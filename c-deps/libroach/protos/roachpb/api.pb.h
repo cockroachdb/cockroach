@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[119];
+  static const ::google::protobuf::internal::ParseTable schema[121];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -138,6 +138,12 @@ extern CheckConsistencyResponseDefaultTypeInternal _CheckConsistencyResponse_def
 class CheckConsistencyResponse_Result;
 class CheckConsistencyResponse_ResultDefaultTypeInternal;
 extern CheckConsistencyResponse_ResultDefaultTypeInternal _CheckConsistencyResponse_Result_default_instance_;
+class CheckExistsRequest;
+class CheckExistsRequestDefaultTypeInternal;
+extern CheckExistsRequestDefaultTypeInternal _CheckExistsRequest_default_instance_;
+class CheckExistsResponse;
+class CheckExistsResponseDefaultTypeInternal;
+extern CheckExistsResponseDefaultTypeInternal _CheckExistsResponse_default_instance_;
 class ClearRangeRequest;
 class ClearRangeRequestDefaultTypeInternal;
 extern ClearRangeRequestDefaultTypeInternal _ClearRangeRequest_default_instance_;
@@ -445,6 +451,8 @@ template<> ::cockroach::roachpb::BulkOpSummary_EntryCountsEntry_DoNotUse* Arena:
 template<> ::cockroach::roachpb::CheckConsistencyRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyRequest>(Arena*);
 template<> ::cockroach::roachpb::CheckConsistencyResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyResponse>(Arena*);
 template<> ::cockroach::roachpb::CheckConsistencyResponse_Result* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckConsistencyResponse_Result>(Arena*);
+template<> ::cockroach::roachpb::CheckExistsRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckExistsRequest>(Arena*);
+template<> ::cockroach::roachpb::CheckExistsResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::CheckExistsResponse>(Arena*);
 template<> ::cockroach::roachpb::ClearRangeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ClearRangeRequest>(Arena*);
 template<> ::cockroach::roachpb::ClearRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ClearRangeResponse>(Arena*);
 template<> ::cockroach::roachpb::ComputeChecksumRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ComputeChecksumRequest>(Arena*);
@@ -3588,6 +3596,225 @@ class ReverseScanResponse : public ::google::protobuf::MessageLite /* @@protoc_i
 };
 // -------------------------------------------------------------------
 
+class CheckExistsRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CheckExistsRequest) */ {
+ public:
+  CheckExistsRequest();
+  virtual ~CheckExistsRequest();
+
+  CheckExistsRequest(const CheckExistsRequest& from);
+
+  inline CheckExistsRequest& operator=(const CheckExistsRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  CheckExistsRequest(CheckExistsRequest&& from) noexcept
+    : CheckExistsRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline CheckExistsRequest& operator=(CheckExistsRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const CheckExistsRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const CheckExistsRequest* internal_default_instance() {
+    return reinterpret_cast<const CheckExistsRequest*>(
+               &_CheckExistsRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    24;
+
+  void Swap(CheckExistsRequest* other);
+  friend void swap(CheckExistsRequest& a, CheckExistsRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline CheckExistsRequest* New() const final {
+    return CreateMaybeMessage<CheckExistsRequest>(NULL);
+  }
+
+  CheckExistsRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<CheckExistsRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const CheckExistsRequest& from);
+  void MergeFrom(const CheckExistsRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(CheckExistsRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::RequestHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::RequestHeader& header() const;
+  ::cockroach::roachpb::RequestHeader* release_header();
+  ::cockroach::roachpb::RequestHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CheckExistsRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::RequestHeader* header_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class CheckExistsResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CheckExistsResponse) */ {
+ public:
+  CheckExistsResponse();
+  virtual ~CheckExistsResponse();
+
+  CheckExistsResponse(const CheckExistsResponse& from);
+
+  inline CheckExistsResponse& operator=(const CheckExistsResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  CheckExistsResponse(CheckExistsResponse&& from) noexcept
+    : CheckExistsResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline CheckExistsResponse& operator=(CheckExistsResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const CheckExistsResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const CheckExistsResponse* internal_default_instance() {
+    return reinterpret_cast<const CheckExistsResponse*>(
+               &_CheckExistsResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    25;
+
+  void Swap(CheckExistsResponse* other);
+  friend void swap(CheckExistsResponse& a, CheckExistsResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline CheckExistsResponse* New() const final {
+    return CreateMaybeMessage<CheckExistsResponse>(NULL);
+  }
+
+  CheckExistsResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<CheckExistsResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const CheckExistsResponse& from);
+  void MergeFrom(const CheckExistsResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(CheckExistsResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::ResponseHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::ResponseHeader& header() const;
+  ::cockroach::roachpb::ResponseHeader* release_header();
+  ::cockroach::roachpb::ResponseHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
+
+  // bool exists = 2;
+  void clear_exists();
+  static const int kExistsFieldNumber = 2;
+  bool exists() const;
+  void set_exists(bool value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CheckExistsResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::ResponseHeader* header_;
+  bool exists_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CheckConsistencyRequest) */ {
  public:
   CheckConsistencyRequest();
@@ -3622,7 +3849,7 @@ class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@prot
                &_CheckConsistencyRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    24;
+    26;
 
   void Swap(CheckConsistencyRequest* other);
   friend void swap(CheckConsistencyRequest& a, CheckConsistencyRequest& b) {
@@ -3761,7 +3988,7 @@ class CheckConsistencyResponse_Result : public ::google::protobuf::MessageLite /
                &_CheckConsistencyResponse_Result_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    25;
+    27;
 
   void Swap(CheckConsistencyResponse_Result* other);
   friend void swap(CheckConsistencyResponse_Result& a, CheckConsistencyResponse_Result& b) {
@@ -3898,7 +4125,7 @@ class CheckConsistencyResponse : public ::google::protobuf::MessageLite /* @@pro
                &_CheckConsistencyResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    26;
+    28;
 
   void Swap(CheckConsistencyResponse* other);
   friend void swap(CheckConsistencyResponse& a, CheckConsistencyResponse& b) {
@@ -4039,7 +4266,7 @@ class RecomputeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc
                &_RecomputeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    27;
+    29;
 
   void Swap(RecomputeStatsRequest* other);
   friend void swap(RecomputeStatsRequest& a, RecomputeStatsRequest& b) {
@@ -4152,7 +4379,7 @@ class RecomputeStatsResponse : public ::google::protobuf::MessageLite /* @@proto
                &_RecomputeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    28;
+    30;
 
   void Swap(RecomputeStatsResponse* other);
   friend void swap(RecomputeStatsResponse& a, RecomputeStatsResponse& b) {
@@ -4270,7 +4497,7 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_EndTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    29;
+    31;
 
   void Swap(EndTxnRequest* other);
   friend void swap(EndTxnRequest& a, EndTxnRequest& b) {
@@ -4453,7 +4680,7 @@ class EndTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_EndTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    30;
+    32;
 
   void Swap(EndTxnResponse* other);
   friend void swap(EndTxnResponse& a, EndTxnResponse& b) {
@@ -4578,7 +4805,7 @@ class AdminSplitRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AdminSplitRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    31;
+    33;
 
   void Swap(AdminSplitRequest* other);
   friend void swap(AdminSplitRequest& a, AdminSplitRequest& b) {
@@ -4710,7 +4937,7 @@ class AdminSplitResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AdminSplitResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    32;
+    34;
 
   void Swap(AdminSplitResponse* other);
   friend void swap(AdminSplitResponse& a, AdminSplitResponse& b) {
@@ -4816,7 +5043,7 @@ class AdminUnsplitRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminUnsplitRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    33;
+    35;
 
   void Swap(AdminUnsplitRequest* other);
   friend void swap(AdminUnsplitRequest& a, AdminUnsplitRequest& b) {
@@ -4922,7 +5149,7 @@ class AdminUnsplitResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminUnsplitResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    34;
+    36;
 
   void Swap(AdminUnsplitResponse* other);
   friend void swap(AdminUnsplitResponse& a, AdminUnsplitResponse& b) {
@@ -5028,7 +5255,7 @@ class AdminMergeRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AdminMergeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    35;
+    37;
 
   void Swap(AdminMergeRequest* other);
   friend void swap(AdminMergeRequest& a, AdminMergeRequest& b) {
@@ -5134,7 +5361,7 @@ class AdminMergeResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AdminMergeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    36;
+    38;
 
   void Swap(AdminMergeResponse* other);
   friend void swap(AdminMergeResponse& a, AdminMergeResponse& b) {
@@ -5240,7 +5467,7 @@ class AdminTransferLeaseRequest : public ::google::protobuf::MessageLite /* @@pr
                &_AdminTransferLeaseRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    37;
+    39;
 
   void Swap(AdminTransferLeaseRequest* other);
   friend void swap(AdminTransferLeaseRequest& a, AdminTransferLeaseRequest& b) {
@@ -5352,7 +5579,7 @@ class AdminTransferLeaseResponse : public ::google::protobuf::MessageLite /* @@p
                &_AdminTransferLeaseResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    38;
+    40;
 
   void Swap(AdminTransferLeaseResponse* other);
   friend void swap(AdminTransferLeaseResponse& a, AdminTransferLeaseResponse& b) {
@@ -5458,7 +5685,7 @@ class ReplicationChange : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_ReplicationChange_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    39;
+    41;
 
   void Swap(ReplicationChange* other);
   friend void swap(ReplicationChange& a, ReplicationChange& b) {
@@ -5571,7 +5798,7 @@ class AdminChangeReplicasRequest : public ::google::protobuf::MessageLite /* @@p
                &_AdminChangeReplicasRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    40;
+    42;
 
   void Swap(AdminChangeReplicasRequest* other);
   friend void swap(AdminChangeReplicasRequest& a, AdminChangeReplicasRequest& b) {
@@ -5720,7 +5947,7 @@ class AdminChangeReplicasResponse : public ::google::protobuf::MessageLite /* @@
                &_AdminChangeReplicasResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    41;
+    43;
 
   void Swap(AdminChangeReplicasResponse* other);
   friend void swap(AdminChangeReplicasResponse& a, AdminChangeReplicasResponse& b) {
@@ -5838,7 +6065,7 @@ class AdminRelocateRangeRequest : public ::google::protobuf::MessageLite /* @@pr
                &_AdminRelocateRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    42;
+    44;
 
   void Swap(AdminRelocateRangeRequest* other);
   friend void swap(AdminRelocateRangeRequest& a, AdminRelocateRangeRequest& b) {
@@ -5956,7 +6183,7 @@ class AdminRelocateRangeResponse : public ::google::protobuf::MessageLite /* @@p
                &_AdminRelocateRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    43;
+    45;
 
   void Swap(AdminRelocateRangeResponse* other);
   friend void swap(AdminRelocateRangeResponse& a, AdminRelocateRangeResponse& b) {
@@ -6062,7 +6289,7 @@ class HeartbeatTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_HeartbeatTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    44;
+    46;
 
   void Swap(HeartbeatTxnRequest* other);
   friend void swap(HeartbeatTxnRequest& a, HeartbeatTxnRequest& b) {
@@ -6180,7 +6407,7 @@ class HeartbeatTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_HeartbeatTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    45;
+    47;
 
   void Swap(HeartbeatTxnResponse* other);
   friend void swap(HeartbeatTxnResponse& a, HeartbeatTxnResponse& b) {
@@ -6286,7 +6513,7 @@ class GCRequest_GCKey : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_GCRequest_GCKey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    46;
+    48;
 
   void Swap(GCRequest_GCKey* other);
   friend void swap(GCRequest_GCKey& a, GCRequest_GCKey& b) {
@@ -6406,7 +6633,7 @@ class GCRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
                &_GCRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    47;
+    49;
 
   void Swap(GCRequest* other);
   friend void swap(GCRequest& a, GCRequest& b) {
@@ -6538,7 +6765,7 @@ class GCResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_
                &_GCResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    48;
+    50;
 
   void Swap(GCResponse* other);
   friend void swap(GCResponse& a, GCResponse& b) {
@@ -6644,7 +6871,7 @@ class PushTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_PushTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    49;
+    51;
 
   void Swap(PushTxnRequest* other);
   friend void swap(PushTxnRequest& a, PushTxnRequest& b) {
@@ -6800,7 +7027,7 @@ class PushTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_PushTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    50;
+    52;
 
   void Swap(PushTxnResponse* other);
   friend void swap(PushTxnResponse& a, PushTxnResponse& b) {
@@ -6918,7 +7145,7 @@ class RecoverTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RecoverTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    51;
+    53;
 
   void Swap(RecoverTxnRequest* other);
   friend void swap(RecoverTxnRequest& a, RecoverTxnRequest& b) {
@@ -7043,7 +7270,7 @@ class RecoverTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RecoverTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    52;
+    54;
 
   void Swap(RecoverTxnResponse* other);
   friend void swap(RecoverTxnResponse& a, RecoverTxnResponse& b) {
@@ -7161,7 +7388,7 @@ class QueryTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_QueryTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    53;
+    55;
 
   void Swap(QueryTxnRequest* other);
   friend void swap(QueryTxnRequest& a, QueryTxnRequest& b) {
@@ -7308,7 +7535,7 @@ class QueryTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_QueryTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    54;
+    56;
 
   void Swap(QueryTxnResponse* other);
   friend void swap(QueryTxnResponse& a, QueryTxnResponse& b) {
@@ -7448,7 +7675,7 @@ class QueryIntentRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_QueryIntentRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    55;
+    57;
 
   void Swap(QueryIntentRequest* other);
   friend void swap(QueryIntentRequest& a, QueryIntentRequest& b) {
@@ -7573,7 +7800,7 @@ class QueryIntentResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_QueryIntentResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    56;
+    58;
 
   void Swap(QueryIntentResponse* other);
   friend void swap(QueryIntentResponse& a, QueryIntentResponse& b) {
@@ -7686,7 +7913,7 @@ class ResolveIntentRequest : public ::google::protobuf::MessageLite /* @@protoc_
                &_ResolveIntentRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    57;
+    59;
 
   void Swap(ResolveIntentRequest* other);
   friend void swap(ResolveIntentRequest& a, ResolveIntentRequest& b) {
@@ -7830,7 +8057,7 @@ class ResolveIntentResponse : public ::google::protobuf::MessageLite /* @@protoc
                &_ResolveIntentResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    58;
+    60;
 
   void Swap(ResolveIntentResponse* other);
   friend void swap(ResolveIntentResponse& a, ResolveIntentResponse& b) {
@@ -7936,7 +8163,7 @@ class ResolveIntentRangeRequest : public ::google::protobuf::MessageLite /* @@pr
                &_ResolveIntentRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    59;
+    61;
 
   void Swap(ResolveIntentRangeRequest* other);
   friend void swap(ResolveIntentRangeRequest& a, ResolveIntentRangeRequest& b) {
@@ -8092,7 +8319,7 @@ class ResolveIntentRangeResponse : public ::google::protobuf::MessageLite /* @@p
                &_ResolveIntentRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    60;
+    62;
 
   void Swap(ResolveIntentRangeResponse* other);
   friend void swap(ResolveIntentRangeResponse& a, ResolveIntentRangeResponse& b) {
@@ -8198,7 +8425,7 @@ class MergeRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_MergeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    61;
+    63;
 
   void Swap(MergeRequest* other);
   friend void swap(MergeRequest& a, MergeRequest& b) {
@@ -8316,7 +8543,7 @@ class MergeResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_MergeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    62;
+    64;
 
   void Swap(MergeResponse* other);
   friend void swap(MergeResponse& a, MergeResponse& b) {
@@ -8422,7 +8649,7 @@ class TruncateLogRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_TruncateLogRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    63;
+    65;
 
   void Swap(TruncateLogRequest* other);
   friend void swap(TruncateLogRequest& a, TruncateLogRequest& b) {
@@ -8541,7 +8768,7 @@ class TruncateLogResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_TruncateLogResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    64;
+    66;
 
   void Swap(TruncateLogResponse* other);
   friend void swap(TruncateLogResponse& a, TruncateLogResponse& b) {
@@ -8647,7 +8874,7 @@ class RequestLeaseRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RequestLeaseRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    65;
+    67;
 
   void Swap(RequestLeaseRequest* other);
   friend void swap(RequestLeaseRequest& a, RequestLeaseRequest& b) {
@@ -8789,7 +9016,7 @@ class TransferLeaseRequest : public ::google::protobuf::MessageLite /* @@protoc_
                &_TransferLeaseRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    66;
+    68;
 
   void Swap(TransferLeaseRequest* other);
   friend void swap(TransferLeaseRequest& a, TransferLeaseRequest& b) {
@@ -8919,7 +9146,7 @@ class LeaseInfoRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_LeaseInfoRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    67;
+    69;
 
   void Swap(LeaseInfoRequest* other);
   friend void swap(LeaseInfoRequest& a, LeaseInfoRequest& b) {
@@ -9025,7 +9252,7 @@ class LeaseInfoResponse : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeaseInfoResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    68;
+    70;
 
   void Swap(LeaseInfoResponse* other);
   friend void swap(LeaseInfoResponse& a, LeaseInfoResponse& b) {
@@ -9143,7 +9370,7 @@ class RequestLeaseResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RequestLeaseResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    69;
+    71;
 
   void Swap(RequestLeaseResponse* other);
   friend void swap(RequestLeaseResponse& a, RequestLeaseResponse& b) {
@@ -9249,7 +9476,7 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
                &_ComputeChecksumRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    70;
+    72;
 
   void Swap(ComputeChecksumRequest* other);
   friend void swap(ComputeChecksumRequest& a, ComputeChecksumRequest& b) {
@@ -9395,7 +9622,7 @@ class ComputeChecksumResponse : public ::google::protobuf::MessageLite /* @@prot
                &_ComputeChecksumResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    71;
+    73;
 
   void Swap(ComputeChecksumResponse* other);
   friend void swap(ComputeChecksumResponse& a, ComputeChecksumResponse& b) {
@@ -9515,7 +9742,7 @@ class ExternalStorage_LocalFilePath : public ::google::protobuf::MessageLite /* 
                &_ExternalStorage_LocalFilePath_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    72;
+    74;
 
   void Swap(ExternalStorage_LocalFilePath* other);
   friend void swap(ExternalStorage_LocalFilePath& a, ExternalStorage_LocalFilePath& b) {
@@ -9630,7 +9857,7 @@ class ExternalStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_
                &_ExternalStorage_Http_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    73;
+    75;
 
   void Swap(ExternalStorage_Http* other);
   friend void swap(ExternalStorage_Http& a, ExternalStorage_Http& b) {
@@ -9739,7 +9966,7 @@ class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ExternalStorage_S3_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    74;
+    76;
 
   void Swap(ExternalStorage_S3* other);
   friend void swap(ExternalStorage_S3& a, ExternalStorage_S3& b) {
@@ -9953,7 +10180,7 @@ class ExternalStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExternalStorage_GCS_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    75;
+    77;
 
   void Swap(ExternalStorage_GCS* other);
   friend void swap(ExternalStorage_GCS& a, ExternalStorage_GCS& b) {
@@ -10122,7 +10349,7 @@ class ExternalStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc
                &_ExternalStorage_Azure_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    76;
+    78;
 
   void Swap(ExternalStorage_Azure* other);
   friend void swap(ExternalStorage_Azure& a, ExternalStorage_Azure& b) {
@@ -10276,7 +10503,7 @@ class ExternalStorage_Workload : public ::google::protobuf::MessageLite /* @@pro
                &_ExternalStorage_Workload_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    77;
+    79;
 
   void Swap(ExternalStorage_Workload* other);
   friend void swap(ExternalStorage_Workload& a, ExternalStorage_Workload& b) {
@@ -10467,7 +10694,7 @@ class ExternalStorage_FileTable : public ::google::protobuf::MessageLite /* @@pr
                &_ExternalStorage_FileTable_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    78;
+    80;
 
   void Swap(ExternalStorage_FileTable* other);
   friend void swap(ExternalStorage_FileTable& a, ExternalStorage_FileTable& b) {
@@ -10606,7 +10833,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ExternalStorage_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    79;
+    81;
 
   void Swap(ExternalStorage* other);
   friend void swap(ExternalStorage& a, ExternalStorage& b) {
@@ -10803,7 +11030,7 @@ class WriteBatchRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_WriteBatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    80;
+    82;
 
   void Swap(WriteBatchRequest* other);
   friend void swap(WriteBatchRequest& a, WriteBatchRequest& b) {
@@ -10936,7 +11163,7 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_WriteBatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    81;
+    83;
 
   void Swap(WriteBatchResponse* other);
   friend void swap(WriteBatchResponse& a, WriteBatchResponse& b) {
@@ -11042,7 +11269,7 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
                &_FileEncryptionOptions_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    82;
+    84;
 
   void Swap(FileEncryptionOptions* other);
   friend void swap(FileEncryptionOptions& a, FileEncryptionOptions& b) {
@@ -11170,7 +11397,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ExportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    84;
+    86;
 
   void Swap(ExportRequest* other);
   friend void swap(ExportRequest& a, ExportRequest& b) {
@@ -11380,7 +11607,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    88;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11511,7 +11738,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    89;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11687,7 +11914,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    90;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11819,7 +12046,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    91;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -11955,7 +12182,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    92;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -12070,7 +12297,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    93;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12240,7 +12467,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    94;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12358,7 +12585,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    95;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12471,7 +12698,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    96;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12577,7 +12804,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    97;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12697,7 +12924,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    98;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12841,7 +13068,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    99;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -12966,7 +13193,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    100;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -13113,7 +13340,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    101;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13219,7 +13446,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    102;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13337,7 +13564,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    103;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13443,7 +13670,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    104;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13561,7 +13788,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    105;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13667,7 +13894,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    106;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13797,7 +14024,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    107;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13934,7 +14161,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    108;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -14040,7 +14267,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    109;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14204,6 +14431,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     kSubsume = 43,
     kRangeStats = 44,
     kAdminVerifyProtectedTimestamp = 49,
+    kCheckExists = 50,
     VALUE_NOT_SET = 0,
   };
 
@@ -14213,7 +14441,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    110;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -14792,6 +15020,18 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* mutable_admin_verify_protected_timestamp();
   void set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp);
 
+  // .cockroach.roachpb.CheckExistsRequest check_exists = 50;
+  bool has_check_exists() const;
+  void clear_check_exists();
+  static const int kCheckExistsFieldNumber = 50;
+  private:
+  const ::cockroach::roachpb::CheckExistsRequest& _internal_check_exists() const;
+  public:
+  const ::cockroach::roachpb::CheckExistsRequest& check_exists() const;
+  ::cockroach::roachpb::CheckExistsRequest* release_check_exists();
+  ::cockroach::roachpb::CheckExistsRequest* mutable_check_exists();
+  void set_allocated_check_exists(::cockroach::roachpb::CheckExistsRequest* check_exists);
+
   void clear_value();
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestUnion)
@@ -14840,6 +15080,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void set_has_subsume();
   void set_has_range_stats();
   void set_has_admin_verify_protected_timestamp();
+  void set_has_check_exists();
 
   inline bool has_value() const;
   inline void clear_has_value();
@@ -14891,6 +15132,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     ::cockroach::roachpb::SubsumeRequest* subsume_;
     ::cockroach::roachpb::RangeStatsRequest* range_stats_;
     ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp_;
+    ::cockroach::roachpb::CheckExistsRequest* check_exists_;
   } value_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   ::google::protobuf::uint32 _oneof_case_[1];
@@ -14971,6 +15213,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     kSubsume = 43,
     kRangeStats = 44,
     kAdminVerifyProtectedTimestamp = 49,
+    kCheckExists = 50,
     VALUE_NOT_SET = 0,
   };
 
@@ -14980,7 +15223,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    111;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15547,6 +15790,18 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* mutable_admin_verify_protected_timestamp();
   void set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp);
 
+  // .cockroach.roachpb.CheckExistsResponse check_exists = 50;
+  bool has_check_exists() const;
+  void clear_check_exists();
+  static const int kCheckExistsFieldNumber = 50;
+  private:
+  const ::cockroach::roachpb::CheckExistsResponse& _internal_check_exists() const;
+  public:
+  const ::cockroach::roachpb::CheckExistsResponse& check_exists() const;
+  ::cockroach::roachpb::CheckExistsResponse* release_check_exists();
+  ::cockroach::roachpb::CheckExistsResponse* mutable_check_exists();
+  void set_allocated_check_exists(::cockroach::roachpb::CheckExistsResponse* check_exists);
+
   void clear_value();
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResponseUnion)
@@ -15594,6 +15849,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void set_has_subsume();
   void set_has_range_stats();
   void set_has_admin_verify_protected_timestamp();
+  void set_has_check_exists();
 
   inline bool has_value() const;
   inline void clear_has_value();
@@ -15644,6 +15900,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     ::cockroach::roachpb::SubsumeResponse* subsume_;
     ::cockroach::roachpb::RangeStatsResponse* range_stats_;
     ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp_;
+    ::cockroach::roachpb::CheckExistsResponse* check_exists_;
   } value_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   ::google::protobuf::uint32 _oneof_case_[1];
@@ -15686,7 +15943,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    112;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15884,7 +16141,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    113;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16002,7 +16259,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    114;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16158,7 +16415,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    115;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16278,7 +16535,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    116;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16403,7 +16660,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    117;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16535,7 +16792,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    118;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16653,7 +16910,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    119;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16759,7 +17016,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    120;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -19295,6 +19552,134 @@ inline ::google::protobuf::RepeatedPtrField< ::std::string>*
 ReverseScanResponse::mutable_batch_responses() {
   // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ReverseScanResponse.batch_responses)
   return &batch_responses_;
+}
+
+// -------------------------------------------------------------------
+
+// CheckExistsRequest
+
+inline bool CheckExistsRequest::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void CheckExistsRequest::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::RequestHeader& CheckExistsRequest::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::RequestHeader& CheckExistsRequest::header() const {
+  const ::cockroach::roachpb::RequestHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CheckExistsRequest.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RequestHeader*>(
+      &::cockroach::roachpb::_RequestHeader_default_instance_);
+}
+inline ::cockroach::roachpb::RequestHeader* CheckExistsRequest::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CheckExistsRequest.header)
+  
+  ::cockroach::roachpb::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RequestHeader* CheckExistsRequest::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RequestHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CheckExistsRequest.header)
+  return header_;
+}
+inline void CheckExistsRequest::set_allocated_header(::cockroach::roachpb::RequestHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CheckExistsRequest.header)
+}
+
+// -------------------------------------------------------------------
+
+// CheckExistsResponse
+
+inline bool CheckExistsResponse::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void CheckExistsResponse::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::ResponseHeader& CheckExistsResponse::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::ResponseHeader& CheckExistsResponse::header() const {
+  const ::cockroach::roachpb::ResponseHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CheckExistsResponse.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ResponseHeader*>(
+      &::cockroach::roachpb::_ResponseHeader_default_instance_);
+}
+inline ::cockroach::roachpb::ResponseHeader* CheckExistsResponse::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CheckExistsResponse.header)
+  
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ResponseHeader* CheckExistsResponse::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ResponseHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CheckExistsResponse.header)
+  return header_;
+}
+inline void CheckExistsResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CheckExistsResponse.header)
+}
+
+// bool exists = 2;
+inline void CheckExistsResponse::clear_exists() {
+  exists_ = false;
+}
+inline bool CheckExistsResponse::exists() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CheckExistsResponse.exists)
+  return exists_;
+}
+inline void CheckExistsResponse::set_exists(bool value) {
+  
+  exists_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CheckExistsResponse.exists)
 }
 
 // -------------------------------------------------------------------
@@ -31495,6 +31880,50 @@ inline ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* RequestUnion:
   return value_.admin_verify_protected_timestamp_;
 }
 
+// .cockroach.roachpb.CheckExistsRequest check_exists = 50;
+inline bool RequestUnion::has_check_exists() const {
+  return value_case() == kCheckExists;
+}
+inline void RequestUnion::set_has_check_exists() {
+  _oneof_case_[0] = kCheckExists;
+}
+inline void RequestUnion::clear_check_exists() {
+  if (has_check_exists()) {
+    delete value_.check_exists_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::CheckExistsRequest& RequestUnion::_internal_check_exists() const {
+  return *value_.check_exists_;
+}
+inline ::cockroach::roachpb::CheckExistsRequest* RequestUnion::release_check_exists() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RequestUnion.check_exists)
+  if (has_check_exists()) {
+    clear_has_value();
+      ::cockroach::roachpb::CheckExistsRequest* temp = value_.check_exists_;
+    value_.check_exists_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::CheckExistsRequest& RequestUnion::check_exists() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.check_exists)
+  return has_check_exists()
+      ? *value_.check_exists_
+      : *reinterpret_cast< ::cockroach::roachpb::CheckExistsRequest*>(&::cockroach::roachpb::_CheckExistsRequest_default_instance_);
+}
+inline ::cockroach::roachpb::CheckExistsRequest* RequestUnion::mutable_check_exists() {
+  if (!has_check_exists()) {
+    clear_value();
+    set_has_check_exists();
+    value_.check_exists_ = CreateMaybeMessage< ::cockroach::roachpb::CheckExistsRequest >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.check_exists)
+  return value_.check_exists_;
+}
+
 inline bool RequestUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -33400,6 +33829,50 @@ inline ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* ResponseUnio
   return value_.admin_verify_protected_timestamp_;
 }
 
+// .cockroach.roachpb.CheckExistsResponse check_exists = 50;
+inline bool ResponseUnion::has_check_exists() const {
+  return value_case() == kCheckExists;
+}
+inline void ResponseUnion::set_has_check_exists() {
+  _oneof_case_[0] = kCheckExists;
+}
+inline void ResponseUnion::clear_check_exists() {
+  if (has_check_exists()) {
+    delete value_.check_exists_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::CheckExistsResponse& ResponseUnion::_internal_check_exists() const {
+  return *value_.check_exists_;
+}
+inline ::cockroach::roachpb::CheckExistsResponse* ResponseUnion::release_check_exists() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ResponseUnion.check_exists)
+  if (has_check_exists()) {
+    clear_has_value();
+      ::cockroach::roachpb::CheckExistsResponse* temp = value_.check_exists_;
+    value_.check_exists_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::CheckExistsResponse& ResponseUnion::check_exists() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.check_exists)
+  return has_check_exists()
+      ? *value_.check_exists_
+      : *reinterpret_cast< ::cockroach::roachpb::CheckExistsResponse*>(&::cockroach::roachpb::_CheckExistsResponse_default_instance_);
+}
+inline ::cockroach::roachpb::CheckExistsResponse* ResponseUnion::mutable_check_exists() {
+  if (!has_check_exists()) {
+    clear_value();
+    set_has_check_exists();
+    value_.check_exists_ = CreateMaybeMessage< ::cockroach::roachpb::CheckExistsResponse >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.check_exists)
+  return value_.check_exists_;
+}
+
 inline bool ResponseUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -34670,6 +35143,10 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -41,6 +41,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BulkOpSummary;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_CheckExistsRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_CheckExistsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumResponse;
@@ -122,8 +124,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResponseHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_SubsumeResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_ResponseUnion;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<45> scc_info_RequestUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_AdminChangeReplicasRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_PushTxnRequest;
@@ -287,6 +289,16 @@ class ReverseScanResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ReverseScanResponse>
       _instance;
 } _ReverseScanResponse_default_instance_;
+class CheckExistsRequestDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<CheckExistsRequest>
+      _instance;
+} _CheckExistsRequest_default_instance_;
+class CheckExistsResponseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<CheckExistsResponse>
+      _instance;
+} _CheckExistsResponse_default_instance_;
 class CheckConsistencyRequestDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<CheckConsistencyRequest>
@@ -755,6 +767,7 @@ class RequestUnionDefaultTypeInternal {
   const ::cockroach::roachpb::SubsumeRequest* subsume_;
   const ::cockroach::roachpb::RangeStatsRequest* range_stats_;
   const ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp_;
+  const ::cockroach::roachpb::CheckExistsRequest* check_exists_;
 } _RequestUnion_default_instance_;
 class ResponseUnionDefaultTypeInternal {
  public:
@@ -803,6 +816,7 @@ class ResponseUnionDefaultTypeInternal {
   const ::cockroach::roachpb::SubsumeResponse* subsume_;
   const ::cockroach::roachpb::RangeStatsResponse* range_stats_;
   const ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp_;
+  const ::cockroach::roachpb::CheckExistsResponse* check_exists_;
 } _ResponseUnion_default_instance_;
 class HeaderDefaultTypeInternal {
  public:
@@ -1219,6 +1233,36 @@ static void InitDefaultsReverseScanResponse() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsReverseScanResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_KeyValue.base,}};
+
+static void InitDefaultsCheckExistsRequest() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_CheckExistsRequest_default_instance_;
+    new (ptr) ::cockroach::roachpb::CheckExistsRequest();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::CheckExistsRequest::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_CheckExistsRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsCheckExistsRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+
+static void InitDefaultsCheckExistsResponse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_CheckExistsResponse_default_instance_;
+    new (ptr) ::cockroach::roachpb::CheckExistsResponse();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::CheckExistsResponse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_CheckExistsResponse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsCheckExistsResponse}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
 
 static void InitDefaultsCheckConsistencyRequest() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2545,8 +2589,8 @@ static void InitDefaultsRequestUnion() {
   ::cockroach::roachpb::RequestUnion::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 44, InitDefaultsRequestUnion}, {
+::google::protobuf::internal::SCCInfo<45> scc_info_RequestUnion =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 45, InitDefaultsRequestUnion}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_GetRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_PutRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ConditionalPutRequest.base,
@@ -2590,7 +2634,8 @@ static void InitDefaultsRequestUnion() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshRangeRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_SubsumeRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsRequest.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampRequest.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampRequest.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsRequest.base,}};
 
 static void InitDefaultsResponseUnion() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2603,8 +2648,8 @@ static void InitDefaultsResponseUnion() {
   ::cockroach::roachpb::ResponseUnion::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 43, InitDefaultsResponseUnion}, {
+::google::protobuf::internal::SCCInfo<44> scc_info_ResponseUnion =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 44, InitDefaultsResponseUnion}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_GetResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_PutResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ConditionalPutResponse.base,
@@ -2647,7 +2692,8 @@ static void InitDefaultsResponseUnion() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshRangeResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_SubsumeResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsResponse.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampResponse.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampResponse.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsResponse.base,}};
 
 static void InitDefaultsHeader() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2820,6 +2866,8 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ScanResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ReverseScanRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ReverseScanResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_CheckExistsRequest.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_CheckExistsResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_CheckConsistencyRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_CheckConsistencyResponse_Result.base);
   ::google::protobuf::internal::InitSCC(&scc_info_CheckConsistencyResponse.base);
@@ -8857,6 +8905,413 @@ void ReverseScanResponse::InternalSwap(ReverseScanResponse* other) {
 
 ::std::string ReverseScanResponse::GetTypeName() const {
   return "cockroach.roachpb.ReverseScanResponse";
+}
+
+
+// ===================================================================
+
+void CheckExistsRequest::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_CheckExistsRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
+      ::cockroach::roachpb::RequestHeader::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int CheckExistsRequest::kHeaderFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+CheckExistsRequest::CheckExistsRequest()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsRequest.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.CheckExistsRequest)
+}
+CheckExistsRequest::CheckExistsRequest(const CheckExistsRequest& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_header()) {
+    header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
+  } else {
+    header_ = NULL;
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.CheckExistsRequest)
+}
+
+void CheckExistsRequest::SharedCtor() {
+  header_ = NULL;
+}
+
+CheckExistsRequest::~CheckExistsRequest() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.CheckExistsRequest)
+  SharedDtor();
+}
+
+void CheckExistsRequest::SharedDtor() {
+  if (this != internal_default_instance()) delete header_;
+}
+
+void CheckExistsRequest::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const CheckExistsRequest& CheckExistsRequest::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsRequest.base);
+  return *internal_default_instance();
+}
+
+
+void CheckExistsRequest::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.CheckExistsRequest)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+  _internal_metadata_.Clear();
+}
+
+bool CheckExistsRequest::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.CheckExistsRequest)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.CheckExistsRequest)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.CheckExistsRequest)
+  return false;
+#undef DO_
+}
+
+void CheckExistsRequest::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.CheckExistsRequest)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_header(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.CheckExistsRequest)
+}
+
+size_t CheckExistsRequest::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.CheckExistsRequest)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *header_);
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void CheckExistsRequest::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const CheckExistsRequest*>(&from));
+}
+
+void CheckExistsRequest::MergeFrom(const CheckExistsRequest& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.CheckExistsRequest)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_header()) {
+    mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
+  }
+}
+
+void CheckExistsRequest::CopyFrom(const CheckExistsRequest& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.CheckExistsRequest)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool CheckExistsRequest::IsInitialized() const {
+  return true;
+}
+
+void CheckExistsRequest::Swap(CheckExistsRequest* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void CheckExistsRequest::InternalSwap(CheckExistsRequest* other) {
+  using std::swap;
+  swap(header_, other->header_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string CheckExistsRequest::GetTypeName() const {
+  return "cockroach.roachpb.CheckExistsRequest";
+}
+
+
+// ===================================================================
+
+void CheckExistsResponse::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_CheckExistsResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
+      ::cockroach::roachpb::ResponseHeader::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int CheckExistsResponse::kHeaderFieldNumber;
+const int CheckExistsResponse::kExistsFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+CheckExistsResponse::CheckExistsResponse()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsResponse.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.CheckExistsResponse)
+}
+CheckExistsResponse::CheckExistsResponse(const CheckExistsResponse& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_header()) {
+    header_ = new ::cockroach::roachpb::ResponseHeader(*from.header_);
+  } else {
+    header_ = NULL;
+  }
+  exists_ = from.exists_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.CheckExistsResponse)
+}
+
+void CheckExistsResponse::SharedCtor() {
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&exists_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(exists_));
+}
+
+CheckExistsResponse::~CheckExistsResponse() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.CheckExistsResponse)
+  SharedDtor();
+}
+
+void CheckExistsResponse::SharedDtor() {
+  if (this != internal_default_instance()) delete header_;
+}
+
+void CheckExistsResponse::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const CheckExistsResponse& CheckExistsResponse::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_CheckExistsResponse.base);
+  return *internal_default_instance();
+}
+
+
+void CheckExistsResponse::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.CheckExistsResponse)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+  exists_ = false;
+  _internal_metadata_.Clear();
+}
+
+bool CheckExistsResponse::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.CheckExistsResponse)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool exists = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &exists_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.CheckExistsResponse)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.CheckExistsResponse)
+  return false;
+#undef DO_
+}
+
+void CheckExistsResponse::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.CheckExistsResponse)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_header(), output);
+  }
+
+  // bool exists = 2;
+  if (this->exists() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->exists(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.CheckExistsResponse)
+}
+
+size_t CheckExistsResponse::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.CheckExistsResponse)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *header_);
+  }
+
+  // bool exists = 2;
+  if (this->exists() != 0) {
+    total_size += 1 + 1;
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void CheckExistsResponse::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const CheckExistsResponse*>(&from));
+}
+
+void CheckExistsResponse::MergeFrom(const CheckExistsResponse& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.CheckExistsResponse)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_header()) {
+    mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
+  }
+  if (from.exists() != 0) {
+    set_exists(from.exists());
+  }
+}
+
+void CheckExistsResponse::CopyFrom(const CheckExistsResponse& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.CheckExistsResponse)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool CheckExistsResponse::IsInitialized() const {
+  return true;
+}
+
+void CheckExistsResponse::Swap(CheckExistsResponse* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void CheckExistsResponse::InternalSwap(CheckExistsResponse* other) {
+  using std::swap;
+  swap(header_, other->header_);
+  swap(exists_, other->exists_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string CheckExistsResponse::GetTypeName() const {
+  return "cockroach.roachpb.CheckExistsResponse";
 }
 
 
@@ -31152,6 +31607,20 @@ void RequestUnion::set_allocated_admin_verify_protected_timestamp(::cockroach::r
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.admin_verify_protected_timestamp)
 }
+void RequestUnion::set_allocated_check_exists(::cockroach::roachpb::CheckExistsRequest* check_exists) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  clear_value();
+  if (check_exists) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      check_exists = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, check_exists, submessage_arena);
+    }
+    set_has_check_exists();
+    value_.check_exists_ = check_exists;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.check_exists)
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RequestUnion::kGetFieldNumber;
 const int RequestUnion::kPutFieldNumber;
@@ -31197,6 +31666,7 @@ const int RequestUnion::kRefreshRangeFieldNumber;
 const int RequestUnion::kSubsumeFieldNumber;
 const int RequestUnion::kRangeStatsFieldNumber;
 const int RequestUnion::kAdminVerifyProtectedTimestampFieldNumber;
+const int RequestUnion::kCheckExistsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RequestUnion::RequestUnion()
@@ -31386,6 +31856,10 @@ RequestUnion::RequestUnion(const RequestUnion& from)
     }
     case kAdminVerifyProtectedTimestamp: {
       mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampRequest::MergeFrom(from.admin_verify_protected_timestamp());
+      break;
+    }
+    case kCheckExists: {
+      mutable_check_exists()->::cockroach::roachpb::CheckExistsRequest::MergeFrom(from.check_exists());
       break;
     }
     case VALUE_NOT_SET: {
@@ -31596,6 +32070,10 @@ void RequestUnion::clear_value() {
     }
     case kAdminVerifyProtectedTimestamp: {
       delete value_.admin_verify_protected_timestamp_;
+      break;
+    }
+    case kCheckExists: {
+      delete value_.check_exists_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -32160,6 +32638,18 @@ bool RequestUnion::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.CheckExistsRequest check_exists = 50;
+      case 50: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(146u /* 402 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_check_exists()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -32448,6 +32938,12 @@ void RequestUnion::SerializeWithCachedSizes(
   if (has_admin_verify_protected_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       49, this->_internal_admin_verify_protected_timestamp(), output);
+  }
+
+  // .cockroach.roachpb.CheckExistsRequest check_exists = 50;
+  if (has_check_exists()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      50, this->_internal_check_exists(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -32770,6 +33266,13 @@ size_t RequestUnion::ByteSizeLong() const {
           *value_.admin_verify_protected_timestamp_);
       break;
     }
+    // .cockroach.roachpb.CheckExistsRequest check_exists = 50;
+    case kCheckExists: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *value_.check_exists_);
+      break;
+    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -32966,6 +33469,10 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
     }
     case kAdminVerifyProtectedTimestamp: {
       mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampRequest::MergeFrom(from.admin_verify_protected_timestamp());
+      break;
+    }
+    case kCheckExists: {
+      mutable_check_exists()->::cockroach::roachpb::CheckExistsRequest::MergeFrom(from.check_exists());
       break;
     }
     case VALUE_NOT_SET: {
@@ -33607,6 +34114,20 @@ void ResponseUnion::set_allocated_admin_verify_protected_timestamp(::cockroach::
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.admin_verify_protected_timestamp)
 }
+void ResponseUnion::set_allocated_check_exists(::cockroach::roachpb::CheckExistsResponse* check_exists) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  clear_value();
+  if (check_exists) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      check_exists = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, check_exists, submessage_arena);
+    }
+    set_has_check_exists();
+    value_.check_exists_ = check_exists;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.check_exists)
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResponseUnion::kGetFieldNumber;
 const int ResponseUnion::kPutFieldNumber;
@@ -33651,6 +34172,7 @@ const int ResponseUnion::kRefreshRangeFieldNumber;
 const int ResponseUnion::kSubsumeFieldNumber;
 const int ResponseUnion::kRangeStatsFieldNumber;
 const int ResponseUnion::kAdminVerifyProtectedTimestampFieldNumber;
+const int ResponseUnion::kCheckExistsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResponseUnion::ResponseUnion()
@@ -33836,6 +34358,10 @@ ResponseUnion::ResponseUnion(const ResponseUnion& from)
     }
     case kAdminVerifyProtectedTimestamp: {
       mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampResponse::MergeFrom(from.admin_verify_protected_timestamp());
+      break;
+    }
+    case kCheckExists: {
+      mutable_check_exists()->::cockroach::roachpb::CheckExistsResponse::MergeFrom(from.check_exists());
       break;
     }
     case VALUE_NOT_SET: {
@@ -34042,6 +34568,10 @@ void ResponseUnion::clear_value() {
     }
     case kAdminVerifyProtectedTimestamp: {
       delete value_.admin_verify_protected_timestamp_;
+      break;
+    }
+    case kCheckExists: {
+      delete value_.check_exists_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -34594,6 +35124,18 @@ bool ResponseUnion::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.CheckExistsResponse check_exists = 50;
+      case 50: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(146u /* 402 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_check_exists()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -34876,6 +35418,12 @@ void ResponseUnion::SerializeWithCachedSizes(
   if (has_admin_verify_protected_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       49, this->_internal_admin_verify_protected_timestamp(), output);
+  }
+
+  // .cockroach.roachpb.CheckExistsResponse check_exists = 50;
+  if (has_check_exists()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      50, this->_internal_check_exists(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -35191,6 +35739,13 @@ size_t ResponseUnion::ByteSizeLong() const {
           *value_.admin_verify_protected_timestamp_);
       break;
     }
+    // .cockroach.roachpb.CheckExistsResponse check_exists = 50;
+    case kCheckExists: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *value_.check_exists_);
+      break;
+    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -35383,6 +35938,10 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
     }
     case kAdminVerifyProtectedTimestamp: {
       mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampResponse::MergeFrom(from.admin_verify_protected_timestamp());
+      break;
+    }
+    case kCheckExists: {
+      mutable_check_exists()->::cockroach::roachpb::CheckExistsResponse::MergeFrom(from.check_exists());
       break;
     }
     case VALUE_NOT_SET: {
@@ -38145,6 +38704,12 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ReverseScanR
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ReverseScanResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::ReverseScanResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ReverseScanResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::CheckExistsRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::CheckExistsRequest >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::CheckExistsRequest >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::CheckExistsResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::CheckExistsResponse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::CheckExistsResponse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::CheckConsistencyRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::CheckConsistencyRequest >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::CheckConsistencyRequest >(arena);

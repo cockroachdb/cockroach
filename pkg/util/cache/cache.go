@@ -507,11 +507,18 @@ func (ik IntervalKey) String() string {
 // NewIntervalCache creates a new Cache backed by an interval tree.
 // See NewCache() for details on parameters.
 func NewIntervalCache(config Config) *IntervalCache {
-	ic := &IntervalCache{
+	ic := new(IntervalCache)
+	ic.Init(config)
+	return ic
+}
+
+// Init initializes a Cache backed by an interval tree.
+// See NewCache() for details on parameters.
+func (ic *IntervalCache) Init(config Config) {
+	*ic = IntervalCache{
 		baseCache: newBaseCache(config),
 	}
 	ic.baseCache.init(ic)
-	return ic
 }
 
 // NewKey creates a new interval key defined by start and end values.

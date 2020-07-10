@@ -54,6 +54,8 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	ReverseScan
+	// CheckExists determines whether any keys exist in a specified key range.
+	CheckExists
 	// EndTxn either commits or aborts an ongoing transaction.
 	EndTxn
 	// AdminSplit is called to coordinate a split of a range.
