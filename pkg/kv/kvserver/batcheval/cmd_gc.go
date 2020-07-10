@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
@@ -45,9 +44,10 @@ func declareKeysGC(
 	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
 	// request first to bump the thresholds, and then another one that actually does work
 	// but can avoid declaring these keys below.
-	if gcr.Threshold != (hlc.Timestamp{}) {
+	if !gcr.Threshold.IsEmpty() {
 		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 	}
+	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
@@ -80,36 +80,31 @@ func GC(
 		return result.Result{}, err
 	}
 
-	// Protect against multiple GC requests arriving out of order; we track
-	// the maximum timestamps.
-
-	var newThreshold hlc.Timestamp
-	if args.Threshold != (hlc.Timestamp{}) {
+	// Optionally bump the GC threshold timestamp.
+	var res result.Result
+	if !args.Threshold.IsEmpty() {
 		oldThreshold := cArgs.EvalCtx.GetGCThreshold()
-		newThreshold = oldThreshold
-		newThreshold.Forward(args.Threshold)
-	}
 
-	var pd result.Result
-	stateLoader := MakeStateLoader(cArgs.EvalCtx)
+		// Protect against multiple GC requests arriving out of order; we track
+		// the maximum timestamp by forwarding the existing timestamp.
+		newThreshold := oldThreshold
+		updated := newThreshold.Forward(args.Threshold)
 
-	// Don't write these keys unless we have to. We also don't declare these
-	// keys unless we have to (to allow the GC queue to batch requests more
-	// efficiently), and we must honor what we declare.
+		// Don't write the GC threshold key unless we have to. We also don't
+		// declare the key unless we have to (to allow the GC queue to batch
+		// requests more efficiently), and we must honor what we declare.
+		if updated {
+			if err := MakeStateLoader(cArgs.EvalCtx).SetGCThreshold(
+				ctx, readWriter, cArgs.Stats, &newThreshold,
+			); err != nil {
+				return result.Result{}, err
+			}
 
-	var replState kvserverpb.ReplicaState
-	if newThreshold != (hlc.Timestamp{}) {
-		replState.GCThreshold = &newThreshold
-		if err := stateLoader.SetGCThreshold(ctx, readWriter, cArgs.Stats, &newThreshold); err != nil {
-			return result.Result{}, err
+			res.Replicated.State = &kvserverpb.ReplicaState{
+				GCThreshold: &newThreshold,
+			}
 		}
 	}
 
-	// Only set ReplicatedEvalResult.ReplicaState if at least one of the GC keys
-	// was written. Leaving the field nil to signify that no changes to the
-	// Replica state occurred allows replicas to perform less work beneath Raft.
-	if replState != (kvserverpb.ReplicaState{}) {
-		pd.Replicated.State = &replState
-	}
-	return pd, nil
+	return res, nil
 }
