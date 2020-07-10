@@ -280,4 +280,28 @@ func TestProject(t *testing.T) {
 			)
 		})
 	}
+
+	errorTestCases := []struct {
+		p           string
+		d           float64
+		a           s1.Angle
+		expectedErr string
+	}{
+		{
+			"POINT EMPTY",
+			0,
+			0,
+			"cannot project POINT EMPTY",
+		},
+	}
+	for _, tc := range errorTestCases {
+		t.Run(tc.expectedErr, func(t *testing.T) {
+			p, err := geo.ParseGeography(tc.p)
+			require.NoError(t, err)
+
+			_, err = Project(p, tc.d, tc.a)
+			require.Error(t, err)
+			require.EqualError(t, err, tc.expectedErr)
+		})
+	}
 }
