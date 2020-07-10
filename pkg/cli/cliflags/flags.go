@@ -1160,4 +1160,14 @@ List of nodes to exclude. Can be specified as a comma-delimited
 list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
+
+	StmtDiagDeleteAll = FlagInfo{
+		Name:        "all",
+		Description: `Delete all bundles.`,
+	}
+
+	StmtDiagCancelAll = FlagInfo{
+		Name:        "all",
+		Description: `Cancel all outstanding requests.`,
+	}
 )

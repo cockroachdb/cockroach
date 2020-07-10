@@ -292,7 +292,7 @@ func isSQLCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "sql", "dump", "workload", "nodelocal":
+	case "sql", "dump", "workload", "nodelocal", "statement-diag":
 		return true
 	case "node":
 		if len(args) == 0 {
@@ -1390,6 +1390,7 @@ Available Commands:
   quit              drain and shut down a node
 
   sql               open a sql shell
+  statement-diag    commands for managing statement diagnostics bundles
   auth-session      log in and out of HTTP sessions
   node              list, inspect, drain or remove nodes
   dump              dump sql tables

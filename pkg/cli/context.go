@@ -174,6 +174,8 @@ func initCLIDefaults() {
 
 	authCtx.validityPeriod = 1 * time.Hour
 
+	setStmtDiagContextDefaults()
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -405,4 +407,14 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+}
+
+// stmtDiagCtx captures the command-line parameters of the 'statement-diag'
+// command.
+var stmtDiagCtx struct {
+	all bool
+}
+
+func setStmtDiagContextDefaults() {
+	stmtDiagCtx.all = false
 }
