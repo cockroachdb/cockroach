@@ -5145,9 +5145,10 @@ func regexpReplace(ctx *tree.EvalContext, s, pattern, to, sqlFlags string) (tree
 						newString.WriteString(s[matchStart:matchEnd])
 					} else {
 						idx := int(to[i] - '0')
-						// regexpReplace expects references to "out-of-bounds" capture groups
-						// to be ignored.
-						if 2*idx < len(matchIndex) {
+						// regexpReplace expects references to "out-of-bounds"
+						// and empty (when the corresponding match indices
+						// are negative) capture groups to be ignored.
+						if 2*idx < len(matchIndex) && matchIndex[2*idx] >= 0 {
 							newString.WriteString(s[matchIndex[2*idx]:matchIndex[2*idx+1]])
 						}
 					}
