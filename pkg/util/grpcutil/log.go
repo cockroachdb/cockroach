@@ -72,7 +72,7 @@ func (severity *logger) Warning(args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	if shouldPrint(connectivitySpamRe, 30*time.Second, args...) {
+	if shouldPrint(ConnectivitySpamRe, 30*time.Second, args...) {
 		log.WarningfDepth(context.TODO(), 2, "", args...)
 	}
 }
@@ -146,7 +146,7 @@ func (severity *logger) V(i int) bool {
 // https://github.com/grpc/grpc-go/blob/v1.29.1/clientconn.go#L1275
 var (
 	transportFailedRe   = regexp.MustCompile(`^` + regexp.QuoteMeta(`grpc: addrConn.createTransport failed to connect to`))
-	connectionRefusedRe = regexp.MustCompile(
+	ConnectionRefusedRe = regexp.MustCompile(
 		strings.Join([]string{
 			// *nix
 			regexp.QuoteMeta("connection refused"),
@@ -159,8 +159,8 @@ var (
 	)
 	clientConnReuseRe = regexp.MustCompile("cannot reuse client connection")
 
-	connectivitySpamRe = regexp.MustCompile(transportFailedRe.String() + `.*` +
-		"(" + connectionRefusedRe.String() + "|" + clientConnReuseRe.String() + ")")
+	ConnectivitySpamRe = regexp.MustCompile(transportFailedRe.String() + `.*` +
+		"(" + ConnectionRefusedRe.String() + "|" + clientConnReuseRe.String() + ")")
 )
 
 var spamMu = struct {

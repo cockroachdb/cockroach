@@ -275,7 +275,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	// Check whether this outgoing client is duplicating work already
 	// being done by an incoming client, either because an outgoing
 	// matches an incoming or the client is connecting to itself.
-	if nodeID := g.NodeID.Get(); nodeID == c.peerID {
+	if nodeID := g.NodeID.Get(); nodeID != 0 && nodeID == c.peerID {
 		return errors.Errorf("stopping outgoing client to n%d (%s); loopback connection", c.peerID, c.addr)
 	} else if g.hasIncomingLocked(c.peerID) && nodeID > c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our

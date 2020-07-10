@@ -559,7 +559,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
 	},
 	// Add new versions here (step two of two).
-
 })
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version

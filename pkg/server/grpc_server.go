@@ -68,6 +68,7 @@ var rpcsAllowedWhileBootstrapping = map[string]struct{}{
 	"/cockroach.rpc.Heartbeat/Ping":             {},
 	"/cockroach.gossip.Gossip/Gossip":           {},
 	"/cockroach.server.serverpb.Init/Bootstrap": {},
+	"/cockroach.server.serverpb.Init/Join":      {},
 	"/cockroach.server.serverpb.Admin/Health":   {},
 }
 

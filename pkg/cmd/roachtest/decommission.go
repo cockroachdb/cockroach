@@ -319,6 +319,10 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		Multiplier:     2,
 	}
 
+	// XXX: Hack, to see node come into liveness table. We should do this as
+	// part of the connect rpc.
+	time.Sleep(10 * time.Second)
+
 	// Partially decommission then recommission a random node, from another
 	// random node. Run a couple of status checks while doing so.
 	{

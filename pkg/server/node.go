@@ -347,6 +347,10 @@ func (n *Node) start(
 	n.initialBoot = state.joined
 	nodeID := state.nodeID
 	if nodeID == 0 {
+		// TODO(irfansharif): This codepath exists to maintain the legacy
+		// behavior of node ID allocation that was triggered on gossip
+		// connectivity. This was replaced by the Join RPC in 20.2, and can be
+		// removed in 21.1.
 		if !state.joined {
 			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
