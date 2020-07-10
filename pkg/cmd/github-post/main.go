@@ -241,7 +241,13 @@ func listFailures(
 				}
 			case "pass", "skip":
 				if timedOutCulprit.name != "" {
-					panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
+					// NB: we used to do this:
+					//   panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
+					// but it would get hit. There is no good way to
+					// blame a timeout on a particular test. We should probably remove this
+					// logic in the first place, but for now make sure we don't panic as
+					// a result of it.
+					timedOutCulprit = scopedTest{}
 				}
 				delete(outstandingOutput, scoped(te))
 				if te.Elapsed > shortTestFilterSecs {
