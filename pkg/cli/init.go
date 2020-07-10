@@ -51,7 +51,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Actually perform cluster initialization.
 	c := serverpb.NewInitClient(conn)
-
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 		return err
 	}

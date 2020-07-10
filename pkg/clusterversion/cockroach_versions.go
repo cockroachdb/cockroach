@@ -579,7 +579,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	},
 
 	// Add new versions here (step two of two).
-
 })
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -191,10 +190,10 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 	}
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.GossipBootstrapResolvers = resolvers
+	cfg.Addr = resolverSpecs[0]
+	cfg.AdvertiseAddr = resolverSpecs[2]
 
-	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])
-	advertAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[2])
-	filtered := cfg.FilterGossipBootstrapResolvers(context.Background(), &listenAddr, &advertAddr)
+	filtered := cfg.FilterGossipBootstrapResolvers(context.Background())
 	if len(filtered) != 1 {
 		t.Fatalf("expected one resolver; got %+v", filtered)
 	} else if filtered[0].Addr() != resolverSpecs[1] {

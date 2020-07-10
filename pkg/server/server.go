@@ -1001,6 +1001,17 @@ func (s *Server) startPersistingHLCUpperBound(
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
+//
+// XXX: Write a summary. What are _all_ the components I care about?
+// - http server/admin UI
+// - engines
+// - rpc servers (Batch, Rangefeed, SQL, admin, status, authentication,
+// tsServer)
+// - init server
+// - gossip
+// - cluster version
+// - /health end point
+// - bootstrap
 func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
@@ -1054,25 +1065,21 @@ func (s *Server) Start(ctx context.Context) error {
 		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
 			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)
 
-	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
-	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
-			bootstrapVersion = ov
-		}
-	}
-
 	// Set up the init server. We have to do this relatively early because we
 	// can't call RegisterInitServer() after `grpc.Serve`, which is called in
 	// startRPCServer (and for the loopback grpc-gw connection).
-	initServer, err := setupInitServer(
+	initConfig := initServerCfg{wrapped: s.cfg}
+	inspectState, err := inspectEngines(
 		ctx,
+		s.engines,
 		s.cfg.Settings.Version.BinaryVersion(),
 		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
-		bootstrapVersion,
-		&s.cfg.DefaultZoneConfig,
-		&s.cfg.DefaultSystemZoneConfig,
-		s.engines,
 	)
+	if err != nil {
+		return err
+	}
+
+	initServer, err := newInitServer(s.cfg.AmbientCtx, s.rpcContext, inspectState, s.db, initConfig)
 	if err != nil {
 		return err
 	}
@@ -1265,12 +1272,12 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// Filter the gossip bootstrap resolvers based on the listen and
-	// advertise addresses.
-	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
+	// Filter out self from the gossip bootstrap resolvers.
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
+
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
+	advTenantAddrU := util.NewUnresolvedAddr("tcp", s.cfg.TenantAdvertiseAddr)
 
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1286,8 +1293,6 @@ func (s *Server) Start(ctx context.Context) error {
 		if _, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 			return err
 		}
-	} else {
-		log.Info(ctx, "awaiting init command or join with an already initialized node.")
 	}
 
 	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
@@ -1311,9 +1316,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// This opens the main listener. When the listener is open, we can call
-	// initServerReadyFn since any request initiated to the initServer at that
-	// point will reach it once ServeAndWait starts handling the queue of incoming
-	// connections.
+	// onInitServerReady since any request initiated to the initServer at that
+	// point will reach it once ServeAndWait starts handling the queue of
+	// incoming connections.
 	startRPCServer(workersCtx)
 	onInitServerReady()
 	state, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, s.gossip)
@@ -1324,6 +1329,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	// If there's no NodeID here, then we didn't just bootstrap. The Node will
 	// read its ID from the stores or request a new one via KV.
+	//
+	// TODO(irfansharif): Delete this once we 20.2 is cut. This only exists to
+	// be compatible with 20.1 clusters.
 	if state.nodeID != 0 {
 		s.rpcContext.NodeID.Set(ctx, state.nodeID)
 	}
@@ -1353,7 +1361,7 @@ func (s *Server) Start(ctx context.Context) error {
 		// demonstrate that we're not doing anything functional here (and to
 		// prevent bugs during further refactors).
 		if s.rpcContext.ClusterID.Get() == uuid.Nil {
-			return errors.New("gossip should already be connected")
+			return errors.New("programming error: expected cluster id to be populated in rpc context")
 		}
 		unregister := s.gossip.RegisterCallback(gossip.KeyClusterID, func(string, roachpb.Value) {
 			clusterID, err := s.gossip.GetClusterID()
@@ -1372,7 +1380,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// but this gossip only happens once the first range has a leaseholder, i.e.
 	// when a quorum of nodes has gone fully operational.
 	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
-		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
+		log.Infof(ctx, "connecting to gossip network to verify cluster id %q", state.clusterID)
 		select {
 		case <-s.gossip.Connected:
 			log.Infof(ctx, "node connected via gossip")

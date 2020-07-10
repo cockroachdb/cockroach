@@ -172,8 +172,9 @@ type KVConfig struct {
 	// in zone configs.
 	Attrs string
 
-	// JoinList is a list of node addresses that act as bootstrap hosts for
-	// connecting to the gossip network.
+	// JoinList is a list of node addresses that is used to form a network of KV
+	// servers. Assuming a connected graph, it suffices to initialize any server
+	// in the network.
 	JoinList base.JoinListType
 
 	// JoinPreferSRVRecords, if set, causes the lookup logic for the
@@ -652,11 +653,13 @@ func (cfg *Config) InitNode(ctx context.Context) error {
 
 // FilterGossipBootstrapResolvers removes any gossip bootstrap resolvers which
 // match either this node's listen address or its advertised host address.
-func (cfg *Config) FilterGossipBootstrapResolvers(
-	ctx context.Context, listen, advert net.Addr,
-) []resolver.Resolver {
+func (cfg *Config) FilterGossipBootstrapResolvers(ctx context.Context) []resolver.Resolver {
+	var listen, advert net.Addr
+	listen = util.NewUnresolvedAddr("tcp", cfg.Addr)
+	advert = util.NewUnresolvedAddr("tcp", cfg.AdvertiseAddr)
 	filtered := make([]resolver.Resolver, 0, len(cfg.GossipBootstrapResolvers))
 	addrs := make([]string, 0, len(cfg.GossipBootstrapResolvers))
+
 	for _, r := range cfg.GossipBootstrapResolvers {
 		if r.Addr() == advert.String() || r.Addr() == listen.String() {
 			if log.V(1) {
