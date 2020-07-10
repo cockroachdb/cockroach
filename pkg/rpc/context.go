@@ -505,6 +505,13 @@ func (a internalClientAdapter) RangeLookup(
 	return a.InternalServer.RangeLookup(ctx, rl)
 }
 
+// Join implements the roachpb.InternalClient interface.
+func (a internalClientAdapter) Join(
+	ctx context.Context, req *roachpb.JoinNodeRequest, _ ...grpc.CallOption,
+) (*roachpb.JoinNodeResponse, error) {
+	return a.InternalServer.Join(ctx, req)
+}
+
 type respStreamClientAdapter struct {
 	ctx   context.Context
 	respC chan interface{}

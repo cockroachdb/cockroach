@@ -179,3 +179,9 @@ func (m *mockInternalClient) GossipSubscription(
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
 	return nil, fmt.Errorf("unsupported GossipSubscripion call")
 }
+
+func (m *mockInternalClient) Join(
+	context.Context, *roachpb.JoinNodeRequest, ...grpc.CallOption,
+) (*roachpb.JoinNodeResponse, error) {
+	return nil, fmt.Errorf("unsupported Join call")
+}

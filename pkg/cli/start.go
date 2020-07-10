@@ -455,7 +455,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 
 		if waitForInit {
 			log.Shout(ctx, log.Severity_INFO,
-				"initial startup completed.\n"+
+				"initial startup completed\n"+
 					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
 					"Client connections will be accepted after this completes successfully.\n"+
 					"Check the log file(s) for progress. ")

@@ -49,6 +49,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const (
@@ -163,6 +165,8 @@ type Node struct {
 	perReplicaServer kvserver.Server
 }
 
+var _ roachpb.InternalServer = &Node{}
+
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(ctx context.Context, db *kv.DB) (roachpb.NodeID, error) {
@@ -212,6 +216,7 @@ func bootstrapCluster(
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
 	var bootstrapVersion clusterversion.ClusterVersion
+	const firstStoreID = 1
 	for i, eng := range engines {
 		cv, err := kvserver.ReadClusterVersion(ctx, eng)
 		if err != nil {
@@ -230,7 +235,7 @@ func bootstrapCluster(
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    FirstNodeID,
-			StoreID:   roachpb.StoreID(i + 1),
+			StoreID:   roachpb.StoreID(i + firstStoreID),
 		}
 
 		// Initialize the engine backing the store with the store ident and cluster
@@ -268,6 +273,7 @@ func bootstrapCluster(
 			initializedEngines: engines,
 			newEngines:         nil,
 		},
+		firstStoreID: firstStoreID,
 	}
 	return state, nil
 }
@@ -348,6 +354,10 @@ func (n *Node) start(
 	n.initialStart = initialStart
 	nodeID := state.nodeID
 	if nodeID == 0 {
+		// TODO(irfansharif): This codepath exists to maintain the legacy
+		// behavior of node ID allocation that was triggered on gossip
+		// connectivity. This was replaced by the Join RPC in 20.2, and can be
+		// removed in 21.1.
 		if !initialStart {
 			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
@@ -450,7 +460,7 @@ func (n *Node) start(
 	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
 	// Should be easy enough. Writing the test is probably most of the work.
 	if len(state.newEngines) > 0 {
-		if err := n.bootstrapStores(ctx, state.newEngines, n.stopper); err != nil {
+		if err := n.bootstrapStores(ctx, state.firstStoreID, state.newEngines, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -536,7 +546,10 @@ func (n *Node) validateStores(ctx context.Context) error {
 // allocated via a sequence id generator stored at a system key per
 // node. The new stores are added to n.stores.
 func (n *Node) bootstrapStores(
-	ctx context.Context, emptyEngines []storage.Engine, stopper *stop.Stopper,
+	ctx context.Context,
+	firstStoreID roachpb.StoreID,
+	emptyEngines []storage.Engine,
+	stopper *stop.Stopper,
 ) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
@@ -545,16 +558,28 @@ func (n *Node) bootstrapStores(
 	{
 		// Bootstrap all waiting stores by allocating a new store id for
 		// each and invoking storage.Bootstrap() to persist it and the cluster
-		// version and to create stores.
-		inc := int64(len(emptyEngines))
-		firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
+		// version and to create stores. The -1 comes from the fact that our
+		// first store ID has already been pre-allocated for us.
+		storeIDAlloc := int64(len(emptyEngines)) - 1
+		if firstStoreID == 0 {
+			// We lied, we don't have a firstStoreID; we'll need to allocate for
+			// that too.
+			//
+			// TODO(irfansharif): We get here if we're falling back to
+			// gossip-based connectivity. This can be removed in 21.1.
+			storeIDAlloc++
+		}
+		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
+		if firstStoreID == 0 {
+			firstStoreID = startID
+		}
 		if err != nil {
 			return errors.Errorf("error allocating store ids: %s", err)
 		}
 		sIdent := roachpb.StoreIdent{
 			ClusterID: n.clusterID.Get(),
 			NodeID:    n.Descriptor.NodeID,
-			StoreID:   firstID,
+			StoreID:   firstStoreID,
 		}
 		for _, eng := range emptyEngines {
 			if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
@@ -1092,4 +1117,42 @@ func (n *Node) GossipSubscription(
 			return ctx.Err()
 		}
 	}
+}
+
+// Join implements the roachpb.InternalServer service. This is the
+// "connectivity" API; individual CRDB servers are passed in a --join list and
+// the join targets are addressed through this API.
+//
+// TODO(irfansharif): Perhaps we could opportunistically create a liveness
+// record here so as to no longer have to worry about the liveness record not
+// existing for a given node.
+func (n *Node) Join(
+	ctx context.Context, req *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
+	ctx, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id")
+	defer span.Finish()
+
+	activeVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
+	if req.BinaryVersion.Less(activeVersion.Version) {
+		return nil, grpcstatus.Error(codes.PermissionDenied, ErrIncompatibleBinaryVersion.Error())
+	}
+
+	nodeID, err := allocateNodeID(ctx, n.storeCfg.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	storeID, err := allocateStoreIDs(ctx, nodeID, 1, n.storeCfg.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
+
+	return &roachpb.JoinNodeResponse{
+		ClusterID:     n.clusterID.Get().GetBytes(),
+		NodeID:        int32(nodeID),
+		StoreID:       int32(storeID),
+		ActiveVersion: &activeVersion.Version,
+	}, nil
 }
