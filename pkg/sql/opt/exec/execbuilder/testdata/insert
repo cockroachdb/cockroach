@@ -424,29 +424,29 @@ query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-·                                        distribution  local                  ·                              ·
-·                                        vectorized    false                  ·                              ·
-render                                   ·             ·                      ("?column?")                   ·
- │                                       render 0      x + v                  ·                              ·
- └── run                                 ·             ·                      (x, v, rowid[hidden])          ·
-      └── insert                         ·             ·                      (x, v, rowid[hidden])          ·
-           │                             into          insert_t(x, v, rowid)  ·                              ·
-           │                             strategy      inserter               ·                              ·
-           └── render                    ·             ·                      (length, "?column?", column9)  ·
-                │                        render 0      length                 ·                              ·
-                │                        render 1      "?column?"             ·                              ·
-                │                        render 2      unique_rowid()         ·                              ·
-                └── limit                ·             ·                      (length, "?column?", column8)  +column8
-                     │                   count         10                     ·                              ·
-                     └── sort            ·             ·                      (length, "?column?", column8)  +column8
-                          │              order         +column8               ·                              ·
-                          └── render     ·             ·                      (length, "?column?", column8)  ·
-                               │         render 0      length(k)              ·                              ·
-                               │         render 1      2                      ·                              ·
-                               │         render 2      k || v                 ·                              ·
-                               └── scan  ·             ·                      (k, v)                         ·
-·                                        table         kv@primary             ·                              ·
-·                                        spans         FULL SCAN              ·                              ·
+·                                        distribution  local                   ·                              ·
+·                                        vectorized    false                   ·                              ·
+render                                   ·             ·                       ("?column?")                   ·
+ │                                       render 0      x + v                   ·                              ·
+ └── run                                 ·             ·                       (x, v, rowid[hidden])          ·
+      └── insert                         ·             ·                       (x, v, rowid[hidden])          ·
+           │                             into          insert_t(x, v, rowid)   ·                              ·
+           │                             strategy      inserter                ·                              ·
+           └── render                    ·             ·                       (length, "?column?", column9)  ·
+                │                        render 0      length                  ·                              ·
+                │                        render 1      "?column?"              ·                              ·
+                │                        render 2      unique_rowid()          ·                              ·
+                └── limit                ·             ·                       (length, "?column?", column8)  +column8
+                     │                   count         10                      ·                              ·
+                     └── sort            ·             ·                       (length, "?column?", column8)  +column8
+                          │              order         +column8                ·                              ·
+                          └── render     ·             ·                       (length, "?column?", column8)  ·
+                               │         render 0      length(k)               ·                              ·
+                               │         render 1      2                       ·                              ·
+                               │         render 2      k::STRING || v::STRING  ·                              ·
+                               └── scan  ·             ·                       (k, v)                         ·
+·                                        table         kv@primary              ·                              ·
+·                                        spans         FULL SCAN               ·                              ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.

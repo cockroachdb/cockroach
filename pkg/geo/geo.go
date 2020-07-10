@@ -649,8 +649,58 @@ func normalizeGeographyGeomT(t geom.T) {
 	}
 }
 
+// validateGeomT validates the geom.T object across valid geom.T objects,
+// returning an error if it is invalid.
+func validateGeomT(t geom.T) error {
+	if t.Empty() {
+		return nil
+	}
+	switch t := t.(type) {
+	case *geom.Point:
+	case *geom.LineString:
+		if t.NumCoords() < 2 {
+			return errors.Newf("LineString must have at least 2 coordinates")
+		}
+	case *geom.Polygon:
+		for i := 0; i < t.NumLinearRings(); i++ {
+			linearRing := t.LinearRing(i)
+			if linearRing.NumCoords() < 4 {
+				return errors.Newf("Polygon LinearRing must have at least 4 points, found %d at position %d", linearRing.NumCoords(), i+1)
+			}
+			if !linearRing.Coord(0).Equal(linearRing.Layout(), linearRing.Coord(linearRing.NumCoords()-1)) {
+				return errors.Newf("Polygon LinearRing at position %d is not closed", i+1)
+			}
+		}
+	case *geom.MultiPoint:
+	case *geom.MultiLineString:
+		for i := 0; i < t.NumLineStrings(); i++ {
+			if err := validateGeomT(t.LineString(i)); err != nil {
+				return errors.Wrapf(err, "invalid MultiLineString component at position %d", i+1)
+			}
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < t.NumPolygons(); i++ {
+			if err := validateGeomT(t.Polygon(i)); err != nil {
+				return errors.Wrapf(err, "invalid MultiPolygon component at position %d", i+1)
+			}
+		}
+	case *geom.GeometryCollection:
+		for i := 0; i < t.NumGeoms(); i++ {
+			if err := validateGeomT(t.Geom(i)); err != nil {
+				return errors.Wrapf(err, "invalid GeometryCollection component at position %d", i+1)
+			}
+		}
+	default:
+		return errors.Newf("unknown geom.T type: %T", t)
+	}
+	return nil
+}
+
 // spatialObjectFromGeomT creates a geopb.SpatialObject from a geom.T.
 func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.SpatialObject, error) {
+	if err := validateGeomT(t); err != nil {
+		return geopb.SpatialObject{}, err
+	}
 	if soType == geopb.SpatialObjectType_GeographyType {
 		normalizeGeographyGeomT(t)
 	}
