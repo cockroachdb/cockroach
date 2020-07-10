@@ -11,12 +11,12 @@
 package geo
 
 import (
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/stretchr/testify/require"
@@ -88,10 +88,20 @@ func init() {
 	}
 }
 
-func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
-	decoded, err := hex.DecodeString(h)
-	require.NoError(t, err)
-	return geopb.EWKB(decoded)
+func MustSerializeShape(shape geopb.Shape) []byte {
+	ret, err := protoutil.Marshal(&shape)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+func MustSerializeGeometryCollectionShape(shape geopb.GeometryCollectionShape) []byte {
+	ret, err := protoutil.Marshal(&shape)
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
@@ -206,8 +216,10 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomPoint,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords: []float64{1, 2},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 1, LoY: 2, HiY: 2},
@@ -218,8 +230,10 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomLineString,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords: []float64{1, 1, 2, 2},
+				}),
 				SRID:        4326,
 				ShapeType:   geopb.ShapeType_LineString,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
@@ -230,8 +244,11 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomPolygon,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords: []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0},
+					Ends:   []int{8},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_Polygon,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
@@ -242,8 +259,11 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiPoint,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords: []float64{1.0, 1.0, 2.0, 2.0},
+					Ends:   []int{2, 4},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiPoint,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
@@ -254,8 +274,11 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiLineString,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords: []float64{1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0},
+					Ends:   []int{4, 8},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiLineString,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 4, LoY: 1, HiY: 4},
@@ -266,8 +289,12 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiPolygon,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeShape(geopb.Shape{
+					Coords:   []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0, 3.0, 3.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0},
+					Ends:     []int{8, 16},
+					EndsEnds: []int{1, 2},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiPolygon,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 4, LoY: 1, HiY: 4},
@@ -278,8 +305,24 @@ func TestSpatialObjectFromGeomT(t *testing.T) {
 			geopb.SpatialObjectType_GeometryType,
 			testGeomGeometryCollection,
 			geopb.SpatialObject{
-				Type:        geopb.SpatialObjectType_GeometryType,
-				EWKB:        mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				Type: geopb.SpatialObjectType_GeometryType,
+				SerializedShape: MustSerializeGeometryCollectionShape(geopb.GeometryCollectionShape{
+					Shapes: []geopb.GeometryCollectionShape_GeometryCollectionSubShape{
+						{
+							ShapeType: geopb.ShapeType_Point,
+							Shape: geopb.Shape{
+								Coords: []float64{1, 2},
+							},
+						},
+						{
+							ShapeType: geopb.ShapeType_MultiPoint,
+							Shape: geopb.Shape{
+								Coords: []float64{1.0, 1.0, 2.0, 2.0},
+								Ends:   []int{2, 4},
+							},
+						},
+					},
+				}),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_GeometryCollection,
 				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},

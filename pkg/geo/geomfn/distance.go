@@ -140,7 +140,10 @@ func distanceLineStringInternal(
 	default:
 		return nil, errors.Newf("programmer error: unknown behavior")
 	}
-	lineString := geom.NewLineStringFlat(geom.XY, append(coordA, coordB...)).SetSRID(int(a.SRID()))
+	coords := []float64{}
+	coords = append(coords, coordA...)
+	coords = append(coords, coordB...)
+	lineString := geom.NewLineStringFlat(geom.XY, coords).SetSRID(int(a.SRID()))
 	return geo.NewGeometryFromGeomT(lineString)
 }
 

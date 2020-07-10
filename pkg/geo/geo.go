@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -204,38 +205,30 @@ func (g *Geometry) AsGeography() (*Geography, error) {
 		// Set a geography SRID if one is not already set.
 		srid = geopb.DefaultGeographySRID
 	}
-	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeographyType)
+	t, err := g.AsGeomT()
 	if err != nil {
 		return nil, err
 	}
+	spatialObject, err := spatialObjectFromGeomT(t, geopb.SpatialObjectType_GeographyType)
+	if err != nil {
+		return nil, err
+	}
+	spatialObject.SRID = srid
 	return NewGeography(spatialObject)
 }
 
 // CloneWithSRID sets a given Geometry's SRID to another, without any transformations.
 // Returns a new Geometry object.
 func (g *Geometry) CloneWithSRID(srid geopb.SRID) (*Geometry, error) {
-	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeometryType)
-	if err != nil {
-		return nil, err
-	}
+	spatialObjectObj := protoutil.Clone(&g.spatialObject)
+	spatialObject := *(spatialObjectObj.(*geopb.SpatialObject))
+	spatialObject.SRID = srid
 	return NewGeometry(spatialObject)
-}
-
-// adjustSpatialObject returns the SpatialObject with new parameters.
-func adjustSpatialObject(
-	so geopb.SpatialObject, srid geopb.SRID, soType geopb.SpatialObjectType,
-) (geopb.SpatialObject, error) {
-	t, err := ewkb.Unmarshal(so.EWKB)
-	if err != nil {
-		return geopb.SpatialObject{}, err
-	}
-	adjustGeomSRID(t, srid)
-	return spatialObjectFromGeomT(t, soType)
 }
 
 // AsGeomT returns the geometry as a geom.T object.
 func (g *Geometry) AsGeomT() (geom.T, error) {
-	return ewkb.Unmarshal(g.spatialObject.EWKB)
+	return spatialObjectToGeomT(g.spatialObject)
 }
 
 // Empty returns whether the given Geometry is empty.
@@ -245,7 +238,16 @@ func (g *Geometry) Empty() bool {
 
 // EWKB returns the EWKB representation of the Geometry.
 func (g *Geometry) EWKB() geopb.EWKB {
-	return g.spatialObject.EWKB
+	// TODO(otan): clean this up by returning errors.
+	t, err := g.AsGeomT()
+	if err != nil {
+		panic(err)
+	}
+	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
+	if err != nil {
+		panic(err)
+	}
+	return geopb.EWKB(ret)
 }
 
 // SpatialObject returns the SpatialObject representation of the Geometry.
@@ -255,7 +257,16 @@ func (g *Geometry) SpatialObject() geopb.SpatialObject {
 
 // EWKBHex returns the EWKBHex representation of the Geometry.
 func (g *Geometry) EWKBHex() string {
-	return g.spatialObject.EWKBHex()
+	// TODO(otan): clean this up by returning errors.
+	t, err := g.AsGeomT()
+	if err != nil {
+		panic(err)
+	}
+	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%X", ret)
 }
 
 // SRID returns the SRID representation of the Geometry.
@@ -407,16 +418,19 @@ func ParseGeographyFromEWKBUnsafe(ewkb geopb.EWKB) (*Geography, error) {
 // CloneWithSRID sets a given Geography's SRID to another, without any transformations.
 // Returns a new Geography object.
 func (g *Geography) CloneWithSRID(srid geopb.SRID) (*Geography, error) {
-	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeographyType)
-	if err != nil {
-		return nil, err
-	}
+	spatialObjectObj := protoutil.Clone(&g.spatialObject)
+	spatialObject := *(spatialObjectObj.(*geopb.SpatialObject))
+	spatialObject.SRID = srid
 	return NewGeography(spatialObject)
 }
 
 // AsGeometry converts a given Geography to its Geometry form.
 func (g *Geography) AsGeometry() (*Geometry, error) {
-	spatialObject, err := adjustSpatialObject(g.spatialObject, g.SRID(), geopb.SpatialObjectType_GeometryType)
+	t, err := g.AsGeomT()
+	if err != nil {
+		return nil, err
+	}
+	spatialObject, err := spatialObjectFromGeomT(t, geopb.SpatialObjectType_GeometryType)
 	if err != nil {
 		return nil, err
 	}
@@ -425,12 +439,21 @@ func (g *Geography) AsGeometry() (*Geometry, error) {
 
 // AsGeomT returns the Geography as a geom.T object.
 func (g *Geography) AsGeomT() (geom.T, error) {
-	return ewkb.Unmarshal(g.spatialObject.EWKB)
+	return spatialObjectToGeomT(g.spatialObject)
 }
 
 // EWKB returns the EWKB representation of the Geography.
 func (g *Geography) EWKB() geopb.EWKB {
-	return g.spatialObject.EWKB
+	// TODO(otan): clean this up by returning errors.
+	t, err := g.AsGeomT()
+	if err != nil {
+		panic(err)
+	}
+	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
+	if err != nil {
+		panic(err)
+	}
+	return geopb.EWKB(ret)
 }
 
 // SpatialObject returns the SpatialObject representation of the Geography.
@@ -440,7 +463,16 @@ func (g *Geography) SpatialObject() geopb.SpatialObject {
 
 // EWKBHex returns the EWKBHex representation of the Geography.
 func (g *Geography) EWKBHex() string {
-	return g.spatialObject.EWKBHex()
+	// TODO(otan): clean this up by returning errors.
+	t, err := g.AsGeomT()
+	if err != nil {
+		panic(err)
+	}
+	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%X", ret)
 }
 
 // SRID returns the SRID representation of the Geography.
@@ -696,6 +728,34 @@ func validateGeomT(t geom.T) error {
 	return nil
 }
 
+// spatialObjectToGeomT converts a geopb.SpatialObject to a geom.T.
+func spatialObjectToGeomT(so geopb.SpatialObject) (geom.T, error) {
+	switch so.ShapeType {
+	case geopb.ShapeType_GeometryCollection:
+		var geometryCollectionShape geopb.GeometryCollectionShape
+		if err := protoutil.Unmarshal(so.SerializedShape, &geometryCollectionShape); err != nil {
+			return nil, err
+		}
+		ret := geom.NewGeometryCollection().SetSRID(int(so.SRID))
+		for _, s := range geometryCollectionShape.Shapes {
+			toPush, err := geopbShapeToGeomT(s.ShapeType, s.Shape, so.SRID)
+			if err != nil {
+				return nil, err
+			}
+			if err := ret.Push(toPush); err != nil {
+				return nil, err
+			}
+		}
+		return ret, nil
+	default:
+		var shape geopb.Shape
+		if err := protoutil.Unmarshal(so.SerializedShape, &shape); err != nil {
+			return nil, err
+		}
+		return geopbShapeToGeomT(so.ShapeType, shape, so.SRID)
+	}
+}
+
 // spatialObjectFromGeomT creates a geopb.SpatialObject from a geom.T.
 func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.SpatialObject, error) {
 	if err := validateGeomT(t); err != nil {
@@ -704,14 +764,12 @@ func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.Spa
 	if soType == geopb.SpatialObjectType_GeographyType {
 		normalizeGeographyGeomT(t)
 	}
-	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
-	if err != nil {
-		return geopb.SpatialObject{}, err
-	}
+
 	shapeType, err := shapeTypeFromGeomT(t)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+
 	switch t.Layout() {
 	case geom.XY:
 	case geom.NoLayout:
@@ -721,19 +779,56 @@ func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.Spa
 	default:
 		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
 	}
+
+	var serializedShape []byte
+	switch t := t.(type) {
+	case *geom.GeometryCollection:
+		shape := geopb.GeometryCollectionShape{
+			Shapes: make([]geopb.GeometryCollectionShape_GeometryCollectionSubShape, t.NumGeoms()),
+		}
+		for i := 0; i < t.NumGeoms(); i++ {
+			subShape, err := geopbShapeFromGeomT(t.Geom(i))
+			if err != nil {
+				return geopb.SpatialObject{}, err
+			}
+			subShapeType, err := shapeTypeFromGeomT(t.Geom(i))
+			if err != nil {
+				return geopb.SpatialObject{}, err
+			}
+			shape.Shapes[i] = geopb.GeometryCollectionShape_GeometryCollectionSubShape{
+				Shape:     subShape,
+				ShapeType: subShapeType,
+			}
+		}
+		serializedShape, err = protoutil.Marshal(&shape)
+		if err != nil {
+			return geopb.SpatialObject{}, err
+		}
+	default:
+		shape, err := geopbShapeFromGeomT(t)
+		if err != nil {
+			return geopb.SpatialObject{}, err
+		}
+		serializedShape, err = protoutil.Marshal(&shape)
+		if err != nil {
+			return geopb.SpatialObject{}, err
+		}
+	}
+
 	bbox, err := boundingBoxFromGeomT(t, soType)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
 	return geopb.SpatialObject{
-		Type:        soType,
-		EWKB:        geopb.EWKB(ret),
-		SRID:        geopb.SRID(t.SRID()),
-		ShapeType:   shapeType,
-		BoundingBox: bbox,
+		Type:            soType,
+		SerializedShape: serializedShape,
+		SRID:            geopb.SRID(t.SRID()),
+		ShapeType:       shapeType,
+		BoundingBox:     bbox,
 	}, nil
 }
 
+// shapeTypeFromGeomT returns the ShapeType given a geom.T.
 func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	switch t := t.(type) {
 	case *geom.Point:
@@ -752,6 +847,81 @@ func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 		return geopb.ShapeType_GeometryCollection, nil
 	default:
 		return geopb.ShapeType_Unset, errors.Newf("unknown shape: %T", t)
+	}
+}
+
+// geopbShapeToGeomT converts a geopb.Shape to a geom.T.
+func geopbShapeToGeomT(
+	shapeType geopb.ShapeType, shape geopb.Shape, srid geopb.SRID,
+) (geom.T, error) {
+	switch shapeType {
+	case geopb.ShapeType_Point:
+		return geom.NewPointFlat(geom.XY, shape.Coords).SetSRID(int(srid)), nil
+	case geopb.ShapeType_LineString:
+		return geom.NewLineStringFlat(geom.XY, shape.Coords).SetSRID(int(srid)), nil
+	case geopb.ShapeType_Polygon:
+		return geom.NewPolygonFlat(geom.XY, shape.Coords, shape.Ends).SetSRID(int(srid)), nil
+	case geopb.ShapeType_MultiPoint:
+		return geom.NewMultiPointFlat(
+			geom.XY,
+			shape.Coords,
+			geom.NewMultiPointFlatOptionWithEnds(shape.Ends),
+		).SetSRID(int(srid)), nil
+	case geopb.ShapeType_MultiLineString:
+		return geom.NewMultiLineStringFlat(geom.XY, shape.Coords, shape.Ends).SetSRID(int(srid)), nil
+	case geopb.ShapeType_MultiPolygon:
+		endsEnds := make([][]int, len(shape.EndsEnds))
+		prevIdx := 0
+		for i, endIdx := range shape.EndsEnds {
+			endsEnds[i] = shape.Ends[prevIdx:endIdx]
+			prevIdx = endIdx
+		}
+		return geom.NewMultiPolygonFlat(geom.XY, shape.Coords, endsEnds).SetSRID(int(srid)), nil
+	default:
+		return nil, errors.Newf("unknown shape type: %s", shapeType)
+	}
+}
+
+// geopbShapeFromGeomT creates a geopb.Shape from a geom object.
+func geopbShapeFromGeomT(t geom.T) (geopb.Shape, error) {
+	switch t := t.(type) {
+	case *geom.Point:
+		return geopb.Shape{
+			Coords: t.FlatCoords(),
+		}, nil
+	case *geom.LineString:
+		return geopb.Shape{
+			Coords: t.FlatCoords(),
+		}, nil
+	case *geom.Polygon:
+		return geopb.Shape{
+			Coords: t.FlatCoords(),
+			Ends:   t.Ends(),
+		}, nil
+	case *geom.MultiPoint:
+		return geopb.Shape{
+			Coords: t.FlatCoords(),
+			Ends:   t.Ends(),
+		}, nil
+	case *geom.MultiLineString:
+		return geopb.Shape{
+			Coords: t.FlatCoords(),
+			Ends:   t.Ends(),
+		}, nil
+	case *geom.MultiPolygon:
+		ends := []int{}
+		endsEnds := make([]int, len(t.Endss()))
+		for i, endsIn := range t.Endss() {
+			ends = append(ends, endsIn...)
+			endsEnds[i] = len(ends)
+		}
+		return geopb.Shape{
+			Coords:   t.FlatCoords(),
+			Ends:     ends,
+			EndsEnds: endsEnds,
+		}, nil
+	default:
+		return geopb.Shape{}, errors.Newf("unknown shape: %T", t)
 	}
 }
 

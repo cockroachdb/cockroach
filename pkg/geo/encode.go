@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
-	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/kml"
 	"github.com/twpayne/go-geom/encoding/wkb"
@@ -31,7 +30,7 @@ import (
 
 // SpatialObjectToWKT transforms a given SpatialObject to WKT.
 func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +40,7 @@ func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT
 
 // SpatialObjectToEWKT transforms a given SpatialObject to EWKT.
 func SpatialObjectToEWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.EWKT, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +56,7 @@ func SpatialObjectToEWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.EW
 
 // SpatialObjectToWKB transforms a given SpatialObject to WKB.
 func SpatialObjectToWKB(so geopb.SpatialObject, byteOrder binary.ByteOrder) (geopb.WKB, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +107,7 @@ func geomToGeoJSONCRS(t geom.T, long bool) (*geojson.CRS, error) {
 func SpatialObjectToGeoJSON(
 	so geopb.SpatialObject, maxDecimalDigits int, flag SpatialObjectToGeoJSONFlag,
 ) ([]byte, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +153,7 @@ func SpatialObjectToGeoJSON(
 
 // SpatialObjectToWKBHex transforms a given SpatialObject to WKBHex.
 func SpatialObjectToWKBHex(so geopb.SpatialObject) (string, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -164,7 +163,7 @@ func SpatialObjectToWKBHex(so geopb.SpatialObject) (string, error) {
 
 // SpatialObjectToKML transforms a given SpatialObject to KML.
 func SpatialObjectToKML(so geopb.SpatialObject) (string, error) {
-	t, err := ewkb.Unmarshal([]byte(so.EWKB))
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
