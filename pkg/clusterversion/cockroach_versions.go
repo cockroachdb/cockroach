@@ -79,6 +79,7 @@ const (
 	VersionBox2DType
 	VersionLeasedDatabaseDescriptors
 	VersionUpdateScheduledJobsSchema
+	VersionJoinRPC
 
 	// Add new versions here (step one of two).
 )
@@ -589,6 +590,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionUpdateScheduledJobsSchema,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 19},
 	},
+	{
+		// VersionJoinRPC enables the use of the Join RPC.
+		Key:     VersionJoinRPC,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 20},
+	},
+
 	// Add new versions here (step two of two).
 })
 
@@ -600,6 +607,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
+	//
 	// We support everything after 19.1, including pre-release 19.2 versions.
 	// This is generally beneficial, but in particular it allows the
 	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading
