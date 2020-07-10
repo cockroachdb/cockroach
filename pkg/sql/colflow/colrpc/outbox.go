@@ -63,7 +63,7 @@ type Outbox struct {
 	draining        uint32
 	metadataSources []execinfrapb.MetadataSource
 	// closers is a slice of Closers that need to be Closed on termination.
-	closers []colexec.IdempotentCloser
+	closers colexec.Closers
 
 	scratch struct {
 		buf *bytes.Buffer
@@ -81,7 +81,7 @@ func NewOutbox(
 	input colexecbase.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -107,13 +107,7 @@ func NewOutbox(
 }
 
 func (o *Outbox) close(ctx context.Context) {
-	for _, closer := range o.closers {
-		if err := closer.IdempotentClose(ctx); err != nil {
-			if log.V(1) {
-				log.Infof(ctx, "error closing Closer: %v", err)
-			}
-		}
-	}
+	o.closers.CloseAndLogOnErr(ctx, "outbox")
 }
 
 // Run starts an outbox by connecting to the provided node and pushing

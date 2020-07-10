@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // OperatorInitStatus indicates whether Init method has already been called on
@@ -123,14 +124,38 @@ type ResettableOperator interface {
 	resetter
 }
 
-// IdempotentCloser is an object that releases resource on the first call to
-// IdempotentClose but does nothing for any subsequent call.
-type IdempotentCloser interface {
-	IdempotentClose(ctx context.Context) error
+// Closer is an object that releases resources when Close is called.
+type Closer interface {
+	Close(ctx context.Context) error
+}
+
+// Closers is a slice of Closers.
+type Closers []Closer
+
+// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
+// is 1 or higher. The given prefix is prepended to the log message.
+func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
+	prefix += ":"
+	for _, closer := range c {
+		if err := closer.Close(ctx); err != nil && log.V(1) {
+			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+		}
+	}
+}
+
+// CallbackCloser is a utility struct that implements the Closer interface by
+// calling a provided callback.
+type CallbackCloser struct {
+	CloseCb func(context.Context) error
+}
+
+// Close implements the Closer interface.
+func (c *CallbackCloser) Close(ctx context.Context) error {
+	return c.CloseCb(ctx)
 }
 
 // closerHelper is a simple helper that helps Operators implement
-// IdempotentCloser. If close returns true, resources may be released, if it
+// Closer. If close returns true, resources may be released, if it
 // returns false, close has already been called.
 // use.
 type closerHelper struct {
@@ -149,7 +174,7 @@ func (c *closerHelper) close() bool {
 
 type closableOperator interface {
 	colexecbase.Operator
-	IdempotentCloser
+	Closer
 }
 
 type noopOperator struct {

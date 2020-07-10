@@ -387,7 +387,7 @@ func (r opResult) createDiskBackedSort(
 				args.FDSemaphore,
 				diskAccount,
 			)
-			r.ToClose = append(r.ToClose, es.(colexec.IdempotentCloser))
+			r.ToClose = append(r.ToClose, es.(colexec.Closer))
 			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
@@ -839,7 +839,7 @@ func NewColOperator(
 							args.TestingKnobs.DelegateFDAcquisitions,
 							diskAccount,
 						)
-						result.ToClose = append(result.ToClose, ehj.(colexec.IdempotentCloser))
+						result.ToClose = append(result.ToClose, ehj.(colexec.Closer))
 						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -908,7 +908,7 @@ func NewColOperator(
 			}
 
 			result.Op = mj
-			result.ToClose = append(result.ToClose, mj.(colexec.IdempotentCloser))
+			result.ToClose = append(result.ToClose, mj.(colexec.Closer))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
 			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
@@ -1025,8 +1025,8 @@ func NewColOperator(
 					)
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
-					// is an IdempotentCloser.
-					if c, ok := result.Op.(colexec.IdempotentCloser); ok {
+					// is an Closer.
+					if c, ok := result.Op.(colexec.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
 				default:

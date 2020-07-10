@@ -119,6 +119,9 @@ type SynchronizerInput struct {
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
 	MetadataSources execinfrapb.MetadataSources
+	// ToClose are Closers in the input tree that should be closed in the same
+	// goroutine as Op.
+	ToClose Closers
 }
 
 func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
@@ -214,6 +217,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				}
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
+				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
 			}()
 			sendErr := func(err error) {
 				if strings.Contains(err.Error(), context.Canceled.Error()) && atomic.LoadInt32(&internalCancellation) == 1 {

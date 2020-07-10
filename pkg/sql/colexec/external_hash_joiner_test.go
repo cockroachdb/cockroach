@@ -307,7 +307,7 @@ func createDiskBackedHashJoiner(
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []Closer, error) {
 	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,

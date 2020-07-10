@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -377,12 +376,6 @@ type mergeJoinBase struct {
 	twoInputNode
 	closerHelper
 
-	// mu is used to protect against concurrent IdempotentClose and Next calls,
-	// which are currently allowed.
-	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
-	//  Next, which will simplify this model.
-	mu syncutil.Mutex
-
 	unlimitedAllocator *colmem.Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
@@ -423,7 +416,7 @@ type mergeJoinBase struct {
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ IdempotentCloser = &mergeJoinBase{}
+var _ Closer = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -714,16 +707,14 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 	)
 }
 
-func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+func (o *mergeJoinBase) Close(ctx context.Context) error {
 	if !o.close() {
 		return nil
 	}
 	var lastErr error
 	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
-		if c, ok := op.(IdempotentCloser); ok {
-			if err := c.IdempotentClose(ctx); err != nil {
+		if c, ok := op.(Closer); ok {
+			if err := c.Close(ctx); err != nil {
 				lastErr = err
 			}
 		}

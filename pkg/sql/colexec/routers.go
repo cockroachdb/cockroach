@@ -493,9 +493,9 @@ type HashRouter struct {
 	// metadataSources is a slice of execinfrapb.MetadataSources that need to be
 	// drained when the HashRouter terminates.
 	metadataSources execinfrapb.MetadataSources
-	// closers is a slice of IdempotentClosers that need to be closed when the
-	// hash router terminates.
-	closers []IdempotentCloser
+	// closers is a slice of Closers that need to be closed when the hash router
+	// terminates.
+	closers Closers
 
 	// unblockedEventsChan is a channel shared between the HashRouter and its
 	// outputs. outputs send events on this channel when they are unblocked by a
@@ -543,7 +543,7 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []IdempotentCloser,
+	toClose []Closer,
 ) (*HashRouter, []colexecbase.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -584,7 +584,7 @@ func newHashRouterWithOutputs(
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 	toDrain []execinfrapb.MetadataSource,
-	toClose []IdempotentCloser,
+	toClose []Closer,
 ) *HashRouter {
 	r := &HashRouter{
 		OneInputNode:        NewOneInputNode(input),
@@ -710,13 +710,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	r.waitForMetadata <- r.bufferedMeta
 	close(r.waitForMetadata)
 
-	for _, closer := range r.closers {
-		if err := closer.IdempotentClose(ctx); err != nil {
-			if log.V(1) {
-				log.Infof(ctx, "error closing IdempotentCloser: %v", err)
-			}
-		}
-	}
+	r.closers.CloseAndLogOnErr(ctx, "hash router")
 }
 
 // processNextBatch reads the next batch from its input, hashes it and adds
