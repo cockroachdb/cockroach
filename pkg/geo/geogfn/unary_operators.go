@@ -135,6 +135,10 @@ func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geograp
 		return nil, errors.Newf("distance must not be greater than %f", math.Pi*spheroid.Radius)
 	}
 
+	if point.Empty() {
+		return nil, errors.Newf("cannot project POINT EMPTY")
+	}
+
 	// Convert to ta geodetic point.
 	x := point.X()
 	y := point.Y()
