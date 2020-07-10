@@ -189,7 +189,7 @@ func TestIntersects(t *testing.T) {
 		{
 			"POLYGON intersects POINT lying inside latitudinal boundary",
 			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
-			"POINT (150 88)",
+			"POINT (150 85)",
 			true,
 		},
 		{

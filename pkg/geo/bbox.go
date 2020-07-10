@@ -141,17 +141,30 @@ func BoundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 }
 
 // boundingBoxFromGeomTGeographyType returns an appropriate bounding box for a Geography type.
+// There are marginally invalid shapes for which we want bounding boxes that are correct
+// regardless of the validity of the shape, since validity checks may return slightly different
+// results in S2 and the other libraries we use. Therefore, instead of constructing s2.Region(s)
+// from the shape, which will expose us to S2's validity checks, we use the points directly to
+// compute the bounding box.
 func boundingBoxFromGeomTGeographyType(g geom.T) (s2.Rect, error) {
 	if g.Empty() {
 		return s2.EmptyRect(), nil
 	}
-	regions, err := S2RegionsFromGeomT(g, EmptyBehaviorOmit)
-	if err != nil {
-		return s2.EmptyRect(), err
-	}
 	rect := s2.EmptyRect()
-	for _, region := range regions {
-		rect = rect.Union(region.RectBound())
+	switch g := g.(type) {
+	case *geom.GeometryCollection:
+		for i := 0; i < g.NumGeoms(); i++ {
+			rectToAdd, err := boundingBoxFromGeomTGeographyType(g.Geom(i))
+			if err != nil {
+				return s2.EmptyRect(), err
+			}
+			rect = rect.Union(rectToAdd)
+		}
+	default:
+		flatCoords := g.FlatCoords()
+		for i := 0; i < len(flatCoords); i += g.Stride() {
+			rect = rect.AddPoint(s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i]))
+		}
 	}
 	return rect, nil
 }
