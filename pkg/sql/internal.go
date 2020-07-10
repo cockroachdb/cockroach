@@ -76,7 +76,7 @@ type InternalExecutor struct {
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
-	monitor := mon.MakeUnlimitedMonitor(
+	monitor := mon.NewUnlimitedMonitor(
 		ctx,
 		"internal SQL executor",
 		mon.MemoryResource,
@@ -87,7 +87,7 @@ func MakeInternalExecutor(
 	)
 	return InternalExecutor{
 		s:          s,
-		mon:        &monitor,
+		mon:        monitor,
 		memMetrics: memMetrics,
 	}
 }

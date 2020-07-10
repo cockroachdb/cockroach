@@ -239,7 +239,7 @@ var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCAT
 // to reserve and release bytes to a pool.
 var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
-// MakeMonitor creates a new monitor.
+// NewMonitor creates a new monitor.
 // Arguments:
 // - name is used to annotate log messages, can be used to distinguish
 //   monitors.
@@ -257,7 +257,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 // - noteworthy determines the minimum total allocated size beyond
 //   which the monitor starts to log increases. Use 0 to always log
 //   or math.MaxInt64 to never log.
-func MakeMonitor(
+func NewMonitor(
 	name string,
 	res Resource,
 	curCount *metric.Gauge,
@@ -265,14 +265,14 @@ func MakeMonitor(
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
-	return MakeMonitorWithLimit(
+) *BytesMonitor {
+	return NewMonitorWithLimit(
 		name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy, settings)
 }
 
-// MakeMonitorWithLimit creates a new monitor with a limit local to this
+// NewMonitorWithLimit creates a new monitor with a limit local to this
 // monitor.
-func MakeMonitorWithLimit(
+func NewMonitorWithLimit(
 	name string,
 	res Resource,
 	limit int64,
@@ -281,14 +281,14 @@ func MakeMonitorWithLimit(
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
+) *BytesMonitor {
 	if increment <= 0 {
 		increment = DefaultPoolAllocationSize
 	}
 	if limit <= 0 {
 		limit = math.MaxInt64
 	}
-	return BytesMonitor{
+	return &BytesMonitor{
 		name:                 name,
 		resource:             res,
 		limit:                limit,
@@ -300,10 +300,10 @@ func MakeMonitorWithLimit(
 	}
 }
 
-// MakeMonitorInheritWithLimit creates a new monitor with a limit local to this
+// NewMonitorInheritWithLimit creates a new monitor with a limit local to this
 // monitor with all other attributes inherited from the passed in monitor.
-func MakeMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) BytesMonitor {
-	return MakeMonitorWithLimit(
+func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *BytesMonitor {
+	return NewMonitorWithLimit(
 		name,
 		m.resource,
 		limit,
@@ -345,9 +345,9 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	}
 }
 
-// MakeUnlimitedMonitor creates a new monitor and starts the monitor in
+// NewUnlimitedMonitor creates a new monitor and starts the monitor in
 // "detached" mode without a pool and without a maximum budget.
-func MakeUnlimitedMonitor(
+func NewUnlimitedMonitor(
 	ctx context.Context,
 	name string,
 	res Resource,
@@ -355,12 +355,12 @@ func MakeUnlimitedMonitor(
 	maxHist *metric.Histogram,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
+) *BytesMonitor {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
 
 	}
-	return BytesMonitor{
+	return &BytesMonitor{
 		name:                 name,
 		resource:             res,
 		limit:                math.MaxInt64,

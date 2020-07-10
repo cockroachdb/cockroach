@@ -532,7 +532,7 @@ func TempStorageConfigFromEnv(
 	} else {
 		monitorName = "temp disk storage"
 	}
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		monitorName,
 		mon.DiskResource,
 		nil,             /* curCount */
@@ -544,7 +544,7 @@ func TempStorageConfigFromEnv(
 	monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMem,
-		Mon:      &monitor,
+		Mon:      monitor,
 		Spec:     useStore,
 	}
 }

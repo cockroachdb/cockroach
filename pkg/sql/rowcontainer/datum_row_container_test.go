@@ -34,7 +34,7 @@ func TestRowContainer(t *testing.T) {
 					resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
 				}
 				st := cluster.MakeTestingClusterSettings()
-				m := mon.MakeUnlimitedMonitor(
+				m := mon.NewUnlimitedMonitor(
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
 				rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
@@ -80,7 +80,7 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
+	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
 	resCols := sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.Int}}
@@ -107,7 +107,7 @@ func TestRowContainerZeroCols(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
+	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
 	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(nil), 0)
@@ -136,7 +136,7 @@ func BenchmarkRowContainerAt(b *testing.B) {
 	const numRows = 1024
 
 	st := cluster.MakeTestingClusterSettings()
-	m := mon.MakeUnlimitedMonitor(
+	m := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 	)
 	defer m.Stop(context.Background())
