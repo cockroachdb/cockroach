@@ -10,6 +10,7 @@ CREATE TABLE t (
     b INT,
     c STRING,
     FAMILY (a, b, c),
+    CHECK (b > 0),
     INDEX b_full (b),
     INDEX b_partial (b) WHERE b > 10,
     INDEX c_partial (c) WHERE a > b AND c = 'foo'
