@@ -31,61 +31,11 @@ import (
 // This file contains functions for building geospatial inverted index scans
 // and joins that are used throughout the xform package.
 
-// geoRelationshipMap contains all the geospatial functions that can be index-
-// accelerated. Each function implies a certain type of geospatial relationship,
-// which affects how the index is queried as part of a constrained scan or
-// geospatial lookup join. geoRelationshipMap maps the function name to its
-// corresponding relationship (Covers, CoveredBy, or Intersects).
-//
-// Note that for all of these functions, a geospatial lookup join or constrained
-// index scan may produce false positives. Therefore, the original function must
-// be called on the output of the index operation to filter the results.
-var geoRelationshipMap = map[string]geoindex.RelationshipType{
-	"st_covers":           geoindex.Covers,
-	"st_coveredby":        geoindex.CoveredBy,
-	"st_contains":         geoindex.Covers,
-	"st_containsproperly": geoindex.Covers,
-	"st_crosses":          geoindex.Intersects,
-	"st_dwithin":          geoindex.DWithin,
-	"st_dfullywithin":     geoindex.DFullyWithin,
-	"st_equals":           geoindex.Intersects,
-	"st_intersects":       geoindex.Intersects,
-	"st_overlaps":         geoindex.Intersects,
-	"st_touches":          geoindex.Intersects,
-	"st_within":           geoindex.CoveredBy,
-}
-
-// geoRelationshipReverseMap contains a default function for each of the
-// possible geospatial relationships.
-var geoRelationshipReverseMap = map[geoindex.RelationshipType]string{
-	geoindex.Covers:       "st_covers",
-	geoindex.CoveredBy:    "st_coveredby",
-	geoindex.DWithin:      "st_dwithin",
-	geoindex.DFullyWithin: "st_dfullywithin",
-	geoindex.Intersects:   "st_intersects",
-}
-
-// commuteGeoRelationshipMap is used to determine how the geospatial
-// relationship changes if the arguments to the index-accelerated function are
-// commuted.
-//
-// The relationships in the geoRelationshipMap map above only apply when the
-// second argument to the function is the indexed column. If the arguments are
-// commuted so that the first argument is the indexed column, the relationship
-// may change.
-var commuteGeoRelationshipMap = map[geoindex.RelationshipType]geoindex.RelationshipType{
-	geoindex.Covers:       geoindex.CoveredBy,
-	geoindex.CoveredBy:    geoindex.Covers,
-	geoindex.DWithin:      geoindex.DWithin,
-	geoindex.DFullyWithin: geoindex.DFullyWithin,
-	geoindex.Intersects:   geoindex.Intersects,
-}
-
 // IsGeoIndexFunction returns true if the given function is a geospatial
 // function that can be index-accelerated.
 func IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 	function := fn.(*memo.FunctionExpr)
-	_, ok := geoRelationshipMap[function.Name]
+	_, ok := geoindex.RelationshipMap[function.Name]
 	return ok
 }
 
@@ -102,7 +52,7 @@ func IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 //   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
 //   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
 //
-// See commuteGeoRelationshipMap for the full list of mappings.
+// See geoindex.CommuteRelationshipMap for the full list of mappings.
 //
 // Also returns the column ID corresponding to the input geospatial column
 // as well as the column ID corresponding to the inverted index key column,
@@ -161,8 +111,8 @@ func TryGetInvertedJoinCondFromGeoFunc(
 		// Get the geospatial relationship that is equivalent to this one with the
 		// arguments commuted, and construct a new function that represents that
 		// relationship.
-		rel := geoRelationshipMap[function.Name]
-		commutedRel, ok := commuteGeoRelationshipMap[rel]
+		rel := geoindex.RelationshipMap[function.Name]
+		commutedRel, ok := geoindex.CommuteRelationshipMap[rel]
 		if !ok {
 			// It's not possible to commute this relationship.
 			return nil, 0, 0, false
@@ -170,7 +120,7 @@ func TryGetInvertedJoinCondFromGeoFunc(
 		if rel != commutedRel {
 			// If the commuted relationship is not the same as the original
 			// relationship, we can't use the same function overload.
-			name := geoRelationshipReverseMap[commutedRel]
+			name := geoindex.RelationshipReverseMap[commutedRel]
 
 			// Copy the original arguments into a new list, and swap the first two
 			// arguments.
@@ -421,7 +371,7 @@ func constrainGeoIndex(
 		//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
 		//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
 		//
-		// See commuteGeoRelationshipMap for the full list of mappings.
+		// See geoindex.CommuteRelationshipMap for the full list of mappings.
 		invertedExpr := constrainGeoIndexFromFunction(
 			ctx, t, false /* commuteArgs */, tabID, index, getSpanExpr,
 		)
@@ -491,9 +441,9 @@ func constrainGeoIndexFromFunction(
 		additionalParams = append(additionalParams, memo.ExtractConstDatum(fn.Args.Child(i)))
 	}
 
-	relationship := geoRelationshipMap[fn.Name]
+	relationship := geoindex.RelationshipMap[fn.Name]
 	if commuteArgs {
-		relationship, ok = commuteGeoRelationshipMap[relationship]
+		relationship, ok = geoindex.CommuteRelationshipMap[relationship]
 		if !ok {
 			// It's not possible to commute this relationship.
 			return invertedexpr.NonInvertedColExpression{}
@@ -530,7 +480,7 @@ func NewGeoDatumToInvertedExpr(
 	}
 
 	name := fn.Func.FunctionReference.String()
-	relationship, ok := geoRelationshipMap[name]
+	relationship, ok := geoindex.RelationshipMap[name]
 	if !ok {
 		return nil, fmt.Errorf("%s cannot be index-accelerated", name)
 	}

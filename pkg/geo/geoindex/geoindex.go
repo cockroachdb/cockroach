@@ -21,6 +21,56 @@ import (
 	"github.com/golang/geo/s2"
 )
 
+// RelationshipMap contains all the geospatial functions that can be index-
+// accelerated. Each function implies a certain type of geospatial relationship,
+// which affects how the index is queried as part of a constrained scan or
+// geospatial lookup join. RelationshipMap maps the function name to its
+// corresponding relationship (Covers, CoveredBy, DFullyWithin, DWithin or Intersects).
+//
+// Note that for all of these functions, a geospatial lookup join or constrained
+// index scan may produce false positives. Therefore, the original function must
+// be called on the output of the index operation to filter the results.
+var RelationshipMap = map[string]RelationshipType{
+	"st_covers":           Covers,
+	"st_coveredby":        CoveredBy,
+	"st_contains":         Covers,
+	"st_containsproperly": Covers,
+	"st_crosses":          Intersects,
+	"st_dwithin":          DWithin,
+	"st_dfullywithin":     DFullyWithin,
+	"st_equals":           Intersects,
+	"st_intersects":       Intersects,
+	"st_overlaps":         Intersects,
+	"st_touches":          Intersects,
+	"st_within":           CoveredBy,
+}
+
+// RelationshipReverseMap contains a default function for each of the
+// possible geospatial relationships.
+var RelationshipReverseMap = map[RelationshipType]string{
+	Covers:       "st_covers",
+	CoveredBy:    "st_coveredby",
+	DWithin:      "st_dwithin",
+	DFullyWithin: "st_dfullywithin",
+	Intersects:   "st_intersects",
+}
+
+// CommuteRelationshipMap is used to determine how the geospatial
+// relationship changes if the arguments to the index-accelerated function are
+// commuted.
+//
+// The relationships in the RelationshipMap map above only apply when the
+// second argument to the function is the indexed column. If the arguments are
+// commuted so that the first argument is the indexed column, the relationship
+// may change.
+var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
+	Covers:       CoveredBy,
+	CoveredBy:    Covers,
+	DWithin:      DWithin,
+	DFullyWithin: DFullyWithin,
+	Intersects:   Intersects,
+}
+
 // Interfaces for accelerating certain spatial operations, by allowing the
 // caller to use an externally stored index.
 //
