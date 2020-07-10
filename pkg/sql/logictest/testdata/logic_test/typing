@@ -15,8 +15,8 @@ SELECT * FROM f
 statement ok
 CREATE TABLE i (x INT)
 
-statement error value type decimal doesn't match type int of column "x"
-INSERT INTO i(x) VALUES (4.5)
+statement error value type timestamptz doesn't match type int of column "x"
+INSERT INTO i(x) VALUES ('1970-01-01'::timestamptz)
 
 statement ok
 INSERT INTO i(x) VALUES (2.0)

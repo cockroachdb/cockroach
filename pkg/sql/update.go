@@ -291,7 +291,11 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Verify the schema constraints. For consistency with INSERT/UPSERT
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
-	if err := enforceLocalColumnConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
+	if err := enforceLocalColumnConstraints(
+		params.EvalContext(),
+		u.run.updateValues,
+		u.run.tu.ru.UpdateCols,
+	); err != nil {
 		return err
 	}
 
@@ -418,17 +422,31 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescriptor) error {
+func enforceLocalColumnConstraints(
+	ctx *tree.EvalContext, row tree.Datums, cols []sqlbase.ColumnDescriptor,
+) error {
 	for i := range cols {
 		col := &cols[i]
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlbase.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
+		var err error
+		if !col.Type.Equivalent(row[i].ResolvedType()) {
+			if _, ok := tree.FindCast(
+				row[i].ResolvedType().Oid(),
+				col.Type.Oid(),
+				tree.CastContextAssignment,
+			); ok {
+				row[i], err = tree.PerformCast(ctx, row[i], col.Type)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		row[i], err = sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
 			return err
 		}
-		row[i] = outVal
 	}
 	return nil
 }

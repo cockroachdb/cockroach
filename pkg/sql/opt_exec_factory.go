@@ -1410,6 +1410,7 @@ func (ef *execFactory) ConstructUpsert(
 			checkOrds:  checks,
 			insertCols: ri.InsertCols,
 			tw: optTableUpserter{
+				evalCtx:       ef.planner.EvalContext(),
 				ri:            ri,
 				alloc:         ef.planner.alloc,
 				canaryOrdinal: int(canaryCol),

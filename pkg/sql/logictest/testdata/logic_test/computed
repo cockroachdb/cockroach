@@ -758,8 +758,11 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type int of column "a"
+query error unsupported binary operator: <decimal> \+ <int> \(desired <int>\)
 INSERT INTO x VALUES(1.4)
+
+query error value type date doesn't match type int of column "a"
+INSERT INTO x VALUES('1970-01-01'::date)
 
 # Regression test for #34901: verify that builtins can be used in computed
 # column expressions without a "memory budget exceeded" error while backfilling
