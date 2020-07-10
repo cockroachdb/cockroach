@@ -87,7 +87,7 @@ func getCreateTypeParams(
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
 		return nil, 0, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
 	}

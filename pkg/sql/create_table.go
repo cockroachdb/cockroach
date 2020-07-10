@@ -200,7 +200,7 @@ func getTableCreateParams(
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
 		// Still return data in this case.
 		return tKey, schemaID, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName)
