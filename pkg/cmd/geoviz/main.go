@@ -12,11 +12,14 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"go/build"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,15 +38,19 @@ type indexTemplate struct {
 
 // handleIndex serves the HTML page that contains the map.
 func handleIndex(w http.ResponseWriter, r *http.Request) {
-	templates := template.Must(template.ParseFiles("pkg/cmd/geoviz/templates/index.tmpl.html"))
-	err := templates.ExecuteTemplate(
+	pkg, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	templates := template.Must(template.ParseFiles(filepath.Join(pkg.Dir, "pkg/cmd/geoviz/templates/index.tmpl.html")))
+	if err := templates.ExecuteTemplate(
 		w,
 		"index.tmpl.html",
 		indexTemplate{
 			APIKey: APIKey,
 		},
-	)
-	if err != nil {
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -78,6 +85,8 @@ func handleLoad(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
+
 	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/load", handleLoad)
 

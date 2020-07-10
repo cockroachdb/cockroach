@@ -54,6 +54,9 @@
           <input type="checkbox" id="show-labels" name="show-labels" checked>
           Show Labels
         </label>
+        <div>
+          <button onclick="copyURL()">Share GeoVIZ</button>
+        </div>
       </div>
     </div>
     <div id="geoviz-input">
@@ -90,6 +93,13 @@ covering,New Mexico Covering,purple,"POLYGON((-109.0448 36.9971,-109.0489 31.333
           center: {lat: -34.397, lng: 150.644},
           zoom: 2
         });
+
+        // Populate GeoVIZ from URL if available.
+        const loc = $(location).attr('hash');
+        if (loc) {
+          $('textarea[name="data"]').val(atob(loc.substring(1)));
+        }
+
         $("#form-geoviz-input").submit();
       }
 
@@ -121,6 +131,19 @@ covering,New Mexico Covering,purple,"POLYGON((-109.0448 36.9971,-109.0489 31.333
         for (const label of objItems.labels) {
           label.setMap((labelChecked && visible) ? map : null);
         }
+      }
+
+      function copyURL() {
+        const el = document.createElement('textarea');
+        el.value = window.location;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        alert("URL copied to clipboard!");
       }
 
       $("#form-geoviz-input").submit(function(event) {
@@ -251,6 +274,8 @@ covering,New Mexico Covering,purple,"POLYGON((-109.0448 36.9971,-109.0489 31.333
               const idx = $(this).attr('value');
               setMapOnObjs(allObjItems[idx], checked);
             });
+
+            window.location.hash = '#' + btoa($('textarea[name="data"]').val());
           },
           error: function(xhr) {
             alert(xhr.responseText);
