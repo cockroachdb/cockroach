@@ -13,6 +13,9 @@ package scheduledjobs
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -28,6 +31,19 @@ type JobSchedulerEnv interface {
 	// NowExpr returns expression representing current time when
 	// used in the database queries.
 	NowExpr() string
+}
+
+// JobExecutionConfig encapsulates external components needed for scheduled job execution.
+type JobExecutionConfig struct {
+	Settings         *cluster.Settings
+	InternalExecutor sqlutil.InternalExecutor
+	DB               *kv.DB
+	// PlanHookMaker is responsible for creating sql.NewInternalPlanner. It returns an
+	// *sql.planner as an interface{} due to package dependency cycles. It should
+	// be cast to that type in the sql package when it is used. Returns a cleanup
+	// function that must be called once the caller is done with the planner.
+	// This is the same mechanism used in jobs.Registry.
+	PlanHookMaker func(opName string, tnx *kv.Txn, user string) (interface{}, func())
 }
 
 // production JobSchedulerEnv implementation.

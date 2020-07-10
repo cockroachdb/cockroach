@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -34,17 +33,19 @@ const createdByName = "crdb_schedule"
 // jobScheduler is responsible for finding and starting scheduled
 // jobs that need to be executed.
 type jobScheduler struct {
+	*scheduledjobs.JobExecutionConfig
 	env scheduledjobs.JobSchedulerEnv
-	ex  sqlutil.InternalExecutor
 }
 
-func newJobScheduler(env scheduledjobs.JobSchedulerEnv, ex sqlutil.InternalExecutor) *jobScheduler {
+func newJobScheduler(
+	cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv,
+) *jobScheduler {
 	if env == nil {
 		env = scheduledjobs.ProdJobSchedulerEnv
 	}
 	return &jobScheduler{
-		env: env,
-		ex:  ex,
+		JobExecutionConfig: cfg,
+		env:                env,
 	}
 }
 
@@ -70,8 +71,7 @@ SELECT
 FROM %s S
 WHERE next_run < %s
 ORDER BY next_run
-%s
-`, env.SystemJobsTableName(), createdByName,
+%s`, env.SystemJobsTableName(), createdByName,
 		StatusSucceeded, StatusCanceled, StatusFailed,
 		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
 }
@@ -106,19 +106,19 @@ func (s *jobScheduler) processSchedule(
 			// a job.  It would also be nice not to log each event.
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
 			schedule.AddScheduleChangeReason("reschedule: %d running", numRunning)
-			return schedule.Update(ctx, s.ex, txn)
+			return schedule.Update(ctx, s.InternalExecutor, txn)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
 			schedule.AddScheduleChangeReason("rescheduled: %d running", numRunning)
-			return schedule.Update(ctx, s.ex, txn)
+			return schedule.Update(ctx, s.InternalExecutor, txn)
 		}
 	}
 
 	// Schedule the next job run.
 	// We do this step early, before the actual execution, to grab a lock on
-	// the scheduled_jobs table.
+	// the scheduledjobs table.
 	if schedule.HasRecurringSchedule() {
 		if err := schedule.ScheduleNextRun(); err != nil {
 			return err
@@ -128,29 +128,29 @@ func (s *jobScheduler) processSchedule(
 		schedule.SetNextRun(time.Time{})
 	}
 
-	if err := schedule.Update(ctx, s.ex, txn); err != nil {
+	if err := schedule.Update(ctx, s.InternalExecutor, txn); err != nil {
 		return err
 	}
 
-	executor, err := NewScheduledJobExecutor(schedule.ExecutorType(), s.ex)
+	executor, err := NewScheduledJobExecutor(schedule.ExecutorType())
 	if err != nil {
 		return err
 	}
 
 	// Grab job executor and execute the job.
-	if err := executor.ExecuteJob(ctx, schedule, txn); err != nil {
-		return err
+	if err := executor.ExecuteJob(ctx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
+		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
 	// Persist any mutations to the underlying schedule.
-	return schedule.Update(ctx, s.ex, txn)
+	return schedule.Update(ctx, s.InternalExecutor, txn)
 }
 
 func (s *jobScheduler) executeSchedules(
 	ctx context.Context, maxSchedules int64, txn *kv.Txn,
 ) error {
 	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
-	rows, cols, err := s.ex.QueryWithCols(ctx, "find-scheduled-jobs", nil,
+	rows, cols, err := s.InternalExecutor.QueryWithCols(ctx, "find-scheduled-jobs", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		findSchedulesStmt)
 
@@ -205,7 +205,7 @@ const minPacePeriod = 10 * time.Second
 // Frequency to recheck if the daemon is enabled.
 const recheckEnabledAfterPeriod = 5 * time.Minute
 
-// Returns duration to wait before scanning scheduled_jobs.
+// Returns duration to wait before scanning system.scheduled_jobs.
 // Package visible for testing.
 var warnIfPaceTooLow = log.Every(time.Minute)
 var getWaitPeriod = func(sv *settings.Values) time.Duration {
@@ -230,25 +230,23 @@ var getWaitPeriod = func(sv *settings.Values) time.Duration {
 func StartJobSchedulerDaemon(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	sv *settings.Values,
+	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
-	db *kv.DB,
-	ex sqlutil.InternalExecutor,
 ) {
-	scheduler := newJobScheduler(env, ex)
+	scheduler := newJobScheduler(cfg, env)
 
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		for waitPeriod := getInitialScanDelay(); ; waitPeriod = getWaitPeriod(sv) {
+		for waitPeriod := getInitialScanDelay(); ; waitPeriod = getWaitPeriod(&cfg.Settings.SV) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-time.After(waitPeriod):
-				if !schedulerEnabledSetting.Get(sv) {
+				if !schedulerEnabledSetting.Get(&cfg.Settings.SV) {
 					continue
 				}
 
-				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(sv)
-				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&cfg.Settings.SV)
+				err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					return scheduler.executeSchedules(ctx, maxSchedules, txn)
 				})
 				if err != nil {
