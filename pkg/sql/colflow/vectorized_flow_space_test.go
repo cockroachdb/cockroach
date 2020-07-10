@@ -87,7 +87,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				if len(tc.spec.Input) > 1 {
 					inputs = append(inputs, colexec.NewZeroOpNoInput())
 				}
-				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
+				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 				} else {
@@ -205,7 +205,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				if len(tc.spec.Input) > 1 {
 					inputs = append(inputs, colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
-				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
+				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
 				if expectNoMemoryError {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))

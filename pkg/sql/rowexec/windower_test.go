@@ -34,7 +34,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	monitor := mon.MakeMonitorWithLimit(
+	monitor := mon.NewMonitorWithLimit(
 		"test-monitor",
 		mon.MemoryResource,
 		100000,        /* limit */
@@ -44,7 +44,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)

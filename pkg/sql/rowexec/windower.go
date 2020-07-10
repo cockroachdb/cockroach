@@ -161,7 +161,7 @@ func newWindower(
 			limit = memRequiredByWindower
 		}
 	}
-	limitedMon := mon.MakeMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
+	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
 	limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
 
 	if err := w.InitWithEvalCtx(
@@ -172,7 +172,7 @@ func newWindower(
 		evalCtx,
 		processorID,
 		output,
-		&limitedMon,
+		limitedMon,
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{w.input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				w.close()

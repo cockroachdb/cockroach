@@ -394,7 +394,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		// Track the total maximum memory used for a query with no budget.
 		{
 			// Swap model's memory monitor in order to adjust allocation size.
-			adjustedMon := mon.MakeMonitor(
+			adjustedMon := mon.NewMonitor(
 				"timeseries-test-worker-adjusted",
 				mon.MemoryResource,
 				nil,
@@ -407,7 +407,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 			defer adjustedMon.Stop(context.Background())
 
 			query := tm.makeQuery("test.metric", resolution1ns, 11, 109)
-			query.workerMemMonitor = &adjustedMon
+			query.workerMemMonitor = adjustedMon
 			query.InterpolationLimitNanos = 10
 			query.assertSuccess(99, 3)
 			memoryUsed := adjustedMon.MaximumBytes()
@@ -471,7 +471,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 
 		// Create a limited bytes monitor.
 		memoryBudget := int64(100 * 1024)
-		limitedMon := mon.MakeMonitorWithLimit(
+		limitedMon := mon.NewMonitorWithLimit(
 			"timeseries-test-limited",
 			mon.MemoryResource,
 			memoryBudget,
@@ -486,7 +486,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 
 		// Assert correctness with no memory pressure.
 		query := tm.makeQuery("test.metric", resolution1ns, 0, 60)
-		query.workerMemMonitor = &limitedMon
+		query.workerMemMonitor = limitedMon
 		query.assertSuccess(7, 1)
 
 		// Assert failure with memory pressure.

@@ -82,7 +82,7 @@ type timeSeriesMaintenanceQueue struct {
 	tsData         TimeSeriesDataStore
 	replicaCountFn func() int
 	db             *kv.DB
-	mem            mon.BytesMonitor
+	mem            *mon.BytesMonitor
 }
 
 // newTimeSeriesMaintenanceQueue returns a new instance of
@@ -94,7 +94,7 @@ func newTimeSeriesMaintenanceQueue(
 		tsData:         tsData,
 		replicaCountFn: store.ReplicaCount,
 		db:             db,
-		mem: mon.MakeUnlimitedMonitor(
+		mem: mon.NewUnlimitedMonitor(
 			context.Background(),
 			"timeseries-maintenance-queue",
 			mon.MemoryResource,
@@ -151,7 +151,7 @@ func (q *timeSeriesMaintenanceQueue) process(
 	now := repl.store.Clock().Now()
 	defer snap.Close()
 	if err := q.tsData.MaintainTimeSeries(
-		ctx, snap, desc.StartKey, desc.EndKey, q.db, &q.mem, TimeSeriesMaintenanceMemoryBudget, now,
+		ctx, snap, desc.StartKey, desc.EndKey, q.db, q.mem, TimeSeriesMaintenanceMemoryBudget, now,
 	); err != nil {
 		return false, err
 	}

@@ -3139,7 +3139,7 @@ type EvalContext struct {
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"test-monitor",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -3148,7 +3148,7 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	return MakeTestingEvalContextWithMon(st, &monitor)
+	return MakeTestingEvalContextWithMon(st, monitor)
 }
 
 // MakeTestingEvalContextWithMon returns an EvalContext with the given

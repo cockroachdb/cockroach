@@ -1261,7 +1261,7 @@ func SupportsVectorized(
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed
 	// case).
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"supports-vectorized",
 		mon.MemoryResource,
 		nil,           /* curCount */

@@ -264,7 +264,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 
 	// Construct a memory monitor that will be used to measure the high-water
 	// mark of memory usage for the rollup process.
-	adjustedMon := mon.MakeMonitor(
+	adjustedMon := mon.NewMonitor(
 		"timeseries-test-worker-adjusted",
 		mon.MemoryResource,
 		nil,
@@ -278,7 +278,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 
 	// Roll up time series with the new monitor to measure high-water mark
 	// of
-	qmc := MakeQueryMemoryContext(&adjustedMon, &adjustedMon, QueryMemoryOptions{
+	qmc := MakeQueryMemoryContext(adjustedMon, adjustedMon, QueryMemoryOptions{
 		// Large budget, but not maximum to avoid overflows.
 		BudgetBytes:      math.MaxInt64,
 		EstimatedSources: 1, // Not needed for rollups
@@ -321,7 +321,7 @@ func TestRollupMemoryConstraint(t *testing.T) {
 		adjustedMon.Stop(context.Background())
 		adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
 
-		qmc := MakeQueryMemoryContext(&adjustedMon, &adjustedMon, QueryMemoryOptions{
+		qmc := MakeQueryMemoryContext(adjustedMon, adjustedMon, QueryMemoryOptions{
 			// Large budget, but not maximum to avoid overflows.
 			BudgetBytes:      limit,
 			EstimatedSources: 1, // Not needed for rollups

@@ -1282,7 +1282,7 @@ func (r opResult) createBufferingUnlimitedMemAccount(
 func (r opResult) createStandaloneMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
-	standaloneMemMonitor := mon.MakeMonitor(
+	standaloneMemMonitor := mon.NewMonitor(
 		name+"-standalone",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -1291,7 +1291,7 @@ func (r opResult) createStandaloneMemAccount(
 		math.MaxInt64, /* noteworthy */
 		flowCtx.Cfg.Settings,
 	)
-	r.OpMonitors = append(r.OpMonitors, &standaloneMemMonitor)
+	r.OpMonitors = append(r.OpMonitors, standaloneMemMonitor)
 	standaloneMemMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &standaloneMemAccount)

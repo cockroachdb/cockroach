@@ -158,7 +158,7 @@ func DefaultTestTempStorageConfig(st *cluster.Settings) TempStorageConfig {
 func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"in-mem temp storage",
 		mon.DiskResource,
 		nil,             /* curCount */
@@ -170,7 +170,7 @@ func DefaultTestTempStorageConfigWithSize(
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: true,
-		Mon:      &monitor,
+		Mon:      monitor,
 	}
 }
 

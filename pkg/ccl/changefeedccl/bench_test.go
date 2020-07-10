@@ -205,7 +205,7 @@ func createBenchmarkChangefeed(
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := s.LeaseManager().(*lease.Manager)
-	mm := mon.MakeUnlimitedMonitor(
+	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 	)
@@ -224,7 +224,7 @@ func createBenchmarkChangefeed(
 		Sink:             buf,
 		LeaseMgr:         leaseMgr,
 		Metrics:          &metrics.KVFeedMetrics,
-		MM:               &mm,
+		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
