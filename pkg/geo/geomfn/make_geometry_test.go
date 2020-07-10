@@ -176,7 +176,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("shell must be closed"),
+			errors.Newf("Polygon LinearRing at position 1 is not closed"),
 		},
 		{
 			"ERROR: Unclosed interior ring",
@@ -188,7 +188,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{geopb.SRID(4326), geopb.SRID(26918)},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("holes must be closed"),
+			errors.Newf("Polygon LinearRing at position 2 is not closed"),
 		},
 		{
 			"ERROR: Shell has 3 points",
@@ -198,7 +198,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("shell must have at least 4 points"),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 3 at position 1"),
 		},
 		{
 			"ERROR: Shell has 2 points",
@@ -208,7 +208,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("shell must have at least 4 points"),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 2 at position 1"),
 		},
 		{
 			"ERROR: Interior ring has 3 points",
@@ -220,7 +220,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{geopb.SRID(4326), geopb.SRID(26918)},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("holes must have at least 4 points"),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 3 at position 2"),
 		},
 		{
 			"ERROR: Interior ring has 2 points",
@@ -232,7 +232,7 @@ func TestMakePolygon(t *testing.T) {
 			[]geopb.SRID{geopb.SRID(4326), geopb.SRID(26918)},
 			"",
 			geopb.DefaultGeometrySRID,
-			errors.Newf("holes must have at least 4 points"),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 2 at position 2"),
 		},
 	}
 
@@ -249,6 +249,7 @@ func TestMakePolygon(t *testing.T) {
 			polygon, err := MakePolygon(outer, interior...)
 			if tc.err != nil {
 				require.Errorf(t, err, tc.err.Error())
+				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
 				expected, err := geo.MustParseGeometry(tc.expected).CloneWithSRID(tc.expectedSRID)
