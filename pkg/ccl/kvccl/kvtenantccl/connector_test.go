@@ -39,6 +39,8 @@ var rpcRetryOpts = retry.Options{
 	MaxBackoff:     4 * time.Microsecond,
 }
 
+var _ roachpb.InternalServer = &mockServer{}
+
 type mockServer struct {
 	rangeLookupFn func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
 	gossipSubFn   func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
@@ -61,6 +63,12 @@ func (*mockServer) Batch(context.Context, *roachpb.BatchRequest) (*roachpb.Batch
 }
 
 func (*mockServer) RangeFeed(*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer) error {
+	panic("unimplemented")
+}
+
+func (m *mockServer) Join(
+	context.Context, *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 
