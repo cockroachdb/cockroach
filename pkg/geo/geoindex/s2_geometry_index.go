@@ -79,6 +79,44 @@ const exceedsBoundsCellID = s2.CellID(^uint64(0))
 // TODO(sumeer): adjust code to handle precision issues with floating point
 // arithmetic.
 
+// covererWithBBoxFallback first computes the covering for the provided
+// regions (which were computed using geom), and if the covering is too
+// broad (contains faces other than 0), falls back to using the bounding
+// box of geom to compute the covering.
+type covererWithBBoxFallback struct {
+	s    *s2GeometryIndex
+	geom geom.T
+}
+
+var _ covererInterface = covererWithBBoxFallback{}
+
+func (rc covererWithBBoxFallback) covering(regions []s2.Region) s2.CellUnion {
+	cu := simpleCovererImpl{rc: rc.s.rc}.covering(regions)
+	if isBadCovering(cu) {
+		bbox := geo.BoundingBoxFromGeomTGeometryType(rc.geom)
+		flatCoords := []float64{
+			bbox.LoX, bbox.LoY, bbox.HiX, bbox.LoY, bbox.HiX, bbox.HiY, bbox.LoX, bbox.HiY,
+			bbox.LoX, bbox.LoY}
+		bboxT := geom.NewPolygonFlat(geom.XY, flatCoords, []int{len(flatCoords)})
+		bboxRegions := rc.s.s2RegionsFromPlanarGeomT(bboxT)
+		bboxCU := simpleCovererImpl{rc: rc.s.rc}.covering(bboxRegions)
+		if !isBadCovering(bboxCU) {
+			cu = bboxCU
+		}
+	}
+	return cu
+}
+
+func isBadCovering(cu s2.CellUnion) bool {
+	for _, c := range cu {
+		if c.Face() != 0 {
+			// Good coverings should not see a face other than 0.
+			return true
+		}
+	}
+	return false
+}
+
 // InvertedIndexKeys implements the GeometryIndex interface.
 func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error) {
 	// If the geometry exceeds the bounds, we index the clipped geometry in
@@ -92,7 +130,7 @@ func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) 
 	var keys []Key
 	if gt != nil {
 		r := s.s2RegionsFromPlanarGeomT(gt)
-		keys = invertedIndexKeys(c, s.rc, r)
+		keys = invertedIndexKeys(c, covererWithBBoxFallback{s: s, geom: gt}, r)
 	}
 	if clipped {
 		keys = append(keys, Key(exceedsBoundsCellID))
@@ -139,7 +177,7 @@ func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionK
 	var spans UnionKeySpans
 	if gt != nil {
 		r := s.s2RegionsFromPlanarGeomT(gt)
-		spans = intersects(c, s.rc, r)
+		spans = intersects(c, covererWithBBoxFallback{s: s, geom: gt}, r)
 	}
 	if clipped {
 		// And lookup all shapes that exceed the bounds.
@@ -175,6 +213,9 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err
+	}
+	if gt.Empty() {
+		return gt, false, nil
 	}
 	clipped := false
 	if s.geomExceedsBounds(gt) {
@@ -290,10 +331,13 @@ func (s *s2GeometryIndex) planarPointToS2Point(x float64, y float64) s2.Point {
 	return face0UVToXYZPoint(u, v)
 }
 
-// TODO(sumeer): this is similar to s2RegionsFromGeomT() but needs to do
+// TODO(sumeer): this is similar to S2RegionsFromGeomT() but needs to do
 // a different point conversion. If these functions do not diverge further,
 // and turn out not to be performance critical, merge the two implementations.
 func (s *s2GeometryIndex) s2RegionsFromPlanarGeomT(geomRepr geom.T) []s2.Region {
+	if geomRepr.Empty() {
+		return nil
+	}
 	var regions []s2.Region
 	switch repr := geomRepr.(type) {
 	case *geom.Point:

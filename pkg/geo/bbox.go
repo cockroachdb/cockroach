@@ -92,7 +92,7 @@ func (b *CartesianBoundingBox) Covers(o *CartesianBoundingBox) bool {
 func boundingBoxFromGeomT(g geom.T, soType geopb.SpatialObjectType) (*geopb.BoundingBox, error) {
 	switch soType {
 	case geopb.SpatialObjectType_GeometryType:
-		ret := boundingBoxFromGeomTGeometryType(g)
+		ret := BoundingBoxFromGeomTGeometryType(g)
 		if ret == nil {
 			return nil, nil
 		}
@@ -115,8 +115,8 @@ func boundingBoxFromGeomT(g geom.T, soType geopb.SpatialObjectType) (*geopb.Boun
 	return nil, errors.Newf("unknown spatial type: %s", soType)
 }
 
-// boundingBoxFromGeomTGeometryType returns an appropriate bounding box for a Geometry type.
-func boundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
+// BoundingBoxFromGeomTGeometryType returns an appropriate bounding box for a Geometry type.
+func BoundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 	if g.Empty() {
 		return nil
 	}
@@ -124,7 +124,7 @@ func boundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 	switch g := g.(type) {
 	case *geom.GeometryCollection:
 		for i := 0; i < g.NumGeoms(); i++ {
-			shapeBBox := boundingBoxFromGeomTGeometryType(g.Geom(i))
+			shapeBBox := BoundingBoxFromGeomTGeometryType(g.Geom(i))
 			if shapeBBox == nil {
 				continue
 			}
