@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -691,7 +692,7 @@ func (s *sqlServer) start(
 
 	// Start scheduled jobs daemon.
 	jobs.StartJobSchedulerDaemon(ctx, stopper, &s.execCfg.Settings.SV,
-		jobs.ProdJobSchedulerEnv, s.execCfg.DB, s.internalExecutor)
+		scheduledjobs.ProdJobSchedulerEnv, s.execCfg.DB, s.internalExecutor)
 
 	return nil
 }

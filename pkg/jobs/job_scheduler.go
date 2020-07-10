@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,58 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// jobSchedulerEnv is an environment for running scheduled jobs.
-// This environment facilitates dependency injection mechanism for tests.
-type jobSchedulerEnv interface {
-	// ScheduledJobsTableName returns the name of the scheduled_jobs table.
-	ScheduledJobsTableName() string
-	// SystemJobsTableName returns the name of the system jobs table.
-	SystemJobsTableName() string
-	// Now returns current time.
-	Now() time.Time
-	// NowExpr returns expression representing current time when
-	// used in the database queries.
-	NowExpr() string
-}
-
-// production jobSchedulerEnv implementation.
-type prodJobSchedulerEnvImpl struct{}
-
-// ProdJobSchedulerEnv is a jobSchedulerEnv implementation suitable for production.
-var ProdJobSchedulerEnv jobSchedulerEnv = &prodJobSchedulerEnvImpl{}
-
 const createdByName = "crdb_schedule"
-
-func (e *prodJobSchedulerEnvImpl) ScheduledJobsTableName() string {
-	return "system.scheduled_jobs"
-}
-
-func (e *prodJobSchedulerEnvImpl) SystemJobsTableName() string {
-	return "system.jobs"
-}
-
-func (e *prodJobSchedulerEnvImpl) Now() time.Time {
-	return timeutil.Now()
-}
-
-func (e *prodJobSchedulerEnvImpl) NowExpr() string {
-	return "current_timestamp()"
-}
 
 // jobScheduler is responsible for finding and starting scheduled
 // jobs that need to be executed.
 type jobScheduler struct {
-	env jobSchedulerEnv
+	env scheduledjobs.JobSchedulerEnv
 	ex  sqlutil.InternalExecutor
 }
 
-func newJobScheduler(env jobSchedulerEnv, ex sqlutil.InternalExecutor) *jobScheduler {
+func newJobScheduler(env scheduledjobs.JobSchedulerEnv, ex sqlutil.InternalExecutor) *jobScheduler {
 	if env == nil {
-		env = ProdJobSchedulerEnv
+		env = scheduledjobs.ProdJobSchedulerEnv
 	}
 	return &jobScheduler{
 		env: env,
@@ -88,7 +52,7 @@ const allSchedules = 0
 
 // getFindSchedulesStatement returns SQL statement used for finding
 // scheduled jobs that should be started.
-func getFindSchedulesStatement(env jobSchedulerEnv, maxSchedules int64) string {
+func getFindSchedulesStatement(env scheduledjobs.JobSchedulerEnv, maxSchedules int64) string {
 	limitClause := ""
 	if maxSchedules > 0 {
 		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
@@ -267,7 +231,7 @@ func StartJobSchedulerDaemon(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	sv *settings.Values,
-	env jobSchedulerEnv,
+	env scheduledjobs.JobSchedulerEnv,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 ) {
