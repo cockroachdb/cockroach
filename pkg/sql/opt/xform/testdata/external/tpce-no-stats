@@ -146,7 +146,7 @@ sort
       │    │    │    └── filters
       │    │    │         └── sc_id:1 = in_sc_id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │    └── projections
-      │    │         └── tr_qty:34 * tr_bid_price:35 [as=column42:42, outer=(34,35), immutable]
+      │    │         └── tr_qty:34::INT8 * tr_bid_price:35::DECIMAL [as=column42:42, outer=(34,35), immutable]
       │    └── aggregations
       │         └── sum [as=sum:43, outer=(42)]
       │              └── column42:42
@@ -287,7 +287,7 @@ limit
  │         │    │    │    │    └── filters (true)
  │         │    │    │    └── filters (true)
  │         │    │    └── projections
- │         │    │         └── hs_qty:9 * lt_price:12 [as=column15:15, outer=(9,12), immutable]
+ │         │    │         └── hs_qty:9::INT8 * lt_price:12::DECIMAL [as=column15:15, outer=(9,12), immutable]
  │         │    └── aggregations
  │         │         ├── sum [as=sum:16, outer=(15)]
  │         │         │    └── column15:15
@@ -1826,7 +1826,7 @@ project
  │    │    │    │    └── fd: ()-->(1), (2)-->(3)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         └── hs_qty:3 * lt_price:6 [as=column9:9, outer=(3,6), immutable]
+ │    │         └── hs_qty:3::INT8 * lt_price:6::DECIMAL [as=column9:9, outer=(3,6), immutable]
  │    └── aggregations
  │         └── sum [as=sum:10, outer=(9)]
  │              └── column9:9
@@ -2273,7 +2273,7 @@ update holding_summary
       │    ├── key: ()
       │    └── fd: ()-->(4-6)
       └── projections
-           └── hs_qty:6 + 10 [as=hs_qty_new:7, outer=(6), immutable]
+           └── hs_qty:6::INT8 + 10 [as=hs_qty_new:7, outer=(6), immutable]
 
 # Q7
 opt
@@ -2400,7 +2400,7 @@ update holding
       │    └── fd: ()-->(7-12)
       └── projections
            ├── h_price:11 > 0 [as=check1:14, outer=(11), immutable]
-           └── h_qty:12 + 10 [as=h_qty_new:13, outer=(12), immutable]
+           └── h_qty:12::INT8 + 10 [as=h_qty_new:13, outer=(12), immutable]
 
 # Q11
 opt
@@ -2598,7 +2598,7 @@ update holding_summary
       │    ├── key: ()
       │    └── fd: ()-->(4-6)
       └── projections
-           └── hs_qty:6 + 10 [as=hs_qty_new:7, outer=(6), immutable]
+           └── hs_qty:6::INT8 + 10 [as=hs_qty_new:7, outer=(6), immutable]
 
 # Q16
 opt
@@ -3028,7 +3028,7 @@ project
  │         │    └── fd: ()-->(7-12)
  │         └── projections
  │              ├── ca_tax_st:11 IN (0, 1, 2) [as=check1:15, outer=(11)]
- │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:12 + 1E+2, 2) [as=ca_bal:14, outer=(12), immutable]
+ │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:12::DECIMAL + 1E+2, 2) [as=ca_bal:14, outer=(12), immutable]
  └── projections
       └── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:16, outer=(6), immutable]
 

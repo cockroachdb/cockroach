@@ -285,8 +285,8 @@ project
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      ├── NULL OR (k:1 = 1) [as=r:6, outer=(1)]
-      └── NULL AND (k:1 = 1) [as=s:7, outer=(1)]
+      ├── CAST(NULL AS BOOL) OR (k:1 = 1) [as=r:6, outer=(1)]
+      └── CAST(NULL AS BOOL) AND (k:1 = 1) [as=s:7, outer=(1)]
 
 # --------------------------------------------------
 # FoldNotTrue + FoldNotFalse + FoldNotNull
@@ -667,7 +667,7 @@ project
  ├── fd: ()-->(6)
  ├── scan a
  └── projections
-      └── NULL [as=r:6]
+      └── CAST(NULL AS BOOL) [as=r:6]
 
 norm expect=(ExtractRedundantConjunct)
 SELECT (null and k=2) or (null and k=1) AS r FROM a
@@ -678,7 +678,7 @@ project
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── NULL AND ((k:1 = 2) OR (k:1 = 1)) [as=r:6, outer=(1)]
+      └── CAST(NULL AS BOOL) AND ((k:1 = 2) OR (k:1 = 1)) [as=r:6, outer=(1)]
 
 # Check that we don't match non-redundant cases.
 norm expect-not=(ExtractRedundantConjunct)

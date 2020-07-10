@@ -1770,34 +1770,24 @@ SELECT ST_MakePolygon(
       ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)', 3857)
     ]);
 
-statement error shell must be closed
+statement error Polygon LinearRing at position 1 is not closed
 SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 70)'));
 
-statement error shell must have at least 4 points
+statement error Polygon LinearRing must have at least 4 points, found 3 at position 1
 SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 40 80)'));
 
-statement error shell must have at least 4 points
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 40 80)'));
-
-statement error holes must be closed
+statement error Polygon LinearRing at position 2 is not closed
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 60)')
     ]);
 
-statement error holes must have at least 4 points
+statement error Polygon LinearRing must have at least 4 points, found 3 at position 2
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 50 70)')
-    ]);
-
-statement error holes must have at least 4 points
-SELECT ST_MakePolygon(
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 50 70)')
     ]);
 
 query T

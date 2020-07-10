@@ -13,9 +13,11 @@ package geo
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
@@ -597,6 +599,124 @@ func TestGeographyAsGeometry(t *testing.T) {
 			to, err := geog.AsGeometry()
 			require.NoError(t, err)
 			require.Equal(t, geom, to)
+		})
+	}
+}
+
+func TestValidateGeomT(t *testing.T) {
+	testCases := []struct {
+		g        geom.T
+		expected error
+	}{
+		{geom.NewPointEmpty(geom.XY), nil},
+		{geom.NewLineString(geom.XY), nil},
+		{geom.NewPolygon(geom.XY), nil},
+		{geom.NewMultiPoint(geom.XY), nil},
+		{geom.NewMultiLineString(geom.XY), nil},
+		{geom.NewMultiPolygon(geom.XY), nil},
+		{geom.NewGeometryCollection(), nil},
+
+		{geom.NewLineStringFlat(geom.XY, []float64{1, 0}), errors.Newf("LineString must have at least 2 coordinates")},
+		{
+			geom.NewPolygonFlat(
+				geom.XY,
+				[]float64{0, 0, 1, 0, 1, 1},
+				[]int{6},
+			),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 3 at position 1"),
+		},
+		{
+			geom.NewPolygonFlat(
+				geom.XY,
+				[]float64{0, 0, 1, 0, 1, 1, 4, 4},
+				[]int{8},
+			),
+			errors.Newf("Polygon LinearRing at position 1 is not closed"),
+		},
+		{
+			geom.NewPolygonFlat(
+				geom.XY,
+				[]float64{0, 0, 1, 0, 1, 1, 0, 0},
+				[]int{8},
+			),
+			nil,
+		},
+		{
+			geom.NewPolygonFlat(
+				geom.XY,
+				[]float64{
+					0, 0, 1, 0, 1, 1, 0, 0,
+					0.1, 0.1, 1.0, 0.1, 0.9, 0.9,
+				},
+				[]int{8, 14},
+			),
+			errors.Newf("Polygon LinearRing must have at least 4 points, found 3 at position 2"),
+		},
+		{
+			geom.NewPolygonFlat(
+				geom.XY,
+				[]float64{
+					0, 0, 1, 0, 1, 1, 0, 0,
+					0.1, 0.1, 1.0, 0.1, 0.9, 0.9, 0.3, 0.3,
+				},
+				[]int{8, 16},
+			),
+			errors.Newf("Polygon LinearRing at position 2 is not closed"),
+		},
+
+		{
+			geom.NewMultiLineStringFlat(
+				geom.XY,
+				[]float64{
+					0, 0, 1, 1,
+					2, 2,
+				},
+				[]int{4, 6},
+			),
+			errors.Newf("invalid MultiLineString component at position 2: LineString must have at least 2 coordinates"),
+		},
+
+		{
+			geom.NewMultiPolygonFlat(
+				geom.XY,
+				[]float64{
+					0, 0, 1, 0, 1, 1, 0, 0,
+					0, 0, 1, 0, 1, 1,
+				},
+				[][]int{{8}, {14}},
+			),
+			errors.Newf("invalid MultiPolygon component at position 2: Polygon LinearRing must have at least 4 points, found 3 at position 1"),
+		},
+
+		{
+			geom.NewGeometryCollection().MustPush(geom.NewLineStringFlat(geom.XY, []float64{0, 1})),
+			errors.Newf("invalid GeometryCollection component at position 1: LineString must have at least 2 coordinates"),
+		},
+		{
+			geom.NewGeometryCollection().MustPush(
+				geom.NewLineStringFlat(geom.XY, []float64{0, 1, 2, 3}),
+			).MustPush(
+				geom.NewMultiPolygonFlat(
+					geom.XY,
+					[]float64{
+						0, 0, 1, 0, 1, 1, 0, 0,
+						0, 0, 1, 0, 1, 1,
+					},
+					[][]int{{8}, {14}},
+				),
+			),
+			errors.Newf("invalid GeometryCollection component at position 2: invalid MultiPolygon component at position 2: Polygon LinearRing must have at least 4 points, found 3 at position 1"),
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			err := validateGeomT(tc.g)
+			if tc.expected != nil {
+				require.EqualError(t, err, tc.expected.Error())
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
