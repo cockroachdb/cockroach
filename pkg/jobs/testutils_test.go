@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/scheduled_jobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,7 +33,7 @@ import (
 
 type testHelper struct {
 	env     *jobstest.JobSchedulerTestEnv
-	cfg     *scheduled_jobs.JobExecutionConfig
+	cfg     *scheduledjobs.JobExecutionConfig
 	sqlDB   *sqlutils.SQLRunner
 	stopper *stop.Stopper
 }
@@ -41,14 +41,7 @@ type testHelper struct {
 // newTestHelper creates and initializes appropriate state for a test,
 // returning testHelper as well as a cleanup function.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
-	cfg := &scheduled_jobs.JobExecutionConfig{
-		Settings:         s.ClusterSettings(),
-		InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
-		DB:               kvdb,
-		TestingKnobs:     base.TestingKnobs{},
-		PlanHookMaker:    nil,
-	}
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup test scheduled jobs table.
@@ -59,8 +52,12 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 
 	restoreRegistry := settings.TestingSaveRegistry()
 	return &testHelper{
-			env:     env,
-			cfg:     cfg,
+			env: env,
+			cfg: &scheduledjobs.JobExecutionConfig{
+				Settings:         s.ClusterSettings(),
+				InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
+				DB:               kvDB,
+			},
 			sqlDB:   sqlDB,
 			stopper: s.Stopper(),
 		}, func() {

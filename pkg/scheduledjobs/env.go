@@ -13,6 +13,7 @@ package scheduledjobs
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -38,6 +39,9 @@ type JobExecutionConfig struct {
 	Settings         *cluster.Settings
 	InternalExecutor sqlutil.InternalExecutor
 	DB               *kv.DB
+	// TestingKnobs is *jobs.TestingKnobs; however we cannot depend
+	// on jobs package due to circular dependencies.
+	TestingKnobs base.ModuleTestingKnobs
 	// PlanHookMaker is responsible for creating sql.NewInternalPlanner. It returns an
 	// *sql.planner as an interface{} due to package dependency cycles. It should
 	// be cast to that type in the sql package when it is used. Returns a cleanup

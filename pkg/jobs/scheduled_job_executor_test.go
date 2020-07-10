@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/scheduled_jobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -29,8 +29,8 @@ type statusTrackingExecutor struct {
 
 func (s *statusTrackingExecutor) ExecuteJob(
 	_ context.Context,
-	_ *scheduled_jobs.JobExecutionConfig,
-	_ scheduled_jobs.JobSchedulerEnv,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
 	_ *ScheduledJob,
 	_ *kv.Txn,
 ) error {
@@ -40,8 +40,8 @@ func (s *statusTrackingExecutor) ExecuteJob(
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
 	_ context.Context,
-	_ *scheduled_jobs.JobExecutionConfig,
-	_ scheduled_jobs.JobSchedulerEnv,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
 	md *JobMetadata,
 	_ *ScheduledJob,
 	_ *kv.Txn,

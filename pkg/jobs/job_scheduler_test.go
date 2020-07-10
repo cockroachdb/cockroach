@@ -46,7 +46,7 @@ func addFakeJob(t *testing.T, h *testHelper, id int64, status Status, txn *kv.Tx
 		fmt.Sprintf(
 			"INSERT INTO %s (created_by_type, created_by_id, status, payload) VALUES ($1, $2, $3, $4)",
 			h.env.SystemJobsTableName()),
-		createdByName, id, status, payload,
+		CreatedByScheduledJobs, id, status, payload,
 	)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -236,8 +236,8 @@ type recordScheduleExecutor struct {
 
 func (n *recordScheduleExecutor) ExecuteJob(
 	_ context.Context,
-	_ *scheduled_jobs.JobExecutionConfig,
-	_ scheduled_jobs.JobSchedulerEnv,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	_ *kv.Txn,
 ) error {
@@ -247,8 +247,8 @@ func (n *recordScheduleExecutor) ExecuteJob(
 
 func (n *recordScheduleExecutor) NotifyJobTermination(
 	_ context.Context,
-	_ *scheduled_jobs.JobExecutionConfig,
-	_ scheduled_jobs.JobSchedulerEnv,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
 	_ *JobMetadata,
 	_ *ScheduledJob,
 	_ *kv.Txn,

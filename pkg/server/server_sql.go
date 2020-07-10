@@ -670,6 +670,7 @@ func (s *sqlServer) start(
 			Settings:         s.execCfg.Settings,
 			InternalExecutor: s.internalExecutor,
 			DB:               s.execCfg.DB,
+			TestingKnobs:     s.distSQLServer.TestingKnobs.JobsTestingKnobs,
 			PlanHookMaker: func(opName string, txn *kv.Txn, user string) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
