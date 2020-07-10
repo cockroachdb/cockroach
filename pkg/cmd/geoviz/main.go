@@ -21,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 )
 
 var (
@@ -84,8 +86,18 @@ func handleLoad(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var flagGeoLibsDir = flag.String(
+	"geo_libs",
+	"/usr/local/lib/cockroach",
+	"Location where geospatial related libraries can be found.",
+)
+
 func main() {
 	flag.Parse()
+
+	if _, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, *flagGeoLibsDir); err != nil {
+		log.Fatalf("could not initialize GEOS - geospatial functions may not be available: %v", err)
+	}
 
 	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/load", handleLoad)
