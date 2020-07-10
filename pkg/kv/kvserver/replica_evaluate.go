@@ -476,10 +476,6 @@ func evaluateCommand(
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if h.ReturnRangeInfo {
-		returnRangeInfo(reply, rec)
-	}
-
 	// TODO(peter): We'd like to assert that the hlc clock is always updated
 	// correctly, but various tests insert versioned data without going through
 	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
@@ -505,21 +501,6 @@ func evaluateCommand(
 	}
 
 	return pd, pErr
-}
-
-// returnRangeInfo populates RangeInfos in the response if the batch
-// requested them.
-func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
-	header := reply.Header()
-	lease, _ := rec.GetLease()
-	desc := rec.Desc()
-	header.RangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *desc,
-			Lease: lease,
-		},
-	}
-	reply.SetHeader(header)
 }
 
 // canDoServersideRetry looks at the error produced by evaluating ba (or the
