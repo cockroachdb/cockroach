@@ -423,40 +423,40 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 58          v1            b        20        0              8       3       0         -1
 58          v1            c        20        0              8       4       0         -1
 
-query TTIBTTBB colnames
-SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
+query TTIBTTBBTT colnames
+SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname       attname  atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef
-t1            p        -1         NULL      NULL        NULL      true        false
-t1            a        -1         NULL      NULL        NULL      false       false
-t1            b        -1         NULL      NULL        NULL      false       false
-t1            c        -1         NULL      NULL        NULL      false       true
-t1            d        9          NULL      NULL        NULL      false       false
-t1            e        5          NULL      NULL        NULL      false       false
-t1            f        655371     NULL      NULL        NULL      false       false
-primary       p        -1         NULL      NULL        NULL      true        false
-t1_a_key      a        -1         NULL      NULL        NULL      false       false
-index_key     b        -1         NULL      NULL        NULL      false       false
-index_key     c        -1         NULL      NULL        NULL      false       true
-t2            t1_id    -1         NULL      NULL        NULL      false       false
-t2            rowid    -1         NULL      NULL        NULL      true        true
-primary       rowid    -1         NULL      NULL        NULL      true        true
-t2_t1_id_idx  t1_id    -1         NULL      NULL        NULL      false       false
-t3            a        -1         NULL      NULL        NULL      false       false
-t3            b        -1         NULL      NULL        NULL      false       false
-t3            c        -1         NULL      NULL        NULL      false       true
-t3            rowid    -1         NULL      NULL        NULL      true        true
-primary       rowid    -1         NULL      NULL        NULL      true        true
-t3_a_b_idx    a        -1         NULL      NULL        NULL      false       false
-t3_a_b_idx    b        -1         NULL      NULL        NULL      false       false
-v1            p        -1         NULL      NULL        NULL      true        false
-v1            a        -1         NULL      NULL        NULL      true        false
-v1            b        -1         NULL      NULL        NULL      true        false
-v1            c        -1         NULL      NULL        NULL      true        false
+relname       attname  atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
+t1            p        -1         NULL      NULL        NULL      true        false      NULL         NULL
+t1            a        -1         NULL      NULL        NULL      false       false      NULL         NULL
+t1            b        -1         NULL      NULL        NULL      false       false      NULL         NULL
+t1            c        -1         NULL      NULL        NULL      false       true       NULL         NULL
+t1            d        9          NULL      NULL        NULL      false       false      NULL         NULL
+t1            e        5          NULL      NULL        NULL      false       false      NULL         NULL
+t1            f        655371     NULL      NULL        NULL      false       false      NULL         NULL
+primary       p        -1         NULL      NULL        NULL      true        false      NULL         NULL
+t1_a_key      a        -1         NULL      NULL        NULL      false       false      NULL         NULL
+index_key     b        -1         NULL      NULL        NULL      false       false      NULL         NULL
+index_key     c        -1         NULL      NULL        NULL      false       true       NULL         NULL
+t2            t1_id    -1         NULL      NULL        NULL      false       false      NULL         NULL
+t2            rowid    -1         NULL      NULL        NULL      true        true       NULL         NULL
+primary       rowid    -1         NULL      NULL        NULL      true        true       NULL         NULL
+t2_t1_id_idx  t1_id    -1         NULL      NULL        NULL      false       false      NULL         NULL
+t3            a        -1         NULL      NULL        NULL      false       false      NULL         NULL
+t3            b        -1         NULL      NULL        NULL      false       false      NULL         NULL
+t3            c        -1         NULL      NULL        NULL      false       true       NULL         NULL
+t3            rowid    -1         NULL      NULL        NULL      true        true       NULL         NULL
+primary       rowid    -1         NULL      NULL        NULL      true        true       NULL         NULL
+t3_a_b_idx    a        -1         NULL      NULL        NULL      false       false      NULL         NULL
+t3_a_b_idx    b        -1         NULL      NULL        NULL      false       false      NULL         NULL
+v1            p        -1         NULL      NULL        NULL      true        false      NULL         NULL
+v1            a        -1         NULL      NULL        NULL      true        false      NULL         NULL
+v1            b        -1         NULL      NULL        NULL      true        false      NULL         NULL
+v1            c        -1         NULL      NULL        NULL      true        false      NULL         NULL
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
