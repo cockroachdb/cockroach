@@ -276,10 +276,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 					result.ResumeReason = roachpb.RESUME_KEY_LIMIT
 				}
 			}
-			// Fill up the RangeInfos, in case we got any.
-			if result.Err == nil && reply != nil {
-				result.RangeInfos = reply.Header().RangeInfos
-			}
 		}
 		offset += result.calls
 	}
