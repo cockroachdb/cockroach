@@ -652,3 +652,16 @@ lookup-join              ·                      ·                          (k,
            └── scan      ·                      ·                          (k, geom)           ·
 ·                        table                  geo_table2@primary         ·                   ·
 ·                        spans                  FULL SCAN                  ·                   ·
+
+# Do not use the index when using a _ prefixed builtin.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE _ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+·          distribution  local                                                               ·          ·
+·          vectorized    true                                                                ·          ·
+render     ·             ·                                                                   (k)        ·
+ │         render 0      k                                                                   ·          ·
+ └── scan  ·             ·                                                                   (k, geom)  ·
+·          table         geo_table@primary                                                   ·          ·
+·          spans         FULL SCAN                                                           ·          ·
+·          filter        _st_intersects('010100000000000000000008400000000000000840', geom)  ·          ·
