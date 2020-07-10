@@ -46,13 +46,6 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
-
 	ctx := context.Background()
 	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
@@ -108,12 +101,6 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
 	ctx := context.Background()
 	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
@@ -262,12 +249,6 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
 	ctx := context.Background()
 	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	// Disable the automatic merging.
@@ -341,13 +322,6 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
-
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
@@ -382,13 +356,6 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
-
 	ctx := context.Background()
 	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
@@ -416,13 +383,6 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work
-		// well with race unless we're extremely lenient, which
-		// drives up the test duration.
-		t.Skip("skipping under race")
-	}
 
 	ctx := context.Background()
 	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
