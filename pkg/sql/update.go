@@ -310,39 +310,39 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// entries from.
 	var ignoreIndexesForPut util.FastIntSet
 	var ignoreIndexesForDel util.FastIntSet
-	partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.numPassthrough
-	partialIndexVals := sourceVals[partialIndexValOffset:]
-	colIdx := 0
-	delColOffset := len(partialIndexVals) / 2
-	indexes := u.run.tu.tableDesc().Indexes
-	for i := range indexes {
-		index := &indexes[i]
-		if index.IsPartial() {
-			// Check the boolean partial index put column.
-			val, err := tree.GetBool(partialIndexVals[colIdx])
-			if err != nil {
-				return err
-			}
-			if !val {
-				// If the value of the column for the index predicate expression
-				// is false, the row should not be added to the partial index.
-				ignoreIndexesForPut.Add(int(index.ID))
-			}
+	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
+	if !partialIndexOrds.Empty() {
+		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.numPassthrough
+		partialIndexVals := sourceVals[partialIndexValOffset:]
+		colIdx := 0
+		delColOffset := len(partialIndexVals) / 2
+		indexes := u.run.tu.tableDesc().Indexes
+		for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
+			index := &indexes[i]
+			if index.IsPartial() {
+				// Check the boolean partial index put column.
+				val, err := tree.GetBool(partialIndexVals[colIdx])
+				if err != nil {
+					return err
+				}
+				if !val {
+					// If the value of the column for the index predicate expression
+					// is false, the row should not be added to the partial index.
+					ignoreIndexesForPut.Add(int(index.ID))
+				}
 
-			// Check the boolean partial index del column.
-			val, err = tree.GetBool(partialIndexVals[colIdx+delColOffset])
-			if err != nil {
-				return err
-			}
-			if !val {
-				// If the value of the column for the index predicate expression
-				// is false, the row should not be added to the partial index.
-				ignoreIndexesForDel.Add(int(index.ID))
-			}
+				// Check the boolean partial index del column.
+				val, err = tree.GetBool(partialIndexVals[colIdx+delColOffset])
+				if err != nil {
+					return err
+				}
+				if !val {
+					// If the value of the column for the index predicate expression
+					// is false, the row should not be added to the partial index.
+					ignoreIndexesForDel.Add(int(index.ID))
+				}
 
-			colIdx++
-			if colIdx+delColOffset >= len(partialIndexVals) {
-				break
+				colIdx++
 			}
 		}
 	}
