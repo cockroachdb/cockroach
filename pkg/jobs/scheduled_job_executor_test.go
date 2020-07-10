@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduled_jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -26,13 +27,24 @@ type statusTrackingExecutor struct {
 	counts  map[Status]int
 }
 
-func (s *statusTrackingExecutor) ExecuteJob(_ context.Context, _ *ScheduledJob, _ *kv.Txn) error {
+func (s *statusTrackingExecutor) ExecuteJob(
+	_ context.Context,
+	_ *scheduled_jobs.JobExecutionConfig,
+	_ scheduled_jobs.JobSchedulerEnv,
+	_ *ScheduledJob,
+	_ *kv.Txn,
+) error {
 	s.numExec++
 	return nil
 }
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
-	_ context.Context, md *JobMetadata, _ *ScheduledJob, _ *kv.Txn,
+	_ context.Context,
+	_ *scheduled_jobs.JobExecutionConfig,
+	_ scheduled_jobs.JobSchedulerEnv,
+	md *JobMetadata,
+	_ *ScheduledJob,
+	_ *kv.Txn,
 ) error {
 	s.counts[md.Status]++
 	return nil
@@ -56,7 +68,8 @@ func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
 			ID:     123,
 			Status: s,
 		}
-		require.Error(t, NotifyJobTermination(context.Background(), nil, md, 321, nil, nil))
+		require.Error(t, NotifyJobTermination(
+			context.Background(), nil, nil, md, 321, nil))
 	}
 }
 
@@ -68,7 +81,7 @@ func TestScheduledJobExecutorRegistration(t *testing.T) {
 	instance := newStatusTrackingExecutor()
 	defer registerScopedScheduledJobExecutor(executorName, instance)()
 
-	registered, err := NewScheduledJobExecutor(executorName, nil)
+	registered, err := NewScheduledJobExecutor(executorName)
 	require.NoError(t, err)
 	require.Equal(t, instance, registered)
 }
@@ -86,7 +99,7 @@ func TestJobTerminationNotification(t *testing.T) {
 	// Create a single job.
 	schedule := h.newScheduledJobForExecutor("test_job", executorName, nil)
 	ctx := context.Background()
-	require.NoError(t, schedule.Create(ctx, h.ex, nil))
+	require.NoError(t, schedule.Create(ctx, h.cfg.InternalExecutor, nil))
 
 	// Pretend it completes multiple runs with terminal statuses.
 	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
@@ -95,7 +108,7 @@ func TestJobTerminationNotification(t *testing.T) {
 			Status:  s,
 			Payload: &jobspb.Payload{},
 		}
-		require.NoError(t, NotifyJobTermination(ctx, h.env, md, schedule.ScheduleID(), h.ex, nil))
+		require.NoError(t, NotifyJobTermination(ctx, h.cfg, h.env, md, schedule.ScheduleID(), nil))
 	}
 
 	// Verify counts.
