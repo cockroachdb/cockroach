@@ -1302,6 +1302,11 @@ func TestImportCSVStmt(t *testing.T) {
 	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.schema"), nil, 0666); err != nil {
+		t.Fatal(err)
+	}
+
 	empty := []string{"'nodelocal://0/empty.csv'"}
 	emptySchema := []interface{}{"nodelocal://0/empty.schema"}
 
@@ -1795,6 +1800,23 @@ func TestImportCSVStmt(t *testing.T) {
 				sqlDB.QueryStr(t, `SELECT 2, 5, 'e', -1, NULL, NULL`),
 			)
 		})
+	})
+
+	t.Run("import-with-db-privs", func(t *testing.T) {
+		sqlDB.Exec(t, `USE defaultdb`)
+		sqlDB.Exec(t, `CREATE USER foo`)
+		sqlDB.Exec(t, `GRANT ALL ON DATABASE defaultdb TO foo`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`
+IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
+			testFiles.files[0]))
+
+		// Verify correct number of rows via COUNT.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM import_with_db_privs`).Scan(&result)
+		if result != rowsPerFile {
+			t.Fatalf("expected %d rows, got %d", rowsPerFile, result)
+		}
 	})
 }
 
@@ -2785,6 +2807,24 @@ func TestImportIntoCSV(t *testing.T) {
 		// Following an import the constraints should be unvalidated.
 		if checkValidated || fkValidated {
 			t.Fatal("FK and CHECK constraints not unvalidated after IMPORT INTO\n")
+		}
+	})
+
+	t.Run("import-into-with-db-privs", func(t *testing.T) {
+		sqlDB.Exec(t, `USE defaultdb`)
+		sqlDB.Exec(t, `CREATE USER foo`)
+		sqlDB.Exec(t, `GRANT ALL ON DATABASE defaultdb TO foo`)
+		sqlDB.Exec(t, `CREATE TABLE d (a INT PRIMARY KEY, b STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE d`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO d (a, b) CSV DATA (%s)`,
+			testFiles.files[0]))
+
+		// Verify correct number of rows via COUNT.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM d`).Scan(&result)
+		if result != rowsPerFile {
+			t.Fatalf("expected %d rows, got %d", rowsPerFile, result)
 		}
 	})
 }
