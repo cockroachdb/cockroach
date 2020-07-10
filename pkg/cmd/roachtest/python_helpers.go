@@ -17,7 +17,7 @@ import (
 	"regexp"
 )
 
-var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*)(?: u?['"](?P<reason>.*)['"])?`)
+var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*?)(?: u?['"](?P<reason>.*)['"])?$`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
 	input []byte, expectedFailures blocklist, ignoredList blocklist,
@@ -45,10 +45,10 @@ func (r *ormTestsResults) parsePythonUnitTestOutput(
 			case expectedIgnored:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
 				r.ignoredCount++
-			case len(skipReason) > 0 && expectedFailure:
+			case skipped && expectedFailure:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
 				r.unexpectedSkipCount++
-			case len(skipReason) > 0:
+			case skipped:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
 				r.skipCount++
 			case pass && !expectedFailure:

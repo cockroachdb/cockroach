@@ -555,11 +555,10 @@ func (s *ScanPrivate) IsCanonical() bool {
 // IsUnfiltered returns true if the ScanPrivate will produce all rows in the
 // table.
 func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
-	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
-	return !isPartialIndex &&
-		(s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
+	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
-		s.HardLimit == 0
+		s.HardLimit == 0 &&
+		!s.UsesPartialIndex(md)
 }
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -568,6 +567,13 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 // as part of the row retrieval of a DELETE or UPDATE statement.
 func (s *ScanPrivate) IsLocking() bool {
 	return s.Locking != nil
+}
+
+// UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
+// partial index.
+func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
+	tabMeta := md.TableMeta(s.Table)
+	return IsPartialIndex(tabMeta, s.Index)
 }
 
 // NeedResults returns true if the mutation operator can return the rows that
@@ -801,6 +807,22 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	}
 
 	return false
+}
+
+// IsPartialIndex returns true if the table's index at the given ordinal is
+// a partial index.
+func IsPartialIndex(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) bool {
+	_, isPartial := tabMeta.PartialIndexPredicates[ord]
+	return isPartial
+}
+
+// PartialIndexPredicate returns the FiltersExpr representing the partial index
+// predicate at the given index ordinal. If the index at the ordinal is not a
+// partial index, this function panics. IsPartialIndex should be used first to
+// determine if the index is a partial index.
+func PartialIndexPredicate(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) FiltersExpr {
+	p := tabMeta.PartialIndexPredicates[ord]
+	return *p.(*FiltersExpr)
 }
 
 // FKCascades stores metadata necessary for building cascading queries.
