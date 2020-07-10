@@ -1314,6 +1314,146 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            true   false  true   false  false  false  true   false  false  false
 Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  false  true   true   false  false  true
 
+query TTBBBBBBBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  _ST_Covers(a.geom, b.geom),
+  _ST_CoveredBy(a.geom, b.geom),
+  _ST_Contains(a.geom, b.geom),
+  _ST_ContainsProperly(a.geom, b.geom),
+  _ST_Crosses(a.geom, b.geom),
+  _ST_Equals(a.geom, b.geom),
+  _ST_Intersects(a.geom, b.geom),
+  _ST_Overlaps(a.geom, b.geom),
+  _ST_Touches(a.geom, b.geom),
+  _ST_Within(a.geom, b.geom)
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Empty GeometryCollection                  Empty GeometryCollection                  false  false  false  false  false  true   false  false  false  false
+Empty GeometryCollection                  Empty LineString                          false  false  false  false  false  true   false  false  false  false
+Empty GeometryCollection                  Empty Point                               false  false  false  false  false  true   false  false  false  false
+Empty GeometryCollection                  Faraway point                             false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  Line going through left and right square  false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Empty GeometryCollection                  Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  Square (left)                             false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  Square (right)                            false  false  false  false  false  false  false  false  false  false
+Empty GeometryCollection                  Square overlapping left and right square  false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Empty GeometryCollection                  false  false  false  false  false  true   false  false  false  false
+Empty LineString                          Empty LineString                          false  false  false  false  false  true   false  false  false  false
+Empty LineString                          Empty Point                               false  false  false  false  false  true   false  false  false  false
+Empty LineString                          Faraway point                             false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Line going through left and right square  false  false  false  false  false  false  false  false  false  false
+Empty LineString                          NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Empty LineString                          Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Square (left)                             false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Square (right)                            false  false  false  false  false  false  false  false  false  false
+Empty LineString                          Square overlapping left and right square  false  false  false  false  false  false  false  false  false  false
+Empty Point                               Empty GeometryCollection                  false  false  false  false  false  true   false  false  false  false
+Empty Point                               Empty LineString                          false  false  false  false  false  true   false  false  false  false
+Empty Point                               Empty Point                               false  false  false  false  false  true   false  false  false  false
+Empty Point                               Faraway point                             false  false  false  false  false  false  false  false  false  false
+Empty Point                               Line going through left and right square  false  false  false  false  false  false  false  false  false  false
+Empty Point                               NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Empty Point                               Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Empty Point                               Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Empty Point                               Square (left)                             false  false  false  false  false  false  false  false  false  false
+Empty Point                               Square (right)                            false  false  false  false  false  false  false  false  false  false
+Empty Point                               Square overlapping left and right square  false  false  false  false  false  false  false  false  false  false
+Faraway point                             Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Faraway point                             Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Faraway point                             Empty Point                               false  false  false  false  false  false  false  false  false  false
+Faraway point                             Faraway point                             true   true   true   true   false  true   true   false  false  true
+Faraway point                             Line going through left and right square  false  false  false  false  false  false  false  false  false  false
+Faraway point                             NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Faraway point                             Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Faraway point                             Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Faraway point                             Square (left)                             false  false  false  false  false  false  false  false  false  false
+Faraway point                             Square (right)                            false  false  false  false  false  false  false  false  false  false
+Faraway point                             Square overlapping left and right square  false  false  false  false  false  false  false  false  false  false
+Line going through left and right square  Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Line going through left and right square  Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Line going through left and right square  Empty Point                               false  false  false  false  false  false  false  false  false  false
+Line going through left and right square  Faraway point                             false  false  false  false  false  false  false  false  false  false
+Line going through left and right square  Line going through left and right square  true   true   true   false  false  true   true   false  false  true
+Line going through left and right square  NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Line going through left and right square  Point middle of Left Square               true   false  false  false  false  false  true   false  true   false
+Line going through left and right square  Point middle of Right Square              true   false  false  false  false  false  true   false  true   false
+Line going through left and right square  Square (left)                             false  false  false  false  true   false  true   false  false  false
+Line going through left and right square  Square (right)                            false  false  false  false  true   false  true   false  false  false
+Line going through left and right square  Square overlapping left and right square  false  false  false  false  true   false  true   false  false  false
+NULL                                      Empty GeometryCollection                  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Empty LineString                          NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Empty Point                               NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Faraway point                             NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Line going through left and right square  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Point middle of Left Square               NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Point middle of Right Square              NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square (left)                             NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square (right)                            NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square overlapping left and right square  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Left Square               Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Empty Point                               false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Faraway point                             false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Line going through left and right square  false  true   false  false  false  false  true   false  true   false
+Point middle of Left Square               NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Left Square               Point middle of Left Square               true   true   true   true   false  true   true   false  false  true
+Point middle of Left Square               Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Square (left)                             false  true   false  false  false  false  true   false  false  true
+Point middle of Left Square               Square (right)                            false  false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Square overlapping left and right square  false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Empty Point                               false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Faraway point                             false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Line going through left and right square  false  true   false  false  false  false  true   false  true   false
+Point middle of Right Square              NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Right Square              Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Point middle of Right Square              true   true   true   true   false  true   true   false  false  true
+Point middle of Right Square              Square (left)                             false  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Square (right)                            false  true   false  false  false  false  true   false  false  true
+Point middle of Right Square              Square overlapping left and right square  false  true   false  false  false  false  true   false  false  true
+Square (left)                             Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Square (left)                             Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Square (left)                             Empty Point                               false  false  false  false  false  false  false  false  false  false
+Square (left)                             Faraway point                             false  false  false  false  false  false  false  false  false  false
+Square (left)                             Line going through left and right square  false  false  false  false  true   false  true   false  false  false
+Square (left)                             NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square (left)                             Point middle of Left Square               true   false  true   true   false  false  true   false  false  false
+Square (left)                             Point middle of Right Square              false  false  false  false  false  false  false  false  false  false
+Square (left)                             Square (left)                             true   true   true   false  false  true   true   false  false  true
+Square (left)                             Square (right)                            false  false  false  false  false  false  true   false  true   false
+Square (left)                             Square overlapping left and right square  false  false  false  false  false  false  true   true   false  false
+Square (right)                            Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Square (right)                            Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Square (right)                            Empty Point                               false  false  false  false  false  false  false  false  false  false
+Square (right)                            Faraway point                             false  false  false  false  false  false  false  false  false  false
+Square (right)                            Line going through left and right square  false  false  false  false  true   false  true   false  false  false
+Square (right)                            NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square (right)                            Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Square (right)                            Point middle of Right Square              true   false  true   true   false  false  true   false  false  false
+Square (right)                            Square (left)                             false  false  false  false  false  false  true   false  true   false
+Square (right)                            Square (right)                            true   true   true   false  false  true   true   false  false  true
+Square (right)                            Square overlapping left and right square  false  true   false  false  false  false  true   false  false  true
+Square overlapping left and right square  Empty GeometryCollection                  false  false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Empty LineString                          false  false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Empty Point                               false  false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Faraway point                             false  false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Line going through left and right square  false  false  false  false  true   false  true   false  false  false
+Square overlapping left and right square  NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square overlapping left and right square  Point middle of Left Square               false  false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Point middle of Right Square              true   false  true   true   false  false  true   false  false  false
+Square overlapping left and right square  Square (left)                             false  false  false  false  false  false  true   true   false  false
+Square overlapping left and right square  Square (right)                            true   false  true   false  false  false  true   false  false  false
+Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  false  true   true   false  false  true
+
 # DWithin
 query TTBB
 SELECT
@@ -1447,6 +1587,139 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            true   false
 Square overlapping left and right square  Square overlapping left and right square  true   false
 
+query TTBB
+SELECT
+  a.dsc,
+  b.dsc,
+  _ST_DWithin(a.geom, b.geom, 1),
+  _ST_DFullyWithin(a.geom, b.geom, 1)
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Empty GeometryCollection                  Empty GeometryCollection                  false  false
+Empty GeometryCollection                  Empty LineString                          false  false
+Empty GeometryCollection                  Empty Point                               false  false
+Empty GeometryCollection                  Faraway point                             false  false
+Empty GeometryCollection                  Line going through left and right square  false  false
+Empty GeometryCollection                  NULL                                      NULL   NULL
+Empty GeometryCollection                  Point middle of Left Square               false  false
+Empty GeometryCollection                  Point middle of Right Square              false  false
+Empty GeometryCollection                  Square (left)                             false  false
+Empty GeometryCollection                  Square (right)                            false  false
+Empty GeometryCollection                  Square overlapping left and right square  false  false
+Empty LineString                          Empty GeometryCollection                  false  false
+Empty LineString                          Empty LineString                          false  false
+Empty LineString                          Empty Point                               false  false
+Empty LineString                          Faraway point                             false  false
+Empty LineString                          Line going through left and right square  false  false
+Empty LineString                          NULL                                      NULL   NULL
+Empty LineString                          Point middle of Left Square               false  false
+Empty LineString                          Point middle of Right Square              false  false
+Empty LineString                          Square (left)                             false  false
+Empty LineString                          Square (right)                            false  false
+Empty LineString                          Square overlapping left and right square  false  false
+Empty Point                               Empty GeometryCollection                  false  false
+Empty Point                               Empty LineString                          false  false
+Empty Point                               Empty Point                               false  false
+Empty Point                               Faraway point                             false  false
+Empty Point                               Line going through left and right square  false  false
+Empty Point                               NULL                                      NULL   NULL
+Empty Point                               Point middle of Left Square               false  false
+Empty Point                               Point middle of Right Square              false  false
+Empty Point                               Square (left)                             false  false
+Empty Point                               Square (right)                            false  false
+Empty Point                               Square overlapping left and right square  false  false
+Faraway point                             Empty GeometryCollection                  false  false
+Faraway point                             Empty LineString                          false  false
+Faraway point                             Empty Point                               false  false
+Faraway point                             Faraway point                             true   true
+Faraway point                             Line going through left and right square  false  false
+Faraway point                             NULL                                      NULL   NULL
+Faraway point                             Point middle of Left Square               false  false
+Faraway point                             Point middle of Right Square              false  false
+Faraway point                             Square (left)                             false  false
+Faraway point                             Square (right)                            false  false
+Faraway point                             Square overlapping left and right square  false  false
+Line going through left and right square  Empty GeometryCollection                  false  false
+Line going through left and right square  Empty LineString                          false  false
+Line going through left and right square  Empty Point                               false  false
+Line going through left and right square  Faraway point                             false  false
+Line going through left and right square  Line going through left and right square  true   true
+Line going through left and right square  NULL                                      NULL   NULL
+Line going through left and right square  Point middle of Left Square               true   true
+Line going through left and right square  Point middle of Right Square              true   true
+Line going through left and right square  Square (left)                             true   false
+Line going through left and right square  Square (right)                            true   false
+Line going through left and right square  Square overlapping left and right square  true   false
+NULL                                      Empty GeometryCollection                  NULL   NULL
+NULL                                      Empty LineString                          NULL   NULL
+NULL                                      Empty Point                               NULL   NULL
+NULL                                      Faraway point                             NULL   NULL
+NULL                                      Line going through left and right square  NULL   NULL
+NULL                                      NULL                                      NULL   NULL
+NULL                                      Point middle of Left Square               NULL   NULL
+NULL                                      Point middle of Right Square              NULL   NULL
+NULL                                      Square (left)                             NULL   NULL
+NULL                                      Square (right)                            NULL   NULL
+NULL                                      Square overlapping left and right square  NULL   NULL
+Point middle of Left Square               Empty GeometryCollection                  false  false
+Point middle of Left Square               Empty LineString                          false  false
+Point middle of Left Square               Empty Point                               false  false
+Point middle of Left Square               Faraway point                             false  false
+Point middle of Left Square               Line going through left and right square  true   true
+Point middle of Left Square               NULL                                      NULL   NULL
+Point middle of Left Square               Point middle of Left Square               true   true
+Point middle of Left Square               Point middle of Right Square              true   true
+Point middle of Left Square               Square (left)                             true   true
+Point middle of Left Square               Square (right)                            true   false
+Point middle of Left Square               Square overlapping left and right square  true   false
+Point middle of Right Square              Empty GeometryCollection                  false  false
+Point middle of Right Square              Empty LineString                          false  false
+Point middle of Right Square              Empty Point                               false  false
+Point middle of Right Square              Faraway point                             false  false
+Point middle of Right Square              Line going through left and right square  true   true
+Point middle of Right Square              NULL                                      NULL   NULL
+Point middle of Right Square              Point middle of Left Square               true   true
+Point middle of Right Square              Point middle of Right Square              true   true
+Point middle of Right Square              Square (left)                             true   false
+Point middle of Right Square              Square (right)                            true   true
+Point middle of Right Square              Square overlapping left and right square  true   true
+Square (left)                             Empty GeometryCollection                  false  false
+Square (left)                             Empty LineString                          false  false
+Square (left)                             Empty Point                               false  false
+Square (left)                             Faraway point                             false  false
+Square (left)                             Line going through left and right square  true   false
+Square (left)                             NULL                                      NULL   NULL
+Square (left)                             Point middle of Left Square               true   true
+Square (left)                             Point middle of Right Square              true   false
+Square (left)                             Square (left)                             true   false
+Square (left)                             Square (right)                            true   false
+Square (left)                             Square overlapping left and right square  true   false
+Square (right)                            Empty GeometryCollection                  false  false
+Square (right)                            Empty LineString                          false  false
+Square (right)                            Empty Point                               false  false
+Square (right)                            Faraway point                             false  false
+Square (right)                            Line going through left and right square  true   false
+Square (right)                            NULL                                      NULL   NULL
+Square (right)                            Point middle of Left Square               true   false
+Square (right)                            Point middle of Right Square              true   true
+Square (right)                            Square (left)                             true   false
+Square (right)                            Square (right)                            true   false
+Square (right)                            Square overlapping left and right square  true   false
+Square overlapping left and right square  Empty GeometryCollection                  false  false
+Square overlapping left and right square  Empty LineString                          false  false
+Square overlapping left and right square  Empty Point                               false  false
+Square overlapping left and right square  Faraway point                             false  false
+Square overlapping left and right square  Line going through left and right square  true   false
+Square overlapping left and right square  NULL                                      NULL   NULL
+Square overlapping left and right square  Point middle of Left Square               true   false
+Square overlapping left and right square  Point middle of Right Square              true   true
+Square overlapping left and right square  Square (left)                             true   false
+Square overlapping left and right square  Square (right)                            true   false
+Square overlapping left and right square  Square overlapping left and right square  true   false
+
+# ST_Buffer
 query TTTT
 SELECT
   a.dsc,
@@ -2266,6 +2539,139 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            false  false  true
 Square overlapping left and right square  Square overlapping left and right square  true   true   true
 
+query TTBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  _ST_Covers(a.geog, b.geog),
+  _ST_CoveredBy(a.geog, b.geog),
+  _ST_Intersects(a.geog, b.geog)
+FROM geog_operators_test a
+JOIN geog_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Empty GeometryCollection                  Empty GeometryCollection                  false  false  false
+Empty GeometryCollection                  Empty LineString                          false  false  false
+Empty GeometryCollection                  Empty Point                               false  false  false
+Empty GeometryCollection                  Faraway point                             false  false  false
+Empty GeometryCollection                  Line going through left and right square  false  false  false
+Empty GeometryCollection                  NULL                                      NULL   NULL   NULL
+Empty GeometryCollection                  Point middle of Left Square               false  false  false
+Empty GeometryCollection                  Point middle of Right Square              false  false  false
+Empty GeometryCollection                  Square (left)                             false  false  false
+Empty GeometryCollection                  Square (right)                            false  false  false
+Empty GeometryCollection                  Square overlapping left and right square  false  false  false
+Empty LineString                          Empty GeometryCollection                  false  false  false
+Empty LineString                          Empty LineString                          false  false  false
+Empty LineString                          Empty Point                               false  false  false
+Empty LineString                          Faraway point                             false  false  false
+Empty LineString                          Line going through left and right square  false  false  false
+Empty LineString                          NULL                                      NULL   NULL   NULL
+Empty LineString                          Point middle of Left Square               false  false  false
+Empty LineString                          Point middle of Right Square              false  false  false
+Empty LineString                          Square (left)                             false  false  false
+Empty LineString                          Square (right)                            false  false  false
+Empty LineString                          Square overlapping left and right square  false  false  false
+Empty Point                               Empty GeometryCollection                  false  false  false
+Empty Point                               Empty LineString                          false  false  false
+Empty Point                               Empty Point                               false  false  false
+Empty Point                               Faraway point                             false  false  false
+Empty Point                               Line going through left and right square  false  false  false
+Empty Point                               NULL                                      NULL   NULL   NULL
+Empty Point                               Point middle of Left Square               false  false  false
+Empty Point                               Point middle of Right Square              false  false  false
+Empty Point                               Square (left)                             false  false  false
+Empty Point                               Square (right)                            false  false  false
+Empty Point                               Square overlapping left and right square  false  false  false
+Faraway point                             Empty GeometryCollection                  false  false  false
+Faraway point                             Empty LineString                          false  false  false
+Faraway point                             Empty Point                               false  false  false
+Faraway point                             Faraway point                             true   true   true
+Faraway point                             Line going through left and right square  false  false  false
+Faraway point                             NULL                                      NULL   NULL   NULL
+Faraway point                             Point middle of Left Square               false  false  false
+Faraway point                             Point middle of Right Square              false  false  false
+Faraway point                             Square (left)                             false  false  false
+Faraway point                             Square (right)                            false  false  false
+Faraway point                             Square overlapping left and right square  false  false  false
+Line going through left and right square  Empty GeometryCollection                  false  false  false
+Line going through left and right square  Empty LineString                          false  false  false
+Line going through left and right square  Empty Point                               false  false  false
+Line going through left and right square  Faraway point                             false  false  false
+Line going through left and right square  Line going through left and right square  true   true   true
+Line going through left and right square  NULL                                      NULL   NULL   NULL
+Line going through left and right square  Point middle of Left Square               true   false  true
+Line going through left and right square  Point middle of Right Square              true   false  true
+Line going through left and right square  Square (left)                             false  false  true
+Line going through left and right square  Square (right)                            false  false  true
+Line going through left and right square  Square overlapping left and right square  false  false  true
+NULL                                      Empty GeometryCollection                  NULL   NULL   NULL
+NULL                                      Empty LineString                          NULL   NULL   NULL
+NULL                                      Empty Point                               NULL   NULL   NULL
+NULL                                      Faraway point                             NULL   NULL   NULL
+NULL                                      Line going through left and right square  NULL   NULL   NULL
+NULL                                      NULL                                      NULL   NULL   NULL
+NULL                                      Point middle of Left Square               NULL   NULL   NULL
+NULL                                      Point middle of Right Square              NULL   NULL   NULL
+NULL                                      Square (left)                             NULL   NULL   NULL
+NULL                                      Square (right)                            NULL   NULL   NULL
+NULL                                      Square overlapping left and right square  NULL   NULL   NULL
+Point middle of Left Square               Empty GeometryCollection                  false  false  false
+Point middle of Left Square               Empty LineString                          false  false  false
+Point middle of Left Square               Empty Point                               false  false  false
+Point middle of Left Square               Faraway point                             false  false  false
+Point middle of Left Square               Line going through left and right square  false  true   true
+Point middle of Left Square               NULL                                      NULL   NULL   NULL
+Point middle of Left Square               Point middle of Left Square               true   true   true
+Point middle of Left Square               Point middle of Right Square              false  false  false
+Point middle of Left Square               Square (left)                             false  true   true
+Point middle of Left Square               Square (right)                            false  false  false
+Point middle of Left Square               Square overlapping left and right square  false  false  false
+Point middle of Right Square              Empty GeometryCollection                  false  false  false
+Point middle of Right Square              Empty LineString                          false  false  false
+Point middle of Right Square              Empty Point                               false  false  false
+Point middle of Right Square              Faraway point                             false  false  false
+Point middle of Right Square              Line going through left and right square  false  true   true
+Point middle of Right Square              NULL                                      NULL   NULL   NULL
+Point middle of Right Square              Point middle of Left Square               false  false  false
+Point middle of Right Square              Point middle of Right Square              true   true   true
+Point middle of Right Square              Square (left)                             false  false  false
+Point middle of Right Square              Square (right)                            false  true   true
+Point middle of Right Square              Square overlapping left and right square  false  true   true
+Square (left)                             Empty GeometryCollection                  false  false  false
+Square (left)                             Empty LineString                          false  false  false
+Square (left)                             Empty Point                               false  false  false
+Square (left)                             Faraway point                             false  false  false
+Square (left)                             Line going through left and right square  false  false  true
+Square (left)                             NULL                                      NULL   NULL   NULL
+Square (left)                             Point middle of Left Square               true   false  true
+Square (left)                             Point middle of Right Square              false  false  false
+Square (left)                             Square (left)                             true   true   true
+Square (left)                             Square (right)                            false  false  true
+Square (left)                             Square overlapping left and right square  false  false  true
+Square (right)                            Empty GeometryCollection                  false  false  false
+Square (right)                            Empty LineString                          false  false  false
+Square (right)                            Empty Point                               false  false  false
+Square (right)                            Faraway point                             false  false  false
+Square (right)                            Line going through left and right square  false  false  true
+Square (right)                            NULL                                      NULL   NULL   NULL
+Square (right)                            Point middle of Left Square               false  false  false
+Square (right)                            Point middle of Right Square              true   false  true
+Square (right)                            Square (left)                             false  false  true
+Square (right)                            Square (right)                            true   true   true
+Square (right)                            Square overlapping left and right square  false  false  true
+Square overlapping left and right square  Empty GeometryCollection                  false  false  false
+Square overlapping left and right square  Empty LineString                          false  false  false
+Square overlapping left and right square  Empty Point                               false  false  false
+Square overlapping left and right square  Faraway point                             false  false  false
+Square overlapping left and right square  Line going through left and right square  false  false  true
+Square overlapping left and right square  NULL                                      NULL   NULL   NULL
+Square overlapping left and right square  Point middle of Left Square               false  false  false
+Square overlapping left and right square  Point middle of Right Square              true   false  true
+Square overlapping left and right square  Square (left)                             false  false  true
+Square overlapping left and right square  Square (right)                            false  false  true
+Square overlapping left and right square  Square overlapping left and right square  true   true   true
+
 # DWithin
 query TTBBB
 SELECT
@@ -2274,6 +2680,139 @@ SELECT
   ST_DWithin(a.geog, b.geog, 70558),
   ST_DWithin(a.geog, b.geog, 70558, false),
   ST_DWithin(a.geog, b.geog, 70558, true)
+FROM geog_operators_test a
+JOIN geog_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Empty GeometryCollection                  Empty GeometryCollection                  false  false  false
+Empty GeometryCollection                  Empty LineString                          false  false  false
+Empty GeometryCollection                  Empty Point                               false  false  false
+Empty GeometryCollection                  Faraway point                             false  false  false
+Empty GeometryCollection                  Line going through left and right square  false  false  false
+Empty GeometryCollection                  NULL                                      NULL   NULL   NULL
+Empty GeometryCollection                  Point middle of Left Square               false  false  false
+Empty GeometryCollection                  Point middle of Right Square              false  false  false
+Empty GeometryCollection                  Square (left)                             false  false  false
+Empty GeometryCollection                  Square (right)                            false  false  false
+Empty GeometryCollection                  Square overlapping left and right square  false  false  false
+Empty LineString                          Empty GeometryCollection                  false  false  false
+Empty LineString                          Empty LineString                          false  false  false
+Empty LineString                          Empty Point                               false  false  false
+Empty LineString                          Faraway point                             false  false  false
+Empty LineString                          Line going through left and right square  false  false  false
+Empty LineString                          NULL                                      NULL   NULL   NULL
+Empty LineString                          Point middle of Left Square               false  false  false
+Empty LineString                          Point middle of Right Square              false  false  false
+Empty LineString                          Square (left)                             false  false  false
+Empty LineString                          Square (right)                            false  false  false
+Empty LineString                          Square overlapping left and right square  false  false  false
+Empty Point                               Empty GeometryCollection                  false  false  false
+Empty Point                               Empty LineString                          false  false  false
+Empty Point                               Empty Point                               false  false  false
+Empty Point                               Faraway point                             false  false  false
+Empty Point                               Line going through left and right square  false  false  false
+Empty Point                               NULL                                      NULL   NULL   NULL
+Empty Point                               Point middle of Left Square               false  false  false
+Empty Point                               Point middle of Right Square              false  false  false
+Empty Point                               Square (left)                             false  false  false
+Empty Point                               Square (right)                            false  false  false
+Empty Point                               Square overlapping left and right square  false  false  false
+Faraway point                             Empty GeometryCollection                  false  false  false
+Faraway point                             Empty LineString                          false  false  false
+Faraway point                             Empty Point                               false  false  false
+Faraway point                             Faraway point                             true   true   true
+Faraway point                             Line going through left and right square  false  false  false
+Faraway point                             NULL                                      NULL   NULL   NULL
+Faraway point                             Point middle of Left Square               false  false  false
+Faraway point                             Point middle of Right Square              false  false  false
+Faraway point                             Square (left)                             false  false  false
+Faraway point                             Square (right)                            false  false  false
+Faraway point                             Square overlapping left and right square  false  false  false
+Line going through left and right square  Empty GeometryCollection                  false  false  false
+Line going through left and right square  Empty LineString                          false  false  false
+Line going through left and right square  Empty Point                               false  false  false
+Line going through left and right square  Faraway point                             false  false  false
+Line going through left and right square  Line going through left and right square  true   true   true
+Line going through left and right square  NULL                                      NULL   NULL   NULL
+Line going through left and right square  Point middle of Left Square               true   true   true
+Line going through left and right square  Point middle of Right Square              true   true   true
+Line going through left and right square  Square (left)                             true   true   true
+Line going through left and right square  Square (right)                            true   true   true
+Line going through left and right square  Square overlapping left and right square  true   true   true
+NULL                                      Empty GeometryCollection                  NULL   NULL   NULL
+NULL                                      Empty LineString                          NULL   NULL   NULL
+NULL                                      Empty Point                               NULL   NULL   NULL
+NULL                                      Faraway point                             NULL   NULL   NULL
+NULL                                      Line going through left and right square  NULL   NULL   NULL
+NULL                                      NULL                                      NULL   NULL   NULL
+NULL                                      Point middle of Left Square               NULL   NULL   NULL
+NULL                                      Point middle of Right Square              NULL   NULL   NULL
+NULL                                      Square (left)                             NULL   NULL   NULL
+NULL                                      Square (right)                            NULL   NULL   NULL
+NULL                                      Square overlapping left and right square  NULL   NULL   NULL
+Point middle of Left Square               Empty GeometryCollection                  false  false  false
+Point middle of Left Square               Empty LineString                          false  false  false
+Point middle of Left Square               Empty Point                               false  false  false
+Point middle of Left Square               Faraway point                             false  false  false
+Point middle of Left Square               Line going through left and right square  true   true   true
+Point middle of Left Square               NULL                                      NULL   NULL   NULL
+Point middle of Left Square               Point middle of Left Square               true   true   true
+Point middle of Left Square               Point middle of Right Square              false  false  false
+Point middle of Left Square               Square (left)                             true   true   true
+Point middle of Left Square               Square (right)                            true   true   true
+Point middle of Left Square               Square overlapping left and right square  true   true   true
+Point middle of Right Square              Empty GeometryCollection                  false  false  false
+Point middle of Right Square              Empty LineString                          false  false  false
+Point middle of Right Square              Empty Point                               false  false  false
+Point middle of Right Square              Faraway point                             false  false  false
+Point middle of Right Square              Line going through left and right square  true   true   true
+Point middle of Right Square              NULL                                      NULL   NULL   NULL
+Point middle of Right Square              Point middle of Left Square               false  false  false
+Point middle of Right Square              Point middle of Right Square              true   true   true
+Point middle of Right Square              Square (left)                             true   true   true
+Point middle of Right Square              Square (right)                            true   true   true
+Point middle of Right Square              Square overlapping left and right square  true   true   true
+Square (left)                             Empty GeometryCollection                  false  false  false
+Square (left)                             Empty LineString                          false  false  false
+Square (left)                             Empty Point                               false  false  false
+Square (left)                             Faraway point                             false  false  false
+Square (left)                             Line going through left and right square  true   true   true
+Square (left)                             NULL                                      NULL   NULL   NULL
+Square (left)                             Point middle of Left Square               true   true   true
+Square (left)                             Point middle of Right Square              true   true   true
+Square (left)                             Square (left)                             true   true   true
+Square (left)                             Square (right)                            true   true   true
+Square (left)                             Square overlapping left and right square  true   true   true
+Square (right)                            Empty GeometryCollection                  false  false  false
+Square (right)                            Empty LineString                          false  false  false
+Square (right)                            Empty Point                               false  false  false
+Square (right)                            Faraway point                             false  false  false
+Square (right)                            Line going through left and right square  true   true   true
+Square (right)                            NULL                                      NULL   NULL   NULL
+Square (right)                            Point middle of Left Square               true   true   true
+Square (right)                            Point middle of Right Square              true   true   true
+Square (right)                            Square (left)                             true   true   true
+Square (right)                            Square (right)                            true   true   true
+Square (right)                            Square overlapping left and right square  true   true   true
+Square overlapping left and right square  Empty GeometryCollection                  false  false  false
+Square overlapping left and right square  Empty LineString                          false  false  false
+Square overlapping left and right square  Empty Point                               false  false  false
+Square overlapping left and right square  Faraway point                             false  false  false
+Square overlapping left and right square  Line going through left and right square  true   true   true
+Square overlapping left and right square  NULL                                      NULL   NULL   NULL
+Square overlapping left and right square  Point middle of Left Square               true   true   true
+Square overlapping left and right square  Point middle of Right Square              true   true   true
+Square overlapping left and right square  Square (left)                             true   true   true
+Square overlapping left and right square  Square (right)                            true   true   true
+Square overlapping left and right square  Square overlapping left and right square  true   true   true
+
+query TTBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  _ST_DWithin(a.geog, b.geog, 70558),
+  _ST_DWithin(a.geog, b.geog, 70558, false),
+  _ST_DWithin(a.geog, b.geog, 70558, true)
 FROM geog_operators_test a
 JOIN geog_operators_test b ON (1=1)
 ORDER BY a.dsc, b.dsc
