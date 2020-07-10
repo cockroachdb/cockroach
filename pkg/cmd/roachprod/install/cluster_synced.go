@@ -278,8 +278,7 @@ fi
 type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
 	Index int
-	// A message about the node. This is either a PID, "dead", "nc exited", or
-	// "skipped".
+	// A message about the node. This is either a PID, "dead", or "skipped".
 	// Anything but a PID or "skipped" is an indication that there is some
 	// problem with the node and that the process is not running.
 	Msg string
@@ -325,12 +324,9 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				return
 			}
 
-			// On each monitored node, we loop looking for a cockroach process. In
-			// order to avoid polling with lsof, if we find a live process we use nc
-			// (netcat) to connect to the rpc port which will block until the server
-			// either decides to kill the connection or the process is killed.
-			// In one-shot we don't use nc and return after the first assessment
-			// of the process' health.
+			// On each monitored node, we loop looking for a cockroach process.
+			// In one-shot we return after the first assessment of the process'
+			// health.
 			data := struct {
 				OneShot     bool
 				IgnoreEmpty bool
@@ -389,6 +385,9 @@ done
 				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
+			// TODO(andrei): The comments below, and perhaps the code itself, are
+			// leftover from a time when the monitor was using nc (netcat). That's no
+			// longer the case.
 			// Give the session a valid stdin pipe so that nc won't exit immediately.
 			// When nc does exit, we write to stdout, which has a side effect of
 			// checking whether the stdout pipe has broken. This allows us to detect
