@@ -4360,11 +4360,16 @@ func regexpReplace(ctx *tree.EvalContext, s, pattern, to, sqlFlags string) (tree
 						// & refers to the entire match.
 						newString.WriteString(s[matchStart:matchEnd])
 					} else {
-						idx := int(to[i] - '0')
-						// regexpReplace expects references to "out-of-bounds" capture groups
-						// to be ignored.
-						if 2*idx < len(matchIndex) {
-							newString.WriteString(s[matchIndex[2*idx]:matchIndex[2*idx+1]])
+						captureGroupNumber := int(to[i] - '0')
+						// regexpReplace expects references to "out-of-bounds"
+						// and empty (when the corresponding match indices
+						// are negative) capture groups to be ignored.
+						if matchIndexPos := 2 * captureGroupNumber; matchIndexPos < len(matchIndex) {
+							startPos := matchIndex[matchIndexPos]
+							endPos := matchIndex[matchIndexPos+1]
+							if startPos >= 0 {
+								newString.WriteString(s[startPos:endPos])
+							}
 						}
 					}
 				}
