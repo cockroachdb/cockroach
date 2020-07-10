@@ -18,8 +18,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
-	"github.com/cockroachdb/errors"
+	crdberrors "github.com/cockroachdb/errors"
 )
 
 type session interface {
@@ -79,7 +80,7 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
-		err = errors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
+		err = crdberrors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
 		s.logfile = "" // prevent removal on close
 	}
 	return err
@@ -88,12 +89,12 @@ func (s *remoteSession) errWithDebug(err error) error {
 func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	b, err := s.Cmd.CombinedOutput()
-	return b, s.errWithDebug(err)
+	return b, rperrors.ClassifyCmdError(s.errWithDebug(err))
 }
 
 func (s *remoteSession) Run(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.errWithDebug(s.Cmd.Run())
+	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Run()))
 }
 
 func (s *remoteSession) Start(cmd string) error {
@@ -133,7 +134,7 @@ func (s *remoteSession) RequestPty() error {
 }
 
 func (s *remoteSession) Wait() error {
-	return s.Cmd.Wait()
+	return rperrors.ClassifyCmdError(s.Cmd.Wait())
 }
 
 func (s *remoteSession) Close() {
