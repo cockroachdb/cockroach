@@ -663,5 +663,9 @@ func (s *sqlServer) start(
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
 
+	// Start scheduled jobs daemon.
+	jobs.StartJobSchedulerDaemon(ctx, stopper, &s.execCfg.Settings.SV,
+		jobs.ProdJobSchedulerEnv, s.execCfg.DB, s.internalExecutor)
+
 	return nil
 }
