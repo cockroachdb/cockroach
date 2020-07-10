@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -232,7 +232,7 @@ func newInvertedJoiner(
 		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, ij.EvalCtx); err != nil {
 			return nil, err
 		}
-		ij.datumToInvertedExpr, err = xform.NewDatumToInvertedExpr(invertedExprHelper.Expr, ij.index)
+		ij.datumToInvertedExpr, err = invertedidx.NewDatumToInvertedExpr(invertedExprHelper.Expr, ij.index)
 		if err != nil {
 			return nil, err
 		}
