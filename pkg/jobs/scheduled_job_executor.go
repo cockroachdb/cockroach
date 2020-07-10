@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -82,7 +83,7 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
 // with the job status changes.
 func NotifyJobTermination(
 	ctx context.Context,
-	env jobSchedulerEnv,
+	env scheduledjobs.JobSchedulerEnv,
 	md *JobMetadata,
 	scheduleID int64,
 	ex sqlutil.InternalExecutor,
@@ -94,7 +95,7 @@ func NotifyJobTermination(
 	}
 
 	if env == nil {
-		env = ProdJobSchedulerEnv
+		env = scheduledjobs.ProdJobSchedulerEnv
 	}
 
 	// Get the executor for this schedule.
@@ -115,7 +116,7 @@ func NotifyJobTermination(
 
 func lookupScheduleAndExecutor(
 	ctx context.Context,
-	env jobSchedulerEnv,
+	env scheduledjobs.JobSchedulerEnv,
 	scheduleID int64,
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
