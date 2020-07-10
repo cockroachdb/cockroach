@@ -665,8 +665,17 @@ func (s *sqlServer) start(
 	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
 
 	// Start scheduled jobs daemon.
-	jobs.StartJobSchedulerDaemon(ctx, stopper, &s.execCfg.Settings.SV,
-		scheduledjobs.ProdJobSchedulerEnv, s.execCfg.DB, s.internalExecutor)
+	jobs.StartJobSchedulerDaemon(
+		ctx, stopper, &scheduledjobs.JobExecutionConfig{
+			Settings:         s.execCfg.Settings,
+			InternalExecutor: s.internalExecutor,
+			DB:               s.execCfg.DB,
+			PlanHookMaker: func(opName string, txn *kv.Txn, user string) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(opName, txn, user, &sql.MemoryMetrics{}, s.execCfg)
+			},
+		}, scheduledjobs.ProdJobSchedulerEnv)
 
 	return nil
 }

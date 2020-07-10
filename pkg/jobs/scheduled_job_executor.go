@@ -27,16 +27,20 @@ import (
 type ScheduledJobExecutor interface {
 	// Executes scheduled job;  Implementation may use provided transaction.
 	// Modifications to the ScheduledJob object will be persisted.
-	ExecuteJob(ctx context.Context, schedule *ScheduledJob, txn *kv.Txn) error
+	ExecuteJob(ctx context.Context,
+		cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv,
+		schedule *ScheduledJob, txn *kv.Txn) error
 
 	// Notifies that the system.job started by the ScheduledJob completed.
 	// Implementation may use provided transaction to perform any additional mutations.
 	// Modifications to the ScheduledJob object will be persisted.
-	NotifyJobTermination(ctx context.Context, md *JobMetadata, schedule *ScheduledJob, txn *kv.Txn) error
+	NotifyJobTermination(ctx context.Context,
+		cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv,
+		md *JobMetadata, schedule *ScheduledJob, txn *kv.Txn) error
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
-type ScheduledJobExecutorFactory = func(ex sqlutil.InternalExecutor) (ScheduledJobExecutor, error)
+type ScheduledJobExecutorFactory = func() (ScheduledJobExecutor, error)
 
 var registeredExecutorFactories = make(map[string]ScheduledJobExecutorFactory)
 
@@ -50,11 +54,9 @@ func RegisterScheduledJobExecutorFactory(name string, factory ScheduledJobExecut
 }
 
 // NewScheduledJobExecutor creates new ScheduledJobExecutor.
-func NewScheduledJobExecutor(
-	name string, ex sqlutil.InternalExecutor,
-) (ScheduledJobExecutor, error) {
+func NewScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
 	if factory, ok := registeredExecutorFactories[name]; ok {
-		return factory(ex)
+		return factory()
 	}
 	return nil, errors.Newf("executor %q is not registered", name)
 }
@@ -83,10 +85,10 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
 // with the job status changes.
 func NotifyJobTermination(
 	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 	md *JobMetadata,
 	scheduleID int64,
-	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) error {
 	if !md.Status.Terminal() {
@@ -99,26 +101,27 @@ func NotifyJobTermination(
 	}
 
 	// Get the executor for this schedule.
-	schedule, executor, err := lookupScheduleAndExecutor(ctx, env, scheduleID, ex, txn)
+	schedule, executor, err := lookupScheduleAndExecutor(
+		ctx, env, cfg.InternalExecutor, scheduleID, txn)
 	if err != nil {
 		return err
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, md, schedule, txn)
+	err = executor.NotifyJobTermination(ctx, cfg, env, md, schedule, txn)
 	if err != nil {
 		return err
 	}
 
 	// Update this schedule in case executor made changes to it.
-	return schedule.Update(ctx, ex, txn)
+	return schedule.Update(ctx, cfg.InternalExecutor, txn)
 }
 
 func lookupScheduleAndExecutor(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
-	scheduleID int64,
 	ex sqlutil.InternalExecutor,
+	scheduleID int64,
 	txn *kv.Txn,
 ) (*ScheduledJob, ScheduledJobExecutor, error) {
 	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
@@ -141,7 +144,7 @@ func lookupScheduleAndExecutor(
 	if err := j.InitFromDatums(rows[0], cols); err != nil {
 		return nil, nil, err
 	}
-	executor, err := NewScheduledJobExecutor(j.ExecutorType(), ex)
+	executor, err := NewScheduledJobExecutor(j.ExecutorType())
 	if err == nil {
 		return j, executor, nil
 	}
