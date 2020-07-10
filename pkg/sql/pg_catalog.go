@@ -432,7 +432,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/9.5/catalog-pg-attribute.html`,
+https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 	`
 CREATE TABLE pg_catalog.pg_attribute (
 	attrelid OID NOT NULL,
@@ -449,6 +449,8 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attalign CHAR,
 	attnotnull BOOL,
 	atthasdef BOOL,
+	attidentity CHAR, 
+	attgenerated CHAR,
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT4,
@@ -466,6 +468,14 @@ CREATE TABLE pg_catalog.pg_attribute (
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
 		addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
 			colTyp := column.Type
+			// Sets the attgenerated column to 's' if the column is generated/
+			// computed, zero byte otherwise.
+			var isColumnComputed string
+			if column.IsComputed() {
+				isColumnComputed = "s"
+			} else {
+				isColumnComputed = ""
+			}
 			return addRow(
 				attRelID,                       // attrelid
 				tree.NewDName(column.Name),     // attname
@@ -481,13 +491,15 @@ CREATE TABLE pg_catalog.pg_attribute (
 				tree.DNull, // attalign
 				tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
 				tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
-				tree.DBoolFalse,    // attisdropped
-				tree.DBoolTrue,     // attislocal
-				zeroVal,            // attinhcount
-				typColl(colTyp, h), // attcollation
-				tree.DNull,         // attacl
-				tree.DNull,         // attoptions
-				tree.DNull,         // attfdwoptions
+				tree.DNull,                        // attidentity
+				tree.NewDString(isColumnComputed), // attgenerated
+				tree.DBoolFalse,                   // attisdropped
+				tree.DBoolTrue,                    // attislocal
+				zeroVal,                           // attinhcount
+				typColl(colTyp, h),                // attcollation
+				tree.DNull,                        // attacl
+				tree.DNull,                        // attoptions
+				tree.DNull,                        // attfdwoptions
 			)
 		}
 
