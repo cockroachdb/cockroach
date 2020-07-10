@@ -144,6 +144,10 @@ func TestRetryNextCh(t *testing.T) {
 func TestRetryWithMaxAttempts(t *testing.T) {
 	expectedErr := errors.New("placeholder")
 	attempts := 0
+	noErrFunc := func() error {
+		attempts++
+		return nil
+	}
 	errWithAttemptsCounterFunc := func() error {
 		attempts++
 		return expectedErr
@@ -183,11 +187,11 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 				Multiplier:     2,
 				MaxRetries:     1,
 			},
-			retryFunc:   func() error { return nil },
+			retryFunc:   noErrFunc,
 			maxAttempts: 3,
 
-			minNumAttempts: 0,
-			maxNumAttempts: 0,
+			minNumAttempts: 1,
+			maxNumAttempts: 1,
 		},
 		{
 			desc: "succeeds after one faked error",
@@ -235,7 +239,7 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 				cancelCtxFunc()
 			},
 
-			minNumAttempts:  0,
+			minNumAttempts:  1,
 			maxNumAttempts:  3,
 			expectedErrText: "did not run function due to context completion: context canceled",
 		},
@@ -255,7 +259,7 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 				close(closeCh)
 			},
 
-			minNumAttempts:  0,
+			minNumAttempts:  1,
 			maxNumAttempts:  3,
 			expectedErrText: "did not run function due to closed opts.Closer",
 		},

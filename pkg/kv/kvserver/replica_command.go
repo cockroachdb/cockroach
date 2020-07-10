@@ -525,7 +525,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	// in a retry loop. Note that this is speculative; there wasn't an incident
 	// that suggested this.
 	retryOpts.RandomizationFactor = 0.5
-	lastErr := ctx.Err()
+	var lastErr error
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
