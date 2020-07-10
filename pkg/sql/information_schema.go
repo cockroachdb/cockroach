@@ -572,9 +572,21 @@ func numericScale(colType *types.T) tree.Datum {
 	})
 }
 
+// datetimePrecision returns the declared or implicit precision of Time,
+// Timestamp or Interval data types. Returns false if the data type is not
+// a Time, Timestamp or Interval.
 func datetimePrecision(colType *types.T) tree.Datum {
-	// We currently do not support a datetime precision.
-	return tree.DNull
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.TimeFamily, types.TimeTZFamily:
+			return colType.Precision(), true
+		case types.TimestampFamily, types.TimestampTZFamily:
+			return colType.Precision(), true
+		case types.IntervalFamily:
+			return colType.Precision(), true
+		}
+		return 0, false
+	})
 }
 
 var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
