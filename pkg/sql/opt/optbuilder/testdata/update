@@ -1697,8 +1697,11 @@ update partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:4!null b:5 c:6
       │    │    │    └── partial index predicates
-      │    │    │         ├── secondary: c:6 = 'foo'
-      │    │    │         └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      │    │    │         ├── secondary: filters
+      │    │    │         │    └── c:6 = 'foo'
+      │    │    │         └── secondary: filters
+      │    │    │              ├── a:4 > b:5
+      │    │    │              └── c:6 = 'bar'
       │    │    └── projections
       │    │         ├── c:6 = 'foo' [as=partial_index_del1:7]
       │    │         ├── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
