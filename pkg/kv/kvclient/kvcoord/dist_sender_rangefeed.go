@@ -199,7 +199,7 @@ func (ds *DistSender) partialRangeFeed(
 			}
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed

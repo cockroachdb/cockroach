@@ -27,7 +27,7 @@ type Options struct {
 	Multiplier          float64         // Default backoff constant
 	MaxRetries          int             // Maximum number of attempts (0 for infinite)
 	RandomizationFactor float64         // Randomize the backoff interval by constant
-	Closer              <-chan struct{} // Optionally end retry loop channel close.
+	Closer              <-chan struct{} // Optionally end retry loop channel close
 }
 
 // Retry implements the public methods necessary to control an exponential-
@@ -47,7 +47,8 @@ func Start(opts Options) Retry {
 
 // StartWithCtx returns a new Retry initialized to some default values. The
 // Retry can then be used in an exponential-backoff retry loop. If the provided
-// context is canceled (see Context.Done), the retry loop ends early.
+// context is canceled (see Context.Done), the retry loop ends early, but will
+// always run at least once.
 func StartWithCtx(ctx context.Context, opts Options) Retry {
 	if opts.InitialBackoff == 0 {
 		opts.InitialBackoff = 50 * time.Millisecond
@@ -62,26 +63,31 @@ func StartWithCtx(ctx context.Context, opts Options) Retry {
 		opts.Multiplier = 2
 	}
 
-	r := Retry{opts: opts}
+	var r Retry
+	r.opts = opts
 	r.ctxDoneChan = ctx.Done()
-	r.Reset()
+	r.mustReset()
 	return r
 }
 
 // Reset resets the Retry to its initial state, meaning that the next call to
-// Next will return true immediately and subsequent calls will behave as if
-// they had followed the very first attempt (i.e. their backoffs will be
-// short).
+// Next will return true immediately and subsequent calls will behave as if they
+// had followed the very first attempt (i.e. their backoffs will be short). The
+// exception to this is if the provided Closer has fired or context has been
+// canceled, in which case subsequent calls to Next will still return false
+// immediately.
 func (r *Retry) Reset() {
 	select {
 	case <-r.opts.Closer:
 		// When the closer has fired, you can't keep going.
-		return
 	case <-r.ctxDoneChan:
 		// When the context was canceled, you can't keep going.
-		return
 	default:
+		r.mustReset()
 	}
+}
+
+func (r *Retry) mustReset() {
 	r.currentAttempt = 0
 	r.isReset = true
 }
@@ -100,8 +106,8 @@ func (r Retry) retryIn() time.Duration {
 }
 
 // Next returns whether the retry loop should continue, and blocks for the
-// appropriate length of time before yielding back to the caller. If a stopper
-// is present, Next will eagerly return false when the stopper is stopped.
+// appropriate length of time before yielding back to the caller. If a closer
+// is present, Next will eagerly return false when the closer fires.
 func (r *Retry) Next() bool {
 	if r.isReset {
 		r.isReset = false

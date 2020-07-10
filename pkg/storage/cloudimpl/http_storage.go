@@ -190,23 +190,19 @@ func (r *resumingHTTPReader) sendRequest(
 ) (resp *http.Response, err error) {
 	// Initialize err to the context.Canceled: if our context is canceled, we will
 	// never enter the loop below; in this case we want to return "nil, canceled"
-	err = context.Canceled
-	for attempt, retries := 0,
-		retry.StartWithCtx(r.ctx, HTTPRetryOptions); retries.Next(); attempt++ {
-		resp, err = r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
-
+	for attempt, retries := 0, retry.StartWithCtx(r.ctx, HTTPRetryOptions); retries.Next(); attempt++ {
+		resp, err := r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
 		if err == nil {
-			return
+			return resp, nil
 		}
 
 		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
 
 		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
-			return
+			return nil, err
 		}
 	}
-
-	return
+	return nil, r.ctx.Err()
 }
 
 // requestNextRanges issues additional http request
