@@ -2203,10 +2203,31 @@ message GossipSubscriptionEvent {
   Error error = 4;
 }
 
-// Batch and RangeFeed service implemeted by nodes for KV API requests.
+// JoinNodeRequest is used to specify to the server node what the client's
+// binary version is. If it's not compatible with the rest of the cluster, the
+// join attempt is refused.
+message JoinNodeRequest {
+  roachpb.Version binary_version = 1;
+}
+
+// JoinNodeResponse informs the joining node what the cluster id is, what
+// node id was allocated to it, and what store ID to use for its first store. It
+// also informs the node what the current active version is.
+message JoinNodeResponse {
+  bytes cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
+  int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
+  roachpb.Version active_version = 4;
+}
+
+// Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  // Join a bootstrapped cluster. If the target node is itself not part of a
+  // bootstrapped cluster, an appropriate error is returned.
+  rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
 }

@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var _ roachpb.InternalServer = Node(0)
+
 type Node time.Duration
 
 func (n Node) Batch(
@@ -58,6 +60,10 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 func (n Node) GossipSubscription(
 	_ *roachpb.GossipSubscriptionRequest, _ roachpb.Internal_GossipSubscriptionServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (n Node) Join(context.Context, *roachpb.JoinNodeRequest) (*roachpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 
