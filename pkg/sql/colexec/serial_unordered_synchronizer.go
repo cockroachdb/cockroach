@@ -31,8 +31,11 @@ type SerialUnorderedSynchronizer struct {
 	curSerialInputIdx int
 }
 
-var _ colexecbase.Operator = &SerialUnorderedSynchronizer{}
-var _ execinfra.OpNode = &SerialUnorderedSynchronizer{}
+var (
+	_ colexecbase.Operator = &SerialUnorderedSynchronizer{}
+	_ execinfra.OpNode     = &SerialUnorderedSynchronizer{}
+	_ Closer               = &SerialUnorderedSynchronizer{}
+)
 
 // ChildCount implements the execinfra.OpNode interface.
 func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
@@ -83,4 +86,12 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
 	}
 	return bufferedMeta
+}
+
+// Close is part of the Closer interface.
+func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
+	for _, input := range s.inputs {
+		input.ToClose.CloseAndLogOnErr(ctx, "serial unordered synchronizer")
+	}
+	return nil
 }

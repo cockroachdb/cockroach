@@ -325,7 +325,7 @@ func createDiskBackedSorter(
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []Closer, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),

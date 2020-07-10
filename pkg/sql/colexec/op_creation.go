@@ -78,9 +78,8 @@ type NewColOperatorResult struct {
 	ColumnTypes      []*types.T
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource
-	// ToClose is a slice of components that need to be Closed. Close should be
-	// idempotent.
-	ToClose     []IdempotentCloser
+	// ToClose is a slice of components that need to be Closed.
+	ToClose     []Closer
 	IsStreaming bool
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount
