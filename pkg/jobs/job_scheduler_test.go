@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -326,7 +327,7 @@ type expectedRun struct {
 }
 
 func expectScheduledRuns(t *testing.T, h *testHelper, expected ...expectedRun) {
-	query := fmt.Sprintf("SELECT schedule_id, next_run FROM %s", h.env.scheduledJobsTableName)
+	query := fmt.Sprintf("SELECT schedule_id, next_run FROM %s", h.env.ScheduledJobsTableName())
 
 	testutils.SucceedsSoon(t, func() error {
 		rows := h.sqlDB.Query(t, query)
@@ -464,7 +465,7 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	runner.Exec(t, "CREATE TABLE defaultdb.foo(a int)")
 
 	// Create a one off job which writes some values into 'foo' table.
-	schedule := NewScheduledJob(ProdJobSchedulerEnv)
+	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 	schedule.SetScheduleName("test schedule")
 	schedule.SetNextRun(timeutil.Now())
 	any, err := types.MarshalAny(

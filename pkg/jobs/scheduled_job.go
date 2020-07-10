@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,7 +49,7 @@ type scheduledJobRecord struct {
 // ScheduledJob  is a representation of the scheduled job.
 // This struct can marshal/unmarshal changes made to the underlying system.scheduled_job table.
 type ScheduledJob struct {
-	env jobSchedulerEnv
+	env scheduledjobs.JobSchedulerEnv
 
 	// The "record" for this schedule job.  Do not access this field
 	// directly (except in tests); Use Get/Set methods on ScheduledJob instead.
@@ -59,7 +60,7 @@ type ScheduledJob struct {
 }
 
 // NewScheduledJob creates and initializes ScheduledJob.
-func NewScheduledJob(env jobSchedulerEnv) *ScheduledJob {
+func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	return &ScheduledJob{
 		env:   env,
 		dirty: make(map[string]struct{}),
