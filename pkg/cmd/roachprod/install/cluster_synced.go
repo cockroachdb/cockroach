@@ -502,9 +502,7 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 			errs[i] = sess.Run(nodeCmd)
 			if errs[i] != nil {
 				detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
-				err = errors.WithDetail(errs[i], detailMsg)
-				err = rperrors.ClassifyCmdError(err)
-				errs[i] = err
+				errs[i] = errors.WithDetail(errs[i], detailMsg)
 			}
 			return nil, nil
 		}
@@ -514,7 +512,6 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		if err != nil {
 			detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
 			err = errors.WithDetail(err, detailMsg)
-			err = rperrors.ClassifyCmdError(err)
 			errs[i] = err
 			msg += fmt.Sprintf("\n%v", err)
 		}

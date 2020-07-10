@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,12 +89,12 @@ func (s *remoteSession) errWithDebug(err error) error {
 func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	b, err := s.Cmd.CombinedOutput()
-	return b, s.errWithDebug(err)
+	return b, rperrors.ClassifyCmdError(s.errWithDebug(err))
 }
 
 func (s *remoteSession) Run(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.errWithDebug(s.Cmd.Run())
+	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Run()))
 }
 
 func (s *remoteSession) Start(cmd string) error {
@@ -133,7 +134,7 @@ func (s *remoteSession) RequestPty() error {
 }
 
 func (s *remoteSession) Wait() error {
-	return s.Cmd.Wait()
+	return rperrors.ClassifyCmdError(s.Cmd.Wait())
 }
 
 func (s *remoteSession) Close() {
