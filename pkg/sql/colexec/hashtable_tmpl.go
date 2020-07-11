@@ -82,11 +82,8 @@ func _CHECK_COL_BODY(
 		probeIdx, buildIdx       int
 		probeIsNull, buildIsNull bool
 	)
-	// Early bounds check.
-	_ = ht.probeScratch.toCheck[nToCheck-1]
-	for i := uint64(0); i < nToCheck; i++ {
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 		// keyID of 0 is reserved to represent the end of the next chain.
-		toCheck := ht.probeScratch.toCheck[i]
 		keyID := ht.probeScratch.groupID[toCheck]
 		if keyID != 0 {
 			// the build table key (calculated using keys[keyID - 1] = key) is
@@ -423,40 +420,6 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 	// {{/*
 } // */}}
 
-// {{if .HashTableMode.IsDistinctBuild}}
-
-// checkBuildForDistinct finds all tuples in probeVecs that are not present in
-// buffered tuples stored in ht.vals. It stores the probeVecs's distinct tuples'
-// keyIDs in headID buffer.
-// NOTE: It assumes that probeVecs does not contain any duplicates itself.
-// NOTE: It assumes that probeSel has already been populated and it is not nil.
-func (ht *hashTable) checkBuildForDistinct(
-	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
-) uint64 {
-	if probeSel == nil {
-		colexecerror.InternalError("invalid selection vector")
-	}
-	copy(ht.probeScratch.distinct, zeroBoolColumn)
-
-	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
-	nDiffers := uint64(0)
-	for i := uint64(0); i < nToCheck; i++ {
-		if ht.probeScratch.distinct[ht.probeScratch.toCheck[i]] {
-			ht.probeScratch.distinct[ht.probeScratch.toCheck[i]] = false
-			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
-			ht.probeScratch.headID[ht.probeScratch.toCheck[i]] = ht.probeScratch.toCheck[i] + 1
-		} else if ht.probeScratch.differs[ht.probeScratch.toCheck[i]] {
-			// Continue probing in this next chain for the probe key.
-			ht.probeScratch.differs[ht.probeScratch.toCheck[i]] = false
-			ht.probeScratch.toCheck[nDiffers] = ht.probeScratch.toCheck[i]
-			nDiffers++
-		}
-	}
-	return nDiffers
-}
-
-// {{end}}
-
 // {{/*
 //     Note that both probing modes (when hash table is built in full mode)
 //     are handled by the same check() function, so we will generate it only
@@ -507,26 +470,27 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 // {{/*
 func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 	// {{define "updateSelBody" -}}
+	batchLength := b.Length()
 	// Reuse the buffer allocated for distinct.
 	visited := ht.probeScratch.distinct
 	copy(visited, zeroBoolColumn)
-	for i := 0; i < b.Length(); i++ {
-		if ht.probeScratch.headID[i] != 0 {
-			if hasVisited := visited[ht.probeScratch.headID[i]-1]; !hasVisited {
+	for i, headID := range ht.probeScratch.headID[:batchLength] {
+		if headID != 0 {
+			if hasVisited := visited[headID-1]; !hasVisited {
 				// {{if .UseSel}}
-				sel[distinctCount] = sel[ht.probeScratch.headID[i]-1]
+				sel[distinctCount] = sel[headID-1]
 				// {{else}}
-				sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
+				sel[distinctCount] = int(headID - 1)
 				// {{end}}
-				visited[ht.probeScratch.headID[i]-1] = true
+				visited[headID-1] = true
 				// Compacting and deduplicating hash buffer.
 				ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
 				distinctCount++
 			}
 		}
-		ht.probeScratch.headID[i] = 0
-		ht.probeScratch.differs[i] = false
 	}
+	copy(ht.probeScratch.headID[:batchLength], zeroUint64Column)
+	copy(ht.probeScratch.differs[:batchLength], zeroBoolColumn)
 	// {{end}}
 	// {{/*
 } // */}}
@@ -564,10 +528,10 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
-	for i := uint64(0); i < nToCheck; i++ {
-		if ht.probeScratch.differs[ht.probeScratch.toCheck[i]] {
-			ht.probeScratch.differs[ht.probeScratch.toCheck[i]] = false
-			ht.probeScratch.toCheck[nDiffers] = ht.probeScratch.toCheck[i]
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		if ht.probeScratch.differs[toCheck] {
+			ht.probeScratch.differs[toCheck] = false
+			ht.probeScratch.toCheck[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
