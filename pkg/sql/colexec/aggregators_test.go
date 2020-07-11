@@ -292,6 +292,37 @@ func TestAggregatorOneFunc(t *testing.T) {
 			name:           "UnorderedWithNullsInGroupingCol",
 			unorderedInput: true,
 		},
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT_ROWS,
+			},
+			aggCols:        [][]uint32{{0}, {}},
+			typs:           []*types.T{types.Int},
+			unorderedInput: true,
+			input: tuples{
+				{1},
+				{2},
+				{1},
+				{nil},
+				{3},
+				{1},
+				{3},
+				{4},
+				{1},
+				{nil},
+				{2},
+				{4},
+				{2},
+			},
+			expected: tuples{
+				{nil, 2},
+				{1, 4},
+				{2, 3},
+				{3, 2},
+				{4, 2},
+			},
+		},
 	}
 
 	// Run tests with deliberate batch sizes and no selection vectors.
