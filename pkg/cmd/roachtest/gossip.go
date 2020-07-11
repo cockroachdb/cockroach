@@ -112,7 +112,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			deadNode = nodes.randNode()[0]
 			c.Stop(ctx, c.Node(deadNode))
 			waitForGossip()
-			c.Start(ctx, t, c.Node(deadNode), args)
+			c.Start(ctx, t, c.Node(deadNode), startArgsSkipInit, args)
 		}
 	}
 
@@ -270,7 +270,7 @@ func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
 		node := c.All().randNode()
 		t.l.Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
-		c.Start(ctx, t, node)
+		c.Start(ctx, t, node, startArgsSkipInit)
 	}
 }
 
@@ -294,7 +294,7 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 		c.Stop(ctx)
 
 		t.l.Printf("%d: restarting all nodes\n", i)
-		c.Start(ctx, t)
+		c.Start(ctx, t, startArgsSkipInit)
 	}
 }
 
@@ -441,7 +441,7 @@ SELECT count(replicas)
 	// Stop our special snowflake process which won't be recognized by the test
 	// harness, and start it again on the regular.
 	c.Stop(ctx, c.Node(1))
-	c.Start(ctx, t, c.Node(1))
+	c.Start(ctx, t, c.Node(1), startArgsSkipInit)
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {

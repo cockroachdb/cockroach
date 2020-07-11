@@ -66,7 +66,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
 		if !isAlive(db, c.l) {
-			c.Start(ctx, t, c.Node(1))
+			c.Start(ctx, t, c.Node(1), startArgsSkipInit)
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.spec.NodeCount)

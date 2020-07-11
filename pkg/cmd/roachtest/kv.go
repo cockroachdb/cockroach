@@ -341,7 +341,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				)
 			}
 			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector
+			c.Start(ctx, t, c.Node(nodes), startArgsSkipInit) // satisfy dead node detector
 		},
 	})
 }
@@ -399,7 +399,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 						return nil
 					case <-time.After(1 * time.Minute):
 					}
-					c.Start(ctx, t, c.Node(nodes))
+					c.Start(ctx, t, c.Node(nodes), startArgsSkipInit)
 				}
 				return nil
 			})

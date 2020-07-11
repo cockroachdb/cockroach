@@ -161,5 +161,5 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	}
 
 	// Restart the remaining nodes to satisfy the dead node detector.
-	c.Start(ctx, t, c.Range(1, 2))
+	c.Start(ctx, t, c.Range(1, 2), startArgsSkipInit)
 }

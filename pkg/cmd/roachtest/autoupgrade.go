@@ -131,7 +131,7 @@ func registerAutoUpgrade(r *testRegistry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt, startArgsSkipInit)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}

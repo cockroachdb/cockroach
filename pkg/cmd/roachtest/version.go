@@ -140,7 +140,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt, startArgsSkipInit)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -177,7 +177,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, b, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt, startArgsSkipInit)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -191,7 +191,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt, startArgsSkipInit)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

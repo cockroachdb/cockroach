@@ -55,11 +55,11 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		c.Start(ctx, t, startArgs(
+		c.Start(ctx, t, startArgsSkipInit, startArgs(
 			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
 	} else {
-		c.Start(ctx, t)
+		c.Start(ctx, t, startArgsSkipInit)
 	}
 
 	// Also restore a much smaller table. We'll use it to run queries against

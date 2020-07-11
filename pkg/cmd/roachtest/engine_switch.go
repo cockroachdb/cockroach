@@ -119,7 +119,7 @@ func registerEngineSwitch(r *testRegistry) {
 				if err := stop(i + 1); err != nil {
 					return err
 				}
-				c.Start(ctx, t, c.Node(i+1), args)
+				c.Start(ctx, t, c.Node(i+1), startArgsSkipInit, args)
 			}
 			return sleepAndCheck()
 		})

@@ -794,7 +794,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// inter-trial interactions.
 		m.ExpectDeaths(int32(len(roachNodes)))
 		c.Stop(ctx, roachNodes)
-		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+		c.Start(ctx, t, append(b.startOpts(), []option{roachNodes, startArgsSkipInit}...)...)
 		time.Sleep(restartWait)
 
 		// Set up the load generation configuration.

@@ -93,7 +93,7 @@ func (q *quitTest) runTest(
 // restartNode restarts one node and waits until it's up and ready to
 // accept clients.
 func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
-	q.c.Start(ctx, q.t, q.args, q.c.Node(nodeID))
+	q.c.Start(ctx, q.t, q.args, q.c.Node(nodeID), startArgsSkipInit)
 
 	q.t.l.Printf("waiting for readiness of node %d\n", nodeID)
 	// Now perform a SQL query. This achieves two goals:
@@ -450,7 +450,7 @@ func registerQuitAllNodes(r *testRegistry) {
 			// At the end, restart all nodes. We do this to check that
 			// the cluster can indeed restart, and also to please
 			// the dead node detection check at the end of each test.
-			q.c.Start(ctx, q.t, q.args)
+			q.c.Start(ctx, q.t, q.args, startArgsSkipInit)
 		},
 	})
 }

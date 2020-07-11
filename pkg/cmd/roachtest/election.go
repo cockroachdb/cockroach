@@ -57,7 +57,7 @@ func registerElectionAfterRestart(r *testRegistry) {
 
 			t.Status("restarting")
 			c.Stop(ctx)
-			c.Start(ctx, t)
+			c.Start(ctx, t, startArgsSkipInit)
 
 			// Each of the 100 ranges in this table must elect a leader for
 			// this query to complete. In naive raft, each of these

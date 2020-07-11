@@ -77,7 +77,7 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		"0x12040800100018002000280032280a10000000000000000000000000000000001a1066616b65207472616e73616374696f6e2a004a00")
 
 	m := newMonitor(ctx, c)
-	c.Start(ctx, t, nodes)
+	c.Start(ctx, t, nodes, startArgsSkipInit)
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):

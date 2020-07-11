@@ -91,6 +91,7 @@ var (
 	encrypt           = false
 	quiet             = false
 	sig               = 9
+	skipInit          = false
 	waitFlag          = false
 	stageOS           string
 	logsDir           string
@@ -1735,6 +1736,9 @@ func main() {
 				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 			cmd.Flags().BoolVar(
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
+			cmd.Flags().BoolVar(
+				&install.StartOpts.SkipInit, "skip-init", false,
+				"skip init step to bootstrap cockroach cluster")
 			fallthrough
 		case sqlCmd:
 			cmd.Flags().StringVarP(

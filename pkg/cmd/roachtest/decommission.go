@@ -214,8 +214,8 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			c.Start(ctx, t, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
-				c.InternalAddr(ctx, c.Node(nodes))[0], node)))
+			c.Start(ctx, t, c.Node(node), startArgsSkipInit, startArgs(
+				fmt.Sprintf("-a=--join %s --attrs=node%d", c.InternalAddr(ctx, c.Node(nodes))[0], node)))
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes
 		// having disappeared. Verify that the workloads don't dip their qps or
@@ -544,7 +544,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
-		c.Start(ctx, t, c.Node(1), args)
+		c.Start(ctx, t, c.Node(1), args, startArgsSkipInit)
 
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
@@ -649,7 +649,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	// with an address belonging to an old decommissioned node.
 	{
 		c.Wipe(ctx, c.Node(1))
-		c.Start(ctx, t, c.Node(1), startArgs(fmt.Sprintf("-a=--join %s",
+		c.Start(ctx, t, c.Node(1), startArgsSkipInit, startArgs(fmt.Sprintf("-a=--join %s",
 			c.InternalAddr(ctx, c.Node(2))[0])))
 	}
 

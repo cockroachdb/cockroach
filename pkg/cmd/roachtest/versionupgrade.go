@@ -292,7 +292,7 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) version
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"}, startArgsSkipInit)
 	}
 }
 
@@ -312,7 +312,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 		for _, node := range nodes {
 			t.l.Printf("restarting node %d", node)
 			c.Stop(ctx, c.Node(node))
-			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt, startArgsSkipInit)
 			t.l.Printf("node %d now running binary version %s", node, u.binaryVersion(ctx, t, node))
 
 			// TODO(nvanbenschoten): add upgrade qualification step. What should we

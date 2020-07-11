@@ -1896,6 +1896,14 @@ func startArgs(extraArgs ...string) option {
 // encryption enabled.
 var startArgsDontEncrypt = startArgs("--encrypt=false")
 
+// startArgsSkipInit will pass '--skip-init' to roachprod.
+//
+// NB: `roachprod start` attempts to auto-initialize the cluster when the target
+// node is n1. It accepts the --skip-init flag to avoid doing so when needed,
+// for example in roachtests that simply restart n1 (using `roachprod start`)
+// without wanting to re-initialize the cluster.
+var startArgsSkipInit = startArgs("--skip-init")
+
 // racks is an option which specifies the number of racks to partition the nodes
 // into.
 func racks(n int) option {
@@ -1939,7 +1947,7 @@ func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
 	var cancel func()
 	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 	c.Stop(ctx, node)
-	c.Start(ctx, t, node)
+	c.Start(ctx, t, node, startArgsSkipInit)
 	cancel()
 }
 

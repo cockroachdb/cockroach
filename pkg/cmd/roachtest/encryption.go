@@ -40,7 +40,7 @@ func registerEncryption(r *testRegistry) {
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, t, c.Range(1, nodes), startArgsSkipInit, startArgs("--encrypt"))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.
