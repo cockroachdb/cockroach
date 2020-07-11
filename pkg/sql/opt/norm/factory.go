@@ -295,13 +295,15 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 }
 
 // NormalizePartialIndexPredicate performs specific normalization functions to
-// build a partial index predicate that is as similar as possible to an
-// identical filter expression that is normalized within the context of a
-// Select.
+// normalize a partial index predicate. The goal is to mimic the normalizations
+// performed on filters with Selects as closely as possible. If a partial index
+// predicate and query filter are normalized differently, proving implication
+// can be difficult or impossible.
 func (f *Factory) NormalizePartialIndexPredicate(pred memo.FiltersExpr) memo.FiltersExpr {
 	// Run SimplifyFilters so that adjacent top-level AND expressions are
 	// flattened into individual FiltersItems, like they would be during
-	// normalization of a SELECT query.
+	// normalization of a SELECT query. See the SimplifySelectFilters
+	// normalization rule.
 	//
 	// NOTE: We currently do not recursively simplify the filters like
 	// SimplifySelectFilters rule does. This could cause a false-negative when
@@ -313,10 +315,16 @@ func (f *Factory) NormalizePartialIndexPredicate(pred memo.FiltersExpr) memo.Fil
 	}
 
 	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
-	// constrain a single variable are combined into a RangeExpr, like they
-	// would be during normalization of a SELECT query.
+	// constrain a single variable are combined into a RangeExpr. See the
+	// ConsolidateSelectFilters normalization rule.
 	if f.CustomFuncs().CanConsolidateFilters(pred) {
 		pred = f.CustomFuncs().ConsolidateFilters(pred)
+	}
+
+	// Run InlineConstVar so that constant variables are inlined. See the
+	// InlineConstVar normalization rule.
+	if f.CustomFuncs().CanInlineConstVar(pred) {
+		pred = f.CustomFuncs().InlineConstVar(pred)
 	}
 
 	return pred
