@@ -30,11 +30,9 @@ func newBoolAndOrderedAggAlloc(
 }
 
 type boolAndOrderedAgg struct {
+	orderedAggregateFuncBase
 	sawNonNull bool
-	groups     []bool
 	vec        []bool
-	nulls      *coldata.Nulls
-	curIdx     int
 	curAgg     bool
 }
 
@@ -42,91 +40,81 @@ var _ aggregateFunc = &boolAndOrderedAgg{}
 
 const sizeOfBoolAndOrderedAgg = int64(unsafe.Sizeof(boolAndOrderedAgg{}))
 
-func (b *boolAndOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	b.groups = groups
-	b.vec = vec.Bool()
-	b.nulls = vec.Nulls()
-	b.Reset()
+func (a *boolAndOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec.Bool()
+	a.Reset()
 }
 
-func (b *boolAndOrderedAgg) Reset() {
-	b.curIdx = 0
-	b.nulls.UnsetNulls()
+func (a *boolAndOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
 	// true indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the true is true and for bool_or the true is false.
-	b.curAgg = true
+	a.curAgg = true
 }
 
-func (b *boolAndOrderedAgg) CurrentOutputIndex() int {
-	return b.curIdx
-}
-
-func (b *boolAndOrderedAgg) SetOutputIndex(idx int) {
-	b.curIdx = idx
-}
-
-func (b *boolAndOrderedAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *boolAndOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
-			if b.groups[i] {
-				if !b.sawNonNull {
-					b.nulls.SetNull(b.curIdx)
+			if a.groups[i] {
+				if !a.sawNonNull {
+					a.nulls.SetNull(a.curIdx)
 				} else {
-					b.vec[b.curIdx] = b.curAgg
+					a.vec[a.curIdx] = a.curAgg
 				}
-				b.curIdx++
-				b.curAgg = true
-				b.sawNonNull = false
+				a.curIdx++
+				a.curAgg = true
+				a.sawNonNull = false
 			}
 
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg && col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg && col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	} else {
 		col = col[:inputLen]
 		for i := range col {
-			if b.groups[i] {
-				if !b.sawNonNull {
-					b.nulls.SetNull(b.curIdx)
+			if a.groups[i] {
+				if !a.sawNonNull {
+					a.nulls.SetNull(a.curIdx)
 				} else {
-					b.vec[b.curIdx] = b.curAgg
+					a.vec[a.curIdx] = a.curAgg
 				}
-				b.curIdx++
-				b.curAgg = true
-				b.sawNonNull = false
+				a.curIdx++
+				a.curAgg = true
+				a.sawNonNull = false
 			}
 
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg && col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg && col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	}
 }
 
-func (b *boolAndOrderedAgg) Flush() {
-	if !b.sawNonNull {
-		b.nulls.SetNull(b.curIdx)
+func (a *boolAndOrderedAgg) Flush(outputIdx int) {
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	if !a.sawNonNull {
+		a.nulls.SetNull(outputIdx)
 	} else {
-		b.vec[b.curIdx] = b.curAgg
+		a.vec[outputIdx] = a.curAgg
 	}
-	b.curIdx++
-}
-
-func (b *boolAndOrderedAgg) HandleEmptyInputScalar() {
-	b.nulls.SetNull(0)
 }
 
 type boolAndOrderedAggAlloc struct {
@@ -156,11 +144,9 @@ func newBoolOrOrderedAggAlloc(
 }
 
 type boolOrOrderedAgg struct {
+	orderedAggregateFuncBase
 	sawNonNull bool
-	groups     []bool
 	vec        []bool
-	nulls      *coldata.Nulls
-	curIdx     int
 	curAgg     bool
 }
 
@@ -168,91 +154,81 @@ var _ aggregateFunc = &boolOrOrderedAgg{}
 
 const sizeOfBoolOrOrderedAgg = int64(unsafe.Sizeof(boolOrOrderedAgg{}))
 
-func (b *boolOrOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	b.groups = groups
-	b.vec = vec.Bool()
-	b.nulls = vec.Nulls()
-	b.Reset()
+func (a *boolOrOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec.Bool()
+	a.Reset()
 }
 
-func (b *boolOrOrderedAgg) Reset() {
-	b.curIdx = 0
-	b.nulls.UnsetNulls()
+func (a *boolOrOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
 	// false indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the false is true and for bool_or the false is false.
-	b.curAgg = false
+	a.curAgg = false
 }
 
-func (b *boolOrOrderedAgg) CurrentOutputIndex() int {
-	return b.curIdx
-}
-
-func (b *boolOrOrderedAgg) SetOutputIndex(idx int) {
-	b.curIdx = idx
-}
-
-func (b *boolOrOrderedAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *boolOrOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
-			if b.groups[i] {
-				if !b.sawNonNull {
-					b.nulls.SetNull(b.curIdx)
+			if a.groups[i] {
+				if !a.sawNonNull {
+					a.nulls.SetNull(a.curIdx)
 				} else {
-					b.vec[b.curIdx] = b.curAgg
+					a.vec[a.curIdx] = a.curAgg
 				}
-				b.curIdx++
-				b.curAgg = false
-				b.sawNonNull = false
+				a.curIdx++
+				a.curAgg = false
+				a.sawNonNull = false
 			}
 
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg || col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg || col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	} else {
 		col = col[:inputLen]
 		for i := range col {
-			if b.groups[i] {
-				if !b.sawNonNull {
-					b.nulls.SetNull(b.curIdx)
+			if a.groups[i] {
+				if !a.sawNonNull {
+					a.nulls.SetNull(a.curIdx)
 				} else {
-					b.vec[b.curIdx] = b.curAgg
+					a.vec[a.curIdx] = a.curAgg
 				}
-				b.curIdx++
-				b.curAgg = false
-				b.sawNonNull = false
+				a.curIdx++
+				a.curAgg = false
+				a.sawNonNull = false
 			}
 
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg || col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg || col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	}
 }
 
-func (b *boolOrOrderedAgg) Flush() {
-	if !b.sawNonNull {
-		b.nulls.SetNull(b.curIdx)
+func (a *boolOrOrderedAgg) Flush(outputIdx int) {
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	if !a.sawNonNull {
+		a.nulls.SetNull(outputIdx)
 	} else {
-		b.vec[b.curIdx] = b.curAgg
+		a.vec[outputIdx] = a.curAgg
 	}
-	b.curIdx++
-}
-
-func (b *boolOrOrderedAgg) HandleEmptyInputScalar() {
-	b.nulls.SetNull(0)
 }
 
 type boolOrOrderedAggAlloc struct {

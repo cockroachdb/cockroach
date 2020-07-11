@@ -69,7 +69,6 @@ func _REHASH_BODY(
 	// {{end}}
 	var selIdx int
 	for i := 0; i < nKeys; i++ {
-		cancelChecker.check(ctx)
 		// {{if .HasSel}}
 		selIdx = sel[i]
 		// {{else}}
@@ -85,6 +84,7 @@ func _REHASH_BODY(
 		_ASSIGN_HASH(p, v, _, keys)
 		buckets[i] = uint64(p)
 	}
+	cancelChecker.checkEveryCall(ctx)
 	// {{end}}
 
 	// {{/*

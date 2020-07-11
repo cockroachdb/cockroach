@@ -28,32 +28,29 @@ import (
 
 func (a *concat_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *concat_AGGKINDAgg) Reset() {
-	a.curIdx = 0
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.foundNonNullForCurrentGroup = false
 	a.curAgg = zeroBytesValue
-	a.nulls.UnsetNulls()
 }
 
-func (a *concat_AGGKINDAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *concat_AGGKINDAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *concat_AGGKINDAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *concat_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -88,23 +85,24 @@ func (a *concat_AGGKINDAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *concat_AGGKINDAgg) Flush() {
+func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	// {{end}}
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec}, func() {
 			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
+				a.nulls.SetNull(outputIdx)
 			} else {
-				a.col.Set(a.curIdx, a.curAgg)
+				a.col.Set(outputIdx, a.curAgg)
 			}
 			a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
-			// release reference to curAgg eagerly
+			// Release the reference to curAgg eagerly.
 			a.curAgg = nil
-			a.curIdx++
 		})
-}
-
-func (a *concat_AGGKINDAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 func (a *concat_AGGKINDAgg) aggValMemoryUsage() int64 {
@@ -115,11 +113,9 @@ func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(sizeOfConcat_AGGKINDAgg * a.allocSize)
 		a.aggFuncs = make([]concat_AGGKINDAgg, a.allocSize)
-		for i := range a.aggFuncs {
-			a.aggFuncs[i].allocator = a.allocator
-		}
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -139,22 +135,18 @@ type concat_AGGKINDAggAlloc struct {
 }
 
 type concat_AGGKINDAgg struct {
-	// allocator is the allocator used to create this aggregateFunc
-	// memory usage of output vector and curAgg varies during aggregation,
-	// we need the allocator to monitor this change.
-	allocator *colmem.Allocator
 	// {{if eq "_AGGKIND" "Ordered"}}
-	groups []bool
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
 	// {{end}}
-	curIdx int
+	allocator *colmem.Allocator
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool

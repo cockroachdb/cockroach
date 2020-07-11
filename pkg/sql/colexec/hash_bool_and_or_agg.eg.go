@@ -30,10 +30,9 @@ func newBoolAndHashAggAlloc(
 }
 
 type boolAndHashAgg struct {
+	hashAggregateFuncBase
 	sawNonNull bool
 	vec        []bool
-	nulls      *coldata.Nulls
-	curIdx     int
 	curAgg     bool
 }
 
@@ -41,31 +40,23 @@ var _ aggregateFunc = &boolAndHashAgg{}
 
 const sizeOfBoolAndHashAgg = int64(unsafe.Sizeof(boolAndHashAgg{}))
 
-func (b *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
-	b.vec = vec.Bool()
-	b.nulls = vec.Nulls()
-	b.Reset()
+func (a *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
+	a.vec = vec.Bool()
+	a.Reset()
 }
 
-func (b *boolAndHashAgg) Reset() {
-	b.curIdx = 0
-	b.nulls.UnsetNulls()
+func (a *boolAndHashAgg) Reset() {
+	a.hashAggregateFuncBase.Reset()
 	// true indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the true is true and for bool_or the true is false.
-	b.curAgg = true
+	a.curAgg = true
 }
 
-func (b *boolAndHashAgg) CurrentOutputIndex() int {
-	return b.curIdx
-}
-
-func (b *boolAndHashAgg) SetOutputIndex(idx int) {
-	b.curIdx = idx
-}
-
-func (b *boolAndHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *boolAndHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	if sel != nil {
 		sel = sel[:inputLen]
@@ -74,8 +65,8 @@ func (b *boolAndHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg && col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg && col[i]
+				a.sawNonNull = true
 			}
 
 		}
@@ -86,25 +77,20 @@ func (b *boolAndHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg && col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg && col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	}
 }
 
-func (b *boolAndHashAgg) Flush() {
-	if !b.sawNonNull {
-		b.nulls.SetNull(b.curIdx)
+func (a *boolAndHashAgg) Flush(outputIdx int) {
+	if !a.sawNonNull {
+		a.nulls.SetNull(outputIdx)
 	} else {
-		b.vec[b.curIdx] = b.curAgg
+		a.vec[outputIdx] = a.curAgg
 	}
-	b.curIdx++
-}
-
-func (b *boolAndHashAgg) HandleEmptyInputScalar() {
-	b.nulls.SetNull(0)
 }
 
 type boolAndHashAggAlloc struct {
@@ -134,10 +120,9 @@ func newBoolOrHashAggAlloc(
 }
 
 type boolOrHashAgg struct {
+	hashAggregateFuncBase
 	sawNonNull bool
 	vec        []bool
-	nulls      *coldata.Nulls
-	curIdx     int
 	curAgg     bool
 }
 
@@ -145,31 +130,23 @@ var _ aggregateFunc = &boolOrHashAgg{}
 
 const sizeOfBoolOrHashAgg = int64(unsafe.Sizeof(boolOrHashAgg{}))
 
-func (b *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
-	b.vec = vec.Bool()
-	b.nulls = vec.Nulls()
-	b.Reset()
+func (a *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
+	a.vec = vec.Bool()
+	a.Reset()
 }
 
-func (b *boolOrHashAgg) Reset() {
-	b.curIdx = 0
-	b.nulls.UnsetNulls()
+func (a *boolOrHashAgg) Reset() {
+	a.hashAggregateFuncBase.Reset()
 	// false indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the false is true and for bool_or the false is false.
-	b.curAgg = false
+	a.curAgg = false
 }
 
-func (b *boolOrHashAgg) CurrentOutputIndex() int {
-	return b.curIdx
-}
-
-func (b *boolOrHashAgg) SetOutputIndex(idx int) {
-	b.curIdx = idx
-}
-
-func (b *boolOrHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *boolOrHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	if sel != nil {
 		sel = sel[:inputLen]
@@ -178,8 +155,8 @@ func (b *boolOrHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg || col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg || col[i]
+				a.sawNonNull = true
 			}
 
 		}
@@ -190,25 +167,20 @@ func (b *boolOrHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 			// TODO(yuzefovich): template out has nulls vs no nulls cases.
 			isNull := nulls.NullAt(i)
 			if !isNull {
-				b.curAgg = b.curAgg || col[i]
-				b.sawNonNull = true
+				a.curAgg = a.curAgg || col[i]
+				a.sawNonNull = true
 			}
 
 		}
 	}
 }
 
-func (b *boolOrHashAgg) Flush() {
-	if !b.sawNonNull {
-		b.nulls.SetNull(b.curIdx)
+func (a *boolOrHashAgg) Flush(outputIdx int) {
+	if !a.sawNonNull {
+		a.nulls.SetNull(outputIdx)
 	} else {
-		b.vec[b.curIdx] = b.curAgg
+		a.vec[outputIdx] = a.curAgg
 	}
-	b.curIdx++
-}
-
-func (b *boolOrHashAgg) HandleEmptyInputScalar() {
-	b.nulls.SetNull(0)
 }
 
 type boolOrHashAggAlloc struct {

@@ -252,7 +252,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 		// ht.next is used to store the computed hash value of each key.
 		ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
 		ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
-		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, ht.vals.Length())
+		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, uint64(ht.vals.Length()))
 	case hashTableDistinctBuildMode:
 		for {
 			batch := input.Next(ctx)
@@ -299,7 +299,7 @@ func (ht *hashTable) computeHashAndBuildChains(ctx context.Context, batch coldat
 		ht.probeScratch.first[hash] = 0
 	}
 
-	ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1 /* offset */, batch.Length())
+	ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1 /* offset */, uint64(batch.Length()))
 }
 
 // findBuckets finds the buckets for all tuples in batch when probing against a
@@ -349,12 +349,12 @@ func (ht *hashTable) removeDuplicates(
 // assumes that all tuples are distinct and that ht.probeScratch.hashBuffer
 // contains the hash codes for all of them.
 func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch) {
-	numBuffered := ht.vals.Length()
+	numBuffered := uint64(ht.vals.Length())
 	ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
 		ht.vals.append(batch, 0 /* startIdx */, batch.Length())
 	})
 	ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:batch.Length()]...)
-	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, batch.Length())
+	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, uint64(batch.Length()))
 }
 
 // checkCols performs a column by column checkCol on the key columns.
@@ -416,7 +416,7 @@ func (ht *hashTable) computeBuckets(
 
 // buildNextChains builds the hash map from the computed hash values.
 func (ht *hashTable) buildNextChains(
-	ctx context.Context, first, next []uint64, offset, batchSize int,
+	ctx context.Context, first, next []uint64, offset, batchSize uint64,
 ) {
 	// The loop direction here is reversed to ensure that when we are building the
 	// next chain for the probe table, the keyID in each equality chain inside
@@ -428,8 +428,6 @@ func (ht *hashTable) buildNextChains(
 	// distinct, therefore we can be sure that when we emit a tuple, there cannot
 	// potentially be other tuples with the same key.
 	for id := offset + batchSize - 1; id >= offset; id-- {
-		// TODO(yuzefovich): consider moving this check outside of the for loop.
-		ht.cancelChecker.check(ctx)
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
 		hash := next[id]
@@ -437,14 +435,15 @@ func (ht *hashTable) buildNextChains(
 		// This is to ensure that `first` always points to the tuple with smallest
 		// keyID in each equality chain. firstKeyID==0 means it is the first tuple
 		// that we have encountered with the given hash value.
-		if firstKeyID == 0 || uint64(id) < firstKeyID {
+		if firstKeyID == 0 || id < firstKeyID {
 			next[id] = first[hash]
-			first[hash] = uint64(id)
+			first[hash] = id
 		} else {
 			next[id] = next[firstKeyID]
-			next[firstKeyID] = uint64(id)
+			next[firstKeyID] = id
 		}
 	}
+	ht.cancelChecker.checkEveryCall(ctx)
 }
 
 // maybeAllocate* methods make sure that the passed in array is allocated and
