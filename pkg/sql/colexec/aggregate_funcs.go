@@ -69,12 +69,20 @@ type aggregateFunc interface {
 	// Compute computes the aggregation on the input batch.
 	// Note: the implementations should be careful to account for their memory
 	// usage.
+	// TODO(yuzefovich): change the signature of this function to
+	//  Compute(vecs []coldata.Vec, length int, sel []int, inputIdxs []uint32).
+	// This will allow us to remove redundant copying of selection vectors in
+	// the hash aggregator.
 	Compute(batch coldata.Batch, inputIdxs []uint32)
 
 	// Flush flushes the result of aggregation on the last group. It should be
 	// called once after input batches have been Compute()'d.
 	// Note: the implementations are free to not account for the memory used
 	// for the result of aggregation of the last group.
+	// TODO(yuzefovich): change the signature of this function to
+	//  Flush(outputIdx int).
+	// This will allow us to remove curIdx variable from the aggregate
+	// functions when used by the hash aggregator.
 	Flush()
 
 	// HandleEmptyInputScalar populates the output for a case of an empty input
