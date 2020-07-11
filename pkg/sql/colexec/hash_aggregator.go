@@ -108,8 +108,7 @@ var _ colexecbase.Operator = &hashAggregator{}
 // aggregator's allocators. This number was chosen after running benchmarks of
 // 'sum' aggregation on ints and decimals with varying group sizes (powers of 2
 // from 1 to 4096).
-// TODO(yuzefovich): retune.
-const hashAggregatorAllocSize = 64
+const hashAggregatorAllocSize = 128
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
@@ -190,8 +189,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			for curOutputIdx < coldata.BatchSize() && curOutputIdx < len(op.buckets) {
 				bucket := op.buckets[curOutputIdx]
 				for _, fn := range bucket.fns {
-					fn.SetOutputIndex(curOutputIdx)
-					fn.Flush()
+					fn.Flush(curOutputIdx)
 				}
 				curOutputIdx++
 			}
@@ -275,6 +273,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 //
 //  We have processed the input fully, so we're ready to emit the output.
 func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
+	inputVecs := b.ColVecs()
 	// Step 1: find "equality" buckets: we compute the hash buckets for all
 	// tuples, build 'next' chains between them, and then find equality buckets
 	// for the tuples.
@@ -307,10 +306,9 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			if headID != 0 {
 				// Tuples in this equality chain belong to an already existing
 				// group.
-				copy(b.Selection(), op.scratch.eqChains[eqChainsSlot])
-				b.SetLength(len(op.scratch.eqChains[eqChainsSlot]))
+				eqChain := op.scratch.eqChains[eqChainsSlot]
 				bucket := op.buckets[headID-1]
-				bucket.compute(b, op.aggCols)
+				bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
@@ -334,12 +332,10 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			bucket := op.hashAlloc.newHashAggFuncs()
 			bucket.fns = op.aggFnsAlloc.makeAggregateFuncs()
 			op.buckets = append(op.buckets, bucket)
-			copy(b.Selection(), eqChain)
-			b.SetLength(len(eqChain))
 			// bucket knows that all selected tuples in b belong to the same
 			// single group, so we can pass 'nil' for the first argument.
 			bucket.init(nil /* group */, op.output)
-			bucket.compute(b, op.aggCols)
+			bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
@@ -385,9 +381,9 @@ func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
 	}
 }
 
-func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
+func (v *hashAggFuncs) compute(vecs []coldata.Vec, aggCols [][]uint32, inputLen int, sel []int) {
 	for fnIdx, fn := range v.fns {
-		fn.Compute(b, aggCols[fnIdx])
+		fn.Compute(vecs, aggCols[fnIdx], inputLen, sel)
 	}
 }
 

@@ -69,14 +69,14 @@ func newAnyNotNull_AGGKINDAggAlloc(
 // anyNotNull_TYPE_AGGKINDAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNull_TYPE_AGGKINDAgg struct {
-	allocator *colmem.Allocator
 	// {{if eq "_AGGKIND" "Ordered"}}
-	groups []bool
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
 	// {{end}}
+	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         _GOTYPESLICE
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
@@ -87,29 +87,27 @@ const sizeOfAnyNotNull_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(anyNotNull_TYPE_AGG
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
 	a.vec = vec
 	a.col = vec.TemplateType()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Reset() {
-	a.curIdx = 0
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNull_TYPE_AGGKINDAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	// {{if eq "_AGGKIND" "Hash"}}
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
@@ -119,8 +117,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 	}
 	// {{end}}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -166,19 +163,23 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 	)
 }
 
-func (a *anyNotNull_TYPE_AGGKINDAgg) Flush() {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		execgen.SET(a.col, a.curIdx, a.curAgg)
-	}
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNull_TYPE_AGGKINDAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	// {{end}}
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		execgen.SET(a.col, outputIdx, a.curAgg)
+	}
 }
 
 type anyNotNull_TYPE_AGGKINDAggAlloc struct {
