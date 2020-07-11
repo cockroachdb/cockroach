@@ -465,6 +465,16 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	locking := scan.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
+	// Raise error if row-level locking is part of a read-only transaction.
+	if locking != nil && locking.Strength > tree.ForNone && b.evalCtx.TxnReadOnly {
+		return execPlan{}, fmt.Errorf("cannot execute %s in a read-only transaction", locking.Strength.String())
+	}
+
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
@@ -486,11 +496,6 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	softLimit := int64(math.Ceil(scan.RequiredPhysical().LimitHint))
 	hardLimit := scan.HardLimit.RowCount()
-
-	locking := scan.Locking
-	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
-	}
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
