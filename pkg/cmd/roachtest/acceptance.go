@@ -35,13 +35,6 @@ func registerAcceptance(r *testRegistry) {
 		{name: "build-info", fn: runBuildInfo},
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},
-		{
-			name: "decommission", fn: runDecommissionAcceptance,
-			skip: `https://github.com/cockroachdb/cockroach/issues/50919
-https://github.com/cockroachdb/cockroach/issues/50861
-https://github.com/cockroachdb/cockroach/issues/50640
-https://github.com/cockroachdb/cockroach/issues/48676`,
-		},
 		{name: "cluster-init", fn: runClusterInit},
 		{name: "event-log", fn: runEventLog},
 		{name: "gossip/peerings", fn: runGossipPeerings},
@@ -71,7 +64,8 @@ https://github.com/cockroachdb/cockroach/issues/48676`,
 			// running. If that branch corresponds to an older release, then upgrading
 			// to head after 19.2 fails.
 			minVersion: "v19.2.0",
-			timeout:    30 * time.Minute},
+			timeout:    30 * time.Minute,
+		},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4

@@ -43,7 +43,10 @@ var (
 	// about a node for which nothing is known.
 	ErrNoLivenessRecord = errors.New("node not in the liveness table")
 
-	errChangeDecommissioningFailed = errors.New("failed to change the decommissioning status")
+	// errChangeMembershipStatusFailed is returned when we're not able to
+	// conditionally write the target membership status. It's safe to retry
+	// when encountering this error.
+	errChangeMembershipStatusFailed = errors.New("failed to change the membership status")
 
 	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
@@ -245,11 +248,11 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		liveness, err := nl.SelfEx()
+		oldLivenessRec, err := nl.SelfEx()
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
+		err = nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
@@ -260,12 +263,14 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 	}
 }
 
-// SetDecommissioning runs a best-effort attempt of marking the the liveness
-// record as decommissioning. It returns whether the function committed a
-// transaction that updated the liveness record.
-func (nl *NodeLiveness) SetDecommissioning(
-	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
-) (changeCommitted bool, err error) {
+// SetMembershipStatus changes the liveness record to reflect the target
+// membership status. It does so idempotently, and may retry internally until it
+// observes its target state durably persisted. It returns whether it was able
+// to change the membership status (as opposed to it returning early when
+// finding the target status possibly set by another node).
+func (nl *NodeLiveness) SetMembershipStatus(
+	ctx context.Context, nodeID roachpb.NodeID, targetStatus kvserverpb.MembershipStatus,
+) (statusChanged bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 
 	attempt := func() (bool, error) {
@@ -322,31 +327,31 @@ func (nl *NodeLiveness) SetDecommissioning(
 			return false, errors.Wrap(err, "invalid liveness record")
 		}
 
-		rec := LivenessRecord{
+		oldLivenessRec := LivenessRecord{
 			Liveness: oldLiveness,
 			raw:      kv.Value.TagAndDataBytes(),
 		}
 
-		// We may have discovered a Liveness not yet received via Gossip. Offer it
-		// to make sure that when we actually try to update the liveness, the
-		// previous view is correct. This, too, is required to de-flake
-		// TestNodeLivenessDecommissionAbsent.
-		nl.maybeUpdate(rec)
-
-		return nl.setDecommissioningInternal(ctx, nodeID, rec, decommission)
+		// We may have discovered a Liveness not yet received via Gossip.
+		// Offer it to make sure that when we actually try to update the
+		// liveness, the previous view is correct. This, too, is required to
+		// de-flake TestNodeLivenessDecommissionAbsent.
+		nl.maybeUpdate(oldLivenessRec)
+		return nl.setMembershipStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
 	}
 
 	for {
-		changeCommitted, err := attempt()
-		if errors.Is(err, errChangeDecommissioningFailed) {
-			continue // expected when epoch incremented
+		statusChanged, err := attempt()
+		if errors.Is(err, errChangeMembershipStatusFailed) {
+			// Expected when epoch incremented, it's safe to retry.
+			continue
 		}
-		return changeCommitted, err
+		return statusChanged, err
 	}
 }
 
 func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, liveness LivenessRecord, drain bool, reporter func(int, string),
+	ctx context.Context, oldLivenessRec LivenessRecord, drain bool, reporter func(int, string),
 ) error {
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)
@@ -360,28 +365,34 @@ func (nl *NodeLiveness) setDrainingInternal(
 		<-sem
 	}()
 
-	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+	// Let's compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
+		// Liveness record didn't previously exist, so we create one.
+		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
-		},
-		old:         liveness.Liveness,
-		ignoreCache: true,
-		oldRaw:      liveness.raw,
-	}
-	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
+		}
+	} else {
+		newLiveness = oldLivenessRec.Liveness
 	}
 
-	if reporter != nil && drain && !update.updated.Draining {
+	if reporter != nil && drain && !newLiveness.Draining {
 		// Report progress to the Drain RPC.
 		reporter(1, "liveness record")
 	}
-	update.updated.Draining = drain
+	newLiveness.Draining = drain
 
+	update := livenessUpdate{
+		oldLiveness: oldLivenessRec.Liveness,
+		newLiveness: newLiveness,
+		oldRaw:      oldLivenessRec.raw,
+		ignoreCache: true,
+	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		nl.maybeUpdate(actual)
-		if actual.Draining == update.updated.Draining {
+
+		if actual.Draining == update.newLiveness.Draining {
 			return errNodeDrainingSet
 		}
 		return errors.New("failed to update liveness record because record has changed")
@@ -395,6 +406,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return err
 	}
+
 	nl.maybeUpdate(written)
 	return nil
 }
@@ -402,8 +414,8 @@ func (nl *NodeLiveness) setDrainingInternal(
 // livenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
 type livenessUpdate struct {
-	updated kvserverpb.Liveness
-	old     kvserverpb.Liveness
+	newLiveness kvserverpb.Liveness
+	oldLiveness kvserverpb.Liveness
 	// When ignoreCache is set, we won't assume that our in-memory cached version
 	// of the liveness record is accurate and will use a CPut on the liveness
 	// table with the old value supplied by the client (oldRaw). This is used for
@@ -424,35 +436,77 @@ type livenessUpdate struct {
 	oldRaw []byte
 }
 
-func (nl *NodeLiveness) setDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness LivenessRecord, decommission bool,
-) (changeCommitted bool, err error) {
-	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+func (nl *NodeLiveness) setMembershipStatusInternal(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	oldLivenessRec LivenessRecord,
+	targetStatus kvserverpb.MembershipStatus,
+) (statusChanged bool, err error) {
+	// Let's compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
+		// Liveness record didn't previously exist, so we create one.
+		//
+		// TODO(irfansharif): This code feels a bit unwieldy because it's
+		// possible for a liveness record to not exist previously. It is just
+		// generally difficult to write it at startup. When a node joins the
+		// cluster, this completes before it has had a chance to write its
+		// liveness record. If it gets decommissioned immediately, there won't
+		// be one yet. The Connect RPC can solve this though, I think? We can
+		// bootstrap clusters with a liveness record for n1. Any other node at
+		// some point has to join the cluster for the first time via the Connect
+		// RPC, which as part of its job can make sure the liveness record
+		// exists before responding to the new node.
+		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
-		},
-		old:         liveness.Liveness,
-		ignoreCache: true,
-		oldRaw:      liveness.raw,
-	}
-	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
-	}
-	update.updated.Decommissioning = decommission
-
-	var conditionFailed bool
-	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		conditionFailed = true
-		if actual.Decommissioning == update.updated.Decommissioning {
-			return nil
 		}
-		return errChangeDecommissioningFailed
+	} else {
+		// We start off with a copy of our existing liveness record.
+		newLiveness = oldLivenessRec.Liveness
+	}
+
+	newLiveness.Membership = targetStatus
+	if oldLivenessRec.Membership == newLiveness.Membership {
+		// No-op. Return early.
+		return false, nil
+	} else if oldLivenessRec.Membership.Decommissioned() &&
+		newLiveness.Membership.Decommissioning() {
+		// Marking a decommissioned node for decommissioning is a no-op. We
+		// return early.
+		return false, nil
+	}
+
+	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
+		err := kvserverpb.ValidateLivenessTransition(oldLivenessRec.Liveness, newLiveness)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	update := livenessUpdate{
+		newLiveness: newLiveness,
+		oldLiveness: oldLivenessRec.Liveness,
+		oldRaw:      oldLivenessRec.raw,
+		ignoreCache: true,
+	}
+	statusChanged = true
+	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
+		if actual.Membership != update.newLiveness.Membership {
+			// We're racing with another attempt at updating the liveness
+			// record, we error out in order to retry.
+			return errChangeMembershipStatusFailed
+		}
+		// The found liveness membership status is the same as the target one,
+		// so we consider our work done. We inform the caller that this attempt
+		// was a no-op.
+		statusChanged = false
+		return nil
 	}); err != nil {
 		return false, err
 	}
-	committed := !conditionFailed && liveness.Decommissioning != decommission
-	return committed, nil
+
+	return statusChanged, nil
 }
 
 // GetLivenessThreshold returns the maximum duration between heartbeats
@@ -602,7 +656,7 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness kvserverpb.Liven
 }
 
 func (nl *NodeLiveness) heartbeatInternal(
-	ctx context.Context, liveness kvserverpb.Liveness, incrementEpoch bool,
+	ctx context.Context, oldLiveness kvserverpb.Liveness, incrementEpoch bool,
 ) error {
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
 	defer sp.Finish()
@@ -626,37 +680,44 @@ func (nl *NodeLiveness) heartbeatInternal(
 		<-sem
 	}()
 
-	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+	// Let's compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLiveness == (kvserverpb.Liveness{}) {
+		// Liveness record didn't previously exist, so we create one.
+		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
-		},
-		old: liveness,
-	}
-	if liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness
+		}
+	} else {
+		newLiveness = oldLiveness
 		if incrementEpoch {
-			update.updated.Epoch++
-			// Clear draining field.
-			update.updated.Draining = false
+			newLiveness.Epoch++
+			newLiveness.Draining = false // Clear draining field.
 		}
 	}
+
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
-		update.updated.Expiration = hlc.LegacyTimestamp(
+		newLiveness.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long
 		// as the cockroach process is running, checks inside hlc.Clock
 		// will ensure that the clock never moves backwards, but these
 		// checks don't work across process restarts.
-		if update.updated.Expiration.Less(liveness.Expiration) {
+		if newLiveness.Expiration.Less(oldLiveness.Expiration) {
 			return errors.Errorf("proposed liveness update expires earlier than previous record")
 		}
+	}
+
+	update := livenessUpdate{
+		oldLiveness: oldLiveness,
+		newLiveness: newLiveness,
 	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		// Update liveness to actual value on mismatch.
 		nl.maybeUpdate(actual)
+
 		// If the actual liveness is different than expected, but is
 		// considered live, treat the heartbeat as a success. This can
 		// happen when the periodic heartbeater races with a concurrent
@@ -730,7 +791,7 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	now := nl.clock.Now().GoTime()
 	for nID, l := range nl.mu.nodes {
 		isLive := l.IsLive(now)
-		if !isLive && l.Decommissioning {
+		if !isLive && !l.Membership.Active() {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
@@ -814,12 +875,14 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 	}
 
 	update := livenessUpdate{
-		updated: liveness,
-		old:     liveness,
+		newLiveness: liveness,
+		oldLiveness: liveness,
 	}
-	update.updated.Epoch++
+	update.newLiveness.Epoch++
+
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		defer nl.maybeUpdate(actual)
+		nl.maybeUpdate(actual)
+
 		if actual.Epoch > liveness.Epoch {
 			return ErrEpochAlreadyIncremented
 		} else if actual.Epoch < liveness.Epoch {
@@ -918,11 +981,11 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			log.Fatalf(ctx, "unexpected oldRaw when ignoreCache not specified")
 		}
 
-		l, err := nl.GetLiveness(update.updated.NodeID)
+		l, err := nl.GetLiveness(update.newLiveness.NodeID)
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			return LivenessRecord{}, err
 		}
-		if err == nil && l.Liveness != update.old {
+		if err == nil && l.Liveness != update.oldLiveness {
 			return LivenessRecord{}, handleCondFailed(l)
 		}
 		oldRaw = l.raw
@@ -931,8 +994,8 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	v := new(roachpb.Value)
 	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		key := keys.NodeLivenessKey(update.updated.NodeID)
-		if err := v.SetProto(&update.updated); err != nil {
+		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
+		if err := v.SetProto(&update.newLiveness); err != nil {
 			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, oldRaw)
@@ -975,7 +1038,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if cb != nil {
 		cb(ctx)
 	}
-	return LivenessRecord{Liveness: update.updated, raw: v.TagAndDataBytes()}, nil
+	return LivenessRecord{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
@@ -987,8 +1050,8 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	}
 
 	nl.mu.Lock()
-	// Note that this works fine even if `old` is empty.
 	old := nl.mu.nodes[new.NodeID]
+
 	should := shouldReplaceLiveness(old.Liveness, new.Liveness)
 	var callbacks []IsLiveCallback
 	if should {
@@ -1009,12 +1072,14 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	}
 }
 
+// shouldReplaceLiveness checks to see if the new liveness is in fact newer
+// than the old liveness.
 func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 	if (old == kvserverpb.Liveness{}) {
 		return true
 	}
 
-	// Compare first Epoch, and no change there, Expiration.
+	// Compare Epoch, and if no change there, Expiration.
 	if old.Epoch != new.Epoch {
 		return old.Epoch < new.Epoch
 	}
@@ -1030,12 +1095,13 @@ func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 	// number.
 	//
 	// See #18219.
-	return old.Draining != new.Draining || old.Decommissioning != new.Decommissioning
+	return old.Draining != new.Draining ||
+		old.Membership != new.Membership
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
-func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) {
+func (nl *NodeLiveness) livenessGossipUpdate(_ string, content roachpb.Value) {
 	var liveness kvserverpb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
 		log.Errorf(context.TODO(), "%v", err)
@@ -1111,7 +1177,7 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	defer nl.mu.RUnlock()
 	var count int
 	for _, l := range nl.mu.nodes {
-		if !l.Decommissioning {
+		if l.Membership.Active() {
 			count++
 		}
 	}

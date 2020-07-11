@@ -734,6 +734,16 @@ func (n nodeListOption) randNode() nodeListOption {
 	return nodeListOption{n[rand.Intn(len(n))]}
 }
 
+// nodeIDsString returns a space separated list of all node IDs comprising this
+// list.
+func (n nodeListOption) nodeIDsString() string {
+	result := ""
+	for _, i := range n {
+		result += fmt.Sprintf("%s ", strconv.Itoa(i))
+	}
+	return result
+}
+
 func (n nodeListOption) String() string {
 	if len(n) == 0 {
 		return ""
@@ -1402,6 +1412,19 @@ func (c *cluster) Range(begin, end int) nodeListOption {
 	r := make(nodeListOption, 0, 1+end-begin)
 	for i := begin; i <= end; i++ {
 		r = append(r, i)
+	}
+	return r
+}
+
+// All returns a node list containing only the node i.
+func (c *cluster) Nodes(ns ...int) nodeListOption {
+	r := make(nodeListOption, 0, len(ns))
+	for _, n := range ns {
+		if n < 1 || n > c.spec.NodeCount {
+			c.t.Fatalf("invalid node range: %d (1-%d)", n, c.spec.NodeCount)
+		}
+
+		r = append(r, n)
 	}
 	return r
 }

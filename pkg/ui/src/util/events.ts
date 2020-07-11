@@ -60,6 +60,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Schema Change Rollback Completed: Rollback of schema change with ID ${info.MutationID} was completed.`;
     case eventTypes.NODE_JOIN:
       return `Node Joined: Node ${targetId} joined the cluster`;
+    case eventTypes.NODE_DECOMMISSIONING:
+      return `Node Decommissioning: Node ${targetId} was marked as decommissioning`;
     case eventTypes.NODE_DECOMMISSIONED:
       return `Node Decommissioned: Node ${targetId} was decommissioned`;
     case eventTypes.NODE_RECOMMISSIONED:

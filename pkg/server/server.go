@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -1880,20 +1881,40 @@ func (s *sqlServer) startServeSQL(
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
-func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
-	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
-	eventType := sql.EventLogNodeDecommissioned
-	if !setTo {
-		eventType = sql.EventLogNodeRecommissioned
-	}
-	for _, nodeID := range nodeIDs {
-		changeCommitted, err := s.nodeLiveness.SetDecommissioning(ctx, nodeID, setTo)
-		if err != nil {
-			return errors.Wrapf(err, "during liveness update %d -> %t", nodeID, setTo)
+func (s *Server) Decommission(
+	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
+) error {
+	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
+		if targetStatus.Decommissioned() {
+			// In mixed-version cluster settings, we need to ensure that we're
+			// on-the-wire compatible with nodes only familiar with the boolean
+			// representation of membership state. We do the simple thing and
+			// simply disallow the setting of the fully decommissioned state until
+			// we're guaranteed to be on v20.2.
+			targetStatus = kvserverpb.MembershipStatus_DECOMMISSIONING
 		}
-		if changeCommitted {
+	}
+
+	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
+	var eventType sql.EventLogType
+	if targetStatus.Decommissioning() {
+		eventType = sql.EventLogNodeDecommissioning
+	} else if targetStatus.Decommissioned() {
+		eventType = sql.EventLogNodeDecommissioned
+	} else if targetStatus.Active() {
+		eventType = sql.EventLogNodeRecommissioned
+	} else {
+		panic("unexpected target membership status")
+	}
+
+	for _, nodeID := range nodeIDs {
+		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
+		if err != nil {
+			return err
+		}
+		if statusChanged {
 			// If we die right now or if this transaction fails to commit, the
-			// commissioning event will not be recorded to the event log. While we
+			// membership event will not be recorded to the event log. While we
 			// could insert the event record in the same transaction as the liveness
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort

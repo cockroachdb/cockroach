@@ -158,13 +158,15 @@ func (rgcq *replicaGCQueue) shouldQueue(
 			(raftStatus.SoftState.RaftState == raft.StateCandidate ||
 				raftStatus.SoftState.RaftState == raft.StatePreCandidate)
 	} else {
-		// If a replica doesn't have an active raft group, we should check whether
-		// we're decommissioning. If so, we should process the replica because it
-		// has probably already been removed from its raft group but doesn't know it.
-		// Without this, node decommissioning can stall on such dormant ranges.
-		// Make sure NodeLiveness isn't nil because it can be in tests/benchmarks.
+		// If a replica doesn't have an active raft group, we should check
+		// whether or not it is active. If not, we should process the replica
+		// because it has probably already been removed from its raft group but
+		// doesn't know it. Without this, node decommissioning can stall on such
+		// dormant ranges. Make sure NodeLiveness isn't nil because it can be in
+		// tests/benchmarks.
 		if repl.store.cfg.NodeLiveness != nil {
-			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil && liveness.Decommissioning {
+			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil &&
+				!liveness.Membership.Active() {
 				return true, replicaGCPriorityDefault
 			}
 		}
