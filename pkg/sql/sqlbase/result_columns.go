@@ -103,6 +103,44 @@ func (r ResultColumns) NodeFormatter(colIdx int) tree.NodeFormatter {
 	return &varFormatter{ColumnName: tree.Name(r[colIdx].Name)}
 }
 
+// String formats result columns to a string.
+// The column types are printed if the argument specifies so.
+func (r ResultColumns) String(printTypes bool) string {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteByte('(')
+	for i := range r {
+		rCol := &r[i]
+		if i > 0 {
+			f.WriteString(", ")
+		}
+		f.FormatNameP(&rCol.Name)
+		// Output extra properties like [hidden,omitted].
+		hasProps := false
+		outputProp := func(prop string) {
+			if hasProps {
+				f.WriteByte(',')
+			} else {
+				f.WriteByte('[')
+			}
+			hasProps = true
+			f.WriteString(prop)
+		}
+		if rCol.Hidden {
+			outputProp("hidden")
+		}
+		if hasProps {
+			f.WriteByte(']')
+		}
+
+		if printTypes {
+			f.WriteByte(' ')
+			f.WriteString(rCol.Typ.String())
+		}
+	}
+	f.WriteByte(')')
+	return f.CloseAndGetString()
+}
+
 // ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...
 // statement.
 var ExplainPlanColumns = ResultColumns{

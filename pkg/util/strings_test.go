@@ -87,3 +87,29 @@ func TestTruncateString(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveTrailingSpaces(t *testing.T) {
+	for _, tc := range []struct{ input, expected string }{
+		{
+			input:    "",
+			expected: "\n",
+		},
+		{
+			input:    "line 1  \nline 2   \nline 3 \n\n",
+			expected: "line 1\nline 2\nline 3\n",
+		},
+		{
+			input:    " line 1  \nline 2   \nline 3  ",
+			expected: " line 1\nline 2\nline 3\n",
+		},
+		{
+			input:    "line 1\n\n  \nline 2   \nline 3",
+			expected: "line 1\n\n\nline 2\nline 3\n",
+		},
+	} {
+		output := RemoveTrailingSpaces(tc.input)
+		if output != tc.expected {
+			t.Errorf("expected:\n%s\ngot:\n%s", tc.expected, output)
+		}
+	}
+}

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -369,7 +368,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				for i := range eqCols {
 					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
 				}
-				v.observer.attr(name, "mergeJoinOrder", formatOrdering(n.mergeJoinOrdering, eqCols))
+				v.observer.attr(name, "mergeJoinOrder", n.mergeJoinOrdering.String(eqCols))
 			}
 		}
 		if v.observer.expr != nil {
@@ -452,9 +451,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *sortNode:
 		if v.observer.attr != nil {
 			columns := planColumns(n.plan)
-			v.observer.attr(name, "order", formatOrdering(n.ordering, columns))
+			v.observer.attr(name, "order", n.ordering.String(columns))
 			if p := n.alreadyOrderedPrefix; p > 0 {
-				v.observer.attr(name, "already ordered", formatOrdering(n.ordering[:p], columns))
+				v.observer.attr(name, "already ordered", n.ordering[:p].String(columns))
 			}
 		}
 		n.plan = v.visit(n.plan)
@@ -495,7 +494,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				v.observer.attr(name, "group by", strings.Join(cols, ", "))
 			}
 			if len(n.groupColOrdering) > 0 {
-				v.observer.attr(name, "ordered", formatOrdering(n.groupColOrdering, inputCols))
+				v.observer.attr(name, "ordered", n.groupColOrdering.String(inputCols))
 			}
 			if n.isScalar {
 				v.observer.attr(name, "scalar", "")
@@ -817,26 +816,6 @@ func (v *planVisitor) metadataTuples(nodeName string, tuples [][]tree.TypedExpr)
 			v.metadataExpr(nodeName, fieldName, j, expr)
 		}
 	}
-}
-
-func formatOrdering(ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColumns) string {
-	var buf bytes.Buffer
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, o := range ordering {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		prefix := byte('+')
-		if o.Direction == encoding.Descending {
-			prefix = byte('-')
-		}
-		buf.WriteByte(prefix)
-
-		fmtCtx.FormatNameP(&columns[o.ColIdx].Name)
-		_, _ = fmtCtx.WriteTo(&buf)
-	}
-	fmtCtx.Close()
-	return buf.String()
 }
 
 // formatValuesSize returns a string of the form "5 columns, 1 row".
