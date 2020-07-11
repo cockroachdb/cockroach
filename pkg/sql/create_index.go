@@ -162,7 +162,7 @@ func MakeIndexDescriptor(
 			return nil, err
 		}
 		if columnDesc.Type.InternalType.Family == types.GeometryFamily {
-			indexDesc.GeoConfig = *geoindex.DefaultGeometryIndexConfig()
+			indexDesc.GeoConfig = *geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
 			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 		}
 		if columnDesc.Type.InternalType.Family == types.GeographyFamily {
