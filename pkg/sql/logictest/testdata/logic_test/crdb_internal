@@ -321,11 +321,11 @@ SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, a
 node_id  network  address           attrs  locality            server_version
 1        tcp      127.0.0.1:<port>  []     region=test,dc=dc1  <server_version>
 
-query IITBB colnames
-SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning FROM crdb_internal.gossip_liveness WHERE node_id = 1
+query IITBBT colnames
+SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning, membership FROM crdb_internal.gossip_liveness WHERE node_id = 1
 ----
-node_id  epoch  expiration    draining  decommissioning
-1        1      <timestamp>   false     false
+node_id  epoch  expiration    draining  decommissioning     membership
+1        1      <timestamp>   false     false               active
 
 query ITTTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version

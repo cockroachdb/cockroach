@@ -939,14 +939,16 @@ drain all active client connections and migrate away range leases.`,
 	Wait = FlagInfo{
 		Name: "wait",
 		Description: `
-Specifies when to return after having marked the targets as decommissioning.
+Specifies when to return during the decommissioning process.
 Takes any of the following values:
 <PRE>
 
-- all: waits until all target nodes' replica counts have dropped to zero.
-  This is the default.
-- none: marks the targets as decommissioning, but does not wait for the
-  process to complete. Use when polling manually from an external system.
+  - all   waits until all target nodes' replica counts have dropped to zero and
+          marks the nodes as fully decommissioned. This is the default.
+  - none  marks the targets as decommissioning, but does not wait for the
+          replica counts to drop to zero before returning. If the replica counts
+          are found to be zero, nodes are marked as fully decommissioned. Use
+          when polling manually from an external system.
 </PRE>`,
 	}
 

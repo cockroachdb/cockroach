@@ -20,6 +20,10 @@ eexpect eof
 
 end_test
 
+start_test "Check that a recommissioning an active node prints out a warning"
+spawn $argv node recommission 2
+eexpect "warning: node 2 is not decommissioned"
+eexpect eof
 
 start_test "Check that a double decommission prints out a warning"
 spawn $argv node decommission 2 --wait none
@@ -30,13 +34,6 @@ eexpect "warning: node 2 is already decommissioning or decommissioned"
 eexpect eof
 end_test
 
-start_test "Check that a double recommission prints out a warning"
-spawn $argv node recommission 2
-eexpect eof
-
-spawn $argv node recommission 2
-eexpect "warning: node 2 is not decommissioned"
-eexpect eof
 end_test
 
 

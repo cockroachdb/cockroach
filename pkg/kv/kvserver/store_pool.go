@@ -127,20 +127,28 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //
 //  - Let's say a node write its liveness record at tWrite. It sets the
 //    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMISSIONING or UNAVAILABLE if draining).
+//    The node is considered LIVE (or DECOMMISSIONING or UNAVAILABLE if draining).
 //  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
+//    UNAVAILABLE (or stays DECOMMISSIONING or UNAVAILABLE if draining).
 //  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// NB: There's a bit of discrepancy between what "Decommissioned" represents, as
+// seen by NodeStatusLiveness, and what "Decommissioned" represents as
+// understood by MembershipStatus. Currently it's possible for a live node, that
+// was marked as fully decommissioned, to have a NodeLivenessStatus of
+// "Decommissioning". This was kept this way for backwards compatibility, and
+// ideally we should remove usage of NodeLivenessStatus altogether. See #50707
+// for more details.
 func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.Decommissioning {
+		if !l.Membership.Active() {
 			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
 		}
 		return kvserverpb.NodeLivenessStatus_DEAD
 	}
-	if l.Decommissioning {
+	if !l.Membership.Active() {
 		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
 	}
 	if l.Draining {

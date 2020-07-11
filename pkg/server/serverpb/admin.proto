@@ -439,14 +439,14 @@ message DecommissionStatusRequest {
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
-// DecommissionRequest requests the server to set the Decommissioning flag on
-// all nodes specified by 'node_id' to the value of 'decommissioning'.
+// DecommissionRequest requests the server to set the membership status on
+// all nodes specified by NodeIDs to the value of TargetMembership.
 //
-// If no 'node_id' is given, it targets the recipient node.
+// If no NodeIDs are given, it targets the recipient node.
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  bool decommissioning = 2;
+  cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
@@ -457,7 +457,8 @@ message DecommissionStatusResponse {
     bool is_live = 2;
     // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
-    bool decommissioning = 4;
+    // The membership status of the given node.
+    cockroach.kv.kvserver.storagepb.MembershipStatus membership = 4;
     bool draining = 5;
   }
   // Status of all affected nodes.
@@ -669,7 +670,7 @@ message DataDistributionResponse {
   map<string, ZoneConfig> zone_configs = 3 [(gogoproto.nullable) = false];
 }
 
-  // MetricMetadataRequest requests metadata for all metrics.
+// MetricMetadataRequest requests metadata for all metrics.
 message MetricMetadataRequest {
 }
 
