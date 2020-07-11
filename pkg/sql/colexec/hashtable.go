@@ -469,10 +469,39 @@ func (ht *hashTable) lookupInitial(ctx context.Context, batchSize int, sel []int
 // findNext determines the id of the next key inside the groupID buckets for
 // each equality column key in toCheck.
 func (ht *hashTable) findNext(next []uint64, nToCheck uint64) {
-	for i := uint64(0); i < nToCheck; i++ {
-		ht.probeScratch.groupID[ht.probeScratch.toCheck[i]] =
-			next[ht.probeScratch.groupID[ht.probeScratch.toCheck[i]]]
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		ht.probeScratch.groupID[toCheck] = next[ht.probeScratch.groupID[toCheck]]
 	}
+}
+
+// checkBuildForDistinct finds all tuples in probeVecs that are not present in
+// buffered tuples stored in ht.vals. It stores the probeVecs's distinct tuples'
+// keyIDs in headID buffer.
+// NOTE: It assumes that probeVecs does not contain any duplicates itself.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
+func (ht *hashTable) checkBuildForDistinct(
+	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
+) uint64 {
+	if probeSel == nil {
+		colexecerror.InternalError("invalid selection vector")
+	}
+	copy(ht.probeScratch.distinct, zeroBoolColumn)
+
+	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
+	nDiffers := uint64(0)
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		if ht.probeScratch.distinct[toCheck] {
+			ht.probeScratch.distinct[toCheck] = false
+			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
+			ht.probeScratch.headID[toCheck] = toCheck + 1
+		} else if ht.probeScratch.differs[toCheck] {
+			// Continue probing in this next chain for the probe key.
+			ht.probeScratch.differs[toCheck] = false
+			ht.probeScratch.toCheck[nDiffers] = toCheck
+			nDiffers++
+		}
+	}
+	return nDiffers
 }
 
 // reset resets the hashTable for reuse.

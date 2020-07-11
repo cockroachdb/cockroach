@@ -52,11 +52,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -118,11 +115,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -172,11 +166,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -226,11 +217,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -278,11 +266,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -334,11 +319,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -400,11 +382,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -454,11 +433,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -508,11 +484,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -560,11 +533,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -631,11 +601,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -689,11 +656,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -735,11 +699,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -781,11 +742,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -825,11 +783,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -873,11 +828,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -931,11 +883,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -977,11 +926,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1023,11 +969,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1067,11 +1010,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1129,11 +1069,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1193,11 +1130,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1245,11 +1179,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1297,11 +1228,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1347,11 +1275,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1401,11 +1326,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1465,11 +1387,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1517,11 +1436,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1569,11 +1485,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1619,11 +1532,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1677,11 +1587,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1741,11 +1648,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1793,11 +1697,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1845,11 +1746,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1895,11 +1793,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -1949,11 +1844,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2013,11 +1905,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2065,11 +1954,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2117,11 +2003,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2167,11 +2050,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2226,11 +2106,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2290,11 +2167,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2342,11 +2216,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2394,11 +2265,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2444,11 +2312,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2498,11 +2363,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2562,11 +2424,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2614,11 +2473,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2666,11 +2522,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2716,11 +2569,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2778,11 +2628,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2844,11 +2691,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2898,11 +2742,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -2952,11 +2793,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3004,11 +2842,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3060,11 +2895,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3126,11 +2958,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3180,11 +3009,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3234,11 +3060,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3286,11 +3109,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3350,11 +3170,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3408,11 +3225,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3454,11 +3268,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3500,11 +3311,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3544,11 +3352,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3592,11 +3397,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3650,11 +3452,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3696,11 +3495,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3742,11 +3538,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3786,11 +3579,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3847,11 +3637,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3916,11 +3703,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -3973,11 +3757,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4030,11 +3811,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4085,11 +3863,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4144,11 +3919,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4213,11 +3985,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4270,11 +4039,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4327,11 +4093,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4382,11 +4145,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4445,11 +4205,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4514,11 +4271,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4571,11 +4325,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4628,11 +4379,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4683,11 +4431,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4742,11 +4487,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4811,11 +4553,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4868,11 +4607,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4925,11 +4661,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -4980,11 +4713,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5044,11 +4774,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5113,11 +4840,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5170,11 +4894,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5227,11 +4948,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5282,11 +5000,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5341,11 +5056,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5410,11 +5122,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5467,11 +5176,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5524,11 +5230,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5579,11 +5282,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5646,11 +5346,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5723,11 +5420,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5788,11 +5482,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5853,11 +5544,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5916,11 +5604,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -5983,11 +5668,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6060,11 +5742,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6125,11 +5804,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6190,11 +5866,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6253,11 +5926,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6328,11 +5998,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6392,11 +6059,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6444,11 +6108,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6496,11 +6157,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6546,11 +6204,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6600,11 +6255,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6664,11 +6316,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6716,11 +6365,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6768,11 +6414,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6818,11 +6461,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6882,11 +6522,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -6951,11 +6588,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7008,11 +6642,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7065,11 +6696,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7120,11 +6748,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7179,11 +6804,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7248,11 +6870,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7305,11 +6924,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7362,11 +6978,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7417,11 +7030,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7480,11 +7090,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7549,11 +7156,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7606,11 +7210,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7663,11 +7264,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7718,11 +7316,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7777,11 +7372,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7846,11 +7438,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7903,11 +7492,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -7960,11 +7546,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8015,11 +7598,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8079,11 +7659,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8148,11 +7725,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8205,11 +7779,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8262,11 +7833,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8317,11 +7885,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8376,11 +7941,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8445,11 +8007,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8502,11 +8061,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8559,11 +8115,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8614,11 +8167,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8681,11 +8231,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8758,11 +8305,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8823,11 +8367,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8888,11 +8429,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -8951,11 +8489,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9018,11 +8553,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9095,11 +8627,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9160,11 +8689,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9225,11 +8751,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9288,11 +8811,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9363,11 +8883,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9427,11 +8944,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9479,11 +8993,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9531,11 +9042,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9581,11 +9089,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9635,11 +9140,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9699,11 +9201,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9751,11 +9250,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9803,11 +9299,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9853,11 +9346,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9918,11 +9408,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -9987,11 +9474,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10044,11 +9528,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10101,11 +9582,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10156,11 +9634,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10215,11 +9690,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10284,11 +9756,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10341,11 +9810,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10398,11 +9864,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10453,11 +9916,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10516,11 +9976,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10585,11 +10042,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10642,11 +10096,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10699,11 +10150,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10754,11 +10202,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10813,11 +10258,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10882,11 +10324,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10939,11 +10378,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -10996,11 +10432,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11051,11 +10484,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11115,11 +10545,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11184,11 +10611,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11241,11 +10665,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11298,11 +10719,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11353,11 +10771,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11412,11 +10827,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11481,11 +10893,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11538,11 +10947,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11595,11 +11001,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11650,11 +11053,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11717,11 +11117,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11794,11 +11191,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11859,11 +11253,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11924,11 +11315,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -11987,11 +11375,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12054,11 +11439,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12131,11 +11513,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12196,11 +11575,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12261,11 +11637,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12324,11 +11697,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12399,11 +11769,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12463,11 +11830,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12515,11 +11879,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12567,11 +11928,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12617,11 +11975,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12671,11 +12026,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12735,11 +12087,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12787,11 +12136,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12839,11 +12185,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12889,11 +12232,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -12957,11 +12297,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13034,11 +12371,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13099,11 +12433,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13164,11 +12495,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13227,11 +12555,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13294,11 +12619,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13371,11 +12693,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13436,11 +12755,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13501,11 +12817,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13564,11 +12877,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13635,11 +12945,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13712,11 +13019,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13777,11 +13081,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13842,11 +13143,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13905,11 +13203,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -13972,11 +13267,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14049,11 +13341,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14114,11 +13403,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14179,11 +13465,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14242,11 +13525,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14314,11 +13594,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14391,11 +13668,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14456,11 +13730,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14521,11 +13792,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14584,11 +13852,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14651,11 +13916,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14728,11 +13990,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14793,11 +14052,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14858,11 +14114,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14921,11 +14174,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -14996,11 +14246,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15073,11 +14320,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15138,11 +14382,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15203,11 +14444,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15266,11 +14504,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15333,11 +14568,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15410,11 +14642,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15475,11 +14704,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15540,11 +14766,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15603,11 +14826,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15678,11 +14898,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15744,11 +14961,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15798,11 +15012,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15852,11 +15063,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15904,11 +15112,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -15960,11 +15165,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16026,11 +15228,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16080,11 +15279,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16134,11 +15330,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16186,11 +15379,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16257,11 +15447,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16322,11 +15509,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16375,11 +15559,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16428,11 +15609,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16479,11 +15657,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16534,11 +15709,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16599,11 +15771,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16652,11 +15821,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16705,11 +15871,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16756,11 +15919,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16826,11 +15986,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16884,11 +16041,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16930,11 +16084,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -16976,11 +16127,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17020,11 +16168,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17068,11 +16213,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17126,11 +16268,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17172,11 +16311,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17218,11 +16354,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17262,11 +16395,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17325,11 +16455,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17385,11 +16512,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17433,11 +16557,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17481,11 +16602,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17527,11 +16645,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17577,11 +16692,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17637,11 +16749,8 @@ func (ht *hashTable) checkColDeleting(
 										probeIdx, buildIdx       int
 										probeIsNull, buildIsNull bool
 									)
-									// Early bounds check.
-									_ = ht.probeScratch.toCheck[nToCheck-1]
-									for i := uint64(0); i < nToCheck; i++ {
+									for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 										// keyID of 0 is reserved to represent the end of the next chain.
-										toCheck := ht.probeScratch.toCheck[i]
 										keyID := ht.probeScratch.groupID[toCheck]
 										if keyID != 0 {
 											// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17685,11 +16794,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17733,11 +16839,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
@@ -17779,11 +16882,8 @@ func (ht *hashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
-								// Early bounds check.
-								_ = ht.probeScratch.toCheck[nToCheck-1]
-								for i := uint64(0); i < nToCheck; i++ {
+								for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
-									toCheck := ht.probeScratch.toCheck[i]
 									keyID := ht.probeScratch.groupID[toCheck]
 									if keyID != 0 {
 										// the build table key (calculated using keys[keyID - 1] = key) is
