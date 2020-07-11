@@ -11,6 +11,9 @@
 package util
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
@@ -63,4 +66,19 @@ func TruncateString(s string, maxRunes int) string {
 	}
 	// This code should be unreachable.
 	return s
+}
+
+// RemoveTrailingSpaces splits the input string into lines, trims any trailing
+// space from each line, then puts the lines back together.
+//
+// Any newlines at the end of the input string are ignored.
+//
+// The output string always ends in a newline.
+func RemoveTrailingSpaces(input string) string {
+	lines := strings.TrimRight(input, "\n")
+	var buf bytes.Buffer
+	for _, line := range strings.Split(lines, "\n") {
+		fmt.Fprintf(&buf, "%s\n", strings.TrimRight(line, " "))
+	}
+	return buf.String()
 }
