@@ -1409,7 +1409,7 @@ func MakeTableDesc(
 					return desc, err
 				}
 				if columnDesc.Type.InternalType.Family == types.GeometryFamily {
-					idx.GeoConfig = *geoindex.DefaultGeometryIndexConfig()
+					idx.GeoConfig = *geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
 				}
 				if columnDesc.Type.InternalType.Family == types.GeographyFamily {
 					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()

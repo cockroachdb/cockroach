@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r3"
@@ -32,15 +34,15 @@ type s2GeometryIndex struct {
 
 var _ GeometryIndex = (*s2GeometryIndex)(nil)
 
+// We adjust the clipping bounds to be smaller by this fraction, since using
+// the endpoints of face 0 in S2 causes coverings to spill out of that face.
+const clippingBoundsDelta = 0.01
+
 // NewS2GeometryIndex returns an index with the given configuration. All reads and
 // writes on this index must use the same config. Writes must use the same
 // config to correctly process deletions. Reads must use the same config since
 // the bounds affect when a read needs to look at the exceedsBoundsCellID.
 func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
-	// We adjust the clipping bounds to be smaller by this fraction, since using
-	// the endpoints of face 0 in S2 causes coverings to spill out of that face.
-	const boundsDelta = 0.01
-
 	// TODO(sumeer): Sanity check cfg.
 	return &s2GeometryIndex{
 		rc: &s2.RegionCoverer{
@@ -53,21 +55,55 @@ func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
 		maxX:   cfg.MaxX,
 		minY:   cfg.MinY,
 		maxY:   cfg.MaxY,
-		deltaX: boundsDelta * (cfg.MaxX - cfg.MinX),
-		deltaY: boundsDelta * (cfg.MaxY - cfg.MinY),
+		deltaX: clippingBoundsDelta * (cfg.MaxX - cfg.MinX),
+		deltaY: clippingBoundsDelta * (cfg.MaxY - cfg.MinY),
 	}
 }
+
+// TODO(sumeer): also support index config with parameters specified by CREATE
+// INDEX.
 
 // DefaultGeometryIndexConfig returns a default config for a geometry index.
 func DefaultGeometryIndexConfig() *Config {
 	return &Config{
 		S2Geometry: &S2GeometryConfig{
 			// Arbitrary bounding box.
-			// TODO(sumeer): replace with parameters specified by CREATE INDEX.
 			MinX:     -10000,
 			MaxX:     10000,
 			MinY:     -10000,
 			MaxY:     10000,
+			S2Config: defaultS2Config()},
+	}
+}
+
+// GeometryIndexConfigForSRID returns a geometry index config for srid.
+func GeometryIndexConfigForSRID(srid geopb.SRID) *Config {
+	p, exists := geoprojbase.Projection(srid)
+	if !exists || p.Bounds == nil {
+		return DefaultGeometryIndexConfig()
+	}
+	b := p.Bounds
+	minX, maxX, minY, maxY := b.MinX, b.MaxX, b.MinY, b.MaxY
+	// There are projections where the min and max are equal e.g. 3571.
+	// We need to have a valid rectangle as the geometry index bounds.
+	if maxX-minX < 1 {
+		maxX++
+	}
+	if maxY-minY < 1 {
+		maxY++
+	}
+	// Expand the bounds by 2x the clippingBoundsDelta, to
+	// ensure that shapes touching the bounds don't get
+	// clipped.
+	boundsExpansion := 2 * clippingBoundsDelta
+	deltaX := (maxX - minX) * boundsExpansion
+	deltaY := (maxY - minY) * boundsExpansion
+	return &Config{
+		S2Geometry: &S2GeometryConfig{
+			MinX:     minX - deltaX,
+			MaxX:     maxX + deltaX,
+			MinY:     minY - deltaY,
+			MaxY:     maxY + deltaY,
 			S2Config: defaultS2Config()},
 	}
 }

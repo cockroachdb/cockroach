@@ -1,0 +1,81 @@
+# LogicTest: local
+
+# SRID of the geometry column is unspecified, so default index bounds are used.
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+# Shapes with SRID 26918. We've taken small X, Y values and added 400,000 to the X coordinate
+# and 4,000,000 to the Y coordinate to place them inside the bounds of SRID 26918.
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'SRID=26918;POINT(400001 4000001)'),
+  (2, 'SRID=26918;LINESTRING(400001 4000001, 400002 4000002)'),
+  (3, 'SRID=26918;POINT(400003 4000003)'),
+  (4, 'SRID=26918;LINESTRING(400004 4000004, 400005 4000005)'),
+  (5, 'SRID=26918;LINESTRING(400040 4000040, 400041 4000041)'),
+  (6, 'SRID=26918;POLYGON((400001 4000001, 400005 4000001, 400005 4000005, 400001 4000005, 400001 4000001))')
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('SRID=26918;POINT(400003 4000003)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+# The InvertedFilterer stats show "rows read: 6" since all the above shapes overflow
+# the default index bounds.
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT k FROM geo_table WHERE ST_Intersects('SRID=26918;POINT(400003 4000003)'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykU1Fr20wQfP9-xbIvifku-E4StnOlYCdRWrWOncqGNo1MUKwliEg69-7UOgT_9yIpaWNDREz1InZ3Zm-GYR_R_MhQ4swf-6dzKHUG5-H0Aq79b5fjUTCB0WQ0vvruw-FZMJvPvow78AS9b4B3pG5sfJsRfP3ohz4Ye5MWlrShpTWHB7MwOHvv9I7F4N3lNJjMDz3OOXeh_nG3cyDlB3964c_DK1btyjswDc_8EE6u4H6BDAuV0CTOyaC8RoELhiutlmSM0lXrsQYEyRolZ5gWq9JW7QXDpdKE8hFtajNCifNKZEhxQrrLkWFCNk6zem317k1aJLQe_rGDDGeruDASukfiqGZo9cuApjiR0EOGxsZZBjbNSQI3yPD2wdIzQPQ9OMHFhqEq7V9RxsZ3hFJs2NuFB8VP0paS8zSzpEl3xbb657m_XmlQBQyFBFNJB2NjbWWEUeTwfhS5_X6EQEXStASPEJDhtLQShuINBvN4DTnlSj9AaSiR4HD4nL5u09nH5ieVFk_xONsGVzrNY_2wlc2TaDZ03qC7jhZ2UE1zB_uaE3cfJzOlLemuu-1iKP5Hhk2IcvdMuOCiOgiHO73eMX_5nfZGYuCJphjwgRh4nu-JA_nycoZO59-SFO1Jevv4D8msVGFoy_9rm_lmwZCSO2qu2ahSL-lSq2X9TFNOa17dSMjYZiqaIiiaUSXwJVm0kp12stNKdtvJbivZ2yEvNv_9DgAA__80dbuh
+
+statement ok
+DROP TABLE geo_table
+
+# SRID of the geometry column is specified, so SRID specific bounds are used.
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry(geometry, 26918),
+  INVERTED INDEX geom_index(geom)
+)
+
+# Same shapes.
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'SRID=26918;POINT(400001 4000001)'),
+  (2, 'SRID=26918;LINESTRING(400001 4000001, 400002 4000002)'),
+  (3, 'SRID=26918;POINT(400003 4000003)'),
+  (4, 'SRID=26918;LINESTRING(400004 4000004, 400005 4000005)'),
+  (5, 'SRID=26918;LINESTRING(400040 4000040, 400041 4000041)'),
+  (6, 'SRID=26918;POLYGON((400001 4000001, 400005 4000001, 400005 4000005, 400001 4000005, 400001 4000001))')
+
+
+# Same result.
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('SRID=26918;POINT(400003 4000003)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+# The InvertedFilterer stats show "rows read: 2" since all the above shapes are within the index
+# bounds.
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT k FROM geo_table WHERE ST_Intersects('SRID=26918;POINT(400003 4000003)'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykVFFP2zAQft-vON0LVMtU2-na4GlSC4QtrLQsrbQxXKHQnFhEGne2uxWh_vcpCWy0iA60vER3933n-853vkX7I0eJo7AfHoxhYXI4iocncB5-Pe33ogH0Br3-2bcQdg-j0Xj0ud-AO-h1DbwifeGSy5zgy8cwDsG6i6xwZCxNnd3dGcXR4XvR3uPBu9NhNBjvthhjzIfqx_zGjpQfwuFJOI7PvDLXrAHD-DCMYf8MrifoYaFTGiQzsijPkePEw7nRU7JWm9J1WwGidImSeZgV84Ur3RMPp9oQylt0mcsJJY7LImNKUjJNhh6m5JIsr9KW515kRUrL7h856OFonhRWQlPwNu-ITiA49zuBH7DgzWPfHiRFCj4D7b6Tseih0b8sGEpSCQI9tC7Jc3DZjCSwMn554-ge0BGwj5OVh3rh_kqwLrkilHzlPV9mVPwk4yg9ynJHhkyTr2u9j4fLuQFdQJdLsKVQsC4xTipUyu-8VYoxXynRZlOljFKCM6UE6xSRQqAi_SfuWCE8aslw4SR0-TOaM0uWMKOZNjewsFSiGHzKnu6ReEmPjnVW3E2CWO_O3GSzxNysjcFd0V5XPKPuaopgA1U7N7BPKfFfomSkjSPT9NdVdPlr9LCeALm5kYwzXu6eYKLd3mMPv4N2jwctXhsBC3jQaoUtviMfLmlXNP7vJvn2m2y9RH9Mdq4LS2v6n8rMVhMPKb2i-uGwemGmdGr0tDqmNocVr3KkZF0d5bURFXWoLPAhmW8li-1ksZXsbyf7W8mtDfJk9ep3AAAA__9EAdjp
+
+# Also works when creating an index.
+statement ok
+DROP INDEX geo_table@geom_index
+
+statement ok
+CREATE INVERTED INDEX geom_index ON geo_table(geom)
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT k FROM geo_table WHERE ST_Intersects('SRID=26918;POINT(400003 4000003)'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykVFFP2zAQft-vON0LVMtU2-na4GlSC4QtrLQsrbQxXKHQnFhEGne2uxWh_vcpCWy0iA60vER3933n-853vkX7I0eJo7AfHoxhYXI4iocncB5-Pe33ogH0Br3-2bcQdg-j0Xj0ud-AO-h1DbwifeGSy5zgy8cwDsG6i6xwZCxNnd3dGcXR4XvR3uPBu9NhNBjvthhjzIfqx_zGjpQfwuFJOI7PvDLXrAHD-DCMYf8MrifoYaFTGiQzsijPkePEw7nRU7JWm9J1WwGidImSeZgV84Ur3RMPp9oQylt0mcsJJY7LImNKUjJNhh6m5JIsr9KW515kRUrL7h856OFonhRWQlPwNu-ITiA49zuBH7DgzWPfHiRFCj4D7b6Tseih0b8sGEpSCQI9tC7Jc3DZjCSwMn554-ge0BGwj5OVh3rh_kqwLrkilHzlPV9mVPwk4yg9ynJHhkyTr2u9j4fLuQFdQJdLsKVQsC4xTipUyu-8VYoxXynRZlOljFKCM6UE6xSRQqAi_SfuWCE8aslw4SR0-TOaM0uWMKOZNjewsFSiGHzKnu6ReEmPjnVW3E2CWO_O3GSzxNysjcFd0V5XPKPuaopgA1U7N7BPKfFfomSkjSPT9NdVdPlr9LCeALm5kYwzXu6eYKLd3mMPv4N2jwctXhsBC3jQaoUtviMfLmlXNP7vJvn2m2y9RH9Mdq4LS2v6n8rMVhMPKb2i-uGwemGmdGr0tDqmNocVr3KkZF0d5bURFXWoLPAhmW8li-1ksZXsbyf7W8mtDfJk9ep3AAAA__9EAdjp
