@@ -311,6 +311,11 @@ $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
 
+# Warn maintainers for if ccache is not found.
+ifeq (, $(shell which ccache))
+$(info $(yellow)Warning: 'ccache' not found, consider installing it for faster builds$(term-reset))
+endif
+
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
 vendor_rebuild: bin/.submodules-initialized
@@ -959,9 +964,9 @@ $(go-targets): override LINKFLAGS += \
 	$(if $(BUILD_TAGGED_RELEASE),-X "github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))")
 
 # The build.utcTime format must remain in sync with TimeFormat in
-# pkg/build/info.go. It is not installed in tests to avoid busting the cache on
-# every rebuild.
-$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install: override LINKFLAGS += \
+# pkg/build/info.go. It is not installed in tests or in `buildshort` to avoid
+# busting the cache on every rebuild.
+$(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
@@ -1630,22 +1635,30 @@ unsafe-clean-c-deps:
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
 	git -C $(KRB5_SRC_DIR)     clean -dxf
 
-.PHONY: clean
-clean: ## Remove build artifacts.
-clean: clean-c-deps
-	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
-	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
-	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
+.PHONY: cleanshort
+cleanshort: ## Clean up go build artifacts and go proto-generated code.
+cleanshort:
+	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources
+	-$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/cockroach...
+	$(FIND_RELEVANT) -type f -name '*.test' -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen
+	rm -rf $(ARCHIVE) pkg/sql/parser/gen
+
+.PHONY: clean
+clean: ## Like cleanshort, but also includes C++ artifacts and the go build cache.
+clean: cleanshort clean-c-deps
+	rm -rf bin/.cpp_protobuf_sources build/defs.mk*
+	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
+	$(FIND_RELEVANT) -type f -name 'zcgo_flags*.go' -exec rm {} +
+	rm -rf artifacts bin
 
 .PHONY: maintainer-clean
-maintainer-clean: ## Like clean, but also remove some auto-generated source code.
+maintainer-clean: ## Like clean, but also remove some auto-generated SQL parser, optgen, and UI protos code.
 maintainer-clean: clean ui-maintainer-clean
 	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 .PHONY: unsafe-clean
-unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
+unsafe-clean: ## Like maintainer-clean, but also remove all untracked/ignored files.
 unsafe-clean: maintainer-clean unsafe-clean-c-deps
 	git clean -dxf
 
