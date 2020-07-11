@@ -39,6 +39,7 @@ import (
 //     these utility test methods for datum-backed types.
 // */}}
 {{if and (not (eq .Left.VecMethod "Datum")) (not (eq .Right.VecMethod "Datum"))}}
+{{if and (not (eq .Left.VecMethod "Bytes")) (not (eq .Right.VecMethod "Bytes"))}}
 
 func {{template "opName" .}}(a {{.Left.GoType}}, b {{.Right.GoType}}) {{.Right.RetGoType}} {
 	var r {{.Right.RetGoType}}
@@ -52,6 +53,7 @@ func {{template "opName" .}}(a {{.Left.GoType}}, b {{.Right.GoType}}) {{.Right.R
 	return r
 }
 
+{{end}}
 {{end}}
 {{end}}
 `
