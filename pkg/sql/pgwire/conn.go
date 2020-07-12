@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -117,8 +116,8 @@ type conn struct {
 // 3) The reader's context is canceled (happens when the server is draining but
 // the connection was busy and hasn't quit yet): the reader notices the canceled
 // context and, like above, closes the processor.
-// 4) The processor encouters an error. This error can come from various fatal
-// conditions encoutered internally by the processor, or from a network
+// 4) The processor encounters an error. This error can come from various fatal
+// conditions encountered internally by the processor, or from a network
 // communication error encountered while flushing results to the network.
 // The processor will cancel the reader's context and terminate.
 // Note that query processing errors are different; they don't cause the
@@ -126,10 +125,10 @@ type conn struct {
 //
 // Draining notes:
 //
-// The reader notices that the server is draining by polling the draining()
-// closure passed to serveConn. At that point, the reader delegates the
+// The reader notices that the server is draining by polling the IsDraining
+// closure passed to serveImpl. At that point, the reader delegates the
 // responsibility of closing the connection to the statement processor: it will
-// push a DrainRequest to the stmtBuf which signal the processor to quit ASAP.
+// push a DrainRequest to the stmtBuf which signals the processor to quit ASAP.
 // The processor will quit immediately upon seeing that command if it's not
 // currently in a transaction. If it is in a transaction, it will wait until the
 // first time a Sync command is processed outside of a transaction - the logic
@@ -152,7 +151,7 @@ func (s *Server) serveConn(
 	c.testingLogEnabled = atomic.LoadInt32(&s.testingLogEnabled) > 0
 
 	// Do the reading of commands from the network.
-	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt, s.stopper)
+	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
 }
 
 func newConn(
@@ -210,7 +209,6 @@ func (c *conn) serveImpl(
 	sqlServer *sql.Server,
 	reserved mon.BoundAccount,
 	authOpt authOptions,
-	stopper *stop.Stopper,
 ) {
 	defer func() { _ = c.conn.Close() }()
 

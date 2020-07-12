@@ -180,8 +180,6 @@ type Server struct {
 	sqlMemoryPool mon.BytesMonitor
 	connMonitor   mon.BytesMonitor
 
-	stopper *stop.Stopper
-
 	// testingLogEnabled is used in unit tests in this package to
 	// force-enable conn/auth logging without dancing around the
 	// asynchronicity of cluster settings.
@@ -283,7 +281,6 @@ func Match(rd io.Reader) bool {
 
 // Start makes the Server ready for serving connections.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.stopper = stopper
 	s.SQLServer.Start(ctx, stopper)
 }
 
