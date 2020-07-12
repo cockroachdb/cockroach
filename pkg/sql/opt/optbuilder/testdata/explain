@@ -11,14 +11,6 @@ explain
       └── columns: x:1!null y:2
 
 build
-EXPLAIN (PLAN,SYMVARS) SELECT * FROM xy
-----
-explain
- ├── columns: tree:3 field:4 description:5
- └── scan xy
-      └── columns: x:1!null y:2
-
-build
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 explain
