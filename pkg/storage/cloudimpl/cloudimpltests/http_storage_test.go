@@ -193,9 +193,13 @@ func TestHttpGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	data := []byte("to serve, or not to serve.  c'est la question")
 
+	defer func(opts retry.Options) {
+		cloudimpl.HTTPRetryOptions = opts
+	}(cloudimpl.HTTPRetryOptions)
+
 	cloudimpl.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
 	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
-	cloudimpl.HTTPRetryOptions.MaxRetries = 100
+	cloudimpl.HTTPRetryOptions.MaxRetries = 25
 
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
@@ -234,7 +238,7 @@ func TestHttpGet(t *testing.T) {
 			g.GoCtx(func(ctx context.Context) error {
 				opts := retry.Options{
 					InitialBackoff: 500 * time.Microsecond,
-					MaxBackoff:     1 * time.Millisecond,
+					MaxBackoff:     5 * time.Millisecond,
 				}
 				for attempt := retry.StartWithCtx(ctx, opts); attempt.Next(); {
 					s.CloseClientConnections()
