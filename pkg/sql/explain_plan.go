@@ -11,19 +11,16 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
 
@@ -69,13 +66,21 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	// Make a copy (to allow changes through planMutableColumns).
 	columns = append(sqlbase.ResultColumns(nil), columns...)
 
-	e := explainer{explainFlags: flags}
+	node := &explainPlanNode{
+		plan:     *plan,
+		stmtType: stmtType,
+		run: explainPlanRun{
+			results: p.newContainerValuesNode(columns, 0),
+		},
+	}
+
+	node.explainer.init(flags)
 
 	noPlaceholderFlags := tree.FmtExpr(
 		tree.FmtSymbolicSubqueries, flags.showTypes, false /* symbolicVars */, flags.qualifyNames,
 	)
-	e.fmtFlags = noPlaceholderFlags
-	e.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+	node.explainer.fmtFlags = noPlaceholderFlags
+	node.explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 		d, err := placeholder.Eval(p.EvalContext())
 		if err != nil {
 			// Disable the placeholder formatter so that
@@ -90,15 +95,6 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 			return
 		}
 		ctx.FormatNode(d)
-	}
-
-	node := &explainPlanNode{
-		explainer: e,
-		plan:      *plan,
-		stmtType:  stmtType,
-		run: explainPlanRun{
-			results: p.newContainerValuesNode(columns, 0),
-		},
 	}
 	return node, nil
 }
@@ -125,15 +121,6 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 		e.plan.checkPlans[i].plan.Close(ctx)
 	}
 	e.run.results.Close(ctx)
-}
-
-// explainEntry is a representation of the info that makes it into an output row
-// of an EXPLAIN statement.
-type explainEntry struct {
-	isNode                bool
-	level                 int
-	node, field, fieldVal string
-	plan                  planNode
 }
 
 // explainFlags contains parameters for the EXPLAIN logic.
@@ -165,11 +152,12 @@ type explainer struct {
 	// Meant for use with FmtCtx.WithPlaceholderFormat().
 	showPlaceholderValues func(ctx *tree.FmtCtx, placeholder *tree.Placeholder)
 
-	// level is the current depth in the tree of planNodes.
-	level int
+	ob *explain.OutputBuilder
+}
 
-	// explainEntry accumulates entries (nodes or attributes).
-	entries []explainEntry
+func (e *explainer) init(flags explainFlags) {
+	*e = explainer{explainFlags: flags}
+	e.ob = explain.NewOutputBuilder(flags.showMetadata, flags.showTypes)
 }
 
 // populateExplain walks the plan and generates rows in a valuesNode.
@@ -222,47 +210,23 @@ func populateExplain(
 		}
 	}
 
-	emitRow := func(
-		treeStr string, level int, node, field, fieldVal, columns, ordering string,
-	) error {
-		var row tree.Datums
-		if !e.showMetadata {
-			row = tree.Datums{
-				tree.NewDString(treeStr),  // Tree
-				tree.NewDString(field),    // Field
-				tree.NewDString(fieldVal), // Description
-			}
-		} else {
-			row = tree.Datums{
-				tree.NewDString(treeStr),       // Tree
-				tree.NewDInt(tree.DInt(level)), // Level
-				tree.NewDString(node),          // Type
-				tree.NewDString(field),         // Field
-				tree.NewDString(fieldVal),      // Description
-				tree.NewDString(columns),       // Columns
-				tree.NewDString(ordering),      // Ordering
-			}
-		}
-		_, err := v.rows.AddRow(params.ctx, row)
-		return err
-	}
-
 	// First, emit the "distribution" and "vectorized" information rows.
-	if err := emitRow("", 0, "", "distribution", distribution.String(), "", ""); err != nil {
-		return err
-	}
-	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", willVectorize), "", ""); err != nil {
-		return err
-	}
+	e.ob.AddField("distribution", distribution.String())
+	e.ob.AddField("vectorized", fmt.Sprintf("%t", willVectorize))
 
-	e.populateEntries(params.ctx, plan, explainSubqueryFmtFlags)
-	return e.emitRows(emitRow)
+	e.populate(params.ctx, plan, explainSubqueryFmtFlags)
+	rows := e.ob.BuildExplainRows()
+	for _, r := range rows {
+		if _, err := v.rows.AddRow(params.ctx, r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (e *explainer) populateEntries(
+func (e *explainer) populate(
 	ctx context.Context, plan *planComponents, subqueryFmtFlags tree.FmtFlags,
 ) {
-	e.entries = nil
 	observer := planObserver{
 		enterNode: e.enterNode,
 		expr:      e.expr,
@@ -364,75 +328,18 @@ func observePlan(
 	return nil
 }
 
-// emitExplainRowFn is used to emit an EXPLAIN row.
-type emitExplainRowFn func(treeStr string, level int, node, field, fieldVal, columns, ordering string) error
-
-// emitRows calls the given function for each populated entry.
-func (e *explainer) emitRows(emitRow emitExplainRowFn) error {
-	tp := treeprinter.New()
-	// n keeps track of the current node on each level.
-	n := []treeprinter.Node{tp}
-
-	for _, entry := range e.entries {
-		if entry.isNode {
-			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
-		} else {
-			tp.AddEmptyLine()
-		}
-	}
-
-	treeRows := tp.FormattedRows()
-
-	for i, entry := range e.entries {
-		var columns, ordering string
-		if e.showMetadata && entry.plan != nil {
-			cols := planColumns(entry.plan)
-			columns = formatColumns(cols, e.showTypes)
-			ordering = formatOrdering(planReqOrdering(entry.plan), cols)
-		}
-		if err := emitRow(
-			treeRows[i], entry.level, entry.node, entry.field, entry.fieldVal, columns, ordering,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // planToString builds a string representation of a plan using the EXPLAIN
 // infrastructure.
 func planToString(ctx context.Context, p *planTop) string {
-	e := explainer{
-		explainFlags: explainFlags{
-			showMetadata: true,
-			showTypes:    true,
-		},
-		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
-	}
+	var e explainer
+	e.init(explainFlags{
+		showMetadata: true,
+		showTypes:    true,
+	})
+	e.fmtFlags = tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true)
 
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-	emitRow := func(
-		treeStr string, level int, node, field, fieldVal, columns, ordering string,
-	) error {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", treeStr, field, fieldVal, columns, ordering)
-		return nil
-	}
-
-	e.populateEntries(ctx, &p.planComponents, explainSubqueryFmtFlags)
-
-	// Our emitRow function never returns errors, so neither will emitRows().
-	_ = e.emitRows(emitRow)
-	_ = tw.Flush()
-
-	// Remove trailing whitespace from each line.
-	result := strings.TrimRight(buf.String(), "\n")
-	buf.Reset()
-	for _, line := range strings.Split(result, "\n") {
-		fmt.Fprintf(&buf, "%s\n", strings.TrimRight(line, " "))
-	}
-	return buf.String()
+	e.populate(ctx, &p.planComponents, explainSubqueryFmtFlags)
+	return e.ob.BuildString()
 }
 
 func getAttrForSpansAll(hardLimitSet bool) string {
@@ -482,68 +389,21 @@ func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, 
 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
-	e.entries = append(e.entries, explainEntry{
-		isNode: true,
-		level:  e.level,
-		node:   name,
-		plan:   plan,
-	})
-
-	e.level++
+	if plan == nil {
+		e.ob.EnterMetaNode(name)
+	} else {
+		e.ob.EnterNode(name, planColumns(plan), planReqOrdering(plan))
+	}
 	return true, nil
 }
 
 // attr implements the planObserver interface.
 func (e *explainer) attr(nodeName, fieldName, attr string) {
-	e.entries = append(e.entries, explainEntry{
-		isNode:   false,
-		level:    e.level - 1,
-		field:    fieldName,
-		fieldVal: attr,
-	})
+	e.ob.AddField(fieldName, attr)
 }
 
 // leaveNode implements the planObserver interface.
 func (e *explainer) leaveNode(name string, _ planNode) error {
-	e.level--
+	e.ob.LeaveNode()
 	return nil
-}
-
-// formatColumns converts a column signature for a data source /
-// planNode to a string. The column types are printed iff the 2nd
-// argument specifies so.
-func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteByte('(')
-	for i := range cols {
-		rCol := &cols[i]
-		if i > 0 {
-			f.WriteString(", ")
-		}
-		f.FormatNameP(&rCol.Name)
-		// Output extra properties like [hidden,omitted].
-		hasProps := false
-		outputProp := func(prop string) {
-			if hasProps {
-				f.WriteByte(',')
-			} else {
-				f.WriteByte('[')
-			}
-			hasProps = true
-			f.WriteString(prop)
-		}
-		if rCol.Hidden {
-			outputProp("hidden")
-		}
-		if hasProps {
-			f.WriteByte(']')
-		}
-
-		if printTypes {
-			f.WriteByte(' ')
-			f.WriteString(rCol.Typ.String())
-		}
-	}
-	f.WriteByte(')')
-	return f.CloseAndGetString()
 }
