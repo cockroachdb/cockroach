@@ -87,7 +87,6 @@ type ExplainFlag uint8
 // Explain flags.
 const (
 	ExplainFlagVerbose ExplainFlag = 1 + iota
-	ExplainFlagSymVars
 	ExplainFlagTypes
 	ExplainFlagAnalyze
 	ExplainFlagEnv
@@ -98,7 +97,6 @@ const (
 
 var explainFlagStrings = [...]string{
 	ExplainFlagVerbose: "VERBOSE",
-	ExplainFlagSymVars: "SYMVARS",
 	ExplainFlagTypes:   "TYPES",
 	ExplainFlagAnalyze: "ANALYZE",
 	ExplainFlagEnv:     "ENV",

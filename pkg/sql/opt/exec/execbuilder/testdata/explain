@@ -645,15 +645,6 @@ scan  ·             ·          (k int, v int)  ·
 ·     spans         FULL SCAN  ·               ·
 
 query TTTTT
-EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
-----
-·     distribution  local      ·        ·
-·     vectorized    true       ·        ·
-scan  ·             ·          (k int)  ·
-·     table         t@primary  ·        ·
-·     spans         FULL SCAN  ·        ·
-
-query TTTTT
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
 ·     distribution  local      ·        ·
