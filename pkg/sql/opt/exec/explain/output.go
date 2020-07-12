@@ -25,9 +25,8 @@ import (
 //
 // See ExampleOutputBuilder for sample usage.
 type OutputBuilder struct {
-	verbose   bool
-	showTypes bool
-	entries   []entry
+	flags   Flags
+	entries []entry
 
 	// Current depth level (# of EnterNode() calls - # of LeaveNode() calls).
 	level int
@@ -37,8 +36,8 @@ type OutputBuilder struct {
 //
 // EnterNode / EnterMetaNode and AddField should be used to populate data, after
 // which a Build* method should be used.
-func NewOutputBuilder(verbose bool, showTypes bool) *OutputBuilder {
-	return &OutputBuilder{verbose: verbose, showTypes: showTypes, level: 0}
+func NewOutputBuilder(flags Flags) *OutputBuilder {
+	return &OutputBuilder{flags: flags}
 }
 
 type entry struct {
@@ -61,8 +60,8 @@ func (ob *OutputBuilder) EnterNode(
 	name string, columns sqlbase.ResultColumns, ordering sqlbase.ColumnOrdering,
 ) {
 	var colStr, ordStr string
-	if ob.verbose {
-		colStr = columns.String(ob.showTypes)
+	if ob.flags.Verbose {
+		colStr = columns.String(ob.flags.ShowTypes)
 		ordStr = ordering.String(columns)
 	}
 	ob.enterNode(name, colStr, ordStr)
@@ -134,7 +133,7 @@ func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 		if e.isNode() {
 			level = e.level
 		}
-		if !ob.verbose {
+		if !ob.flags.Verbose {
 			rows[i] = tree.Datums{
 				tree.NewDString(treeRows[i]), // Tree
 				tree.NewDString(e.field),     // Field
@@ -164,7 +163,7 @@ func (ob *OutputBuilder) BuildString() string {
 	treeRows := ob.buildTreeRows()
 	for i, e := range ob.entries {
 		fmt.Fprintf(tw, "%s\t%s\t%s", treeRows[i], e.field, e.fieldVal)
-		if ob.verbose {
+		if ob.flags.Verbose {
 			fmt.Fprintf(tw, "\t%s\t%s", e.columns, e.ordering)
 		}
 		fmt.Fprintf(tw, "\n")

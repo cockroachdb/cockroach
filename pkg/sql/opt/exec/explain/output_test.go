@@ -24,7 +24,8 @@ import (
 )
 
 func ExampleOutputBuilder() {
-	example := func(name string, ob *explain.OutputBuilder) {
+	example := func(name string, flags explain.Flags) {
+		ob := explain.NewOutputBuilder(flags)
 		ob.AddField("distributed", "true")
 		ob.EnterMetaNode("meta")
 		{
@@ -82,9 +83,9 @@ func ExampleOutputBuilder() {
 		fmt.Printf("\n")
 	}
 
-	example("basic", explain.NewOutputBuilder(false /* verbose */, false /* showTypes */))
-	example("verbose", explain.NewOutputBuilder(true /* verbose */, false /* showTypes */))
-	example("verbose+types", explain.NewOutputBuilder(true /* verbose */, true /* showTypes */))
+	example("basic", explain.Flags{})
+	example("verbose", explain.Flags{Verbose: true})
+	example("verbose+types", explain.Flags{Verbose: true, ShowTypes: true})
 
 	// Output:
 	// -- basic (datums) --
