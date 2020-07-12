@@ -27,6 +27,7 @@ var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
 	execinfrapb.AggregatorSpec_AVG,
 	execinfrapb.AggregatorSpec_SUM,
 	execinfrapb.AggregatorSpec_SUM_INT,
+	execinfrapb.AggregatorSpec_CONCAT_AGG,
 	execinfrapb.AggregatorSpec_COUNT_ROWS,
 	execinfrapb.AggregatorSpec_COUNT,
 	execinfrapb.AggregatorSpec_MIN,
@@ -146,6 +147,12 @@ func newAggregateFuncsAlloc(
 				funcAllocs[i], err = newSumIntHashAggAlloc(allocator, aggTyps[i][0], allocSize)
 			} else {
 				funcAllocs[i], err = newSumIntOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+			}
+		case execinfrapb.AggregatorSpec_CONCAT_AGG:
+			if isHashAgg {
+				funcAllocs[i] = newConcatHashAggAlloc(allocator, allocSize)
+			} else {
+				funcAllocs[i] = newConcatOrderedAggAlloc(allocator, allocSize)
 			}
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			if isHashAgg {
