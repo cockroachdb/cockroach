@@ -53,15 +53,12 @@ type explainPlanNode struct {
 func (p *planner) makeExplainPlanNodeWithPlan(
 	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents, stmtType tree.StatementType,
 ) (planNode, error) {
-	flags := explainFlags{
-		symbolicVars: opts.Flags[tree.ExplainFlagSymVars],
-	}
-	if opts.Flags[tree.ExplainFlagVerbose] {
+	var flags explainFlags
+	if opts.Flags[tree.ExplainFlagVerbose] || opts.Flags[tree.ExplainFlagTypes] {
 		flags.showMetadata = true
 		flags.qualifyNames = true
 	}
 	if opts.Flags[tree.ExplainFlagTypes] {
-		flags.showMetadata = true
 		flags.showTypes = true
 	}
 
@@ -75,7 +72,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	e := explainer{explainFlags: flags}
 
 	noPlaceholderFlags := tree.FmtExpr(
-		tree.FmtSymbolicSubqueries, flags.showTypes, flags.symbolicVars, flags.qualifyNames,
+		tree.FmtSymbolicSubqueries, flags.showTypes, false /* symbolicVars */, flags.qualifyNames,
 	)
 	e.fmtFlags = noPlaceholderFlags
 	e.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
@@ -149,10 +146,6 @@ type explainFlags struct {
 	// qualifyNames determines whether column names in expressions
 	// should be fully qualified during pretty-printing.
 	qualifyNames bool
-
-	// symbolicVars determines whether ordinal column references
-	// should be printed numerically.
-	symbolicVars bool
 
 	// showTypes indicates whether to print the type of embedded
 	// expressions and result columns.
