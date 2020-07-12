@@ -1,3 +1,5 @@
+# LogicTest: local
+
 statement ok
 CREATE TABLE bools (a INT, b BOOL)
 
@@ -28,3 +30,56 @@ false false
 false true
 true true
 false false
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colfetcher.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colfetcher.colBatchScan
+
+statement ok
+SET vectorize=experimental_always
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+NULL NULL
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+
+statement ok
+RESET vectorize
+
+statement ok
+INSERT INTO bytes_string VALUES
+(0, NULL, NULL),
+(1, b'1', '1'),
+(2, b'2', '2'), (2, b'2', '2'),
+(3, b'3', '3'), (3, NULL, NULL), (3, b'3', '3')
+
+statement ok
+SET vectorize=experimental_always
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group ORDER BY _group
+----
+NULL NULL
+1    1
+22   22
+33   33

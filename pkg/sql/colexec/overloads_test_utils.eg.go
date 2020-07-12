@@ -3,7 +3,6 @@
 package colexec
 
 import (
-	"bytes"
 	"math"
 	"time"
 
@@ -3292,18 +3291,6 @@ func performPowFloat64Float64(a float64, b float64) float64 {
 	return r
 }
 
-func performConcatBytesBytes(a []byte, b []byte) []byte {
-	var r []byte
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-	colexecerror.InternalError("couldn't translate indexing on target element: r")
-	return r
-}
-
 func performLShiftInt16Int16(a int16, b int16) int64 {
 	var r int64
 	// In order to inline the templated code of overloads, we need to have a
@@ -3684,24 +3671,6 @@ func performEQBoolBool(a bool, b bool) bool {
 			cmpResult = 0
 		}
 
-		r = cmpResult == 0
-	}
-
-	return r
-}
-
-func performEQBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
 		r = cmpResult == 0
 	}
 
@@ -4511,24 +4480,6 @@ func performNEBoolBool(a bool, b bool) bool {
 	return r
 }
 
-func performNEBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
-		r = cmpResult != 0
-	}
-
-	return r
-}
-
 func performNEDecimalInt16(a apd.Decimal, b int16) bool {
 	var r bool
 	// In order to inline the templated code of overloads, we need to have a
@@ -5326,24 +5277,6 @@ func performLTBoolBool(a bool, b bool) bool {
 			cmpResult = 0
 		}
 
-		r = cmpResult < 0
-	}
-
-	return r
-}
-
-func performLTBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
 		r = cmpResult < 0
 	}
 
@@ -6153,24 +6086,6 @@ func performLEBoolBool(a bool, b bool) bool {
 	return r
 }
 
-func performLEBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
-		r = cmpResult <= 0
-	}
-
-	return r
-}
-
 func performLEDecimalInt16(a apd.Decimal, b int16) bool {
 	var r bool
 	// In order to inline the templated code of overloads, we need to have a
@@ -6974,24 +6889,6 @@ func performGTBoolBool(a bool, b bool) bool {
 	return r
 }
 
-func performGTBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
-		r = cmpResult > 0
-	}
-
-	return r
-}
-
 func performGTDecimalInt16(a apd.Decimal, b int16) bool {
 	var r bool
 	// In order to inline the templated code of overloads, we need to have a
@@ -7789,24 +7686,6 @@ func performGEBoolBool(a bool, b bool) bool {
 			cmpResult = 0
 		}
 
-		r = cmpResult >= 0
-	}
-
-	return r
-}
-
-func performGEBytesBytes(a []byte, b []byte) bool {
-	var r bool
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	var _overloadHelper overloadHelper
-	// However, the scratch is not used in all of the functions, so we add this
-	// to go around "unused" error.
-	_ = _overloadHelper
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(a, b)
 		r = cmpResult >= 0
 	}
 
