@@ -154,6 +154,11 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return c.accumulatedMeta
 }
 
+func (c *Columnarizer) Close(ctx context.Context) error {
+	c.input.ConsumerClosed()
+	return nil
+}
+
 // ChildCount is part of the Operator interface.
 func (c *Columnarizer) ChildCount(verbose bool) int {
 	if _, ok := c.input.(execinfra.OpNode); ok {
