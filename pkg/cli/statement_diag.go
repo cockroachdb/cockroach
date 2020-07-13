@@ -77,7 +77,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) error {
 		id := vals[0].(int64)
 		stmt := vals[1].(string)
 		t := vals[2].(time.Time)
-		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.Local().Format(timeFmt), stmt)
+		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.UTC().Format(timeFmt), stmt)
 		num++
 	}
 	if err := rows.Close(); err != nil {
@@ -118,7 +118,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) error {
 		id := vals[0].(int64)
 		stmt := vals[1].(string)
 		t := vals[2].(time.Time)
-		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.Local().Format(timeFmt), stmt)
+		fmt.Fprintf(w, "  %d\t%s\t%s\n", id, t.UTC().Format(timeFmt), stmt)
 		num++
 	}
 	if err := rows.Close(); err != nil {
