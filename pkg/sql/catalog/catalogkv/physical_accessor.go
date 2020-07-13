@@ -104,29 +104,6 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	if err != nil {
 		return nil, err
 	}
-	// We scan both the deprecated and new system.namespace table to get the
-	// complete list of tables. Duplicate entries may be present in both the tables,
-	// so we filter those out. If a duplicate entry is present, it doesn't matter
-	// which table it is read from -- system.namespace entries are never modified,
-	// they are only added/deleted. Entries are written to only one table, so
-	// duplicate entries must have been copied over during migration. Thus, it
-	// doesn't matter which table (newer/deprecated) the value is read from.
-	//
-	// It may seem counter-intuitive to read both tables if we have found data in
-	// the newer version. The migration copied all entries from the deprecated
-	// system.namespace and all new entries after the cluster version bump are added
-	// to the new system.namespace. Why do we do this then?
-	// This is to account the scenario where a table was created before
-	// the cluster version was bumped, but after the older system.namespace was
-	// copied into the newer system.namespace. Objects created in this window
-	// will only be present in the older system.namespace. To account for this
-	// scenario, we must do this filtering logic.
-	// TODO(solon): This complexity can be removed in  20.2.
-	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(codec)
-	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
-	}
 
 	alreadySeen := make(map[string]bool)
 	var tableNames tree.TableNames
@@ -144,21 +121,50 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		tableNames = append(tableNames, tn)
 	}
 
-	for _, row := range dsr {
-		// Decode using the deprecated key prefix.
-		_, tableName, err := encoding.DecodeUnsafeStringAscending(
-			bytes.TrimPrefix(row.Key, dprefix), nil)
+	// When constructing the list of entries under the `public` schema (and only
+	// when constructing the list for the `public` schema), We scan both the
+	// deprecated and new system.namespace table to get the complete list of
+	// tables. Duplicate entries may be present in both the tables, so we filter
+	// those out. If a duplicate entry is present, it doesn't matter which table
+	// it is read from -- system.namespace entries are never modified, they are
+	// only added/deleted. Entries are written to only one table, so duplicate
+	// entries must have been copied over during migration. Thus, it doesn't
+	// matter which table (newer/deprecated) the value is read from.
+	//
+	// It may seem counter-intuitive to read both tables if we have found data in
+	// the newer version. The migration copied all entries from the deprecated
+	// system.namespace and all new entries after the cluster version bump are added
+	// to the new system.namespace. Why do we do this then?
+	// This is to account the scenario where a table was created before
+	// the cluster version was bumped, but after the older system.namespace was
+	// copied into the newer system.namespace. Objects created in this window
+	// will only be present in the older system.namespace. To account for this
+	// scenario, we must do this filtering logic.
+	// TODO(solon): This complexity can be removed in  20.2.
+	if scName == tree.PublicSchema {
+		dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(codec)
+		dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
 		if err != nil {
 			return nil, err
 		}
-		if alreadySeen[tableName] {
-			continue
+
+		for _, row := range dsr {
+			// Decode using the deprecated key prefix.
+			_, tableName, err := encoding.DecodeUnsafeStringAscending(
+				bytes.TrimPrefix(row.Key, dprefix), nil)
+			if err != nil {
+				return nil, err
+			}
+			if alreadySeen[tableName] {
+				continue
+			}
+			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
+			tn.ExplicitCatalog = flags.ExplicitPrefix
+			tn.ExplicitSchema = flags.ExplicitPrefix
+			tableNames = append(tableNames, tn)
 		}
-		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
-		tn.ExplicitCatalog = flags.ExplicitPrefix
-		tn.ExplicitSchema = flags.ExplicitPrefix
-		tableNames = append(tableNames, tn)
 	}
+
 	return tableNames, nil
 }
 
