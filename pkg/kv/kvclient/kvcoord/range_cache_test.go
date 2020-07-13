@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -953,6 +954,7 @@ func TestRangeCacheUseIntents(t *testing.T) {
 
 // TestRangeCacheClearOverlapping verifies that existing, overlapping
 // cached entries are cleared when adding a new entry.
+// Also see TestRangeCacheClearOlderOverlapping().
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1024,6 +1026,145 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), ri)
 	ri = cache.GetCached(roachpb.RKey("c"), true)
 	require.Equal(t, *bToCDesc, ri.Desc)
+}
+
+// Test The ClearOlderOverlapping. There's also the older
+// TestRangeCacheClearOverlapping(); this test is written in a table-driven
+// manner.
+func TestRangeCacheClearOlderOverlapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	descAB1 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("b"),
+		Generation: 1,
+	}
+	descAB2 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("b"),
+		Generation: 2,
+	}
+	descAB3 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("b"),
+		Generation: 3,
+	}
+	descBC2 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("b"),
+		EndKey:     roachpb.RKey("c"),
+		Generation: 2,
+	}
+	descCD2 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("c"),
+		EndKey:     roachpb.RKey("d"),
+		Generation: 2,
+	}
+	descCD3 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("c"),
+		EndKey:     roachpb.RKey("d"),
+		Generation: 3,
+	}
+	descAZ100 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a"),
+		EndKey:     roachpb.RKey("z"),
+		Generation: 100,
+	}
+
+	// A descriptor that overlaps [a,b) and [b,c).
+	descAxBx1 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a_"),
+		EndKey:     roachpb.RKey("b_"),
+		Generation: 1,
+	}
+	descAxBx3 := roachpb.RangeDescriptor{
+		StartKey:   roachpb.RKey("a_"),
+		EndKey:     roachpb.RKey("b_"),
+		Generation: 3,
+	}
+
+	testCases := []struct {
+		cachedDescs []roachpb.RangeDescriptor
+		clearDesc   roachpb.RangeDescriptor
+		expCache    []roachpb.RangeDescriptor
+		expNewest   bool
+		// If expNewest is false, expNewer indicates the expected 2nd ret val of
+		// clearOlderOverlapping().
+		expNewer *roachpb.RangeDescriptor
+	}{
+		{
+			cachedDescs: nil,
+			clearDesc:   descAZ100,
+			expCache:    nil,
+			expNewest:   true,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descAZ100,
+			expCache:    nil,
+			expNewest:   true,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descAB1,
+			expCache:    []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			expNewest:   false,
+			expNewer:    &descAB2,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descAB3,
+			expCache:    []roachpb.RangeDescriptor{descBC2, descCD2},
+			expNewest:   true,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descAxBx1, // old descriptor, doesn't clear anything.
+			expCache:    []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			expNewest:   false,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descAxBx3,
+			expCache:    []roachpb.RangeDescriptor{descCD2},
+			expNewest:   true,
+		},
+		{
+			cachedDescs: []roachpb.RangeDescriptor{descAB2, descBC2, descCD2},
+			clearDesc:   descCD3,
+			expCache:    []roachpb.RangeDescriptor{descAB2, descBC2},
+			expNewest:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			cache := NewRangeDescriptorCache(st, nil /* db */, staticSize(2<<10), stop.NewStopper())
+			for _, d := range tc.cachedDescs {
+				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
+			}
+			newEntry := &kvbase.RangeCacheEntry{Desc: tc.clearDesc}
+			newest, newer := cache.clearOlderOverlapping(ctx, newEntry)
+			all := cache.all()
+			var allDescs []roachpb.RangeDescriptor
+			if all != nil {
+				allDescs = make([]roachpb.RangeDescriptor, len(all))
+				for i, e := range all {
+					allDescs[i] = e.Desc
+				}
+			}
+			var newerDesc *roachpb.RangeDescriptor
+			if newer != nil {
+				newerDesc = &newer.Desc
+			}
+
+			assert.Equal(t, tc.expCache, allDescs)
+			assert.Equal(t, tc.expNewest, newest)
+			assert.Equal(t, tc.expNewer, newerDesc)
+		})
+	}
 }
 
 // TestRangeCacheClearOverlappingMeta prevents regression of a bug which caused
