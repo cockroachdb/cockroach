@@ -327,10 +327,20 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	// Iterate over all non-inverted indexes.
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
-		// TODO(mgartner): Generate constrained scans for partial indexes if
-		// they are implied by the filter.
+		// If the index is a partial index, check whether or not the filter
+		// implies the predicate.
+		if memo.IsPartialIndex(tabMeta, iter.IndexOrdinal()) {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(explicitFilters, pred)
+			if !ok {
+				// The filters do not imply the predicate, so the partial index
+				// cannot be used.
+				continue
+			}
+			explicitFilters = remainingFilters
+		}
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values

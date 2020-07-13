@@ -112,18 +112,12 @@ index-join a
  ├── stats: [rows=140, distinct(2)=14, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── select
+ └── scan a@idx_i_200_to_250,partial
       ├── columns: k:1(int!null) i:2(int!null)
-      ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+      ├── constraint: /2/1: [/216 - /229]
+      ├── stats: [rows=13.72, distinct(2)=13.72, null(2)=0]
       ├── key: (1)
-      ├── fd: (1)-->(2)
-      ├── scan a@idx_i_200_to_250,partial
-      │    ├── columns: k:1(int!null) i:2(int)
-      │    ├── stats: [rows=490, distinct(1)=490, null(1)=0, distinct(2)=49, null(2)=0]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── filters
-           └── (i:2 > 215) AND (i:2 < 230) [type=bool, outer=(2), constraints=(/2: [/216 - /229]; tight)]
+      └── fd: (1)-->(2)
 
 # Test for FuncDep equivalencies.
 opt
@@ -136,12 +130,13 @@ index-join a
  ├── fd: (1)-->(2-4), (3)==(4), (4)==(3)
  └── select
       ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
-      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0]
+      ├── stats: [rows=0.187554386, distinct(3)=0.187554386, null(3)=0, distinct(4)=0.187554386, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4)
       ├── scan a@idx_equiv,partial
-      │    ├── columns: k:1(int!null) s:3(string) t:4(string)
-      │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0]
+      │    ├── columns: k:1(int!null) s:3(string!null) t:4(string)
+      │    ├── constraint: /3/4/1: (/NULL - ]
+      │    ├── stats: [rows=1.68798948, distinct(1)=1.68798948, null(1)=0, distinct(3)=1.68798948, null(3)=0, distinct(4)=1.68798948, null(4)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4)
       └── filters
@@ -163,6 +158,22 @@ index-join a
       ├── key: (1)
       └── fd: (1)-->(2)
 
+# Test for constrained partial index scan.
+opt
+SELECT * FROM a WHERE s = 'foo' AND i > 10 AND i < 20
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx_s_foo,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/11 - /19]
+      ├── stats: [rows=1.73571429, distinct(2)=1.73571429, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
 # ---------------------
 # Tests with Histograms
 # ---------------------
@@ -172,7 +183,8 @@ CREATE TABLE hist (
   k INT PRIMARY KEY,
   i INT,
   s STRING,
-  INDEX idx_i (s) WHERE i > 100 AND i <= 200
+  INDEX idx_i_100_to_200 (s) WHERE i > 100 AND i <= 200,
+  INDEX idx_i_200_to_400 (i) WHERE i > 200 AND i <= 400
 )
 ----
 
@@ -191,6 +203,20 @@ ALTER TABLE hist INJECT STATISTICS '[
       {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
       {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
       {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "pineapple"}
     ]
   }
 ]'
@@ -215,7 +241,7 @@ select
  │    ├── stats: [rows=190]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    └── scan hist@idx_i,partial
+ │    └── scan hist@idx_i_100_to_200,partial
  │         ├── columns: k:1(int!null) s:3(string)
  │         ├── stats: [rows=190, distinct(2)=11, null(2)=0]
  │         │   histogram(2)=  0   0   180  10
@@ -224,3 +250,54 @@ select
  │         └── fd: (1)-->(3)
  └── filters
       └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+# Test for constrained partial index scan.
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150 AND s >= 'banana' AND s < 'cherry'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=5.5, null(3)=0, distinct(2,3)=6.91433927, null(2,3)=0]
+ │   histogram(2)=  0   0   6.6262 0.2881
+ │                <--- 125 -------- 149 -
+ │   histogram(3)=  0  0.69143   6.2229     0
+ │                <--- 'banana' -------- 'cherry'
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=19]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx_i_100_to_200,partial
+ │         ├── columns: k:1(int!null) s:3(string!null)
+ │         ├── constraint: /3/1: [/'banana' - /'cherry')
+ │         ├── stats: [rows=19, distinct(2)=11, null(2)=0, distinct(3)=5.5, null(3)=0]
+ │         │   histogram(2)=  0   0   18   1
+ │         │                <--- 100 ---- 200
+ │         │   histogram(3)=  0    1.9     17.1     0
+ │         │                <--- 'banana' ------ 'cherry'
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+# Test for an indexed column that is also constrained by partial index predicate.
+opt
+SELECT * FROM hist WHERE i > 300 AND i < 350
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=178.181818, distinct(2)=6.36363636, null(2)=0]
+ │   histogram(2)=  0   0   174.55 3.6364
+ │                <--- 300 -------- 349 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx_i_200_to_400,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/301 - /349]
+      ├── stats: [rows=121.163636, distinct(2)=5.36363636, null(2)=0]
+      │   histogram(2)=  0   0   118.69 2.4727
+      │                <--- 300 -------- 349 -
+      ├── key: (1)
+      └── fd: (1)-->(2)
