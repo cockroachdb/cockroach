@@ -103,7 +103,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_QueryTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_QueryTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeFeedCheckpoint;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeStatsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecomputeStatsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnResponse;
@@ -118,6 +117,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_GCRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_Header;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RangeStatsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RequestLeaseRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResponseHeader;
@@ -2529,10 +2529,11 @@ static void InitDefaultsRangeStatsResponse() {
   ::cockroach::roachpb::RangeStatsResponse::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_RangeStatsResponse =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRangeStatsResponse}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_RangeStatsResponse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsRangeStatsResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
-      &protobuf_storage_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
+      &protobuf_storage_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsRequestUnion() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -30275,6 +30276,8 @@ void RangeStatsResponse::InitAsDefaultInstance() {
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
   ::cockroach::roachpb::_RangeStatsResponse_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::enginepb::MVCCStats*>(
       ::cockroach::storage::enginepb::MVCCStats::internal_default_instance());
+  ::cockroach::roachpb::_RangeStatsResponse_default_instance_._instance.get_mutable()->range_info_ = const_cast< ::cockroach::roachpb::RangeInfo*>(
+      ::cockroach::roachpb::RangeInfo::internal_default_instance());
 }
 void RangeStatsResponse::clear_mvcc_stats() {
   if (GetArenaNoVirtual() == NULL && mvcc_stats_ != NULL) {
@@ -30282,10 +30285,17 @@ void RangeStatsResponse::clear_mvcc_stats() {
   }
   mvcc_stats_ = NULL;
 }
+void RangeStatsResponse::clear_range_info() {
+  if (GetArenaNoVirtual() == NULL && range_info_ != NULL) {
+    delete range_info_;
+  }
+  range_info_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeStatsResponse::kHeaderFieldNumber;
 const int RangeStatsResponse::kMvccStatsFieldNumber;
 const int RangeStatsResponse::kQueriesPerSecondFieldNumber;
+const int RangeStatsResponse::kRangeInfoFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeStatsResponse::RangeStatsResponse()
@@ -30309,6 +30319,11 @@ RangeStatsResponse::RangeStatsResponse(const RangeStatsResponse& from)
   } else {
     mvcc_stats_ = NULL;
   }
+  if (from.has_range_info()) {
+    range_info_ = new ::cockroach::roachpb::RangeInfo(*from.range_info_);
+  } else {
+    range_info_ = NULL;
+  }
   queries_per_second_ = from.queries_per_second_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RangeStatsResponse)
 }
@@ -30327,6 +30342,7 @@ RangeStatsResponse::~RangeStatsResponse() {
 void RangeStatsResponse::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete mvcc_stats_;
+  if (this != internal_default_instance()) delete range_info_;
 }
 
 void RangeStatsResponse::SetCachedSize(int size) const {
@@ -30352,6 +30368,10 @@ void RangeStatsResponse::Clear() {
     delete mvcc_stats_;
   }
   mvcc_stats_ = NULL;
+  if (GetArenaNoVirtual() == NULL && range_info_ != NULL) {
+    delete range_info_;
+  }
+  range_info_ = NULL;
   queries_per_second_ = 0;
   _internal_metadata_.Clear();
 }
@@ -30408,6 +30428,18 @@ bool RangeStatsResponse::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.RangeInfo range_info = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_range_info()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -30449,6 +30481,12 @@ void RangeStatsResponse::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteDouble(3, this->queries_per_second(), output);
   }
 
+  // .cockroach.roachpb.RangeInfo range_info = 4;
+  if (this->has_range_info()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4, this->_internal_range_info(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RangeStatsResponse)
@@ -30470,6 +30508,13 @@ size_t RangeStatsResponse::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *mvcc_stats_);
+  }
+
+  // .cockroach.roachpb.RangeInfo range_info = 4;
+  if (this->has_range_info()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *range_info_);
   }
 
   // double queries_per_second = 3;
@@ -30500,6 +30545,9 @@ void RangeStatsResponse::MergeFrom(const RangeStatsResponse& from) {
   if (from.has_mvcc_stats()) {
     mutable_mvcc_stats()->::cockroach::storage::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
   }
+  if (from.has_range_info()) {
+    mutable_range_info()->::cockroach::roachpb::RangeInfo::MergeFrom(from.range_info());
+  }
   if (from.queries_per_second() != 0) {
     set_queries_per_second(from.queries_per_second());
   }
@@ -30524,6 +30572,7 @@ void RangeStatsResponse::InternalSwap(RangeStatsResponse* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(mvcc_stats_, other->mvcc_stats_);
+  swap(range_info_, other->range_info_);
   swap(queries_per_second_, other->queries_per_second_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
