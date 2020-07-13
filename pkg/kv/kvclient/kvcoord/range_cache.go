@@ -39,6 +39,8 @@ import (
 // RangeCache.
 type rangeCacheKey roachpb.RKey
 
+var maxCacheKey interface{} = rangeCacheKey(roachpb.RKeyMax)
+
 func (a rangeCacheKey) String() string {
 	return roachpb.Key(a).String()
 }
@@ -894,7 +896,7 @@ func (rdc *RangeDescriptorCache) insertLockedInner(
 		// Before adding a new entry, make sure we clear out any
 		// pre-existing, overlapping entries which might have been
 		// re-inserted due to concurrent range lookups.
-		ok, newerEntry := rdc.clearOlderOverlapping(ctx, ent)
+		ok, newerEntry := rdc.clearOlderOverlappingLocked(ctx, ent)
 		if !ok {
 			// The descriptor we tried to insert is already in the cache, or is stale.
 			// We might have gotten a newer cache entry, if the descriptor in the
@@ -917,7 +919,15 @@ func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCache
 	return entry.Value.(*kvbase.RangeCacheEntry)
 }
 
-// clearOlderOverlapping clears any stale cache entries which overlap the
+func (rdc *RangeDescriptorCache) clearOlderOverlapping(
+	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
+) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
+	rdc.rangeCache.Lock()
+	defer rdc.rangeCache.Unlock()
+	return rdc.clearOlderOverlappingLocked(ctx, newEntry)
+}
+
+// clearOlderOverlappingLocked clears any stale cache entries which overlap the
 // specified descriptor. Returns true if the clearing succeeds, and false if any
 // overlapping newer descriptor is found (or if the descriptor we're trying to
 // insert is already in the cache). If false is returned, a cache entry might
@@ -927,60 +937,44 @@ func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCache
 //
 // Note that even if false is returned, older descriptors are still cleared from
 // the cache.
-func (rdc *RangeDescriptorCache) clearOlderOverlapping(
+func (rdc *RangeDescriptorCache) clearOlderOverlappingLocked(
 	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
 ) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
+	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.Desc)
 	startMeta := keys.RangeMetaKey(newEntry.Desc.StartKey)
-	endMeta := keys.RangeMetaKey(newEntry.Desc.EndKey)
 	var entriesToEvict []*cache.Entry
 	newest := true
 
-	// Try to clear the descriptor that covers the end key of desc, if any. For
-	// example, if we are inserting a [/Min, "m") descriptor, we should check if
-	// we should evict an existing [/Min, /Max) descriptor.
-	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(endMeta))
-	if ok {
-		cached := rdc.getValue(entry)
-		// It might be possible that the range descriptor immediately following
-		// desc.EndKey does not contain desc.EndKey, so we explicitly check that it
-		// overlaps. For example, if we are inserting ["a", "c"), we don't want to
-		// check ["c", "d"). We do, however, want to check ["b", "c"), which is why
-		// the end key is inclusive.
-		if cached.Desc.StartKey.Less(newEntry.Desc.EndKey) && !cached.Desc.EndKey.Less(newEntry.Desc.EndKey) {
-			if newEntry.NewerThan(cached) {
-				entriesToEvict = append(entriesToEvict, entry)
-			} else {
-				// A newer descriptor already exists in cache.
-				newest = false
-
-				// If we found a similar, but newer, descriptor, return it. There's no
-				// point in continuing - there cannot be any other overlapping
-				// descriptors in the cache.
-				if descsCompatible(&cached.Desc, &newEntry.Desc) {
-					return false, cached
-				}
-			}
-		}
-	}
-
-	// Try to clear any descriptors whose end key is contained by the descriptor
-	// we are inserting. We iterate from the range meta key after
-	// RangeMetaKey(desc.StartKey) to RangeMetaKey(desc.EndKey) to avoid clearing
-	// the descriptor that ends when desc starts. For example, if we are
-	// inserting ["b", "c"), we should not evict ["a", "b").
-	//
-	// Descriptors could be cleared from the cache in the event of a merge or a
-	// lot of concurrency. For example, if ranges ["a", "b") and ["b", "c") are
-	// merged, we should clear both of these if we are inserting ["a", "c").
-	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) bool {
+	// Clear any descriptors overlapping the descriptor newEntry. We iterate from
+	// the range meta key after RangeMetaKey(desc.StartKey) to the end of the key
+	// space and we stop when we hit a descriptor to the right of newEntry. Notice
+	// the startMeta.Next() we use for the start key to avoid clearing the
+	// descriptor that ends when newEntry starts: for example, if we are inserting
+	// ["b", "c"), we should not evict ["a", "b").
+	var newerFound *kvbase.RangeCacheEntry
+	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) (exit bool) {
 		cached := rdc.getValue(e)
+		// Stop when we hit a descriptor to the right of newEntry. The end key is
+		// exclusive, so if newEntry is [a,b) and we hit [b,c), we stop.
+		if newEntry.Desc.EndKey.Compare(cached.Desc.StartKey) <= 0 {
+			return true
+		}
+
 		if newEntry.NewerThan(cached) {
 			entriesToEvict = append(entriesToEvict, e)
 		} else {
 			newest = false
+			if descsCompatible(&cached.Desc, &newEntry.Desc) {
+				newerFound = cached
+				// We've found a similar descriptor in the cache; there can't be any
+				// other overlapping ones so let's stop the iteration.
+				return true
+			}
+			// We've found a newer descriptor in the cache. We'll continue iterating
+			// as there might still be older overlapping descriptors.
 		}
-		return false
-	}, rangeCacheKey(startMeta.Next()), rangeCacheKey(endMeta))
+		return false // continue iterating
+	}, rangeCacheKey(startMeta.Next()), maxCacheKey)
 
 	for _, e := range entriesToEvict {
 		if log.V(2) {
@@ -988,5 +982,18 @@ func (rdc *RangeDescriptorCache) clearOlderOverlapping(
 		}
 		rdc.rangeCache.cache.DelEntry(e)
 	}
-	return newest, nil
+	return newest, newerFound
+}
+
+// all returns all the entries in the cache.
+func (rdc *RangeDescriptorCache) all() []*kvbase.RangeCacheEntry {
+	rdc.rangeCache.RLock()
+	defer rdc.rangeCache.RUnlock()
+	var res []*kvbase.RangeCacheEntry
+	rdc.rangeCache.cache.DoEntry(func(e *cache.Entry) bool {
+		entry := rdc.getValue(e)
+		res = append(res, entry)
+		return false
+	})
+	return res
 }

@@ -171,8 +171,10 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
+	var err error
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
-		rngInfo, err := ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
+		var rngInfo EvictionToken
+		rngInfo, err = ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
 		// getRoutingInfo may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
@@ -192,9 +194,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	}
 
 	// Check for an early exit from the retry loop.
-	if err := ri.ds.deduceRetryEarlyExitError(ctx); err != nil {
-		ri.err = err
+	if deducedErr := ri.ds.deduceRetryEarlyExitError(ctx); deducedErr != nil {
+		ri.err = deducedErr
 	} else {
-		ri.err = errors.Errorf("RangeIterator failed to seek to %s", key)
+		ri.err = errors.Wrapf(err, "RangeIterator failed to seek to %s", key)
 	}
 }
