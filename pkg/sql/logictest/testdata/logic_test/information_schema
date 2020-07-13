@@ -1478,6 +1478,40 @@ num_prec    rowid        64                 2                        0          
 statement ok
 DROP TABLE num_prec
 
+statement ok
+CREATE TABLE time_prec (
+  a TIME, 
+  b TIME(0),
+  c TIMETZ,
+  d TIMETZ(1),
+  e TIMESTAMP, 
+  f TIMESTAMP(2), 
+  g TIMESTAMPTZ,
+  h TIMESTAMPTZ(3),
+  i INTERVAL,
+  j INTERVAL(6))
+
+query TTIIII colnames
+SELECT table_name, column_name, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'time_prec'
+----
+table_name  column_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision
+time_prec   a            NULL               NULL                     NULL           6
+time_prec   b            NULL               NULL                     NULL           0
+time_prec   c            NULL               NULL                     NULL           6
+time_prec   d            NULL               NULL                     NULL           1
+time_prec   e            NULL               NULL                     NULL           6
+time_prec   f            NULL               NULL                     NULL           2
+time_prec   g            NULL               NULL                     NULL           6
+time_prec   h            NULL               NULL                     NULL           3
+time_prec   i            NULL               NULL                     NULL           6
+time_prec   j            NULL               NULL                     NULL           6
+time_prec   rowid        64                 2                        0              NULL
+
+statement ok
+DROP TABLE time_prec
+
 ## information_schema.key_column_usage
 ## information_schema.referential_constraints
 
