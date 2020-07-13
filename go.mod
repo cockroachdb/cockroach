@@ -40,7 +40,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
-	github.com/cockroachdb/pebble v0.0.0-20200701140535-d845c8c2d870
+	github.com/cockroachdb/pebble v0.0.0-20200713154309-36c1b9c7a833
 	github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
