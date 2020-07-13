@@ -67,7 +67,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		junkDescriptorKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := sqlbase.NewInitialDatabaseDescriptor(junkDescriptorID, "junk")
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
 			return txn.Put(ctx, junkDescriptorKey, junkDescriptor.DescriptorProto())

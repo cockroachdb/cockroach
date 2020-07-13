@@ -1488,7 +1488,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(r.codec.ForSystemTenant()); err != nil {
 			return err
 		}
 		return txn.Run(ctx, b)
