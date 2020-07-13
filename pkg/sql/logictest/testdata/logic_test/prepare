@@ -1277,3 +1277,71 @@ query I
 EXECUTE tview_prep
 ----
 2
+
+# Use of SELECT FOR UPDATE/SHARE in ReadOnly Transaction
+
+statement ok
+CREATE TABLE t3 (i INT PRIMARY KEY)
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR NO KEY UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR KEY SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR KEY SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+DROP TABLE t3
