@@ -22,7 +22,7 @@ SELECT * FROM a JOIN b ON a.x=b.x ORDER BY a.y
 sort
  ├── columns: x:1!null y:2 x:3!null
  ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=1000, null(3)=0]
- ├── cost: 2319.37569
+ ├── cost: 2319.38569
  ├── key: (3)
  ├── fd: (1)-->(2), (1)==(3), (3)==(1)
  ├── ordering: +2
@@ -30,7 +30,7 @@ sort
       ├── columns: a.x:1!null y:2 b.x:3!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=1000, null(3)=0]
-      ├── cost: 2100.05
+      ├── cost: 2100.06
       ├── key: (3)
       ├── fd: (1)-->(2), (1)==(3), (3)==(1)
       ├── scan a
