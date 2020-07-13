@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -74,27 +75,38 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 	}
 	cmd := fmt.Sprintf("env=%s args=%s", c.Env, c.Args)
 
-	var path string
+	var paths []string
 	if c.Args[0] == `mkrelease` {
-		path = filepath.Join(c.Dir, `cockroach`)
+		path := filepath.Join(c.Dir, `cockroach`)
 		for _, arg := range c.Args {
 			if strings.HasPrefix(arg, `SUFFIX=`) {
 				path += strings.TrimPrefix(arg, `SUFFIX=`)
 			}
 		}
+		paths = append(paths, path)
+		ext := release.SharedLibraryExtensionFromBuildType(c.Args[1])
+		for _, lib := range release.CRDBSharedLibraries {
+			paths = append(paths, filepath.Join(c.Dir, "lib", lib+ext))
+		}
+		// Make the lib directory as it exists after `make`.
+		if err := os.MkdirAll(filepath.Join(c.Dir, "lib"), 0755); err != nil {
+			return nil, err
+		}
 	} else if c.Args[0] == `make` && c.Args[1] == `archive` {
 		for _, arg := range c.Args {
 			if strings.HasPrefix(arg, `ARCHIVE=`) {
-				path = filepath.Join(c.Dir, strings.TrimPrefix(arg, `ARCHIVE=`))
+				paths = append(paths, filepath.Join(c.Dir, strings.TrimPrefix(arg, `ARCHIVE=`)))
 				break
 			}
 		}
 	}
 
-	if path != `` {
+	for _, path := range paths {
 		if err := ioutil.WriteFile(path, []byte(cmd), 0666); err != nil {
 			return nil, err
 		}
+	}
+	if len(paths) > 0 {
 		r.cmds = append(r.cmds, cmd)
 	}
 
@@ -154,14 +166,26 @@ func TestProvisional(t *testing.T) {
 					"CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.darwin-amd64.00SHA00",
+				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib",
+				"s3://cockroach//cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib",
 				"s3://cockroach//cockroach/cockroach.linux-gnu-amd64.00SHA00 " +
 					"CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.linux-gnu-amd64.00SHA00",
+				"s3://cockroach//cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so",
+				"s3://cockroach//cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so",
 				"s3://cockroach//cockroach/cockroach.windows-amd64.00SHA00.exe " +
 					"CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.windows-amd64.00SHA00.exe",
+				"s3://cockroach//cockroach/lib/libgeos.windows-amd64.00SHA00.dll CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.windows-amd64.00SHA00.dll",
+				"s3://cockroach//cockroach/lib/libgeos_c.windows-amd64.00SHA00.dll CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos_c.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.windows-amd64.00SHA00.dll",
 			},
 		},
 	}
