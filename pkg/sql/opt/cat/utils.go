@@ -348,3 +348,28 @@ func formatFamily(family Family, buf *bytes.Buffer) {
 	}
 	buf.WriteString(")")
 }
+
+// InterleaveAncestorDescendant returns ok=true if a and b are interleaved
+// indexes and one of them is the ancestor of the other.
+// If a is an ancestor of b, aIsAncestor is true.
+// If b is an ancestor of a, aIsAncestor is false.
+func InterleaveAncestorDescendant(a, b Index) (ok bool, aIsAncestor bool) {
+	aCount := a.InterleaveAncestorCount()
+	bCount := b.InterleaveAncestorCount()
+	// If the indexes are in an ancestor/descendant relationship, the ancestor has
+	// a smaller ancestor count.
+	switch {
+	case aCount < bCount:
+		aIsAncestor = true
+	case aCount > bCount:
+		a, b = b, a
+		aCount, bCount = bCount, aCount
+	default:
+		return false, false
+	}
+	tabID, idxID, _ := b.InterleaveAncestor(aCount)
+	if tabID == a.Table().ID() && idxID == a.ID() {
+		return true, aIsAncestor
+	}
+	return false, false
+}
