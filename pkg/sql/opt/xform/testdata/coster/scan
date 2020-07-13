@@ -38,13 +38,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 642.134762
+ ├── cost: 642.144762
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=4666.66667, distinct(1)=4666.66667, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.66667, null(1,2)=0]
- │    ├── cost: 641.924762
+ │    ├── cost: 641.934762
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -69,14 +69,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 52.4648066
+ ├── cost: 52.4748066
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
  │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
- │    ├── cost: 52.2548066
+ │    ├── cost: 52.2648066
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -106,7 +106,7 @@ select
  ├── cardinality: [0 - 1000]
  ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1030.02
+ ├── cost: 1030.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -127,7 +127,7 @@ select
  ├── cardinality: [0 - 2000]
  ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1030.02
+ ├── cost: 1030.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
