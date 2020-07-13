@@ -447,10 +447,9 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
 	return c.CalculateMaxResults(b.evalCtx, indexCols, rel.NotNullCols)
 }
 
-func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
-	md := b.mem.Metadata()
-	tab := md.Table(scan.Table)
-
+func (b *Builder) scanParams(
+	tab cat.Table, scan *memo.ScanExpr,
+) (exec.ScanParams, opt.ColMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
@@ -462,7 +461,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
 		}
-		return execPlan{}, err
+		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
 	locking := scan.Locking
@@ -472,12 +471,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Raise error if row-level locking is part of a read-only transaction.
 	if locking != nil && locking.Strength > tree.ForNone && b.evalCtx.TxnReadOnly {
-		return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 			"cannot execute %s in a read-only transaction", locking.Strength.String())
 	}
 
-	needed, output := b.getColumns(scan.Cols, scan.Table)
-	res := execPlan{outputCols: output}
+	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
 
 	// Get the estimated row count from the statistics.
 	// Note: if this memo was originally created as part of a PREPARE
@@ -512,7 +510,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
-	params := exec.ScanParams{
+	return exec.ScanParams{
 		NeededCols:         needed,
 		IndexConstraint:    scan.Constraint,
 		InvertedConstraint: scan.InvertedConstraint,
@@ -523,8 +521,17 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		Parallelize:       parallelize,
 		Locking:           locking,
 		EstimatedRowCount: rowCount,
-	}
+	}, outputMap, nil
+}
 
+func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+	params, outputCols, err := b.scanParams(tab, scan)
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{outputCols: outputCols}
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -543,8 +550,7 @@ func (b *Builder) buildSelect(sel *memo.SelectExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	ctx := input.makeBuildScalarCtx()
-	filter, err := b.buildScalar(&ctx, &sel.Filters)
+	filter, err := b.buildScalarWithMap(input.outputCols, &sel.Filters)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -879,6 +885,12 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
 	}
 
+	if plan, ok, err := b.tryBuildInterleavedJoin(join); err != nil {
+		return execPlan{}, err
+	} else if ok {
+		return plan, nil
+	}
+
 	joinType := joinOpToJoinType(join.JoinType)
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
@@ -906,6 +918,140 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 	return ep, nil
 }
 
+// tryBuildInterleavedJoin attempts to build the merge-sort as an interleaved
+// join.
+//
+// We can use an interleaved join when all following conditions are satisfied:
+//  1. Both sides of the join are Scans or Filter->Scan complexes.
+//  2. The scans have the same direction.
+//  3. The scans don't have limits.
+//  4. The tables are interleaved and one is the ancestor of the other.
+//  5. The merge join equality columns map exactly to the ancestor index key
+//     columns and the corresponding prefix of the descendant index.
+//
+// TODO(radu): this matching belongs in a rule (but for that we need to design
+// a proper optimizer operator).
+func (b *Builder) tryBuildInterleavedJoin(join *memo.MergeJoinExpr) (_ execPlan, ok bool, _ error) {
+	if !b.allowInterleavedJoins {
+		return execPlan{}, false, nil
+	}
+
+	getScanAndFilters := func(input memo.RelExpr) (scan *memo.ScanExpr, filters memo.FiltersExpr) {
+		if sel, isSelect := input.(*memo.SelectExpr); isSelect {
+			filters = sel.Filters
+			input = sel.Input
+		}
+		if scan, isScan := input.(*memo.ScanExpr); isScan {
+			return scan, filters
+		}
+		return nil, nil
+	}
+	leftScan, leftFilters := getScanAndFilters(join.Left)
+	if leftScan == nil {
+		// Condition 1 is not satisfied.
+		return execPlan{}, false, nil
+	}
+	rightScan, rightFilters := getScanAndFilters(join.Right)
+	if rightScan == nil {
+		// Condition 1 is not satisfied.
+		return execPlan{}, false, nil
+	}
+	reverse := ordering.ScanIsReverse(leftScan, &leftScan.RequiredPhysical().Ordering)
+	rightReverse := ordering.ScanIsReverse(rightScan, &rightScan.RequiredPhysical().Ordering)
+	if rightReverse != reverse {
+		// Condition 2 is not satisfied.
+		return execPlan{}, false, nil
+	}
+	if leftScan.HardLimit != 0 || rightScan.HardLimit != 0 {
+		// Condition 3 is not satisfied.
+		return execPlan{}, false, nil
+	}
+
+	md := b.mem.Metadata()
+	leftTab := md.Table(leftScan.Table)
+	leftIdx := leftTab.Index(leftScan.Index)
+	rightTab := md.Table(rightScan.Table)
+	rightIdx := rightTab.Index(rightScan.Index)
+
+	ok, leftIsAncestor := cat.InterleaveAncestorDescendant(leftIdx, rightIdx)
+	if !ok {
+		// Condition 4 is not satisfied.
+		return execPlan{}, false, nil
+	}
+	ancestorIdx := leftIdx
+	if !leftIsAncestor {
+		ancestorIdx = rightIdx
+	}
+	if ancestorIdx.LaxKeyColumnCount() != len(join.LeftEq) {
+		// Condition 5 is not satisfied.
+		return execPlan{}, false, nil
+	}
+	for i := range join.LeftEq {
+		if join.LeftEq[i].ID() != leftScan.Table.ColumnID(leftIdx.Column(i).Ordinal) {
+			// Condition 5 is not satisfied.
+			return execPlan{}, false, nil
+		}
+		if join.RightEq[i].ID() != rightScan.Table.ColumnID(rightIdx.Column(i).Ordinal) {
+			// Condition 5 is not satisfied.
+			return execPlan{}, false, nil
+		}
+	}
+
+	// All conditions are satisfied; start the build.
+	var leftFilterExpr, rightFilterExpr, onExpr tree.TypedExpr
+
+	leftScanParams, leftScanColMap, err := b.scanParams(leftTab, leftScan)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+
+	if len(leftFilters) > 0 {
+		leftFilterExpr, err = b.buildScalarWithMap(leftScanColMap, &leftFilters)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+	}
+	rightScanParams, rightScanColMap, err := b.scanParams(rightTab, rightScan)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+	if len(rightFilters) > 0 {
+		rightFilterExpr, err = b.buildScalarWithMap(rightScanColMap, &rightFilters)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+	}
+
+	joinType := joinOpToJoinType(join.JoinType)
+
+	joinCols := joinOutputMap(leftScanColMap, rightScanColMap)
+	if len(join.On) > 0 {
+		onExpr, err = b.buildScalarWithMap(joinCols, &join.On)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+	}
+	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+		// For semi and anti join, only the left columns are output.
+		joinCols = leftScanColMap
+	}
+
+	ep := execPlan{outputCols: joinCols}
+
+	ep.root, err = b.factory.ConstructInterleavedJoin(
+		joinType,
+		leftTab, leftIdx, leftScanParams, leftFilterExpr,
+		rightTab, rightIdx, rightScanParams, rightFilterExpr,
+		leftIsAncestor,
+		onExpr,
+		ep.reqOrdering(join),
+	)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+	return ep, true, nil
+}
+
 // initJoinBuild builds the inputs to the join as well as the ON expression.
 func (b *Builder) initJoinBuild(
 	leftChild memo.RelExpr,
@@ -924,13 +1070,8 @@ func (b *Builder) initJoinBuild(
 
 	allCols := joinOutputMap(leftPlan.outputCols, rightPlan.outputCols)
 
-	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(allCols)),
-		ivarMap: allCols,
-	}
-
 	if len(filters) != 0 {
-		onExpr, err = b.buildScalar(&ctx, &filters)
+		onExpr, err = b.buildScalarWithMap(allCols, &filters)
 		if err != nil {
 			return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 		}

@@ -22,80 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
-
-func setTestEqColForSide(
-	colName string, side *scanNode, equalityIndices *[]exec.NodeColumnOrdinal,
-) error {
-	colFound := false
-
-	for i, leftCol := range side.cols {
-		if colName == leftCol.Name {
-			*equalityIndices = append(*equalityIndices, exec.NodeColumnOrdinal(i))
-			colFound = true
-			break
-		}
-	}
-	if !colFound {
-		return errors.Errorf("column %s not found in %s", colName, side.desc.Name)
-	}
-	return nil
-}
-
-func setTestEqCols(n *joinNode, colNames []string) error {
-	left := n.left.plan.(*scanNode)
-	right := n.right.plan.(*scanNode)
-
-	n.pred = &joinPredicate{}
-	n.mergeJoinOrdering = nil
-
-	for _, colName := range colNames {
-		if colName == "" {
-			continue
-		}
-
-		if err := setTestEqColForSide(colName, left, &n.pred.leftEqualityIndices); err != nil {
-			return err
-		}
-		if err := setTestEqColForSide(colName, right, &n.pred.rightEqualityIndices); err != nil {
-			return err
-		}
-	}
-
-	n.mergeJoinOrdering = computeMergeJoinOrdering(
-		left.reqOrdering,
-		right.reqOrdering,
-		n.pred.leftEqualityIndices,
-		n.pred.rightEqualityIndices,
-	)
-
-	return nil
-}
-
-func genPermutations(slice []string) [][]string {
-	if len(slice) == 0 {
-		return [][]string{{}}
-	}
-
-	var out [][]string
-	for i, str := range slice {
-		recurse := append([]string{}, slice[:i]...)
-		recurse = append(recurse, slice[i+1:]...)
-		for _, subperms := range genPermutations(recurse) {
-			out = append(out, append([]string{str}, subperms...))
-		}
-	}
-
-	return out
-}
 
 var tableNames = map[string]bool{
 	"parent1":     true,
@@ -227,142 +160,6 @@ func shortToLongKey(short string) string {
 	return string(long[:len(long)-1])
 }
 
-func TestUseInterleavedJoin(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
-
-	// Only test cases on the full interleave prefix between the two
-	// tables should return true.
-	for _, tc := range []struct {
-		table1   string
-		table2   string
-		eqCols   string
-		expected bool
-	}{
-		// Refer to comment above CreateTestInterleavedHierarchy for
-		// table schemas.
-
-		// Simple parent-child case.
-		// parent1-child1 share interleave prefix (pid1).
-		{"parent1", "child1", "pid1", true},
-		{"parent1", "child1", "pid1,v", false},
-		{"parent1", "child1", "", false},
-		{"parent1", "child1", "v", false},
-		// Parent-grandchild case.
-		// parent1-grandchild1 share interleave prefix (pid1).
-		{"parent1", "grandchild1", "pid1", true},
-		{"parent1", "grandchild1", "pid1,v", false},
-		{"parent1", "grandchild1", "", false},
-		{"parent1", "grandchild1", "v", false},
-		// Multiple-column interleave prefix.
-		// child1-grandchild1 share interleave prefix (pid1, cid1,
-		// cid2).
-		{"child1", "grandchild1", "pid1,cid1,cid2", true},
-		{"child1", "grandchild1", "pid1,cid1,cid2,v", false},
-		{"child1", "grandchild1", "", false},
-		{"child1", "grandchild1", "v", false},
-		// TODO(richardwu): update these once prefix/subset of
-		// interleave prefixes are permitted.
-		{"child1", "grandchild1", "cid1", false},
-		{"child1", "grandchild1", "cid2", false},
-		{"child1", "grandchild1", "cid1,v", false},
-		{"child1", "grandchild1", "cid2,v", false},
-		{"child1", "grandchild1", "cid1,cid2", false},
-		{"child1", "grandchild1", "cid1,cid2,v", false},
-		{"child1", "grandchild1", "pid1,cid1", false},
-		{"child1", "grandchild1", "pid1,cid2", false},
-		{"child1", "grandchild1", "pid1,cid1,v", false},
-		{"child1", "grandchild1", "pid1,cid2,v", false},
-		// Common ancestor example.
-		{"child1", "child2", "", false},
-		// TODO(richardwu): update this when common ancestor
-		// interleaved joins are possible.
-		{"child1", "child2", "pid1", false},
-	} {
-		// Run the subtests with the tables in both positions (left and
-		// right).
-		for i := 0; i < 2; i++ {
-			// Run every permutation of the equality columns (just
-			// to ensure mergeJoinOrdering is invariant since we
-			// rely on it to correspond with the primary index of
-			// the ancestor).
-			eqCols := strings.Split(tc.eqCols, ",")
-			for _, colNames := range genPermutations(eqCols) {
-				testName := fmt.Sprintf("%s-%s-%s", tc.table1, tc.table2, strings.Join(colNames, ","))
-				t.Run(testName, func(t *testing.T) {
-					join, err := newTestJoinNode(kvDB, tc.table1, tc.table2)
-					if err != nil {
-						t.Fatal(err)
-					}
-					join.joinType = sqlbase.InnerJoin
-
-					if err := setTestEqCols(join, colNames); err != nil {
-						t.Fatal(err)
-					}
-					join.mergeJoinOrdering = computeMergeJoinOrdering(
-						planReqOrdering(join.left.plan),
-						planReqOrdering(join.right.plan),
-						join.pred.leftEqualityIndices,
-						join.pred.rightEqualityIndices,
-					)
-
-					actual := useInterleavedJoin(join)
-
-					if tc.expected != actual {
-						t.Errorf("expected useInterleaveJoin to return %t, actual %t", tc.expected, actual)
-					}
-				})
-			}
-			// Rerun the same subtests but flip the tables
-			tc.table1, tc.table2 = tc.table2, tc.table1
-		}
-	}
-
-	// Test that a join from an interleaved column to a non-interleaved column
-	// doesn't get planned as an interleaved table join, even if the
-	// non-interleaved column is constant and is given a merge join ordering.
-	t.Run("MismatchedJoin", func(t *testing.T) {
-		join, err := newTestJoinNode(kvDB, "parent1", "child1")
-		if err != nil {
-			t.Fatal(err)
-		}
-		join.joinType = sqlbase.InnerJoin
-
-		join.pred = &joinPredicate{}
-		join.mergeJoinOrdering = nil
-		if err := setTestEqColForSide("pid1", join.left.plan.(*scanNode), &join.pred.leftEqualityIndices); err != nil {
-			t.Fatal(err)
-		}
-		if err := setTestEqColForSide("v", join.right.plan.(*scanNode), &join.pred.rightEqualityIndices); err != nil {
-			t.Fatal(err)
-		}
-		// Set the merge join ordering to idx 0 - this says that the column `pid1`
-		// and `v` have the same ordering. This can be true if `v` has been
-		// constrained to a constant value. We shouldn't plan an interleaved table
-		// join in this case, even though the left equality columns are a prefix
-		// of the interleaved columns, because the right equality columns are not
-		// part of the interleaved columns.
-		// See issue #25838 for a case where this could happen.
-		join.mergeJoinOrdering = sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{
-				ColIdx:    0,
-				Direction: encoding.Ascending,
-			},
-		}
-
-		actual := useInterleavedJoin(join)
-
-		if actual {
-			t.Errorf("expected useInterleaveJoin to return %t, actual %t", false, actual)
-		}
-	})
-}
-
 func TestMaximalJoinPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -407,7 +204,11 @@ func TestMaximalJoinPrefix(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
-			join, err := newTestJoinNode(kvDB, tc.table1, tc.table2)
+			ancestor, err := newTestScanNode(kvDB, tc.table1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descendant, err := newTestScanNode(kvDB, tc.table2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -416,8 +217,6 @@ func TestMaximalJoinPrefix(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			ancestor, descendant := join.interleavedNodes()
 
 			// Compute maximal join prefix.
 			actualKey, truncated, err := maximalJoinPrefix(ancestor, descendant, input)
@@ -735,7 +534,11 @@ func TestAlignInterleavedSpans(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
-			join, err := newTestJoinNode(kvDB, tc.table1, tc.table2)
+			ancestor, err := newTestScanNode(kvDB, tc.table1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descendant, err := newTestScanNode(kvDB, tc.table2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -750,7 +553,7 @@ func TestAlignInterleavedSpans(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			actual, err := alignInterleavedSpans(join, ancsParts, descParts)
+			actual, err := alignInterleavedSpans(ancestor, descendant, ancsParts, descParts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -765,48 +568,6 @@ func TestAlignInterleavedSpans(t *testing.T) {
 			}
 		})
 	}
-}
-
-// computeMergeJoinOrdering determines if merge-join can be used to perform a join.
-//
-// It takes the orderings of the two data sources that are to be joined on a set
-// of equality columns (the join condition is that the value for the column
-// colA[i] equals the value for column colB[i]).
-//
-// If merge-join can be used, the function returns a ColumnOrdering that refers
-// to the equality columns by their index in colA/colB. Specifically column i in
-// the returned ordering refers to column colA[i] for A and colB[i] for B. This
-// is the ordering that must be used by the merge-join.
-//
-// The returned ordering can be partial, i.e. only contains a subset of the
-// equality columns.
-func computeMergeJoinOrdering(
-	a, b sqlbase.ColumnOrdering, colA, colB []exec.NodeColumnOrdinal,
-) sqlbase.ColumnOrdering {
-	if len(colA) != len(colB) {
-		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
-	}
-	var result sqlbase.ColumnOrdering
-	for i := 0; i < len(a) && i < len(b); i++ {
-		found := false
-		if a[i].Direction != b[i].Direction {
-			break
-		}
-		for j := range colA {
-			if int(colA[j]) == a[i].ColIdx && int(colB[j]) == b[i].ColIdx {
-				result = append(result, sqlbase.ColumnOrderInfo{
-					ColIdx:    j,
-					Direction: a[i].Direction,
-				})
-				found = true
-				break
-			}
-		}
-		if !found {
-			break
-		}
-	}
-	return result
 }
 
 func TestInterleavedNodes(t *testing.T) {

@@ -431,6 +431,24 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	)
 }
 
+// ConstructInterleavedJoin is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructInterleavedJoin(
+	joinType sqlbase.JoinType,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	leftParams exec.ScanParams,
+	leftFilter tree.TypedExpr,
+	rightTable cat.Table,
+	rightIndex cat.Index,
+	rightParams exec.ScanParams,
+	rightFilter tree.TypedExpr,
+	leftIsAncestor bool,
+	onCond tree.TypedExpr,
+	reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: interleaved join")
+}
+
 func populateAggFuncSpec(
 	spec *execinfrapb.AggregatorSpec_Aggregation,
 	funcName string,

@@ -316,6 +316,63 @@ func (ef *execFactory) ConstructMergeJoin(
 	return node, nil
 }
 
+// ConstructInterleavedJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructInterleavedJoin(
+	joinType sqlbase.JoinType,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	leftParams exec.ScanParams,
+	leftFilter tree.TypedExpr,
+	rightTable cat.Table,
+	rightIndex cat.Index,
+	rightParams exec.ScanParams,
+	rightFilter tree.TypedExpr,
+	leftIsAncestor bool,
+	onCond tree.TypedExpr,
+	reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	n := &interleavedJoinNode{
+		joinType:       joinType,
+		leftIsAncestor: leftIsAncestor,
+	}
+
+	left, err := ef.ConstructScan(leftTable, leftIndex, leftParams, nil /* reqOrdering */)
+	if err != nil {
+		return nil, err
+	}
+	n.left = left.(*scanNode)
+
+	right, err := ef.ConstructScan(rightTable, rightIndex, rightParams, nil /* reqOrdering */)
+	if err != nil {
+		return nil, err
+	}
+	n.right = right.(*scanNode)
+
+	if leftFilter != nil {
+		f := &filterNode{
+			source: asDataSource(n.left),
+		}
+		ivarHelper := tree.MakeIndexedVarHelper(f, len(f.source.columns))
+		n.leftFilter = ivarHelper.Rebind(leftFilter)
+	}
+
+	if rightFilter != nil {
+		f := &filterNode{
+			source: asDataSource(n.right),
+		}
+		ivarHelper := tree.MakeIndexedVarHelper(f, len(f.source.columns))
+		n.rightFilter = ivarHelper.Rebind(rightFilter)
+	}
+
+	pred := makePredicate(joinType, n.left.resultColumns, n.right.resultColumns)
+	n.columns = pred.cols
+	n.onCond = pred.iVarHelper.Rebind(onCond)
+
+	n.reqOrdering = ReqOrdering(reqOrdering)
+
+	return n, nil
+}
+
 // ConstructScalarGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,

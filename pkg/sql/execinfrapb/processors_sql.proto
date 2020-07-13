@@ -664,7 +664,7 @@ message AggregatorSpec {
 // performs intermediate filtering on rows from each table, and performs a
 // join on the rows from the 2+ tables.
 //
-// Limitations: the InterleavedReaderJoiner currently supports only equality INNER joins
+// Limitations: the InterleavedReaderJoiner currently supports only equality joins
 // on the full interleave prefix.
 // See https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20171025_interleaved_table_joins.md.
 //
@@ -703,8 +703,8 @@ message InterleavedReaderJoinerSpec {
     repeated TableReaderSpan spans = 5 [(gogoproto.nullable) = false];
   }
 
-  // For the common case of two tables, table at index 0 is the left/parent
-  // table and table at index 1 is the right/child table.
+	// The tables can be in any order. The processor figures out internally the
+	// hierarchy between them.
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 
   // Reader component

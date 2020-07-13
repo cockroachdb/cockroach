@@ -32,17 +32,18 @@
 #################
 
 statement ok
-CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT)
+CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT, FAMILY (pid1,pa1))
 
 statement ok
-CREATE TABLE parent2 (pid2 INT PRIMARY KEY, pa2 INT)
+CREATE TABLE parent2 (pid2 INT PRIMARY KEY, pa2 INT, FAMILY (pid2, pa2))
 
 statement ok
 CREATE TABLE child1 (
   pid1 INT,
   cid1 INT,
   ca1 INT,
-  PRIMARY KEY(pid1, cid1)
+  PRIMARY KEY(pid1, cid1),
+  FAMILY (pid1,cid1,ca1)
 )
 INTERLEAVE IN PARENT parent1 (pid1)
 
@@ -52,7 +53,8 @@ CREATE TABLE child2 (
   cid2 INT,
   cid3 INT,
   ca2 INT,
-  PRIMARY KEY(pid1, cid2, cid3)
+  PRIMARY KEY(pid1, cid2, cid3),
+  FAMILY (pid1,cid2,cid3,ca2)
 )
 INTERLEAVE IN PARENT parent1 (pid1)
 
@@ -62,7 +64,8 @@ CREATE TABLE grandchild1 (
   cid1 INT,
   gcid1 INT,
   gca1 INT,
-  PRIMARY KEY(pid1, cid1, gcid1)
+  PRIMARY KEY(pid1, cid1, gcid1),
+  FAMILY (pid1,cid1,gcid1,gca1)
 )
 INTERLEAVE IN PARENT child1 (pid1, cid1)
 
@@ -75,7 +78,8 @@ CREATE TABLE grandchild2 (
   cid3 INT,
   gcid2 INT,
   gca2 INT,
-  PRIMARY KEY(pid1, cid2, cid3, gcid2)
+  PRIMARY KEY(pid1, cid2, cid3, gcid2),
+  FAMILY (pid1, cid2, cid3, gcid2, gca2)
 )
 INTERLEAVE IN PARENT child2 (pid1, cid2, cid3)
 
@@ -178,20 +182,95 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
+#########################
+# Check session setting #
+#########################
+
 statement ok
-SET CLUSTER SETTING sql.distsql.interleaved_joins.enabled = true;
+SET enable_interleaved_joins = false
+
+query TTT
+EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
+----
+·                distribution       full
+·                vectorized         true
+render           ·                  ·
+ └── merge-join  ·                  ·
+      │          type               inner
+      │          equality           (pid1) = (pid1)
+      │          left cols are key  ·
+      │          mergeJoinOrder     +"(pid1=pid1)"
+      ├── scan   ·                  ·
+      │          table              parent1@primary
+      │          spans              FULL SCAN
+      └── scan   ·                  ·
+·                table              child1@primary
+·                spans              FULL SCAN
+
+statement ok
+SET enable_interleaved_joins = true
+
+query TTT
+EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
+----
+·                      distribution  full
+·                      vectorized    true
+render                 ·             ·
+ └── interleaved-join  ·             ·
+·                      type          inner
+·                      left table    parent1@primary
+·                      left spans    FULL SCAN
+·                      right table   child1@primary
+·                      right spans   FULL SCAN
+·                      ancestor      left
 
 #####################
 # Interleaved joins #
 #####################
 
 # Select over two ranges for parent/child with split at children key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
+----
+·                      distribution  full                 ·                             ·
+·                      vectorized    true                 ·                             ·
+render                 ·             ·                    (pid1, pa1, cid1, ca1)        ·
+ │                     render 0      pid1                 ·                             ·
+ │                     render 1      pa1                  ·                             ·
+ │                     render 2      cid1                 ·                             ·
+ │                     render 3      ca1                  ·                             ·
+ └── interleaved-join  ·             ·                    (pid1, pa1, pid1, cid1, ca1)  ·
+·                      type          inner                ·                             ·
+·                      left table    parent1@primary      ·                             ·
+·                      left spans    /3-/5/#              ·                             ·
+·                      right table   child1@primary       ·                             ·
+·                      right spans   /3/#/55/1-/5/#/55/2  ·                             ·
+·                      ancestor      left                 ·                             ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzMUsFu00AQvfMVq3eKYVC9Dr1YiuSKGnAVnOIUgVR8sLzT1JLrNbtrBKry78jeSDgVVMCpN8-89-b5zc497NcWMbbpOn19JQbTijfF5r24Tj9frs-yXCzOs-3V9sM6EAfKc0_oK8Odk-Jik-Wivm1aJcXHbZa_FYu-UTIQn96lReoL8WUIwyWvxDIQZ_n5vFmvxGlQgtBpxXl1xxbxNSQIEQhLlITe6Jqt1WaE7idipr4jDglN1w_Ot13jWkaModNGsWEFgmJXNe2Il_uSUGvDiH9Rc_1S9yfRAyJBD-4wtiRYV-0YcbSnmbWcWf9mcNY5Ni1X37jgSrG50E3H5iQ8csKabxzGeM1dZX4kh4WCUDS72znitwuCnwNCyzdukcgXwcqM3OkThM3gYpFISiJKXlFyij-lkUdpov9KI59omvDxNAXbXneW_-rVw_FsWO3Y35jVg6n50uh6svHlZtJNDcXWeXTpi6zz0PiDc7F8VBweieVDcfRP4nL_7GcAAAD__-nTPX0=
 
 # Swap parent1 and child1 tables.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
+----
+·                      distribution  full                 ·                             ·
+·                      vectorized    true                 ·                             ·
+render                 ·             ·                    (pid1, cid1, ca1, pa1)        ·
+ │                     render 0      pid1                 ·                             ·
+ │                     render 1      cid1                 ·                             ·
+ │                     render 2      ca1                  ·                             ·
+ │                     render 3      pa1                  ·                             ·
+ └── interleaved-join  ·             ·                    (pid1, cid1, ca1, pid1, pa1)  ·
+·                      type          inner                ·                             ·
+·                      left table    child1@primary       ·                             ·
+·                      left spans    /3/#/55/1-/5/#/55/2  ·                             ·
+·                      right table   parent1@primary      ·                             ·
+·                      right spans   /3-/5/#              ·                             ·
+·                      ancestor      right                ·                             ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
 ----
@@ -200,6 +279,19 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzMUtFulEAUffcrJuep6DVlIH
 # Select over two ranges for parent/child with split at grandchild key.
 # Also, rows with pid1 <= 30 should have 4 rows whereas pid1 > 30 should
 # have 3 rows.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
+----
+·                 distribution  full                   ·                             ·
+·                 vectorized    true                   ·                             ·
+interleaved-join  ·             ·                      (pid1, pa1, pid1, cid1, ca1)  +pid1
+·                 type          inner                  ·                             ·
+·                 left table    parent1@primary        ·                             ·
+·                 left spans    /29-/31/#              ·                             ·
+·                 right table   child1@primary         ·                             ·
+·                 right spans   /29/#/55/1-/31/#/55/2  ·                             ·
+·                 ancestor      left                   ·                             ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1]
 ----
@@ -212,12 +304,50 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUUdFu0zAUfecrru5TywyLU_
 # joins).
 # TODO(richardwu): we can remove nodes reading from just one table for INNER
 # joins or LEFT/RIGHT joins.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
+----
+·                      distribution  full             ·                                   ·
+·                      vectorized    true             ·                                   ·
+render                 ·             ·                (pid1, pa1, cid2, cid3, ca2)        +pid1
+ │                     render 0      pid1             ·                                   ·
+ │                     render 1      pa1              ·                                   ·
+ │                     render 2      cid2             ·                                   ·
+ │                     render 3      cid3             ·                                   ·
+ │                     render 4      ca2              ·                                   ·
+ └── interleaved-join  ·             ·                (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+·                      type          inner            ·                                   ·
+·                      left table    parent1@primary  ·                                   ·
+·                      left spans    /12-             ·                                   ·
+·                      right table   child2@primary   ·                                   ·
+·                      right spans   /12/#/56/1-      ·                                   ·
+·                      ancestor      left             ·                                   ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFFv0zAUhd_5FdZ5atlFi9N0D5EmBViATCUZ6RCgkYcovusiZXFwHASq-t9RkklbEQPWvvTN9j3H536WfNdov1XwsQwX4etL0ZlKvEmT9-Iq_HyxeBnFYnIWLS-XHxZTcSd5Pgqa3HBtpThPolgUN2WlXPFxGcVvxaQplZyKT-_CNBT9WnztHGfGp0K6IknPwlS8-jIUMhBqrTjOb7mFfwUJggvCDAQPhDkyQmN0wW2rTS9ZD4ZI_YDvEMq66Wx_nBEKbRj-Gra0FcNHVFs2FeffOeVcsTnXZc3m2AFBsc3Lakhc8LVFn1He5uZncEcFQlqubh5WRkQQxntAqPjaTgJ5ND01vXZYgpB01heBpMClwKNgTsEJsg1Bd_a-2dbmK4YvN_QI0D2HNooNq-22A3mEbPMH6li_0M3xfEv9WLq7lS53ek55uM_p7gTkHi7QbCeg2eECeTsBeYcL9I-RlHLb6Lrl__qdTv-9Wa14HAet7kzBF0YXQ8y4TQbfcKC4tWNVjpuoHkpDgw_N8q_mky2z87vZ3Sd5to_Z28c8f5I52zz7FQAA__8hjUPy
 
 # These rows are all on the same node 1 (gateway).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
+----
+·                      distribution  full                                                                                   ·                                   ·
+·                      vectorized    true                                                                                   ·                                   ·
+render                 ·             ·                                                                                      (pid1, pa1, cid2, cid3, ca2)        +pid1
+ │                     render 0      pid1                                                                                   ·                                   ·
+ │                     render 1      pa1                                                                                    ·                                   ·
+ │                     render 2      cid2                                                                                   ·                                   ·
+ │                     render 3      cid3                                                                                   ·                                   ·
+ │                     render 4      ca2                                                                                    ·                                   ·
+ └── interleaved-join  ·             ·                                                                                      (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+·                      type          inner                                                                                  ·                                   ·
+·                      left table    parent1@primary                                                                        ·                                   ·
+·                      left spans    /1-/1/# /11-/11/# /21-/21/# /31-/31/#                                                  ·                                   ·
+·                      right table   child2@primary                                                                         ·                                   ·
+·                      right spans   /1/#/56/1-/1/#/56/2 /11/#/56/1-/11/#/56/2 /21/#/56/1-/21/#/56/2 /31/#/56/1-/31/#/56/2  ·                                   ·
+·                      ancestor      left                                                                                   ·                                   ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1]
 ----
@@ -225,6 +355,32 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUE2L2zAQvfdXDHOK24FG6c
 
 # Parent-grandchild.
 # We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.
+query TTTTT
+EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+----
+·                      distribution  full                                                                                                                    ·                                           ·
+·                      vectorized    true                                                                                                                    ·                                           ·
+render                 ·             ·                                                                                                                       (pid1, pa1, cid2, cid3, gcid2, gca2)        ·
+ │                     render 0      pid1                                                                                                                    ·                                           ·
+ │                     render 1      pa1                                                                                                                     ·                                           ·
+ │                     render 2      cid2                                                                                                                    ·                                           ·
+ │                     render 3      cid3                                                                                                                    ·                                           ·
+ │                     render 4      gcid2                                                                                                                   ·                                           ·
+ │                     render 5      gca2                                                                                                                    ·                                           ·
+ └── interleaved-join  ·             ·                                                                                                                       (pid1, pa1, pid1, cid2, cid3, gcid2, gca2)  ·
+·                      type          inner                                                                                                                   ·                                           ·
+·                      left table    parent1@primary                                                                                                         ·                                           ·
+·                      left spans    FULL SCAN                                                                                                               ·                                           ·
+·                      left filter   ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)  ·                                           ·
+·                      right table   grandchild2@primary                                                                                                     ·                                           ·
+·                      right spans   FULL SCAN                                                                                                               ·                                           ·
+·                      ancestor      left                                                                                                                    ·                                           ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
   SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
@@ -235,6 +391,32 @@ SELECT url FROM [EXPLAIN (DISTSQL)
 ]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzsldFv0zAQxt_5K6x7SsBocdwOFqlSJtZBppKOtAikkYcovnWRsjg4DgJV_d9RnXZLqxRBK5WXvtW-78vV3--km0P1PQcPJsPR8N2U1Con19H4I7kbfr0dXQYhsa6CyXTyaWSTleRlIygThYVm5GYchGSmkkKkD1kuXPJ5EoTviVVmgtnky4dhNCSWZZkz-VY7DscBYcwml-EVad2mA8K4bZNxRLbFF11il9mdat75ac7X6jJZa4ljx0ChkALD5BEr8O6AAQUXKHCg0AMKfYgplEqmWFVSLSVzYwjET_AcCllR1np5HVNIpULw5qAznSN4EBQaVY7JD4wwEahuZFagOnOAgkCdZLnpOMJ7Dcse2WOifvmrWIGaArnOco3KMwn67fw8zwvC6dvVW_12iOvSKp227WKnzX36YoeP727H-ZbPd5_iXVeAQpTNHtrPbA0MUGiSAQo53mvLZ6_sgVoazE-gMK61R3xGfZf6Per3qX9O_TcQLyjIWj8TqHQyQ_DYgu6g9AynLqQSqFBs0IgXHRxD-VqWZ_0tYXdrd6M122tA2GlAjjog7l6U3BOlo1Lie1HiJ0pHpdTbi1LvROm_rcQOShFWpSwq_KuN5yxXJooZNvu1krVK8VbJ1LRpjmPjMxcCK91UWXMIClMyf7BtZn80n2-YnW2ze0hnfoi5d4i5_0_mePHidwAAAP__aOtjjw==
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+----
+·                      distribution  full                                                                                                                    ·                                           ·
+·                      vectorized    true                                                                                                                    ·                                           ·
+render                 ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pa1)        ·
+ │                     render 0      pid1                                                                                                                    ·                                           ·
+ │                     render 1      cid2                                                                                                                    ·                                           ·
+ │                     render 2      cid3                                                                                                                    ·                                           ·
+ │                     render 3      gcid2                                                                                                                   ·                                           ·
+ │                     render 4      gca2                                                                                                                    ·                                           ·
+ │                     render 5      pa1                                                                                                                     ·                                           ·
+ └── interleaved-join  ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)  ·
+·                      type          inner                                                                                                                   ·                                           ·
+·                      left table    grandchild2@primary                                                                                                     ·                                           ·
+·                      left spans    FULL SCAN                                                                                                               ·                                           ·
+·                      right table   parent1@primary                                                                                                         ·                                           ·
+·                      right spans   FULL SCAN                                                                                                               ·                                           ·
+·                      right filter  ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)  ·                                           ·
+·                      ancestor      right                                                                                                                   ·                                           ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
@@ -254,21 +436,17 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 31 AND pid1 <= 33
   OR pa1 > 0
 ----
-·                distribution        full
-·                vectorized          true
-render           ·                   ·
- └── merge-join  ·                   ·
-      │          type                inner
-      │          equality            (pid1) = (pid1)
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(pid1=pid1)"
-      ├── scan   ·                   ·
-      │          table               grandchild2@primary
-      │          spans               FULL SCAN
-      └── scan   ·                   ·
-·                table               parent1@primary
-·                spans               FULL SCAN
-·                filter              ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+·                      distribution  full
+·                      vectorized    true
+render                 ·             ·
+ └── interleaved-join  ·             ·
+·                      type          inner
+·                      left table    grandchild2@primary
+·                      left spans    FULL SCAN
+·                      right table   parent1@primary
+·                      right spans   FULL SCAN
+·                      right filter  ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+·                      ancestor      right
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
@@ -298,20 +476,16 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-·           distribution       full
-·           vectorized         true
-merge-join  ·                  ·
- │          type               inner
- │          equality           (pid1, cid2, cid3) = (pid1, cid2, cid3)
- │          left cols are key  ·
- │          mergeJoinOrder     +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
- ├── scan   ·                  ·
- │          table              child2@primary
- │          spans              FULL SCAN
- └── scan   ·                  ·
-·           table              grandchild2@primary
-·           spans              FULL SCAN
-·           filter             (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+·                 distribution  full
+·                 vectorized    true
+interleaved-join  ·             ·
+·                 type          inner
+·                 left table    child2@primary
+·                 left spans    FULL SCAN
+·                 right table   grandchild2@primary
+·                 right spans   FULL SCAN
+·                 right filter  (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+·                 ancestor      left
 
 # Aggregation over parent and child keys.
 query T
@@ -341,7 +515,8 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlVFv2j4Uxd__n8K6T0R_q4
 statement ok
 CREATE TABLE outer_p1 (
   pid1 INT PRIMARY KEY,
-  pa1 INT
+  pa1 INT,
+  FAMILY (pid1, pa1)
 )
 
 statement ok
@@ -350,7 +525,8 @@ CREATE TABLE outer_c1 (
   cid1 INT,
   cid2 INT,
   ca1 INT,
-  PRIMARY KEY (pid1, cid1, cid2)
+  PRIMARY KEY (pid1, cid1, cid2),
+  FAMILY (pid1, cid1, cid2)
 ) INTERLEAVE IN PARENT outer_p1 (pid1)
 
 statement ok
@@ -360,7 +536,8 @@ CREATE TABLE outer_gc1 (
   cid2 INT,
   gcid1 INT,
   gca1 INT,
-  PRIMARY KEY (pid1, cid1, cid2, gcid1)
+  PRIMARY KEY (pid1, cid1, cid2, gcid1),
+  FAMILY (pid1, cid1, cid2)
 ) INTERLEAVE IN PARENT outer_c1 (pid1, cid1, cid2)
 
 statement ok
@@ -388,20 +565,98 @@ NULL       /0       {5}       5
 
 ### Begin OUTER queries
 
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
+----
+·                      distribution  full                  ·                                   ·
+·                      vectorized    true                  ·                                   ·
+render                 ·             ·                     (pid1, pa1, cid1, cid2, ca1)        ·
+ │                     render 0      COALESCE(pid1, pid1)  ·                                   ·
+ │                     render 1      pa1                   ·                                   ·
+ │                     render 2      cid1                  ·                                   ·
+ │                     render 3      cid2                  ·                                   ·
+ │                     render 4      ca1                   ·                                   ·
+ └── interleaved-join  ·             ·                     (pid1, pa1, pid1, cid1, cid2, ca1)  ·
+·                      type          full outer            ·                                   ·
+·                      left table    outer_p1@primary      ·                                   ·
+·                      left spans    FULL SCAN             ·                                   ·
+·                      right table   outer_c1@primary      ·                                   ·
+·                      right spans   FULL SCAN             ·                                   ·
+·                      ancestor      left                  ·                                   ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzclM9q20AQxu99imVOdjslXknOQVBQcJWioEqpZEMhiCK0E1egaNXdVWkwfveiVUrqNP1n33TbnZlvvvnNYXagvzTgQx7G4WrNetWwyyx9z27Cj9fxRZSw2dsoX-cf4jl7KHk5FsjekPrUcXa5iWN2lUbJQ6jibJNHyTs262rB5wUgtFJQUt6RBv8GOCA4gOACggcISygQOiUr0lqqoWRnBZH4Bv4CoW673gzhAqGSisDfgalNQ-BD1BpSDZVfKaNSkLqSdUvqbLAQZMq6sY4x3RoYPOq7Ut0HPyYHhKzefv41VQ2psRUgrO878kfKdLMOM8sKCA3dmlnAX83fqKGLfQ4tqRWkfLZKL-IwX4WzgGPgzpEFDrLAQxYskQXnUOwRZG8e2bQptwQ-3-Nv-B-x-1YqQYrEAWexf2ZDiXwtu7Plk8LnrZ0Da37U6p3JrN45it-dDL97FL83GX7vKP7FZPj_cnoz0p1sNf3TZVkMp4nElsY7pmWvKrpWsrI24ze1OhsQpM2Y5eMnam3KDvizmP9RfH4gXjwVO6c4u6eIvVPEy_8SF_sX3wMAAP__E6R9Gg==
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
+----
+·                      distribution  full                  ·                                                       ·
+·                      vectorized    true                  ·                                                       ·
+render                 ·             ·                     (pid1, cid1, cid2, gcid1, gca1, ca1)                    ·
+ │                     render 0      COALESCE(pid1, pid1)  ·                                                       ·
+ │                     render 1      COALESCE(cid1, cid1)  ·                                                       ·
+ │                     render 2      COALESCE(cid2, cid2)  ·                                                       ·
+ │                     render 3      gcid1                 ·                                                       ·
+ │                     render 4      gca1                  ·                                                       ·
+ │                     render 5      ca1                   ·                                                       ·
+ └── interleaved-join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, cid1, cid2, ca1)  ·
+·                      type          full outer            ·                                                       ·
+·                      left table    outer_gc1@primary     ·                                                       ·
+·                      left spans    FULL SCAN             ·                                                       ·
+·                      right table   outer_c1@primary      ·                                                       ·
+·                      right spans   FULL SCAN             ·                                                       ·
+·                      ancestor      right                 ·                                                       ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzklU9r20AQxe_9FMuc7HpKvJKctoLCBlcpCqqUSjYUgihCO3EFilZdrUqD8XcvktImStN_9tEXw76Zt8_zWxhtoflSgguJF3jLFWt1yc7j6D278j5eBmd-yCZv_WSVfAim7K7l-dCgWkP60ybn7HwdBOwi8sM7LedsnfjhOzapC8mR5T9-rWkKCJWSFGY31IB7BRwQLECwAcEBhAWkCLVWOTWN0l3Ltjf48hu4c4SiqlvTySlCrjSBuwVTmJLABb8ypEvKvlJMmSR9oYqK9EkXIclkRdknBnRtoMsobjJ9K36OAQhxsfn8a60vDXcBwuq2JncYOVqvvLgfHBBKujYTwWcorBkKezZ9o7vbRlIXQZUk7bJldBZ4ydKbCI7idIoPBAvFy5Fgo3g1RSYcZGKBTLyGdIegWnOPojHZhsDlO_wNrntKbaW0JE1yhCXdPQE0VC9UfbJ41Ph0tDWK5nu9lHWsL2Xthcs-Vlz2XricY8Xl7IVrfqy4_vKViampVdXQP23FebdWSW5o2MGNanVOl1rlfcxwjHpfL0hqzFDlw8Gv-lL_Bx-a-R_NpyPz_LHZOiTZPsTsHGJe_Jc53T37HgAA__8UBrYr
 
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
+----
+·                      distribution  full                  ·                                   ·
+·                      vectorized    true                  ·                                   ·
+render                 ·             ·                     (pid1, cid1, cid2, ca1, pa1)        ·
+ │                     render 0      pid1                  ·                                   ·
+ │                     render 1      cid1                  ·                                   ·
+ │                     render 2      cid2                  ·                                   ·
+ │                     render 3      ca1                   ·                                   ·
+ │                     render 4      pa1                   ·                                   ·
+ └── interleaved-join  ·             ·                     (pid1, cid1, cid2, ca1, pid1, pa1)  ·
+·                      type          left outer            ·                                   ·
+·                      left table    outer_c1@primary      ·                                   ·
+·                      left spans    /0/#/60/1-/39/#/60/2  ·                                   ·
+·                      right table   outer_p1@primary      ·                                   ·
+·                      right spans   /0-/39/#              ·                                   ·
+·                      ancestor      right                 ·                                   ·
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVF1vlEAUffdXTM7TomPKAPpA0oTGUqVBqCyNJpUYArcrCWVwGIzNZv-7Yahpt9aPbp_2jXvPPfdwTnJnjeFbCx_LMA7f5GxULTvJ0vfsIvx0Fh9FCVscR8t8-SG22M3I83lAjprUl0qwODzJ2WkaJTetXrDzZZS8ZYu-qYXFPr4Ls3Au2OfRtl06ZLbFjpLju82KebZVgKOTNSXlFQ3wLyDA4YDDBYeHgqNXsqJhkGqC12Y4qn_Atzmarh_11C44KqkI_hq60S3BR9RpUi2V3ymjsiZ1KpuO1IENjpp02bRGLaZLjUmjuSrVdfDLITiyZvX1d6ifoHkVOPLrnvw5jfQ8DzOTCThautSLQLywDtW0xXyCIx21zwLBA4cHLg88HrxGseGQo771MehyRfDFhv_B663FsZOqJkX1lqdi80AaiXwp-wPv3uDD0s6WtNgpZrGXMTs7eXX20qu7k1d3L73-46nIaOhlN9B_XYc9nRfVK5pvcZCjquhMycrIzGVqeKZR06BnVMxF1BnI_OBdsvgr-dUW2b5Pdp6i7D6F7D2KXGye_QwAAP__qyUQHg==
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
+----
+·                      distribution  full                  ·                                           ·
+·                      vectorized    true                  ·                                           ·
+render                 ·             ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
+ │                     render 0      pid1                  ·                                           ·
+ │                     render 1      pa1                   ·                                           ·
+ │                     render 2      cid1                  ·                                           ·
+ │                     render 3      cid2                  ·                                           ·
+ │                     render 4      gcid1                 ·                                           ·
+ │                     render 5      gca1                  ·                                           ·
+ └── interleaved-join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
+·                      type          left outer            ·                                           ·
+·                      left table    outer_gc1@primary     ·                                           ·
+·                      left spans    /1/#/60/1-/20/#/60/2  ·                                           ·
+·                      right table   outer_p1@primary      ·                                           ·
+·                      right spans   /1-/20/#              ·                                           ·
+·                      ancestor      right                 ·                                           ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]
@@ -468,15 +723,186 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlU9r20AQxe_9FMuckmaKvZ
 
 # If there are Limits, interleaved joins should not be used.
 query T
-SELECT url FROM [
-  EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM parent1 ORDER BY pid1 LIMIT 2) AS parent1 INNER MERGE JOIN child1 USING(pid1)
-]
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM (SELECT * FROM parent1 ORDER BY pid1 LIMIT 2) AS parent1 INNER MERGE JOIN child1 USING(pid1)
+] WHERE node_type LIKE '%join'
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lV1v2joYx-_Pp7CecwOnRo6dhJdIR0q3sioVLx0waVOVi5R4EIkmmROkVRXffQqhL1Bqh1nhzgb_bD__n5XnCbJfK3Bg2h_0P8_QWqzQl8l4iO76328Hl94INa686Wz6ddBEuyX_lQsa-9M0EDzOKRpPrvoT9OkHSqOQooE39GaINdHl9GWFNxr1J2jYn1z30c3YG6H5MlqFFH2beqNr1Ci4pg8Y4iTko-CBZ-DcAQUMDDCYgMECDDb4GFKRzHmWJaJY8rQFvPA3OAaGKE7XefGzj2GeCA7OE-RRvuLgwCy4X_EJD0IuiAEYQp4H0Wp7TCqih0A8uru7AoZpGsSZg1qAYRA9RDli4G8wJOt8d8DrvvePaBlky_0dXQr-xseQ5cGCg0M3-O8uSo9ftMzuzT0JI_8Su00osVg57hJKGAriEJkoyZdcZFoVsA8reN1nHSci5IKHezv5Bfm85NgCcOlFedZhEkMuFvwmiWIuSHufWfGfecOlF83_RbRYlkPAMF7nDnIpdhl2LezaBzW_1mNq1HPkpqOklaSE0sPKj55t7Z1Nq78GVu01fPAYWsQqxnbxu1XXy6DnfxmdOl8Gq27HrGjnjYUWab-oapfjQlW7Ljvs_Ha6ddoxq9uxKto5LqRFunU5Mc_vpFenE6u6E7uik26LUOPZi23sJoUYatSlxTq_Fmqcq8cduciEZ2kSZ7xSBzOKUni44GU6WbIWc34rkvn2mHI63nLbjhDyLC__ZeXEi8u_igtWh20duKMD93RgSuU0PSExdhps68AdHbinAx8k9o5mh7TxljblcZtSmO7nbRzSlo4sOayQJYcVsuSwQpYcVsmydWS1deKWw4q45bAibjmsiFsOq-Lu6MTd1YlbDivilsOKuOWwIm45rIq7pxM3PaVZvv-GntItT6VVH_9T-uWptCpz-q57SEP3N__8CQAA__-JnSC4
+merge-join
 
 query T
-SELECT url FROM [
-  EXPLAIN (DISTSQL) SELECT * FROM parent1 INNER MERGE JOIN (SELECT * FROM child1 ORDER BY pid1 LIMIT 10) AS child1 USING(pid1)
-]
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN (SELECT * FROM child1 ORDER BY pid1 LIMIT 10) AS child1 USING(pid1)
+] WHERE node_type LIKE '%join'
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVtvozoQx9_Pp7DmvDSnjoy55IJ0pPScshVVLl2SlXZV8UCDN0GiwBoibVXlu68I6aahqU3XIm8Gz88z8_-PNM-Q_4jBhrkzdv5foA2P0SdvNkH3zte78ZU7RRfX7nwx_zzuoH3IP1VAFnCWFBS506njoYnj3TjodlYCx3HLdRSHFM28a8dD_31DWRRSNHYn7gJRrYOu5i8RX-bu9AZdlPcdHzAkacimwSPLwb4HChh0wGAABhMwWOBjyHi6ZHme8jLkeQe44U-wNQxRkm2K8rePYZlyBvYzFFERM7BhETzEzGNByDjRAEPIiiCKd2kyHj0G_Gm0bw4wzLMgyW3UJTr5m1g9QompV-cBoURHQRIiA6XFmvEc_C2GdFPsUx8yPjyhdZCvj3ONKPhbH0NeBCsGNt3iP2vBOt1CpeqrDgDDOHqMCkQ1pUL1dws9vJPykHEW1t-5LBMfojbJqbhdrnrDE8ZX7DaNEsZJ7_jZmH0vLkb0svMvj1br6ggYZpvCRiOKRzoemXhk1Xo-9GM06OcDlU7TbpoRSmuRp3ObR7lpc9Npw7l9Z2y7xCzPVvnfbGuG6flHo9_maOjN7dGb2vPKhi7p_faqV51Lr3pt2aOf355Bm_YYze0xmtpz2pEuGbRlinF-U4ZtmmI2N8VsasqgS6j2Yoyl7T9KZ6jWli_m-X2h2rn23IlCPJZnaZKzRltMK1th4YpV6uTphi_ZHU-XuzTV52zH7ZZCyPKiutWrDzeprsoCm8OWCtxXgYcqMKVimn5AMf1jsKUC91XgoQpcU-wNrddp7TVtiOU2hDA91lur06bKeIthyXiLYcl4i2HJeIth2XhbKmb1VOQWwxK5xbBEbjEskVsMy-Tuq8g9UJFbDEvkFsMSucWwRG4xLJN7qCI3VVqWEloiuISWKC6hJZJLaOnCfLM9hKL7279-BQAA___BmiKQ
+merge-join
+
+statement ok
+DROP TABLE grandchild2, grandchild1, child1, child2, parent1, parent2
+
+# The following tests target the decision of whether to use interleaved join or
+# not. We define the following hierarchy:
+#   name:             primary key:
+#   parent1           (pid1)
+#     child1          (pid1, cid1, cid2)
+#       grandchild1   (pid1, cid1, cid2, gcid1)
+#     child2          (pid1, cid3, cid4)
+#   parent2           (pid1)
+statement ok
+CREATE TABLE parent1 (pid1 INT PRIMARY KEY, v INT);
+CREATE TABLE child1 (pid1 INT8, cid1 INT8, cid2 INT8, v INT8, PRIMARY KEY (pid1, cid1, cid2))
+  INTERLEAVE IN PARENT parent1 (pid1);
+CREATE TABLE grandchild1 (pid1 INT, cid1 INT, cid2 INT, gcid1 INT, v INT, PRIMARY KEY (pid1, cid1, cid2, gcid1))
+  INTERLEAVE IN PARENT child1 (pid1, cid1, cid2);
+CREATE TABLE child2 (pid1 INT, cid3 INT, cid4 INT, v INT, PRIMARY KEY (pid1, cid3, cid4))
+  INTERLEAVE IN PARENT parent1 (pid1);
+CREATE TABLE parent2 (pid1 INT PRIMARY KEY, v INT);
+
+# Simple parent-child cases.
+# parent1-child1 share interleave prefix (pid1).
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN child1 USING (pid1)
+] WHERE node_type LIKE '%join'
+----
+interleaved-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN child1 USING (pid1, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN child1 USING (v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+# Parent-grandchild cases.
+# parent1-grandchild1 share interleave prefix (pid1).
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (pid1)
+] WHERE node_type LIKE '%join'
+----
+interleaved-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (pid1, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+# Multiple-column interleave prefix.
+# child1-grandchild1 share interleave prefix (pid1, cid1, cid2).
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, cid2)
+] WHERE node_type LIKE '%join'
+----
+interleaved-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, cid2, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+# TODO(richardwu): update these once prefix/subset of
+# interleave prefixes are permitted.
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid2)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid2, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, cid2)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, cid2, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid2)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid2, v)
+] WHERE node_type LIKE '%join'
+----
+merge-join
+
+# Common ancestor example.
+# TODO(richardwu): update this when common ancestor interleaved joins are possible.
+query T
+SELECT node_type FROM [ EXPLAIN (VERBOSE)
+  SELECT * FROM child1 INNER MERGE JOIN child2 USING (pid1)
+] WHERE node_type LIKE '%join'
+----
+merge-join

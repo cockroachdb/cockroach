@@ -405,6 +405,26 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return rec, nil
 
+	case *interleavedJoinNode:
+		if err := checkExpr(n.leftFilter); err != nil {
+			return cannotDistribute, err
+		}
+		if err := checkExpr(n.rightFilter); err != nil {
+			return cannotDistribute, err
+		}
+		if err := checkExpr(n.onCond); err != nil {
+			return cannotDistribute, err
+		}
+		if n.left.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE ||
+			n.right.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			// Scans that are performing row-level locking cannot currently be
+			// distributed because their locks would not be propagated back to
+			// the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
+		return shouldDistribute, nil
+
 	case *limitNode:
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
@@ -2349,18 +2369,6 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]*types.T,
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *PlanningCtx, n *joinNode,
 ) (*PhysicalPlan, error) {
-	// See if we can create an interleave join plan.
-	if planInterleavedJoins.Get(&dsp.st.SV) {
-		plan, ok, err := dsp.tryCreatePlanForInterleavedJoin(planCtx, n)
-		if err != nil {
-			return nil, err
-		}
-		// An interleave join plan could be used. Return it.
-		if ok {
-			return plan, nil
-		}
-	}
-
 	leftPlan, err := dsp.createPhysPlanForPlanNode(planCtx, n.left.plan)
 	if err != nil {
 		return nil, err
@@ -2533,6 +2541,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
+
+	case *interleavedJoinNode:
+		plan, err = dsp.createPlanForInterleavedJoin(planCtx, n)
 
 	case *limitNode:
 		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.plan)
