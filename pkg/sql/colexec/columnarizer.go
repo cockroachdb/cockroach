@@ -138,8 +138,11 @@ func (c *Columnarizer) Run(context.Context) {
 	colexecerror.InternalError("Columnarizer should not be Run")
 }
 
-var _ colexecbase.Operator = &Columnarizer{}
-var _ execinfrapb.MetadataSource = &Columnarizer{}
+var (
+	_ colexecbase.Operator       = &Columnarizer{}
+	_ execinfrapb.MetadataSource = &Columnarizer{}
+	_ Closer                     = &Columnarizer{}
+)
 
 // DrainMeta is part of the MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
@@ -152,6 +155,11 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 	}
 	return c.accumulatedMeta
+}
+
+func (c *Columnarizer) Close(ctx context.Context) error {
+	c.input.ConsumerClosed()
+	return nil
 }
 
 // ChildCount is part of the Operator interface.
