@@ -141,6 +141,35 @@ type Factory interface {
 		leftEqColsAreKey, rightEqColsAreKey bool,
 	) (Node, error)
 
+	// ConstructInterleavedJoin returns a node that runs a join between two
+	// interleaved tables. One table is the ancestor of the other in the
+	// interleaving hierarchy (as per leftIsAncestor).
+	//
+	// Semantically, the join is identical to a merge-join between these two
+	// tables, where the equality columns are all the index column of the ancestor
+	// index.
+	//
+	// The two scans are guaranteed to have the same direction, and to not have
+	// any hard limits.
+	//
+	// Since the interleaved joiner does a single scan for both tables, only the
+	// Locking clause for the ancestor is used.
+	//
+	ConstructInterleavedJoin(
+		joinType sqlbase.JoinType,
+		leftTable cat.Table,
+		leftIndex cat.Index,
+		leftParams ScanParams,
+		leftFilter tree.TypedExpr,
+		rightTable cat.Table,
+		rightIndex cat.Index,
+		rightParams ScanParams,
+		rightFilter tree.TypedExpr,
+		leftIsAncestor bool,
+		onCond tree.TypedExpr,
+		reqOrdering OutputOrdering,
+	) (Node, error)
+
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
 	// aggregations is performed for each group of values on the groupCols.
 	//
@@ -578,7 +607,7 @@ type ScanParams struct {
 	HardLimit int64
 
 	// If non-zero, the scan may still be required to return up to all its rows
-	// (or up to the HardLimit if it is set0, but can be optimized under the
+	// (or up to the HardLimit if it is set, but can be optimized under the
 	// assumption that only SoftLimit rows will be needed.
 	SoftLimit int64
 
