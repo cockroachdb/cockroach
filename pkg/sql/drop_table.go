@@ -36,7 +36,7 @@ type dropTableNode struct {
 }
 
 type toDelete struct {
-	tn   *tree.TableName
+	tn   tree.ObjectName
 	desc *sqlbase.MutableTableDescriptor
 }
 
@@ -112,7 +112,12 @@ func (n *dropTableNode) startExec(params runParams) error {
 			continue
 		}
 
-		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()))
+		droppedViews, err := params.p.dropTableImpl(
+			ctx,
+			droppedDesc,
+			false, /* droppingDatabase */
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 		if err != nil {
 			return err
 		}
@@ -238,9 +243,13 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
-// dropped due to `cascade` behavior.
+// dropped due to `cascade` behavior. droppingDatabase indicates whether this
+// table is being dropped as part of a `DROP DATABASE CASCADE` operation.
 func (p *planner) dropTableImpl(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, queueJob bool, jobDesc string,
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	droppingDatabase bool,
+	jobDesc string,
 ) ([]string, error) {
 	var droppedViews []string
 
@@ -285,9 +294,9 @@ func (p *planner) dropTableImpl(
 		}
 	}
 
-	// Drop sequences that the columns of the table own
+	// Drop sequences that the columns of the table own.
 	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col, queueJob); err != nil {
+		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingDatabase); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -305,7 +314,7 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, queueJob, "dropping dependent view", tree.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingDatabase, "dropping dependent view", tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -318,12 +327,16 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	// Remove any references to types that this table has.
-	if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
-		return droppedViews, err
+	// Remove any references to types that this table has if a job is meant to be
+	// queued. If not, then the job that is handling the drop table will also
+	// clean up all of the types to be dropped.
+	if !droppingDatabase {
+		if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
+			return droppedViews, err
+		}
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, queueJob, jobDesc, true /* drain name */)
+	err = p.initiateDropTable(ctx, tableDesc, !droppingDatabase, jobDesc, true /* drain name */)
 	return droppedViews, err
 }
 
