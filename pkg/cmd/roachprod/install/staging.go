@@ -24,19 +24,19 @@ const (
 	releaseBinaryServer = "https://s3.amazonaws.com/binaries.cockroachdb.com/"
 )
 
-func getEdgeBinaryURL(binaryName, SHA, arch string) (*url.URL, error) {
+func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 	edgeBinaryLocation, err := url.Parse(edgeBinaryServer)
 	if err != nil {
 		return nil, err
 	}
-	edgeBinaryLocation.Path = binaryName
+	edgeBinaryLocation.Path = urlPathBase
 	// If a target architecture is provided, attach that.
 	if len(arch) > 0 {
-		edgeBinaryLocation.Path += "." + arch
+		edgeBinaryLocation.Path += "." + arch + ext
 	}
 	// If a specific SHA is provided, just attach that.
 	if len(SHA) > 0 {
-		edgeBinaryLocation.Path += "." + SHA
+		edgeBinaryLocation.Path += "." + SHA + ext
 	} else {
 		edgeBinaryLocation.Path += ".LATEST"
 		// Otherwise, find the latest SHA binary available. This works because
@@ -54,8 +54,8 @@ func getEdgeBinaryURL(binaryName, SHA, arch string) (*url.URL, error) {
 // StageRemoteBinary downloads a cockroach edge binary with the provided
 // application path to each specified by the cluster. If no SHA is specified,
 // the latest build of the binary is used instead.
-func StageRemoteBinary(c *SyncedCluster, applicationName, binaryPath, SHA, arch string) error {
-	binURL, err := getEdgeBinaryURL(binaryPath, SHA, arch)
+func StageRemoteBinary(c *SyncedCluster, applicationName, urlPathBase, SHA, arch string) error {
+	binURL, err := getEdgeURL(urlPathBase, SHA, arch, "")
 	if err != nil {
 		return err
 	}
@@ -65,6 +65,30 @@ func StageRemoteBinary(c *SyncedCluster, applicationName, binaryPath, SHA, arch 
 	)
 	return c.Run(
 		os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
+	)
+}
+
+// StageOptionalRemoteLibrary downloads a library from the cockroach edge with the provided
+// application path to each specified by the cluster.
+// If no SHA is specified, the latest build of the library is used instead.
+// It will not error if the library does not exist on the edge.
+func StageOptionalRemoteLibrary(
+	c *SyncedCluster, libraryName, urlPathBase, SHA, arch, ext string,
+) error {
+	url, err := getEdgeURL(urlPathBase, SHA, arch, ext)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Resolved library url for %s: %s\n", libraryName, url)
+	cmdStr := fmt.Sprintf(
+		`sudo mkdir -p /usr/local/lib/cockroach && \
+sudo curl -sfSL -o "/usr/local/lib/cockroach/%s" "%s" 2>/dev/null || echo 'optional library %s not found; continuing...'`,
+		libraryName+ext,
+		url,
+		libraryName+ext,
+	)
+	return c.Run(
+		os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
 }
 
@@ -92,6 +116,8 @@ func StageCockroachRelease(c *SyncedCluster, version, arch string) error {
 tmpdir="$(mktemp -d /tmp/cockroach-release.XXX)" && \
 curl -f -s -S -o- %s | tar xfz - -C "${tmpdir}" --strip-components 1 && \
 mv ${tmpdir}/cockroach ./cockroach && \
+sudo mkdir -p /usr/local/lib/cockroach && \
+if [ -d ${tmpdir}/lib ]; then sudo mv ${tmpdir}/lib/* /usr/local/lib/cockroach; fi && \
 chmod 755 ./cockroach
 `, binURL)
 	return c.Run(

@@ -1284,14 +1284,14 @@ Some examples of usage:
 		} else if c.IsLocal() {
 			os = runtime.GOOS
 		}
-		var debugArch, releaseArch string
+		var debugArch, releaseArch, libExt string
 		switch os {
 		case "linux":
-			debugArch, releaseArch = "linux-gnu-amd64", "linux-amd64"
+			debugArch, releaseArch, libExt = "linux-gnu-amd64", "linux-amd64", ".so"
 		case "darwin":
-			debugArch, releaseArch = "darwin-amd64", "darwin-10.9-amd64"
+			debugArch, releaseArch, libExt = "darwin-amd64", "darwin-10.9-amd64", ".dylib"
 		case "windows":
-			debugArch, releaseArch = "windows-amd64", "windows-6.2-amd64"
+			debugArch, releaseArch, libExt = "windows-amd64", "windows-6.2-amd64", ".dll"
 		default:
 			return errors.Errorf("cannot stage binary on %s", os)
 		}
@@ -1303,9 +1303,25 @@ Some examples of usage:
 		}
 		switch applicationName {
 		case "cockroach":
-			return install.StageRemoteBinary(
+			if err := install.StageRemoteBinary(
 				c, applicationName, "cockroach/cockroach", versionArg, debugArch,
-			)
+			); err != nil {
+				return err
+			}
+			// Libraries may not be present in older versions.
+			for _, library := range []string{"libgeos", "libgeos_c"} {
+				if err := install.StageOptionalRemoteLibrary(
+					c,
+					library,
+					fmt.Sprintf("cockroach/lib/%s", library),
+					versionArg,
+					debugArch,
+					libExt,
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		case "workload":
 			return install.StageRemoteBinary(
 				c, applicationName, "cockroach/workload", versionArg, "", /* arch */
