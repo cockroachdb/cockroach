@@ -12,30 +12,28 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerReplicaGC(r *testRegistry) {
-
-	r.Add(testSpec{
-		Name:    "replicagc-changed-peers/withRestart",
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(6),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runReplicaGCChangedPeers(ctx, t, c, true /* withRestart */)
-		},
-	})
-	r.Add(testSpec{
-		Name:    "replicagc-changed-peers/noRestart",
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(6),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runReplicaGCChangedPeers(ctx, t, c, false /* withRestart */)
-		},
-	})
+	for _, restart := range []bool{true, false} {
+		r.Add(testSpec{
+			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
+			Owner:   OwnerKV,
+			Cluster: makeClusterSpec(6),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runReplicaGCChangedPeers(ctx, t, c, restart)
+			},
+		})
+	}
 }
+
+var deadNodeAttr = "deadnode"
 
 func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRestart bool) {
 	if c.spec.NodeCount != 6 {
@@ -47,66 +45,48 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	c.Put(ctx, workload, "./workload", c.Node(1))
 	c.Start(ctx, t, args, c.Range(1, 3))
 
-	t.Status("waiting for full replication")
-	func() {
-		db := c.Conn(ctx, 3)
-		defer func() {
-			_ = db.Close()
-		}()
-		for {
-			var fullReplicated bool
-			if err := db.QueryRow(
-				// Check if all ranges are fully replicated.
-				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-			).Scan(&fullReplicated); err != nil {
-				t.Fatal(err)
-			}
-			if fullReplicated {
-				break
-			}
-			time.Sleep(time.Second)
-		}
-	}()
+	h := &replicagcTestHelper{c: c, t: t}
 
-	c.Run(ctx, c.Node(1), "./workload run kv {pgurl:1} --init --max-ops=1 --splits 100")
+	t.Status("waiting for full replication")
+	h.waitForFullReplication(ctx)
+
+	// Fill in a bunch of data.
+	c.Run(ctx, c.Node(1), "./workload init kv {pgurl:1} --splits 100")
 
 	// Kill the third node so it won't know that all of its replicas are moved
-	// elsewhere. (We don't use the first because that's what roachprod will
+	// elsewhere (we don't use the first because that's what roachprod will
 	// join new nodes to).
 	c.Stop(ctx, c.Node(3))
 
 	// Start three new nodes that will take over all data.
 	c.Start(ctx, t, args, c.Range(4, 6))
 
-	if _, err := execCLI(ctx, t, c, 2, "node", "decommission", "1", "2", "3"); err != nil {
+	// Recommission n1-3, with n3 in absentia, moving the replicas to n4-6.
+	if err := h.decommission(ctx, c.Range(1, 3), 2, "--wait=none"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Stop the remaining two old nodes.
+	t.Status("waiting for zero replicas on n1 and n2")
+	h.waitForZeroReplicas(ctx, 1)
+
+	t.Status("waiting for zero replicas on n2")
+	h.waitForZeroReplicas(ctx, 2)
+
+	// Stop the remaining two old nodes, no replicas remaining there.
 	c.Stop(ctx, c.Range(1, 2))
 
-	db4 := c.Conn(ctx, 4)
-	defer func() {
-		_ = db4.Close()
-	}()
-
-	for _, change := range []string{
-		"RANGE default", "RANGE meta", "RANGE system", "RANGE liveness", "DATABASE system", "TABLE system.jobs",
-	} {
-		stmt := `ALTER ` + change + ` CONFIGURE ZONE = 'constraints: {"-deadnode"}'`
-		c.l.Printf(stmt + "\n")
-		if _, err := db4.ExecContext(ctx, stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Set up zone configs to isolate out nodes with the `deadNodeAttr`
+	// attribute. We'll later start n3 using this attribute to test GC replica
+	// count.
+	h.isolateDeadNodes(ctx, 4)
 
 	// Recommission n3 so that when it starts again, it doesn't even know that
-	// it was decommissioned (being decommissioning basically lets the replica
+	// it was marked for decommissioning (which basically let the replica
 	// GC queue run wild). We also recommission the other nodes, for if we didn't,
-	// n3 would learn that they are decommissioned and would try to perform
-	// replication changes on its ranges, which acquires the lease, which hits
-	// the eager GC path since the Raft groups get initialized.
-	if _, err := execCLI(ctx, t, c, 4, "node", "recommission", "1", "2", "3"); err != nil {
+	// n3 would learn that they were marked for decommissioning, and would try
+	// to perform replication changes on its ranges, which acquires the lease,
+	// which hits the eager GC path since the Raft groups get initialized.
+	if err := h.recommission(ctx, c.Range(1, 3), 4); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,43 +103,127 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	}
 
 	// Restart n3. We have to manually tell it where to find a new node or it
-	// won't be able to connect. Give it the attribute that we've used as a
-	// negative constraint for "everything" so that no new replicas are added
-	// to this node.
-	addr4 := c.InternalAddr(ctx, c.Node(4))[0]
+	// won't be able to connect. Give it the deadNodeAttr attribute that we've
+	// used as a negative constraint for "everything", which should prevent new
+	// replicas from being added to it.
 	c.Start(ctx, t, c.Node(3), startArgs(
-		"--args=--join="+addr4,
-		"--args=--attrs=deadnode",
+		"--args=--join="+c.InternalAddr(ctx, c.Node(4))[0],
+		"--args=--attrs="+deadNodeAttr,
 		"--args=--vmodule=raft=5,replicate_queue=5,allocator=5",
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
 	))
 
-	db3 := c.Conn(ctx, 3)
-	defer func() {
-		_ = db3.Close()
-	}()
-
 	// Loop for two metric sample intervals (10s) to make sure n3 doesn't see any
 	// underreplicated ranges.
-	var sawNonzero bool
-	var n int
-	for tBegin := timeutil.Now(); timeutil.Since(tBegin) < 5*time.Minute; time.Sleep(time.Second) {
-		if err := db3.QueryRowContext(
-			ctx,
-			`SELECT value FROM crdb_internal.node_metrics WHERE name = 'replicas'`,
-		).Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		c.l.Printf("%d replicas on n3\n", n)
-		if sawNonzero && n == 0 {
-			break
-		}
-		sawNonzero = true
-	}
-	if n != 0 {
-		t.Fatalf("replica count didn't drop to zero: %d", n)
-	}
+	h.waitForZeroReplicas(ctx, 3)
 
 	// Restart the remaining nodes to satisfy the dead node detector.
 	c.Start(ctx, t, c.Range(1, 2))
+}
+
+type replicagcTestHelper struct {
+	t *test
+	c *cluster
+}
+
+func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
+	db := h.c.Conn(ctx, 1)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	for {
+		var fullReplicated bool
+		if err := db.QueryRow(
+			// Check if all ranges are fully replicated.
+			"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+		).Scan(&fullReplicated); err != nil {
+			h.t.Fatal(err)
+		}
+		if fullReplicated {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func (h *replicagcTestHelper) waitForZeroReplicas(ctx context.Context, targetNode int) {
+	db := h.c.Conn(ctx, targetNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	var n = 0
+	for tBegin := timeutil.Now(); timeutil.Since(tBegin) < 5*time.Minute; time.Sleep(5 * time.Second) {
+		n = h.numReplicas(ctx, db, targetNode)
+		if n == 0 {
+			break
+		}
+	}
+	if n != 0 {
+		h.t.Fatalf("replica count on n%d didn't drop to zero: %d", targetNode, n)
+	}
+}
+
+// numReplicas returns the number of replicas found on targetNode, provided a db
+// connected to the targetNode.
+func (h *replicagcTestHelper) numReplicas(ctx context.Context, db *sql.DB, targetNode int) int {
+	var n int
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT value FROM crdb_internal.node_metrics WHERE name = 'replicas'`,
+	).Scan(&n); err != nil {
+		h.t.Fatal(err)
+	}
+	h.c.l.Printf("found %d replicas found on n%d\n", n, targetNode)
+	return n
+}
+
+// decommission decommissions the given targetNodes, running the process
+// through the specified runNode.
+func (h *replicagcTestHelper) decommission(
+	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+) error {
+	args := []string{"node", "decommission"}
+	args = append(args, verbs...)
+
+	for _, target := range targetNodes {
+		args = append(args, strconv.Itoa(target))
+	}
+	_, err := execCLI(ctx, h.t, h.c, runNode, args...)
+	return err
+}
+
+// recommission recommissions the given targetNodes, running the process
+// through the specified runNode.
+func (h *replicagcTestHelper) recommission(
+	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+) error {
+	args := []string{"node", "recommission"}
+	args = append(args, verbs...)
+	for _, target := range targetNodes {
+		args = append(args, strconv.Itoa(target))
+	}
+	_, err := execCLI(ctx, h.t, h.c, runNode, args...)
+	return err
+}
+
+// isolateDeadNodes sets up the zone configs so as to avoid replica placement to
+// nodes started with deadNodeAttr. This can then be used as a negative
+// constraint for everything.
+func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int) {
+	db := h.c.Conn(ctx, runNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	for _, change := range []string{
+		"RANGE default", "RANGE meta", "RANGE system", "RANGE liveness", "DATABASE system", "TABLE system.jobs",
+	} {
+		stmt := `ALTER ` + change + ` CONFIGURE ZONE = 'constraints: {"-` + deadNodeAttr + `"}'`
+		h.c.l.Printf(stmt + "\n")
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			h.t.Fatal(err)
+		}
+	}
 }
