@@ -1125,24 +1125,18 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 	// Set up a directory for the data files.
 	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
 	require.NoError(t, err)
-	// Test IMPORT and IMPORT INTO.
-	for _, into := range []bool{true, false} {
-		for _, test := range tests {
-			// Write the test data into a file.
-			err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(test.contents), 0666)
-			require.NoError(t, err)
-			// Run the import statement.
-			if into {
-				sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE t (%s)", test.create))
-				sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ), "nodelocal://0/test/data")
-			} else {
-				sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE t (%s) %s DATA ($1)", test.create, test.typ), "nodelocal://0/test/data")
-			}
-			// Ensure that the table data is as we expect.
-			sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
-			// Clean up after the test.
-			sqlDB.Exec(t, "DROP TABLE t")
-		}
+	// Test IMPORT INTO.
+	for _, test := range tests {
+		// Write the test data into a file.
+		err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(test.contents), 0666)
+		require.NoError(t, err)
+		// Run the import statement.
+		sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE t (%s)", test.create))
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ), "nodelocal://0/test/data")
+		// Ensure that the table data is as we expect.
+		sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+		// Clean up after the test.
+		sqlDB.Exec(t, "DROP TABLE t")
 	}
 }
 
