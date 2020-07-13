@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -57,6 +58,7 @@ func TestImplicator(t *testing.T) {
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
+			var cols opt.ColSet
 			var iVarHelper tree.IndexedVarHelper
 			var err error
 
@@ -79,10 +81,8 @@ func TestImplicator(t *testing.T) {
 
 					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
-					// Set up the columns in the metadata.
-					for i, typ := range varTypes {
-						md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
-					}
+					// Add the columns to the metadata.
+					cols = addColumnsToMetadata(varTypes, md)
 
 				default:
 					d.Fatalf(t, "unknown argument: %s\n", key)
@@ -95,13 +95,13 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the filters from the first split, everything before "=>".
-			filters, err := makeFiltersExpr(splitInput[0], &semaCtx, &evalCtx, &f)
+			filters, err := makeFilters(splitInput[0], cols, &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building filters: %v\n", err)
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makeFiltersExpr(splitInput[1], &semaCtx, &evalCtx, &f)
+			pred, err := makePredicate(splitInput[1], &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
@@ -255,18 +255,16 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		// Add the variables to the metadata.
-		for i, typ := range varTypes {
-			md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
-		}
+		cols := addColumnsToMetadata(varTypes, md)
 
 		// Build the filters.
-		filters, err := makeFiltersExpr(tc.filters, &semaCtx, &evalCtx, &f)
+		filters, err := makeFilters(tc.filters, cols, &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building filters: %v\n", err)
 		}
 
 		// Build the predicate.
-		pred, err := makeFiltersExpr(tc.pred, &semaCtx, &evalCtx, &f)
+		pred, err := makePredicate(tc.pred, &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
@@ -286,32 +284,91 @@ func BenchmarkImplicator(b *testing.B) {
 	}
 }
 
-// makeFiltersExpr returns a FiltersExpr generated from the input string.
-func makeFiltersExpr(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+// addColumnsToMetadata adds a new column to the metadata for each type in the
+// given list. It returns the set of column IDs that were added.
+func addColumnsToMetadata(varTypes []*types.T, md *opt.Metadata) opt.ColSet {
+	cols := opt.ColSet{}
+	for i, typ := range varTypes {
+		col := md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+		cols.Add(col)
+	}
+	return cols
+}
+
+// makeFilters returns a FiltersExpr generated from the input string that is
+// normalized within the context of a Select. By normalizing within a Select,
+// rules that only match on Selects are applied, such as SimplifySelectFilters.
+// This ensures that these test filters mimic the filters that will be created
+// during a real query.
+func makeFilters(
+	input string,
+	cols opt.ColSet,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	f *norm.Factory,
 ) (memo.FiltersExpr, error) {
-	scalar, err := makeScalarExpr(input, semaCtx, evalCtx, f)
+	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
 	if err != nil {
 		return nil, err
 	}
 
-	filters := memo.FiltersExpr{f.ConstructFiltersItem(scalar)}
+	// Create an output set of columns for the fake relation with all the
+	// columns in the test case.
+	colStatsMap := props.ColStatsMap{}
+	cols.ForEach(func(col opt.ColumnID) {
+		colStat, _ := colStatsMap.Add(opt.MakeColSet(col))
+		colStat.DistinctCount = 100
+		colStat.NullCount = 10
+	})
 
-	// Run SimplifyFilters so that adjacent top-level AND expressions are
-	// flattened into individual FiltersItems, like they would be during
-	// normalization of a SELECT query.
-	filters = f.CustomFuncs().SimplifyFilters(filters)
+	// Create a non-zero cardinality to prevent the fake Select from
+	// simplifying into a ValuesExpr.
+	card := props.Cardinality{Min: 0, Max: 1}
 
-	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
-	// constrain a single variable are combined into a RangeExpr, like they
-	// would be during normalization of a SELECT query.
-	return f.CustomFuncs().ConsolidateFilters(filters), nil
+	// Create stats for the fake relation.
+	stats := props.Statistics{
+		Available:   true,
+		RowCount:    1000,
+		ColStats:    colStatsMap,
+		Selectivity: 1,
+	}
+
+	// Create a fake Select and input so that normalization rules are run.
+	p := &props.Relational{OutputCols: cols, Cardinality: card, Stats: stats}
+	fakeRel := f.ConstructFakeRel(&memo.FakeRelPrivate{Props: p})
+	sel := f.ConstructSelect(fakeRel, filters)
+
+	// If the normalized relational expression is a Select, return the filters.
+	if s, ok := sel.(*memo.SelectExpr); ok {
+		return s.Filters, nil
+	}
+
+	// If the resulting relational expression is not a Select, the Select has
+	// been eliminated by normalization rules. This can occur for certain
+	// filters, such as "true". We still want to test these cases, so we normalize
+	// the filters in the same way that predicate expressions are normalized.
+	return f.NormalizePartialIndexPredicate(filters), nil
 }
 
-// makeScalarExpr returns a ScalarExpr generated from the input string.
-func makeScalarExpr(
+// makePredicate returns a FiltersExpr generated from the input string and
+// normalized in the same way that optbuilder normalizes partial index
+// predicates.
+func makePredicate(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (opt.ScalarExpr, error) {
+) (memo.FiltersExpr, error) {
+	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	// Normalize the predicate expression as it is in select.go.
+	return f.NormalizePartialIndexPredicate(filters), nil
+}
+
+// makeFiltersExpr returns a FiltersExpr generated from the input string.
+func makeFiltersExpr(
+	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+) (memo.FiltersExpr, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
 		return nil, err
@@ -323,5 +380,6 @@ func makeScalarExpr(
 	}
 
 	root := f.Memo().RootExpr().(opt.ScalarExpr)
-	return root, nil
+
+	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }

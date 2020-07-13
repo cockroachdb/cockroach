@@ -82,6 +82,16 @@ predtest vars=(bool, bool, bool)
 true
 └── remaining filters: none
 
+# Regression for #51177. The InlineConstVars normalization rule must be applied
+# to the predicate if it is applied to the filters.
+predtest vars=(string, string)
+@1 = 'foo' and @1 = @2
+=>
+@1 = 'foo' and @1 = @2
+----
+true
+└── remaining filters: none
+
 predtest vars=(bool, bool)
 @1 AND NOT @2
 =>
