@@ -88,18 +88,21 @@ CREATE TABLE p (
     f FLOAT,
     s STRING,
     b BOOL,
-    INDEX if_s (i) STORING (f, s) WHERE s = 'foo'
+    INDEX i_where_s_foo (i) STORING (f, s) WHERE s = 'foo'
 )
 ----
 
 exec-ddl
 CREATE TABLE q (
     i INT,
+    f FLOAT,
     s STRING,
     b BOOL,
     INDEX i (i),
-    INDEX i_gt_0 (i) WHERE i > 0,
-    INDEX s_eq_foo (s) WHERE s = 'foo'
+    INDEX s_where_i_gt_0 (s) WHERE i > 0,
+    INDEX i_where_s_eq_foo (i) WHERE s = 'foo',
+    INDEX i_where_s_eq_foo_or_bar (i) STORING (s) WHERE s = 'foo' OR s = 'bar',
+    INDEX f_where_f_lt_100 (f) WHERE f < 100
 )
 ----
 
@@ -125,7 +128,7 @@ SELECT i FROM p WHERE s = 'foo'
 ----
 project
  ├── columns: i:1
- └── scan p@if_s,partial
+ └── scan p@i_where_s_foo,partial
       ├── columns: i:1 s:3!null
       └── fd: ()-->(3)
 
@@ -139,7 +142,7 @@ project
  └── select
       ├── columns: i:1 f:2 s:3!null
       ├── fd: ()-->(3)
-      ├── scan p@if_s,partial
+      ├── scan p@i_where_s_foo,partial
       │    └── columns: i:1 f:2 s:3
       └── filters
            └── (i:1 = 1) OR (f:2 = 2.0) [outer=(1,2)]
@@ -154,7 +157,7 @@ project
  └── index-join p
       ├── columns: s:3!null b:4
       ├── fd: ()-->(3)
-      └── scan p@if_s,partial
+      └── scan p@i_where_s_foo,partial
            ├── columns: s:3 rowid:5!null
            ├── key: (5)
            └── fd: (5)-->(3)
@@ -174,7 +177,7 @@ project
            ├── columns: i:1 f:2 s:3 rowid:5!null
            ├── key: (5)
            ├── fd: (5)-->(1-3)
-           ├── scan p@if_s,partial
+           ├── scan p@i_where_s_foo,partial
            │    ├── columns: i:1 f:2 s:3 rowid:5!null
            │    ├── key: (5)
            │    └── fd: (5)-->(1-3)
@@ -194,7 +197,7 @@ project
       ├── fd: ()-->(3,4)
       ├── index-join p
       │    ├── columns: s:3 b:4
-      │    └── scan p@if_s,partial
+      │    └── scan p@i_where_s_foo,partial
       │         ├── columns: s:3 rowid:5!null
       │         ├── key: (5)
       │         └── fd: (5)-->(3)
@@ -204,27 +207,27 @@ project
 # Generate a partial index scan inside a Select/IndexJoin/Select when the index
 # is not covering and the remaining filters are partially covered by the index.
 opt expect=GeneratePartialIndexScans
-SELECT b FROM p WHERE s = 'foo' AND i = 1 AND b
+SELECT b FROM p WHERE s = 'foo' AND f = 1 AND b
 ----
 project
  ├── columns: b:4!null
  ├── fd: ()-->(4)
  └── select
-      ├── columns: i:1!null s:3!null b:4!null
-      ├── fd: ()-->(1,3,4)
+      ├── columns: f:2!null s:3!null b:4!null
+      ├── fd: ()-->(2-4)
       ├── index-join p
-      │    ├── columns: i:1 s:3 b:4
-      │    ├── fd: ()-->(1)
+      │    ├── columns: f:2 s:3 b:4
+      │    ├── fd: ()-->(2)
       │    └── select
-      │         ├── columns: i:1!null s:3 rowid:5!null
+      │         ├── columns: f:2!null s:3 rowid:5!null
       │         ├── key: (5)
-      │         ├── fd: ()-->(1), (5)-->(3)
-      │         ├── scan p@if_s,partial
-      │         │    ├── columns: i:1 s:3 rowid:5!null
+      │         ├── fd: ()-->(2), (5)-->(3)
+      │         ├── scan p@i_where_s_foo,partial
+      │         │    ├── columns: f:2 s:3 rowid:5!null
       │         │    ├── key: (5)
-      │         │    └── fd: (5)-->(1,3)
+      │         │    └── fd: (5)-->(2,3)
       │         └── filters
-      │              └── i:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      │              └── f:2 = 1.0 [outer=(2), constraints=(/2: [/1.0 - /1.0]; tight), fd=()-->(2)]
       └── filters
            └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
 
@@ -233,48 +236,60 @@ project
 memo expect=GeneratePartialIndexScans
 SELECT * FROM q WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
- ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G5)
- │    └── [presentation: i:1,s:2,b:3]
- │         ├── best: (select G6 G7)
- │         └── cost: 51.34
- ├── G2: (scan q,cols=(1-3))
+memo (optimized, ~15KB, required=[presentation: i:1,f:2,s:3,b:4])
+ ├── G1: (select G2 G3) (index-join G4 q,cols=(1-4)) (index-join G5 q,cols=(1-4)) (index-join G6 q,cols=(1-4)) (select G7 G8) (index-join G9 q,cols=(1-4))
+ │    └── [presentation: i:1,f:2,s:3,b:4]
+ │         ├── best: (index-join G9 q,cols=(1-4))
+ │         └── cost: 16.98
+ ├── G2: (scan q,cols=(1-4))
  │    └── []
- │         ├── best: (scan q,cols=(1-3))
- │         └── cost: 1070.02
- ├── G3: (filters G9 G10)
- ├── G4: (index-join G11 q,cols=(1-3))
+ │         ├── best: (scan q,cols=(1-4))
+ │         └── cost: 1090.02
+ ├── G3: (filters G10 G11)
+ ├── G4: (select G12 G8)
  │    └── []
- │         ├── best: (index-join G11 q,cols=(1-3))
- │         └── cost: 1706.69
- ├── G5: (filters G10)
- ├── G6: (index-join G12 q,cols=(1-3))
+ │         ├── best: (select G12 G8)
+ │         └── cost: 350.03
+ ├── G5: (select G13 G14)
  │    └── []
- │         ├── best: (index-join G12 q,cols=(1-3))
- │         └── cost: 51.22
- ├── G7: (filters G9)
- ├── G8: (index-join G13 q,cols=(1-3))
+ │         ├── best: (select G13 G14)
+ │         └── cost: 10.53
+ ├── G6: (select G15 G3)
  │    └── []
- │         ├── best: (index-join G13 q,cols=(1-3))
- │         └── cost: 1706.69
- ├── G9: (gt G14 G15)
- ├── G10: (eq G16 G17)
- ├── G11: (scan q@i_gt_0,partial,cols=(1,4))
+ │         ├── best: (select G15 G3)
+ │         └── cost: 21.44
+ ├── G7: (index-join G16 q,cols=(1-4))
  │    └── []
- │         ├── best: (scan q@i_gt_0,partial,cols=(1,4))
+ │         ├── best: (index-join G16 q,cols=(1-4))
+ │         └── cost: 1713.35
+ ├── G8: (filters G11)
+ ├── G9: (scan q@s_where_i_gt_0,partial,cols=(3,5),constrained)
+ │    └── []
+ │         ├── best: (scan q@s_where_i_gt_0,partial,cols=(3,5),constrained)
+ │         └── cost: 3.44
+ ├── G10: (gt G17 G18)
+ ├── G11: (eq G19 G20)
+ ├── G12: (scan q@s_where_i_gt_0,partial,cols=(3,5))
+ │    └── []
+ │         ├── best: (scan q@s_where_i_gt_0,partial,cols=(3,5))
  │         └── cost: 346.68
- ├── G12: (scan q@s_eq_foo,partial,cols=(2,4))
+ ├── G13: (scan q@i_where_s_eq_foo,partial,cols=(1,5))
  │    └── []
- │         ├── best: (scan q@s_eq_foo,partial,cols=(2,4))
+ │         ├── best: (scan q@i_where_s_eq_foo,partial,cols=(1,5))
  │         └── cost: 10.41
- ├── G13: (scan q@i,cols=(1,4),constrained)
+ ├── G14: (filters G10)
+ ├── G15: (scan q@i_where_s_eq_foo_or_bar,partial,cols=(1,3,5))
  │    └── []
- │         ├── best: (scan q@i,cols=(1,4),constrained)
+ │         ├── best: (scan q@i_where_s_eq_foo_or_bar,partial,cols=(1,3,5))
+ │         └── cost: 21.21
+ ├── G16: (scan q@i,cols=(1,5),constrained)
+ │    └── []
+ │         ├── best: (scan q@i,cols=(1,5),constrained)
  │         └── cost: 346.68
- ├── G14: (variable i)
- ├── G15: (const 0)
- ├── G16: (variable s)
- └── G17: (const 'foo')
+ ├── G17: (variable i)
+ ├── G18: (const 0)
+ ├── G19: (variable s)
+ └── G20: (const 'foo')
 
 # Do not generate a partial index scan when the predicate is not implied by the
 # filter.
@@ -957,6 +972,174 @@ select
  │         └── fd: (1)-->(3), (3)-->(1)
  └── filters
       └── (k:1 + u:2) = 1 [outer=(1,2), immutable]
+
+# Constrained partial index scan.
+opt
+SELECT i FROM p WHERE s = 'foo' AND i > 5 AND i < 10
+----
+project
+ ├── columns: i:1!null
+ └── scan p@i_where_s_foo,partial
+      ├── columns: i:1!null s:3!null
+      ├── constraint: /1/5: [/6 - /9]
+      └── fd: ()-->(3)
+
+# Constrained partial index scan with indexed column in predicate.
+opt
+SELECT f FROM q WHERE f > 10 AND f < 20
+----
+scan q@f_where_f_lt_100,partial
+ ├── columns: f:2!null
+ └── constraint: /2/5: [/10.000000000000002 - /19.999999999999996]
+
+# Constrained partial index scan with index-join.
+opt
+SELECT * FROM p WHERE s = 'foo' AND i > 5 AND i < 10
+----
+index-join p
+ ├── columns: i:1!null f:2 s:3!null b:4
+ ├── fd: ()-->(3)
+ └── scan p@i_where_s_foo,partial
+      ├── columns: i:1!null f:2 s:3 rowid:5!null
+      ├── constraint: /1/5: [/6 - /9]
+      ├── key: (5)
+      └── fd: (5)-->(1-3)
+
+# Constrained partial index scan with additional filter.
+opt
+SELECT i FROM q WHERE i > 10 AND i < 20 AND b
+----
+project
+ ├── columns: i:1!null
+ └── select
+      ├── columns: i:1!null b:4!null
+      ├── fd: ()-->(4)
+      ├── index-join q
+      │    ├── columns: i:1 b:4
+      │    └── scan q@i
+      │         ├── columns: i:1!null rowid:5!null
+      │         ├── constraint: /1/5: [/11 - /19]
+      │         ├── key: (5)
+      │         └── fd: (5)-->(1)
+      └── filters
+           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+
+# Constrained partial index scan with additional filters before and after an
+# index-join.
+opt
+SELECT * FROM q WHERE i > 10 AND i < 20 AND s = 'bar' AND b
+----
+select
+ ├── columns: i:1!null f:2 s:3!null b:4!null
+ ├── fd: ()-->(3,4)
+ ├── index-join q
+ │    ├── columns: i:1 f:2 s:3 b:4
+ │    ├── fd: ()-->(3)
+ │    └── select
+ │         ├── columns: i:1!null s:3!null rowid:5!null
+ │         ├── key: (5)
+ │         ├── fd: ()-->(3), (5)-->(1)
+ │         ├── scan q@i_where_s_eq_foo_or_bar,partial
+ │         │    ├── columns: i:1!null s:3 rowid:5!null
+ │         │    ├── constraint: /1/5: [/11 - /19]
+ │         │    ├── key: (5)
+ │         │    └── fd: (5)-->(1,3)
+ │         └── filters
+ │              └── s:3 = 'bar' [outer=(3), constraints=(/3: [/'bar' - /'bar']; tight), fd=()-->(3)]
+ └── filters
+      └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+
+# Generate multiple partial index scans in the memo when the filter implies
+# multiple partial index predicates.
+memo
+SELECT i FROM q WHERE i = 3 AND s = 'foo'
+----
+memo (optimized, ~19KB, required=[presentation: i:1])
+ ├── G1: (project G2 G3 i)
+ │    └── [presentation: i:1]
+ │         ├── best: (project G2 G3 i)
+ │         └── cost: 0.55
+ ├── G2: (select G4 G5) (select G6 G7) (index-join G8 q,cols=(1,3)) (select G9 G5) (select G10 G11) (select G12 G7) (index-join G13 q,cols=(1,3))
+ │    └── []
+ │         ├── best: (index-join G13 q,cols=(1,3))
+ │         └── cost: 0.53
+ ├── G3: (projections)
+ ├── G4: (scan q,cols=(1,3))
+ │    └── []
+ │         ├── best: (scan q,cols=(1,3))
+ │         └── cost: 1070.02
+ ├── G5: (filters G14 G15)
+ ├── G6: (index-join G16 q,cols=(1,3))
+ │    └── []
+ │         ├── best: (index-join G16 q,cols=(1,3))
+ │         └── cost: 363.88
+ ├── G7: (filters G14)
+ ├── G8: (select G17 G7)
+ │    └── []
+ │         ├── best: (select G17 G7)
+ │         └── cost: 10.53
+ ├── G9: (scan q@i_where_s_eq_foo_or_bar,partial,cols=(1,3))
+ │    └── []
+ │         ├── best: (scan q@i_where_s_eq_foo_or_bar,partial,cols=(1,3))
+ │         └── cost: 21.01
+ ├── G10: (index-join G18 q,cols=(1,3))
+ │    └── []
+ │         ├── best: (index-join G18 q,cols=(1,3))
+ │         └── cost: 51.22
+ ├── G11: (filters G15)
+ ├── G12: (index-join G19 q,cols=(1,3))
+ │    └── []
+ │         ├── best: (index-join G19 q,cols=(1,3))
+ │         └── cost: 16.92
+ ├── G13: (scan q@i_where_s_eq_foo,partial,cols=(1,5),constrained)
+ │    └── []
+ │         ├── best: (scan q@i_where_s_eq_foo,partial,cols=(1,5),constrained)
+ │         └── cost: 0.11
+ ├── G14: (eq G20 G21)
+ ├── G15: (eq G22 G23)
+ ├── G16: (select G24 G11)
+ │    └── []
+ │         ├── best: (select G24 G11)
+ │         └── cost: 350.03
+ ├── G17: (scan q@i_where_s_eq_foo,partial,cols=(1,5))
+ │    └── []
+ │         ├── best: (scan q@i_where_s_eq_foo,partial,cols=(1,5))
+ │         └── cost: 10.41
+ ├── G18: (scan q@i,cols=(1,5),constrained)
+ │    └── []
+ │         ├── best: (scan q@i,cols=(1,5),constrained)
+ │         └── cost: 10.41
+ ├── G19: (scan q@s_where_i_gt_0,partial,cols=(3,5),constrained)
+ │    └── []
+ │         ├── best: (scan q@s_where_i_gt_0,partial,cols=(3,5),constrained)
+ │         └── cost: 3.44
+ ├── G20: (variable i)
+ ├── G21: (const 3)
+ ├── G22: (variable s)
+ ├── G23: (const 'foo')
+ └── G24: (scan q@s_where_i_gt_0,partial,cols=(3,5))
+      └── []
+           ├── best: (scan q@s_where_i_gt_0,partial,cols=(3,5))
+           └── cost: 346.68
+
+# Do not use partial indexes when the predicate is not implied by the filter.
+opt
+SELECT i FROM p WHERE s = 'bar' AND i = 5
+----
+project
+ ├── columns: i:1!null
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: i:1!null s:3!null
+      ├── fd: ()-->(1,3)
+      ├── scan p
+      │    ├── columns: i:1 s:3
+      │    └── partial index predicates
+      │         └── i_where_s_foo: filters
+      │              └── s:3 = 'foo' [outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+      └── filters
+           ├── s:3 = 'bar' [outer=(3), constraints=(/3: [/'bar' - /'bar']; tight), fd=()-->(3)]
+           └── i:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
 
 # --------------------------------------------------
 # GenerateInvertedIndexScans

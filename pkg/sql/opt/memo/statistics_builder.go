@@ -587,7 +587,42 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// Calculate distinct counts and histograms for partial index predicates.
 	if scan.UsesPartialIndex(sb.md) {
 		pred := scan.PartialIndexPredicate(sb.md)
-		sb.filterScan(scan, pred, relProps, s)
+
+		// If the scan has a constraint, exclude partial index predicate
+		// constraints that overlap the scan constraint to avoid applying the
+		// selectivity of both. For example, consider the constraints:
+		//
+		//   scan constraint:      /1: [/3 - /5]
+		//   predicate constraint: /1: [/1 - /10]
+		//
+		// If we apply the selectivity of both constraints, the estimated rows
+		// returned would be lower than it should be. In order to estimate row
+		// counts accurately, only the selectivity of the strictest constraint
+		// should be applied.
+		//
+		// The selectivity of the scan constraint is always applied, while the
+		// predicate constraint is discarded because the former is guaranteed to
+		// be as strict or more strict than the latter. If the scan constraint,
+		// which is built from the query filter, was less strict than the
+		// predicate constraint, then the partial index predicate would not
+		// contain the query filter, partialidx.Implicator would have proven
+		// non-implication, and a partial index scan would not have been
+		// generated.
+		if scan.Constraint != nil {
+			nonConstraintFilters := make(FiltersExpr, 0, len(pred))
+			for i := range pred {
+				if constraintSet := pred[i].ScalarProps().Constraints; constraintSet != nil {
+					if !constraintSet.ExtractCols().Intersects(scan.Constraint.Columns.ColSet()) {
+						nonConstraintFilters = append(nonConstraintFilters, pred[i])
+					}
+				}
+			}
+			pred = nonConstraintFilters
+		}
+
+		if len(pred) > 0 {
+			sb.filterScan(scan, pred, relProps, s)
+		}
 	}
 
 	if scan.InvertedConstraint != nil ||
