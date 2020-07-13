@@ -42,8 +42,14 @@ type routerOutput interface {
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
 	addBatch(context.Context, coldata.Batch, []int) bool
-	// cancel tells the output to stop producing batches.
-	cancel(ctx context.Context)
+	// cancel tells the output to stop producing batches. Optionally forwards an
+	// error if not nil.
+	cancel(context.Context, error)
+	// forwardErr forwards an error to the output. The output should call
+	// colexecerror.ExpectedError with this error on the next call to Next.
+	forwardErr(error)
+	// resetForTests resets the routerOutput for a benchmark or test run.
+	resetForTests(context.Context)
 }
 
 // getDefaultRouterOutputBlockedThreshold returns the number of unread values
@@ -78,7 +84,7 @@ type drainCoordinator interface {
 	// encounteredError should be called when a routerOutput encounters an error.
 	// This terminates execution. No locks should be held when calling this
 	// method, since cancellation could occur.
-	encounteredError(context.Context, error)
+	encounteredError(context.Context)
 	// drainMeta should be called exactly once when the routerOutput moves to
 	// draining.
 	drainMeta() []execinfrapb.ProducerMetadata
@@ -100,6 +106,9 @@ type routerOutputOp struct {
 	mu struct {
 		syncutil.Mutex
 		state routerOutputOpState
+		// forwardedErr is an error that was forwarded by the HashRouter. It set,
+		// Next always returns this error.
+		forwardedErr error
 		// unlimitedAllocator tracks the memory usage of this router output,
 		// providing a signal for when it should spill to disk.
 		// The memory lifecycle is as follows:
@@ -245,7 +254,7 @@ func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
 	o.maybeUnblockLocked()
 	// Unlock the mutex, since the HashRouter will cancel all outputs.
 	o.mu.Unlock()
-	o.drainCoordinator.encounteredError(ctx, err)
+	o.drainCoordinator.encounteredError(ctx)
 	o.mu.Lock()
 	colexecerror.InternalError(err)
 }
@@ -256,9 +265,12 @@ func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
 func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	for o.mu.state == routerOutputOpRunning && o.mu.pendingBatch == nil && o.mu.data.empty() {
+	for o.mu.forwardedErr == nil && o.mu.state == routerOutputOpRunning && o.mu.pendingBatch == nil && o.mu.data.empty() {
 		// Wait until there is data to read or the output is canceled.
 		o.mu.cond.Wait()
+	}
+	if o.mu.forwardedErr != nil {
+		colexecerror.ExpectedError(o.mu.forwardedErr)
 	}
 	if o.mu.state == routerOutputOpDraining {
 		return coldata.ZeroBatch
@@ -325,13 +337,27 @@ func (o *routerOutputOp) closeLocked(ctx context.Context) {
 // cancel wakes up a reader in Next if there is one and results in the output
 // returning zero length batches for every Next call after cancel. Note that
 // all accumulated data that hasn't been read will not be returned.
-func (o *routerOutputOp) cancel(ctx context.Context) {
+func (o *routerOutputOp) cancel(ctx context.Context, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.closeLocked(ctx)
+	o.forwardErrLocked(err)
 	// Some goroutine might be waiting on the condition variable, so wake it up.
 	// Note that read goroutines check o.mu.done, so won't wait on the condition
 	// variable after we unlock the mutex.
+	o.mu.cond.Signal()
+}
+
+func (o *routerOutputOp) forwardErrLocked(err error) {
+	if err != nil {
+		o.mu.forwardedErr = err
+	}
+}
+
+func (o *routerOutputOp) forwardErr(err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.forwardErrLocked(err)
 	o.mu.cond.Signal()
 }
 
@@ -449,11 +475,12 @@ func (o *routerOutputOp) maybeUnblockLocked() {
 	}
 }
 
-// resetForBenchmarks resets the routerOutputOp for a benchmark run.
-func (o *routerOutputOp) resetForBenchmarks(ctx context.Context) {
+// resetForTests resets the routerOutputOp for a test or benchmark run.
+func (o *routerOutputOp) resetForTests(ctx context.Context) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.mu.state = routerOutputOpRunning
+	o.mu.forwardedErr = nil
 	o.mu.data.reset(ctx)
 	o.mu.numUnread = 0
 	o.mu.blocked = false
@@ -605,20 +632,22 @@ func newHashRouterWithOutputs(
 	return r
 }
 
-// bufferErr buffers the given error to be returned by one of the router outputs.
-func (r *HashRouter) bufferErr(err error) {
-	if err == nil {
-		return
-	}
-	r.bufferedMeta = append(r.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
-}
-
-func (r *HashRouter) cancelOutputs(ctx context.Context) {
+// cancelOutputs cancels all outputs and forwards the given error to one output
+// if non-nil. The only case where the error is not forwarded if no output could
+// be canceled due to an error. In this case each output will forward the error
+// returned during cancellation.
+func (r *HashRouter) cancelOutputs(ctx context.Context, errToForward error) {
 	for _, o := range r.outputs {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() {
-			o.cancel(ctx)
+			o.cancel(ctx, errToForward)
 		}); err != nil {
-			r.bufferErr(err)
+			// If there was an error canceling this output, this error can be
+			// forwarded to whoever is calling Next.
+			o.forwardErr(err)
+		} else {
+			// Successful cancellation, which means errToForward was also consumed.
+			// Set it to nil to not forward it to another output.
+			errToForward = nil
 		}
 	}
 }
@@ -641,15 +670,6 @@ func (r *HashRouter) Run(ctx context.Context) {
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		r.input.Init()
-		// bufferErrAndCancelOutputs buffers non-nil error as metadata, cancels all
-		// of the outputs additionally buffering any error if such occurs during the
-		// outputs' cancellation as metadata as well. Note that it attempts to
-		// cancel every output regardless of whether "previous" output's
-		// cancellation succeeds.
-		bufferErrAndCancelOutputs := func(err error) {
-			r.bufferErr(err)
-			r.cancelOutputs(ctx)
-		}
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
@@ -662,7 +682,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			// Check for cancellation.
 			select {
 			case <-ctx.Done():
-				bufferErrAndCancelOutputs(ctx.Err())
+				r.cancelOutputs(ctx, ctx.Err())
 				return
 			default:
 			}
@@ -685,13 +705,13 @@ func (r *HashRouter) Run(ctx context.Context) {
 				case <-r.unblockedEventsChan:
 					r.numBlockedOutputs--
 				case <-ctx.Done():
-					bufferErrAndCancelOutputs(ctx.Err())
+					r.cancelOutputs(ctx, ctx.Err())
 					return
 				}
 			}
 
 			if err := colexecerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
-				bufferErrAndCancelOutputs(err)
+				r.cancelOutputs(ctx, err)
 				return
 			}
 			if done {
@@ -701,7 +721,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 	}); err != nil {
-		r.bufferErr(err)
+		r.cancelOutputs(ctx, err)
 	}
 
 	// Non-blocking send of metadata so that one of the outputs can return it
@@ -738,8 +758,8 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	return false
 }
 
-// resetForBenchmarks resets the HashRouter for a benchmark run.
-func (r *HashRouter) resetForBenchmarks(ctx context.Context) {
+// resetForTests resets the HashRouter for a test or benchmark run.
+func (r *HashRouter) resetForTests(ctx context.Context) {
 	if i, ok := r.input.(resetter); ok {
 		i.reset(ctx)
 	}
@@ -756,19 +776,17 @@ func (r *HashRouter) resetForBenchmarks(ctx context.Context) {
 		}
 	}
 	for _, o := range r.outputs {
-		if op, ok := o.(*routerOutputOp); ok {
-			op.resetForBenchmarks(ctx)
-		}
+		o.resetForTests(ctx)
 	}
 }
 
-func (r *HashRouter) encounteredError(ctx context.Context, err error) {
+func (r *HashRouter) encounteredError(ctx context.Context) {
 	// Once one output returns an error the hash router needs to stop running
 	// and drain its input.
 	r.setDrainState(hashRouterDrainStateRequested)
 	// cancel all outputs. The Run goroutine will eventually realize that the
 	// HashRouter is done and exit without draining.
-	r.cancelOutputs(ctx)
+	r.cancelOutputs(ctx, nil /* errToForward */)
 }
 
 func (r *HashRouter) drainMeta() []execinfrapb.ProducerMetadata {
