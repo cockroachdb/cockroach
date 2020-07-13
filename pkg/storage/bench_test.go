@@ -33,6 +33,103 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// Note: most benchmarks in this package have an engine-specific Benchmark
+// function (see bench_rocksdb_test.go and bench_pebble_test.go). The newer
+// Benchmarks with a unified implementation are here at the top of this file
+// with the business logic for the implementation of the other tests following.
+
+func BenchmarkMVCCGarbageCollect(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+
+	// NB: To debug #16068, test only 128-128-15000-6.
+	keySizes := []int{128}
+	valSizes := []int{128}
+	numKeys := []int{1, 1024}
+	versionConfigs := []struct {
+		total    int
+		toDelete []int
+	}{
+		{2, []int{1}},
+		{1024, []int{1, 16, 32, 512, 1015, 1023}},
+	}
+	engineMakers := []struct {
+		name   string
+		create engineMaker
+	}{
+		{"rocksdb", setupMVCCInMemRocksDB},
+		{"pebble", setupMVCCInMemPebble},
+	}
+
+	ctx := context.Background()
+	for _, engineImpl := range engineMakers {
+		b.Run(engineImpl.name, func(b *testing.B) {
+			for _, keySize := range keySizes {
+				b.Run(fmt.Sprintf("keySize=%d", keySize), func(b *testing.B) {
+					for _, valSize := range valSizes {
+						b.Run(fmt.Sprintf("valSize=%d", valSize), func(b *testing.B) {
+							for _, numKeys := range numKeys {
+								b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+									for _, versions := range versionConfigs {
+										b.Run(fmt.Sprintf("numVersions=%d", versions.total), func(b *testing.B) {
+											for _, toDelete := range versions.toDelete {
+												b.Run(fmt.Sprintf("deleteVersions=%d", toDelete), func(b *testing.B) {
+													runMVCCGarbageCollect(ctx, b, engineImpl.create,
+														benchGarbageCollectOptions{
+															benchDataOptions: benchDataOptions{
+																numKeys:     numKeys,
+																numVersions: versions.total,
+																valueBytes:  valSize,
+															},
+															keyBytes:       keySize,
+															deleteVersions: toDelete,
+														})
+												})
+											}
+										})
+									}
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkExportToSst(b *testing.B) {
+	numKeys := []int{64, 512, 1024, 8192, 65536}
+	numRevisions := []int{1, 10, 100}
+	exportAllRevisions := []bool{false, true}
+	engineMakers := []struct {
+		name   string
+		create engineMaker
+	}{
+		{"rocksdb", setupMVCCRocksDB},
+		{"pebble", setupMVCCPebble},
+	}
+
+	for _, engineImpl := range engineMakers {
+		b.Run(engineImpl.name, func(b *testing.B) {
+			for _, numKey := range numKeys {
+				b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
+					for _, numRevision := range numRevisions {
+						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
+							for _, exportAllRevisionsVal := range exportAllRevisions {
+								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
+									runExportToSst(b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal)
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 const overhead = 48 // Per key/value overhead (empirically determined)
 
 type engineMaker func(testing.TB, string) Engine
