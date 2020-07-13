@@ -394,7 +394,7 @@ func TestJoinReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -416,7 +416,7 @@ func TestJoinReader(t *testing.T) {
 						Cfg: &execinfra.ServerConfig{
 							Settings:    st,
 							TempStorage: tempEngine,
-							DiskMonitor: &diskMonitor,
+							DiskMonitor: diskMonitor,
 						},
 						Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					}
@@ -533,7 +533,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -549,7 +549,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: &diskMonitor,
+			DiskMonitor: diskMonitor,
 		},
 		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
@@ -635,7 +635,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -656,7 +656,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
-			DiskMonitor: &diskMonitor,
+			DiskMonitor: diskMonitor,
 		},
 		Txn: leafTxn,
 	}

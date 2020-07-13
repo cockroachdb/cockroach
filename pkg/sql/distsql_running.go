@@ -834,7 +834,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) error {
-	subqueryMonitor := mon.MakeMonitor(
+	subqueryMonitor := mon.NewMonitor(
 		"subquery",
 		mon.MemoryResource,
 		dsp.distSQLSrv.Metrics.CurBytesCount,
@@ -1127,7 +1127,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) error {
-	postqueryMonitor := mon.MakeMonitor(
+	postqueryMonitor := mon.NewMonitor(
 		"postquery",
 		mon.MemoryResource,
 		dsp.distSQLSrv.Metrics.CurBytesCount,

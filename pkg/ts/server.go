@@ -91,8 +91,8 @@ type Server struct {
 	nodeCountFn      ClusterNodeCountFn
 	queryMemoryMax   int64
 	queryWorkerMax   int
-	workerMemMonitor mon.BytesMonitor
-	resultMemMonitor mon.BytesMonitor
+	workerMemMonitor *mon.BytesMonitor
+	resultMemMonitor *mon.BytesMonitor
 	workerSem        *quotapool.IntPool
 }
 
@@ -123,7 +123,7 @@ func MakeServer(
 		db:             db,
 		stopper:        stopper,
 		nodeCountFn:    nodeCountFn,
-		workerMemMonitor: mon.MakeUnlimitedMonitor(
+		workerMemMonitor: mon.NewUnlimitedMonitor(
 			context.Background(),
 			"timeseries-workers",
 			mon.MemoryResource,
@@ -134,7 +134,7 @@ func MakeServer(
 			queryMemoryMax*2,
 			db.st,
 		),
-		resultMemMonitor: mon.MakeUnlimitedMonitor(
+		resultMemMonitor: mon.NewUnlimitedMonitor(
 			context.Background(),
 			"timeseries-results",
 			mon.MemoryResource,
@@ -249,8 +249,8 @@ func (s *Server) Query(
 
 					// Create a memory account for the results of this query.
 					memContexts[queryIdx] = MakeQueryMemoryContext(
-						&s.workerMemMonitor,
-						&s.resultMemMonitor,
+						s.workerMemMonitor,
+						s.resultMemMonitor,
 						QueryMemoryOptions{
 							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
 							EstimatedSources:        estimatedSourceCount,

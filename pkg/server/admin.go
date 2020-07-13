@@ -90,7 +90,7 @@ var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "
 // the cockroach cluster.
 type adminServer struct {
 	server     *Server
-	memMonitor mon.BytesMonitor
+	memMonitor *mon.BytesMonitor
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -104,7 +104,7 @@ func newAdminServer(s *Server) *adminServer {
 	server := &adminServer{server: s}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
-	server.memMonitor = mon.MakeUnlimitedMonitor(
+	server.memMonitor = mon.NewUnlimitedMonitor(
 		context.Background(),
 		"admin",
 		mon.MemoryResource,

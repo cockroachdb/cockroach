@@ -196,9 +196,9 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if knobs.MemBufferCapacity != 0 {
 		kvFeedMemMonCapacity = knobs.MemBufferCapacity
 	}
-	kvFeedMemMon := mon.MakeMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
 	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
-	ca.kvFeedMemMon = &kvFeedMemMon
+	ca.kvFeedMemMon = kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)

@@ -41,7 +41,7 @@ type testContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	mockDB      *kv.DB
-	mon         mon.BytesMonitor
+	mon         *mon.BytesMonitor
 	tracer      opentracing.Tracer
 	// ctx is mimicking the spirit of a client connection's context
 	ctx      context.Context
@@ -63,7 +63,7 @@ func makeTestContext() testContext {
 		manualClock: manual,
 		clock:       clock,
 		mockDB:      kv.NewDB(ambient, factory, clock),
-		mon: mon.MakeMonitor(
+		mon: mon.NewMonitor(
 			"test root mon",
 			mon.MemoryResource,
 			nil,  /* curCount */
@@ -84,7 +84,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	ctx := opentracing.ContextWithSpan(tc.ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
 
-	txnStateMon := mon.MakeMonitor("test mon",
+	txnStateMon := mon.NewMonitor("test mon",
 		mon.MemoryResource,
 		nil,  /* curCount */
 		nil,  /* maxHist */
@@ -92,7 +92,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
+	txnStateMon.Start(tc.ctx, tc.mon, mon.BoundAccount{})
 
 	ts := txnState{
 		Ctx:           ctx,
@@ -101,7 +101,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
 		priority:      roachpb.NormalUserPriority,
-		mon:           &txnStateMon,
+		mon:           txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
@@ -129,7 +129,7 @@ func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 }
 
 func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
-	txnStateMon := mon.MakeMonitor("test mon",
+	txnStateMon := mon.NewMonitor("test mon",
 		mon.MemoryResource,
 		nil,  /* curCount */
 		nil,  /* maxHist */
@@ -137,7 +137,7 @@ func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	ts := txnState{mon: &txnStateMon, connCtx: tc.ctx}
+	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts
 }
 
@@ -216,7 +216,7 @@ func TestTransitions(t *testing.T) {
 		nodeIDOrZero:   roachpb.NodeID(5),
 		clock:          testCon.clock,
 		tracer:         tracing.NewTracer(),
-		connMon:        &testCon.mon,
+		connMon:        testCon.mon,
 		sessionTracing: &SessionTracing{},
 		settings:       testCon.settings,
 	}

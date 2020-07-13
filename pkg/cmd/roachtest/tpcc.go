@@ -356,7 +356,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		MinVersion: "v20.1.0",
-		Timeout:    3 * time.Hour,
+		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				// Currently, we do not support import on interleaved tables which
