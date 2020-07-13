@@ -2710,13 +2710,12 @@ func addPGTypeRow(
 	)
 }
 
-// TODO (rohany): We should add a virtual index on OID here. See #49208.
 var pgCatalogTypeTable = virtualSchemaTable{
 	comment: `scalar types (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_type (
-	oid OID,
+	oid OID NOT NULL,
 	typname NAME NOT NULL,
 	typnamespace OID,
 	typowner OID,
@@ -2746,7 +2745,8 @@ CREATE TABLE pg_catalog.pg_type (
 	typcollation OID,
 	typdefaultbin STRING,
 	typdefault STRING,
-	typacl STRING[]
+	typacl STRING[],
+  INDEX(oid)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
@@ -2762,12 +2762,8 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *sqlbase.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
-					typ, err := typDesc.MakeTypesT(
-						tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())),
-						p.makeTypeLookupFn(ctx),
-					)
+					typ, err := createTypeFromDesc(ctx, p, typDesc)
 					if err != nil {
 						return err
 					}
@@ -2775,6 +2771,56 @@ CREATE TABLE pg_catalog.pg_type (
 				})
 			})
 	},
+	indexes: []virtualIndex{
+		{
+			partial: false,
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
+				addRow func(...tree.Datum) error) (bool, error) {
+
+				h := makeOidHasher()
+				nspOid := h.NamespaceOid(db, pgCatalogName)
+				coid := tree.MustBeDOid(constraint)
+				ooid := oid.Oid(int(coid.DInt))
+
+				// Check if it is a predefined type.
+				typ, ok := types.OidToType[ooid]
+				if ok {
+					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+						return false, err
+					}
+					return true, nil
+				}
+
+				// Check if it is a user defined type.
+				id := sqlbase.ID(types.UserDefinedTypeOIDToID(ooid))
+				// TODO (rohany): This access should go through the desc.Collection.
+				typDesc, err := sqlbase.GetTypeDescFromID(ctx, p.txn, keys.SystemSQLCodec, id)
+				if err != nil {
+					if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+						return false, nil
+					}
+					return false, err
+				}
+				typ, err = createTypeFromDesc(ctx, p, typDesc)
+				if err != nil {
+					return false, err
+				}
+				if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+					return false, err
+				}
+
+				// No errors and matches.
+				return false, nil
+			},
+		},
+	},
+}
+
+func createTypeFromDesc(ctx context.Context, p *planner, typDesc *sqlbase.ImmutableTypeDescriptor) (*types.T, error) {
+	return typDesc.MakeTypesT(
+		tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())),
+		p.makeTypeLookupFn(ctx),
+	)
 }
 
 var pgCatalogUserTable = virtualSchemaTable{
