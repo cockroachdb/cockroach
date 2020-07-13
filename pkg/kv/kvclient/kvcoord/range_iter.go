@@ -82,11 +82,7 @@ func (ri *RangeIterator) Leaseholder() *roachpb.ReplicaDescriptor {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
-	l := ri.token.Lease()
-	if l == nil {
-		return nil
-	}
-	return &l.Replica
+	return ri.token.Leaseholder()
 }
 
 // Token returns the eviction token corresponding to the range
