@@ -4100,19 +4100,17 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	allowResponse := make(chan struct{})
+	allowRequest := make(chan struct{})
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: func(
-			ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
-		) *roachpb.Error {
-			for _, ru := range br.Responses {
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range ba.Requests {
 				switch ru.GetInner().(type) {
-				case *roachpb.ExportResponse, *roachpb.ImportResponse:
-					<-allowResponse
+				case *roachpb.ExportRequest:
+					<-allowRequest
 				}
 			}
 			return nil
@@ -4127,9 +4125,9 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	close(allowResponse)
+	close(allowRequest)
 	runner.Exec(t, `BACKUP TABLE FOO TO 'nodelocal://0/foo'`) // create a base backup.
-	allowResponse = make(chan struct{})
+	allowRequest = make(chan struct{})
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	rRand, _ := randutil.NewPseudoRand()
@@ -4141,16 +4139,13 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	writeGarbage(3, 10)
 	rowCount := runner.QueryStr(t, "SELECT * FROM foo")
 
-	go func() {
-		// N.B. We use the conn rather than the runner here since the test may
-		// finish before the job finishes. The test will finish as soon as the
-		// timestamp is no longer protected. If the test starts tearing down the
-		// cluster before the backup job is done, the test may still fail when the
-		// backup fails. This test does not particularly care if the BACKUP
-		// completes with a success or failure, as long as the timestamp is released
-		// shortly after the BACKUP is unblocked.
-		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://0/foo-inc' INCREMENTAL FROM 'nodelocal://0/foo'`) // ignore error.
-	}()
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		// If BACKUP does not protect the timestamp, the ExportRequest will
+		// throw an error and fail the backup.
+		_, err := conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://0/foo-inc' INCREMENTAL FROM 'nodelocal://0/foo'`)
+		return err
+	})
 
 	var jobID string
 	testutils.SucceedsSoon(t, func() error {
@@ -4186,7 +4181,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	gcTable(true /* skipShouldQueue */)
 
 	// Unblock the blocked backup request.
-	close(allowResponse)
+	close(allowRequest)
 
 	runner.CheckQueryResultsRetry(t, "SELECT * FROM foo", rowCount)
 
@@ -4204,6 +4199,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		}
 		return nil
 	})
+	require.NoError(t, g.Wait())
 }
 
 func getFirstStoreReplica(
