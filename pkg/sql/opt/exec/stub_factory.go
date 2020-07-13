@@ -100,6 +100,24 @@ func (StubFactory) ConstructMergeJoin(
 	return struct{}{}, nil
 }
 
+// ConstructInterleavedJoin is part of the exec.Factory interface.
+func (StubFactory) ConstructInterleavedJoin(
+	joinType sqlbase.JoinType,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	leftParams ScanParams,
+	leftFilter tree.TypedExpr,
+	rightTable cat.Table,
+	rightIndex cat.Index,
+	rightParams ScanParams,
+	rightFilter tree.TypedExpr,
+	leftIsAncestor bool,
+	onCond tree.TypedExpr,
+	reqOrdering OutputOrdering,
+) (Node, error) {
+	return struct{}{}, nil
+}
+
 // ConstructGroupBy is part of the exec.Factory interface.
 func (StubFactory) ConstructGroupBy(
 	input Node,

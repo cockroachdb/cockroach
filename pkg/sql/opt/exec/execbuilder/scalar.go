@@ -94,6 +94,16 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 	return fn(b, ctx, scalar)
 }
 
+func (b *Builder) buildScalarWithMap(
+	colMap opt.ColMap, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numOutputColsInMap(colMap)),
+		ivarMap: colMap,
+	}
+	return b.buildScalar(&ctx, scalar)
+}
+
 func (b *Builder) buildTypedExpr(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
