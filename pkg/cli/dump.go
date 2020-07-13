@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -234,14 +235,16 @@ func getDumpMetadata(
 	return mds, clusterTS, nil
 }
 
-// getTableNames retrieves all tables names in the given database.
+// getTableNames retrieves all tables names in the given database. Following
+// pg_dump, we ignore all descriptors which are part of the temp schema. This
+// includes tables, views and sequences.
 func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string, err error) {
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT descriptor_name
 		FROM "".crdb_internal.create_statements
 		AS OF SYSTEM TIME %s
-		WHERE database_name = $1
-		`, lex.EscapeSQLString(ts)), []driver.Value{dbName})
+		WHERE database_name = $1 AND schema_name NOT LIKE $2
+		`, lex.EscapeSQLString(ts)), []driver.Value{dbName, sessiondata.PgTempSchemaName + "%"})
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +278,7 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 	dbNameEscaped := tree.NameString(dbName)
 	vals, err := conn.QueryRow(fmt.Sprintf(`
 		SELECT
+			schema_name,
 			descriptor_id,
 			create_nofks,
 			descriptor_type,
@@ -294,26 +298,41 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 		}
 		return basicMetadata{}, errors.Wrap(err, "getBasicMetadata")
 	}
-	idI := vals[0]
+
+	// Check the schema to disallow dumping temp tables, views and sequences. This
+	// will only be triggered if a user explicitly specifies a temp construct as
+	// one of the arguments to the `cockroach dump` command. When no table names
+	// are specified on the CLI, we ignore temp tables at the stage where we read
+	// all table names in getTableNames.
+	schemaNameI := vals[0]
+	schemaName, ok := schemaNameI.(string)
+	if !ok {
+		return basicMetadata{}, fmt.Errorf("unexpected value: %T", schemaNameI)
+	}
+	if strings.HasPrefix(schemaName, sessiondata.PgTempSchemaName) {
+		return basicMetadata{}, errors.Newf("cannot dump temp table %s", tableName)
+	}
+
+	idI := vals[1]
 	id, ok := idI.(int64)
 	if !ok {
 		return basicMetadata{}, fmt.Errorf("unexpected value: %T", idI)
 	}
-	createStatementI := vals[1]
+	createStatementI := vals[2]
 	createStatement, ok := createStatementI.(string)
 	if !ok {
 		return basicMetadata{}, fmt.Errorf("unexpected value: %T", createStatementI)
 	}
-	kindI := vals[2]
+	kindI := vals[3]
 	kind, ok := kindI.(string)
 	if !ok {
 		return basicMetadata{}, fmt.Errorf("unexpected value: %T", kindI)
 	}
-	alterStatements, err := extractArray(vals[3])
+	alterStatements, err := extractArray(vals[4])
 	if err != nil {
 		return basicMetadata{}, err
 	}
-	validateStatements, err := extractArray(vals[4])
+	validateStatements, err := extractArray(vals[5])
 	if err != nil {
 		return basicMetadata{}, err
 	}
