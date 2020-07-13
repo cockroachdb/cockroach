@@ -1812,17 +1812,31 @@ func (r schemaChangeResumer) Resume(
 
 	// For an empty database, the zone config for it was already GC'ed and there's
 	// nothing left to do.
-	if details.DroppedDatabaseID != sqlbase.InvalidID && len(details.DroppedTables) == 0 {
+	if details.DroppedDatabaseID != sqlbase.InvalidID && len(details.DroppedTables) == 0 && len(details.DroppedTypes) == 0 {
 		return nil
 	}
 
 	// If a database is being dropped, handle this separately by draining names
-	// for all the tables.
+	// for all the tables and types.
 	//
 	// This also covers other cases where we have a leftover 19.2 job that drops
 	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
 	// it's possible for DroppedDatabaseID to be unset.
-	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 {
+	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 || len(details.DroppedTypes) > 0 {
+		// Drop all of the types in the database.
+		for i := range details.DroppedTypes {
+			ts := &typeSchemaChanger{
+				typeID:  details.DroppedTypes[i],
+				execCfg: p.ExecCfg(),
+			}
+			// TODO (rohany): This should be a call to exec wrapped in the error
+			//  handling, especially the handling for ErrDescriptorNotFound.
+			if err := ts.exec(ctx); err != nil {
+				return err
+			}
+		}
+
+		// Drop the tables now.
 		for i := range details.DroppedTables {
 			droppedTable := &details.DroppedTables[i]
 			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID, details.DroppedDatabaseID); err != nil {

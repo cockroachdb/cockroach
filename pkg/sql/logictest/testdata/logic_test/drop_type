@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant
+
 statement ok
 SET experimental_enable_enums = true;
 SET sql_safe_updates = false;
@@ -256,3 +258,63 @@ TRUNCATE TABLE tab
 
 statement error pq: cannot drop type "ty" because other objects \(\[test.public.tab\]\) still depend on it
 DROP TYPE ty
+
+# Tests for dropping a database that contains types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t AS ENUM ()
+
+statement error pq: database \"d\" is not empty and RESTRICT was specified
+DROP DATABASE d RESTRICT
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+# Default is CASCADE.
+# TODO (rohany): This hangs under the tenant config.
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Test when some objects in the database use the types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t AS ENUM ('hello');
+CREATE TABLE d.t1 (x d.d_t);
+CREATE TABLE d.t2 (y d.d_t[])
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'd_t'
+
+statement ok
+DROP DATABASE d
+
+# Ensure that the namespace entries are deleted.
+query I
+SELECT id FROM system.namespace WHERE name = 'd_t' or name = '_d_t'
+
+# Ensure that the system.descriptor entries are deleted too.
+query IT
+SELECT * FROM system.descriptor WHERE id = $t_id OR id = $t_id + 1
+
+# Create a database with a large number of types.
+statement ok
+CREATE DATABASE d;
+CREATE TYPE d.d_t_1 AS ENUM ('hello');
+CREATE TYPE d.d_t_2 AS ENUM ('hello');
+CREATE TYPE d.d_t_3 AS ENUM ('hello');
+CREATE TYPE d.d_t_4 AS ENUM ('hello');
+CREATE TYPE d.d_t_5 AS ENUM ('hello')
+
+statement ok
+DROP DATABASE d
+
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'd_t%'

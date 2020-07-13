@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// writeTypeChange should be called on a mutated type descriptor to ensure that
+// writeTypeSchemaChange should be called on a mutated type descriptor to ensure that
 // the descriptor gets written to a batch, as well as ensuring that a job is
 // created to perform the schema change on the type.
-func (p *planner) writeTypeChange(
+func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string,
 ) error {
 	// Check if there is an active job for this type, otherwise create one.
@@ -66,6 +66,12 @@ func (p *planner) writeTypeChange(
 		log.Infof(ctx, "queued new type change job %d for type %d", *newJob.ID(), typeDesc.ID)
 	}
 
+	return p.writeTypeDesc(ctx, typeDesc)
+}
+
+func (p *planner) writeTypeDesc(
+	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor,
+) error {
 	// TODO (rohany): Once the desc.Collection has a hook to register a modified
 	//  type, call into that hook here.
 

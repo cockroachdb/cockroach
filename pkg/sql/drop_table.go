@@ -36,7 +36,7 @@ type dropTableNode struct {
 }
 
 type toDelete struct {
-	tn   *tree.TableName
+	tn   tree.ObjectName
 	desc *sqlbase.MutableTableDescriptor
 }
 

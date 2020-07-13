@@ -36,7 +36,8 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
 	databaseID sqlbase.ID,
-	droppedDetails []jobspb.DroppedTableDetails,
+	tableDropDetails []jobspb.DroppedTableDetails,
+	typesToDrop []*sqlbase.MutableTypeDescriptor,
 	jobDesc string,
 ) error {
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
@@ -46,16 +47,21 @@ func (p *planner) createDropDatabaseJob(
 	}
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
-	descriptorIDs := make([]sqlbase.ID, 0, len(droppedDetails))
-	for _, d := range droppedDetails {
-		descriptorIDs = append(descriptorIDs, d.ID)
+	tableIDs := make([]sqlbase.ID, 0, len(tableDropDetails))
+	for _, d := range tableDropDetails {
+		tableIDs = append(tableIDs, d.ID)
+	}
+	typeIDs := make([]sqlbase.ID, 0, len(typesToDrop))
+	for _, t := range typesToDrop {
+		typeIDs = append(typeIDs, t.ID)
 	}
 	jobRecord := jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
-		DescriptorIDs: descriptorIDs,
+		DescriptorIDs: tableIDs,
 		Details: jobspb.SchemaChangeDetails{
-			DroppedTables:     droppedDetails,
+			DroppedTables:     tableDropDetails,
+			DroppedTypes:      typeIDs,
 			DroppedDatabaseID: databaseID,
 			FormatVersion:     jobspb.JobResumerFormatVersion,
 		},

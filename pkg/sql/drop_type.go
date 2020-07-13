@@ -113,7 +113,7 @@ func (p *planner) canDropTypeDesc(
 
 func (n *dropTypeNode) startExec(params runParams) error {
 	for _, typ := range n.td {
-		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
+		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), true /* queueJob */); err != nil {
 			return err
 		}
 	}
@@ -130,7 +130,7 @@ func (p *planner) addTypeBackReference(
 	}
 	mutDesc := sqlbase.NewMutableExistingTypeDescriptor(*desc.TypeDesc())
 	mutDesc.AddReferencingDescriptorID(ref)
-	return p.writeTypeChange(ctx, mutDesc, jobDesc)
+	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
 }
 
 func (p *planner) addBackRefsToAllTypesInTable(
@@ -158,7 +158,7 @@ func (p *planner) addBackRefsToAllTypesInTable(
 
 // dropTypeImpl does the work of dropping a type and everything that depends on it.
 func (p *planner) dropTypeImpl(
-	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string,
+	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string, queueJob bool,
 ) error {
 	if typeDesc.State == sqlbase.TypeDescriptor_DROP {
 		return errors.Errorf("type %q is already being dropped", typeDesc.Name)
@@ -173,7 +173,10 @@ func (p *planner) dropTypeImpl(
 
 	// Actually mark the type as dropped.
 	typeDesc.State = sqlbase.TypeDescriptor_DROP
-	return p.writeTypeChange(ctx, typeDesc, jobDesc)
+	if queueJob {
+		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
+	}
+	return p.writeTypeDesc(ctx, typeDesc)
 }
 
 func (n *dropTypeNode) Next(params runParams) (bool, error) { return false, nil }

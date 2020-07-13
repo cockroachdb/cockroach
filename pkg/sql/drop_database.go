@@ -36,6 +36,7 @@ type dropDatabaseNode struct {
 	dbDesc          *sqlbase.ImmutableDatabaseDescriptor
 	td              []toDelete
 	schemasToDelete []string
+	typesToDelete   []*sqlbase.MutableTypeDescriptor
 }
 
 // DropDatabase drops a database.
@@ -74,7 +75,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	var tbNames TableNames
+	var objNames []tree.ObjectName
 	schemasToDelete := make([]string, 0, len(schemas))
 	for _, schema := range schemas {
 		schemasToDelete = append(schemasToDelete, schema)
@@ -84,10 +85,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		if err != nil {
 			return nil, err
 		}
-		tbNames = append(tbNames, toAppend...)
+		for i := range toAppend {
+			objNames = append(objNames, &toAppend[i])
+		}
 	}
 
-	if len(tbNames) > 0 {
+	if len(objNames) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
 			return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
@@ -103,50 +106,86 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	td := make([]toDelete, 0, len(tbNames))
-	for i, tbName := range tbNames {
+	var typesToDelete []*sqlbase.MutableTypeDescriptor
+	td := make([]toDelete, 0, len(objNames))
+	for i, objName := range objNames {
+		// First try looking up objName as a table.
 		found, desc, err := p.LookupObject(
 			ctx,
 			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+				// Note we set required to be false here in order to not error out
+				// if we don't find the object,
+				CommonLookupFlags: tree.CommonLookupFlags{Required: false},
 				RequireMutable:    true,
 				IncludeOffline:    true,
+				DesiredObjectKind: tree.TableObject,
 			},
-			tbName.Catalog(),
-			tbName.Schema(),
-			tbName.Table(),
+			objName.Catalog(),
+			objName.Schema(),
+			objName.Object(),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
-			continue
-		}
-		tbDesc, ok := desc.(*sqlbase.MutableTableDescriptor)
-		if !ok {
-			return nil, errors.AssertionFailedf(
-				"descriptor for %q is not MutableTableDescriptor",
-				tbName.String(),
-			)
-		}
-		if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
-			dbName := dbDesc.GetName()
-			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"cannot drop a database with OFFLINE tables, ensure %s is"+
-					" dropped or made public before dropping database %s",
-				tbName.String(), tree.AsString((*tree.Name)(&dbName)))
-		}
-		if err := p.prepareDropWithTableDesc(ctx, tbDesc); err != nil {
-			return nil, err
-		}
-		// Recursively check permissions on all dependent views, since some may
-		// be in different databases.
-		for _, ref := range tbDesc.DependedOnBy {
-			if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
+		if found {
+			tbDesc, ok := desc.(*sqlbase.MutableTableDescriptor)
+			if !ok {
+				return nil, errors.AssertionFailedf(
+					"descriptor for %q is not MutableTableDescriptor",
+					objName.Object(),
+				)
+			}
+			if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
+				dbName := dbDesc.GetName()
+				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot drop a database with OFFLINE tables, ensure %s is"+
+						" dropped or made public before dropping database %s",
+					objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
+			}
+			if err := p.prepareDropWithTableDesc(ctx, tbDesc); err != nil {
 				return nil, err
 			}
+			// Recursively check permissions on all dependent views, since some may
+			// be in different databases.
+			for _, ref := range tbDesc.DependedOnBy {
+				if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
+					return nil, err
+				}
+			}
+			td = append(td, toDelete{objNames[i], tbDesc})
+		} else {
+			// If we couldn't resolve objName as a table, try a type.
+			found, desc, err := p.LookupObject(
+				ctx,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+					RequireMutable:    true,
+					IncludeOffline:    true,
+					DesiredObjectKind: tree.TypeObject,
+				},
+				objName.Catalog(),
+				objName.Schema(),
+				objName.Object(),
+			)
+			if err != nil {
+				return nil, err
+			}
+			// If we couldn't find the object at all, then continue.
+			if !found {
+				continue
+			}
+			typDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+			if !ok {
+				return nil, errors.AssertionFailedf(
+					"descriptor for %q is not MutableTypeDescriptor",
+					objName.Object(),
+				)
+			}
+			// Types can only depend on objects within this database, so we don't
+			// need to do any more verification about whether or not we can drop
+			// this type.
+			typesToDelete = append(typesToDelete, typDesc)
 		}
-		td = append(td, toDelete{&tbNames[i], tbDesc})
 	}
 
 	td, err = p.filterCascadedTables(ctx, td)
@@ -154,7 +193,13 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td, schemasToDelete: schemasToDelete}, nil
+	return &dropDatabaseNode{
+		n:               n,
+		dbDesc:          dbDesc,
+		td:              td,
+		schemasToDelete: schemasToDelete,
+		typesToDelete:   typesToDelete,
+	}, nil
 }
 
 func (n *dropDatabaseNode) startExec(params runParams) error {
@@ -174,9 +219,17 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tableDescs = append(tableDescs, toDel.desc)
 	}
 	if err := p.createDropDatabaseJob(
-		ctx, n.dbDesc.GetID(), droppedTableDetails, tree.AsStringWithFQNames(n.n, params.Ann()),
+		ctx, n.dbDesc.GetID(), droppedTableDetails, n.typesToDelete, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
+	}
+
+	for _, typ := range n.typesToDelete {
+		// Drop the types. Note that we set queueJob to be false because the types
+		// will be dropped in bulk as part of the DROP DATABASE job.
+		if err := p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), false /* queueJob */); err != nil {
+			return err
+		}
 	}
 
 	// When views, sequences, and tables are dropped, don't queue a separate job

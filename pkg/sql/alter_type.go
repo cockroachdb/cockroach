@@ -141,7 +141,7 @@ func (p *planner) performRenameTypeDesc(
 	})
 	// Set the descriptor up with the new name.
 	desc.Name = newName
-	if err := p.writeTypeChange(ctx, desc, jobDesc); err != nil {
+	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
 	// Construct the new namespace key.
