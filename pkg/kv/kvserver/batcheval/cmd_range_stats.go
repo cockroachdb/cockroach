@@ -13,10 +13,24 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
+
+func declareKeysRangeStats(
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+	// The request will return the descriptor and lease.
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+}
 
 func init() {
 	RegisterReadOnlyCommand(roachpb.RangeStats, DefaultDeclareKeys, RangeStats)
@@ -24,10 +38,12 @@ func init() {
 
 // RangeStats returns the MVCC statistics for a range.
 func RangeStats(
-	_ context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.QueriesPerSecond = cArgs.EvalCtx.GetSplitQPS()
+	desc, lease := cArgs.EvalCtx.GetDescAndLease(ctx)
+	reply.RangeInfo = &roachpb.RangeInfo{Desc: desc, Lease: lease}
 	return result.Result{}, nil
 }

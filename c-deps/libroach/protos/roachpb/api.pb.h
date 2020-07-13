@@ -14113,6 +14113,18 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
   ::cockroach::storage::enginepb::MVCCStats* mutable_mvcc_stats();
   void set_allocated_mvcc_stats(::cockroach::storage::enginepb::MVCCStats* mvcc_stats);
 
+  // .cockroach.roachpb.RangeInfo range_info = 4;
+  bool has_range_info() const;
+  void clear_range_info();
+  static const int kRangeInfoFieldNumber = 4;
+  private:
+  const ::cockroach::roachpb::RangeInfo& _internal_range_info() const;
+  public:
+  const ::cockroach::roachpb::RangeInfo& range_info() const;
+  ::cockroach::roachpb::RangeInfo* release_range_info();
+  ::cockroach::roachpb::RangeInfo* mutable_range_info();
+  void set_allocated_range_info(::cockroach::roachpb::RangeInfo* range_info);
+
   // double queries_per_second = 3;
   void clear_queries_per_second();
   static const int kQueriesPerSecondFieldNumber = 3;
@@ -14125,6 +14137,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::ResponseHeader* header_;
   ::cockroach::storage::enginepb::MVCCStats* mvcc_stats_;
+  ::cockroach::roachpb::RangeInfo* range_info_;
   double queries_per_second_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -29565,6 +29578,54 @@ inline void RangeStatsResponse::set_queries_per_second(double value) {
   
   queries_per_second_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeStatsResponse.queries_per_second)
+}
+
+// .cockroach.roachpb.RangeInfo range_info = 4;
+inline bool RangeStatsResponse::has_range_info() const {
+  return this != internal_default_instance() && range_info_ != NULL;
+}
+inline const ::cockroach::roachpb::RangeInfo& RangeStatsResponse::_internal_range_info() const {
+  return *range_info_;
+}
+inline const ::cockroach::roachpb::RangeInfo& RangeStatsResponse::range_info() const {
+  const ::cockroach::roachpb::RangeInfo* p = range_info_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeStatsResponse.range_info)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RangeInfo*>(
+      &::cockroach::roachpb::_RangeInfo_default_instance_);
+}
+inline ::cockroach::roachpb::RangeInfo* RangeStatsResponse::release_range_info() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeStatsResponse.range_info)
+  
+  ::cockroach::roachpb::RangeInfo* temp = range_info_;
+  range_info_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RangeInfo* RangeStatsResponse::mutable_range_info() {
+  
+  if (range_info_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RangeInfo>(GetArenaNoVirtual());
+    range_info_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeStatsResponse.range_info)
+  return range_info_;
+}
+inline void RangeStatsResponse::set_allocated_range_info(::cockroach::roachpb::RangeInfo* range_info) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(range_info_);
+  }
+  if (range_info) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      range_info = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, range_info, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  range_info_ = range_info;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeStatsResponse.range_info)
 }
 
 // -------------------------------------------------------------------
