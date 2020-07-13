@@ -6,9 +6,9 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// Package followerreadsccl implements and injects the functionality needed to
+// Package kvfollowerreadsccl implements and injects the functionality needed to
 // expose follower reads to clients.
-package followerreadsccl
+package kvfollowerreadsccl
 
 import (
 	"fmt"
