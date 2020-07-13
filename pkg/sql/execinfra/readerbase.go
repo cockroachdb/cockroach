@@ -85,16 +85,17 @@ func MisplannedRanges(
 		overlapping := rdc.GetCachedOverlapping(ctx, rsp)
 
 		for _, ri := range overlapping {
-			if _, ok := misplanned[ri.Desc.RangeID]; ok {
+			if _, ok := misplanned[ri.Desc().RangeID]; ok {
 				// We're already returning info about this range.
 				continue
 			}
 			// Ranges with unknown leases are not returned, as the current node might
 			// actually have the lease without the local cache knowing about it.
-			if !ri.Lease.Empty() && ri.Lease.Replica.NodeID != nodeID {
+			l := ri.Lease()
+			if l != nil && l.Replica.NodeID != nodeID {
 				misplannedRanges = append(misplannedRanges, roachpb.RangeInfo{
-					Desc:  ri.Desc,
-					Lease: ri.Lease,
+					Desc:  *ri.Desc(),
+					Lease: *l,
 				})
 			}
 		}

@@ -278,15 +278,17 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 			{
 				Desc: descs[0],
 				Lease: roachpb.Lease{
-					Replica: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1},
-					Start:   hlc.MinTimestamp,
+					Replica:  roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1},
+					Start:    hlc.MinTimestamp,
+					Sequence: 1,
 				},
 			},
 			{
 				Desc: descs[1],
 				Lease: roachpb.Lease{
-					Replica: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2},
-					Start:   hlc.MinTimestamp,
+					Replica:  roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2},
+					Start:    hlc.MinTimestamp,
+					Sequence: 1,
 				},
 			},
 		}})
@@ -298,8 +300,9 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 			{
 				Desc: descs[2],
 				Lease: roachpb.Lease{
-					Replica: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3},
-					Start:   hlc.MinTimestamp,
+					Replica:  roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3},
+					Start:    hlc.MinTimestamp,
+					Sequence: 1,
 				},
 			},
 		}})
@@ -310,8 +313,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	for i := range descs {
 		ri := rangeCache.GetCached(descs[i].StartKey, false /* inclusive */)
 		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
-		require.Equal(t, descs[i], ri.Desc)
-		require.False(t, ri.Lease.Empty())
+		require.Equal(t, &descs[i], ri.Desc())
+		require.NotNil(t, ri.Lease())
 	}
 }
 
