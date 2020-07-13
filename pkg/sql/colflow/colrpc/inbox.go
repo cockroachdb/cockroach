@@ -90,6 +90,14 @@ type Inbox struct {
 	// only the Next/DrainMeta goroutine may access it.
 	stream flowStreamServer
 
+	// flowCtx is a temporary field that captures a flow's context during
+	// initialization. This is so that RunWithStream can listen for cancellation
+	// even in the case in which Next is not called (e.g. in cases where the Inbox
+	// is the left side of a HashJoiner). The best solution for this problem would
+	// be to refactor Operator.Init to accept a context since that must be called
+	// regardless of whether or not Next is called.
+	flowCtx context.Context
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -100,7 +108,7 @@ var _ colexecbase.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -119,6 +127,7 @@ func NewInbox(
 		contextCh:  make(chan context.Context, 1),
 		timeoutCh:  make(chan error, 1),
 		errCh:      make(chan error, 1),
+		flowCtx:    ctx,
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = allocator.NewMemBatch(typs)
@@ -190,6 +199,8 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return fmt.Errorf("%s: streamCtx while waiting for reader (remote client canceled)", streamCtx.Err())
+	case <-i.flowCtx.Done():
+		return fmt.Errorf("%s: flowCtx while waiting for reader (remote client canceled)", i.flowCtx.Err())
 	}
 
 	// Now wait for one of the events described in the method comment. If a

@@ -207,9 +207,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
-					inbox, err := colrpc.NewInbox(
-						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID),
-					)
+					inbox, err := colrpc.NewInbox(context.Background(), colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
@@ -299,10 +297,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
-					inbox, err := colrpc.NewInbox(
-						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
-						typs, execinfrapb.StreamID(streamID),
-					)
+					inbox, err := colrpc.NewInbox(context.Background(), colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
