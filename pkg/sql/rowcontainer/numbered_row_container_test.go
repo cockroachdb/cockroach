@@ -51,7 +51,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	const smallMemoryBudget = 40
 	rng, _ := randutil.NewPseudoRand()
 
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -85,7 +85,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		true /*deDup*/, types, &evalCtx, tempEngine, &memoryMonitor, diskMonitor,
+		true /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
 		0 /*rowCapacity*/)
 	defer rc.Close(ctx)
 
@@ -137,7 +137,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -173,7 +173,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		false /*deDup*/, types, &evalCtx, tempEngine, &memoryMonitor, diskMonitor,
+		false /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
 		0 /*rowCapacity*/)
 	defer rc.Close(ctx)
 
@@ -434,7 +434,7 @@ func makeNumberedContainerUsingIRC(
 func makeMemMonitorAndStart(
 	ctx context.Context, st *cluster.Settings, budget int64,
 ) *mon.BytesMonitor {
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -444,7 +444,7 @@ func makeMemMonitorAndStart(
 		st,
 	)
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
-	return &memoryMonitor
+	return memoryMonitor
 }
 
 // Assume that join is using a batch of 100 left rows.

@@ -181,6 +181,17 @@ type BytesMonitor struct {
 		// curBudget represents the budget allocated at the pool on behalf of
 		// this monitor.
 		curBudget BoundAccount
+
+		//  Both fields below are protected by the mutex because they might be
+		//  updated after the monitor has been instantiated.
+
+		// curBytesCount is the metric object used to track number of bytes
+		// reserved by the monitor during its lifetime.
+		curBytesCount *metric.Gauge
+
+		// maxBytesHist is the metric object used to track the high watermark of bytes
+		// allocated by the monitor during its lifetime.
+		maxBytesHist *metric.Histogram
 	}
 
 	// name identifies this monitor in logging messages.
@@ -215,14 +226,6 @@ type BytesMonitor struct {
 	// become reported in the logs.
 	noteworthyUsageBytes int64
 
-	// curBytesCount is the metric object used to track number of bytes reserved
-	// by the monitor during its lifetime.
-	curBytesCount *metric.Gauge
-
-	// maxBytesHist is the metric object used to track the high watermark of bytes
-	// allocated by the monitor during its lifetime.
-	maxBytesHist *metric.Histogram
-
 	settings *cluster.Settings
 }
 
@@ -239,7 +242,7 @@ var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCAT
 // to reserve and release bytes to a pool.
 var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
-// MakeMonitor creates a new monitor.
+// NewMonitor creates a new monitor.
 // Arguments:
 // - name is used to annotate log messages, can be used to distinguish
 //   monitors.
@@ -257,7 +260,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 // - noteworthy determines the minimum total allocated size beyond
 //   which the monitor starts to log increases. Use 0 to always log
 //   or math.MaxInt64 to never log.
-func MakeMonitor(
+func NewMonitor(
 	name string,
 	res Resource,
 	curCount *metric.Gauge,
@@ -265,14 +268,14 @@ func MakeMonitor(
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
-	return MakeMonitorWithLimit(
+) *BytesMonitor {
+	return NewMonitorWithLimit(
 		name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy, settings)
 }
 
-// MakeMonitorWithLimit creates a new monitor with a limit local to this
+// NewMonitorWithLimit creates a new monitor with a limit local to this
 // monitor.
-func MakeMonitorWithLimit(
+func NewMonitorWithLimit(
 	name string,
 	res Resource,
 	limit int64,
@@ -281,34 +284,37 @@ func MakeMonitorWithLimit(
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
+) *BytesMonitor {
 	if increment <= 0 {
 		increment = DefaultPoolAllocationSize
 	}
 	if limit <= 0 {
 		limit = math.MaxInt64
 	}
-	return BytesMonitor{
+	m := &BytesMonitor{
 		name:                 name,
 		resource:             res,
 		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
-		curBytesCount:        curCount,
-		maxBytesHist:         maxHist,
 		poolAllocationSize:   increment,
 		settings:             settings,
 	}
+	m.mu.curBytesCount = curCount
+	m.mu.maxBytesHist = maxHist
+	return m
 }
 
-// MakeMonitorInheritWithLimit creates a new monitor with a limit local to this
+// NewMonitorInheritWithLimit creates a new monitor with a limit local to this
 // monitor with all other attributes inherited from the passed in monitor.
-func MakeMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) BytesMonitor {
-	return MakeMonitorWithLimit(
+func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *BytesMonitor {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return NewMonitorWithLimit(
 		name,
 		m.resource,
 		limit,
-		m.curBytesCount,
-		m.maxBytesHist,
+		m.mu.curBytesCount,
+		m.mu.maxBytesHist,
 		m.poolAllocationSize,
 		m.noteworthyUsageBytes,
 		m.settings,
@@ -345,9 +351,9 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	}
 }
 
-// MakeUnlimitedMonitor creates a new monitor and starts the monitor in
+// NewUnlimitedMonitor creates a new monitor and starts the monitor in
 // "detached" mode without a pool and without a maximum budget.
-func MakeUnlimitedMonitor(
+func NewUnlimitedMonitor(
 	ctx context.Context,
 	name string,
 	res Resource,
@@ -355,22 +361,23 @@ func MakeUnlimitedMonitor(
 	maxHist *metric.Histogram,
 	noteworthy int64,
 	settings *cluster.Settings,
-) BytesMonitor {
+) *BytesMonitor {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
 
 	}
-	return BytesMonitor{
+	m := &BytesMonitor{
 		name:                 name,
 		resource:             res,
 		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
-		curBytesCount:        curCount,
-		maxBytesHist:         maxHist,
 		poolAllocationSize:   DefaultPoolAllocationSize,
 		reserved:             MakeStandaloneBudget(math.MaxInt64),
 		settings:             settings,
 	}
+	m.mu.curBytesCount = curCount
+	m.mu.maxBytesHist = maxHist
+	return m
 }
 
 // EmergencyStop completes a monitoring region, and disables checking
@@ -403,12 +410,12 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 
 	mm.releaseBudget(ctx)
 
-	if mm.maxBytesHist != nil && mm.mu.maxAllocated > 0 {
+	if mm.mu.maxBytesHist != nil && mm.mu.maxAllocated > 0 {
 		// TODO(knz): We record the logarithm because the UI doesn't know
 		// how to do logarithmic y-axes yet. See the explanatory comments
 		// in sql/mem_metrics.go.
 		val := int64(1000 * math.Log(float64(mm.mu.maxAllocated)) / math.Ln10)
-		mm.maxBytesHist.RecordValue(val)
+		mm.mu.maxBytesHist.RecordValue(val)
 	}
 
 	// Disable the pool for further allocations, so that further
@@ -436,8 +443,10 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 
 // SetMetrics sets the metric objects for the monitor.
 func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
-	mm.curBytesCount = curCount
-	mm.maxBytesHist = maxHist
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.mu.curBytesCount = curCount
+	mm.mu.maxBytesHist = maxHist
 }
 
 // Resource returns the type of the resource the monitor is tracking.
@@ -608,8 +617,8 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		}
 	}
 	mm.mu.curAllocated += x
-	if mm.curBytesCount != nil {
-		mm.curBytesCount.Inc(x)
+	if mm.mu.curBytesCount != nil {
+		mm.mu.curBytesCount.Inc(x)
 	}
 	if mm.mu.maxAllocated < mm.mu.curAllocated {
 		mm.mu.maxAllocated = mm.mu.curAllocated
@@ -650,8 +659,8 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 		sz = mm.mu.curAllocated
 	}
 	mm.mu.curAllocated -= sz
-	if mm.curBytesCount != nil {
-		mm.curBytesCount.Dec(sz)
+	if mm.mu.curBytesCount != nil {
+		mm.mu.curBytesCount.Dec(sz)
 	}
 	mm.adjustBudget(ctx)
 

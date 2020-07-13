@@ -42,7 +42,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	defer tempEngine.Close()
 
 	// These monitors are started and stopped by subtests.
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -51,7 +51,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil,           /* curCount */
@@ -68,7 +68,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	types := sqlbase.OneIntCol
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
 	err = rc.Init(
 		ctx,
 		false, /* shouldMark */
@@ -346,7 +346,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	defer tempEngine.Close()
 
 	// These monitors are started and stopped by subtests.
-	memoryMonitor := mon.MakeMonitor(
+	memoryMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -355,7 +355,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil,           /* curCount */
@@ -373,7 +373,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	types := []*types.T{types.Int, types.Int}
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
 	err = rc.Init(
 		ctx,
 		true, /* shouldMark */

@@ -877,9 +877,9 @@ func (pb *ProcessorBase) ConsumerDone() {
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
 func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
-	monitor := mon.MakeMonitorInheritWithLimit(name, 0 /* limit */, parent)
+	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent)
 	monitor.Start(ctx, parent, mon.BoundAccount{})
-	return &monitor
+	return monitor
 }
 
 // NewLimitedMonitor is a utility function used by processors to create a new
@@ -894,9 +894,9 @@ func NewLimitedMonitor(
 	if config.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, limit, parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
-	return &limitedMon
+	return limitedMon
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with

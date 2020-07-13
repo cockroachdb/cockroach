@@ -61,7 +61,7 @@ type ServerImpl struct {
 	execinfra.ServerConfig
 	flowRegistry  *flowinfra.FlowRegistry
 	flowScheduler *flowinfra.FlowScheduler
-	memMonitor    mon.BytesMonitor
+	memMonitor    *mon.BytesMonitor
 	regexpCache   *tree.RegexpCache
 }
 
@@ -74,7 +74,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 		regexpCache:   tree.NewRegexpCache(512),
 		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.SQLInstanceID()),
 		flowScheduler: flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
-		memMonitor: mon.MakeMonitor(
+		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
 			cfg.Metrics.CurBytesCount,
@@ -218,7 +218,7 @@ func (ds *ServerImpl) setupFlow(
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor opened here is closed in Flow.Cleanup().
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"flow",
 		mon.MemoryResource,
 		ds.Metrics.CurBytesCount,
@@ -249,7 +249,7 @@ func (ds *ServerImpl) setupFlow(
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
-		evalCtx.Mon = &monitor
+		evalCtx.Mon = monitor
 	} else {
 		if localState.IsLocal {
 			return nil, nil, errors.AssertionFailedf(
@@ -311,7 +311,7 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:      ds.ServerConfig.NodeID,
 			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
-			Mon:         &monitor,
+			Mon:         monitor,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
@@ -499,7 +499,7 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 		return errors.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
-	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(stream.Context(), ds.memMonitor, req, mbox)
 	if err != nil {
 		return err
 	}
@@ -532,7 +532,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

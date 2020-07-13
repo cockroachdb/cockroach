@@ -282,14 +282,14 @@ func startConnExecutor(
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
 	}
-	pool := mon.MakeUnlimitedMonitor(
+	pool := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
 	)
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 
-	s := NewServer(cfg, &pool)
+	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
 	var cc ClientComm = &internalClientComm{

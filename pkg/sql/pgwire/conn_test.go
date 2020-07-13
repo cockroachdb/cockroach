@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgproto3"
@@ -112,7 +111,7 @@ func TestConn(t *testing.T) {
 			nil,
 			mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true},
-			s.Stopper())
+		)
 		return nil
 	})
 	defer stopServe()
@@ -836,9 +835,6 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}()
 
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
@@ -856,7 +852,6 @@ func TestMaliciousInputs(t *testing.T) {
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
 				authOptions{testingSkipAuth: true},
-				stopper,
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)

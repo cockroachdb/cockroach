@@ -91,7 +91,7 @@ func TestKVFeed(t *testing.T) {
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		buf := MakeChanBuffer()
-		mm := mon.MakeUnlimitedMonitor(
+		mm := mon.NewUnlimitedMonitor(
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)

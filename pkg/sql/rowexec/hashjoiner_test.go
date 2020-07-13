@@ -58,7 +58,7 @@ func TestHashJoiner(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -88,7 +88,7 @@ func TestHashJoiner(t *testing.T) {
 					Cfg: &execinfra.ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
-						DiskMonitor: &diskMonitor,
+						DiskMonitor: diskMonitor,
 					},
 				}
 				if flowCtxSetup != nil {
@@ -174,7 +174,7 @@ func TestHashJoinerError(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -198,7 +198,7 @@ func TestHashJoinerError(t *testing.T) {
 				Cfg: &execinfra.ServerConfig{
 					Settings:    st,
 					TempStorage: tempEngine,
-					DiskMonitor: &diskMonitor,
+					DiskMonitor: diskMonitor,
 				},
 			}
 

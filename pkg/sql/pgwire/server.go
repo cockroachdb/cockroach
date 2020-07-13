@@ -177,10 +177,8 @@ type Server struct {
 		conf *hba.Conf
 	}
 
-	sqlMemoryPool mon.BytesMonitor
-	connMonitor   mon.BytesMonitor
-
-	stopper *stop.Stopper
+	sqlMemoryPool *mon.BytesMonitor
+	connMonitor   *mon.BytesMonitor
 
 	// testingLogEnabled is used in unit tests in this package to
 	// force-enable conn/auth logging without dancing around the
@@ -239,20 +237,20 @@ func MakeServer(
 		execCfg:    executorConfig,
 		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
 	}
-	server.sqlMemoryPool = mon.MakeMonitor("sql",
+	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
 		server.metrics.SQLMemMetrics.CurBytesCount,
 		server.metrics.SQLMemMetrics.MaxBytesHist,
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
-	server.SQLServer = sql.NewServer(executorConfig, &server.sqlMemoryPool)
+	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
-	server.connMonitor = mon.MakeMonitor("conn",
+	server.connMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,
 		server.metrics.ConnMemMetrics.CurBytesCount,
 		server.metrics.ConnMemMetrics.MaxBytesHist,
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
-	server.connMonitor.Start(context.Background(), &server.sqlMemoryPool, mon.BoundAccount{})
+	server.connMonitor.Start(context.Background(), server.sqlMemoryPool, mon.BoundAccount{})
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
@@ -283,7 +281,6 @@ func Match(rd io.Reader) bool {
 
 // Start makes the Server ready for serving connections.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.stopper = stopper
 	s.SQLServer.Start(ctx, stopper)
 }
 
