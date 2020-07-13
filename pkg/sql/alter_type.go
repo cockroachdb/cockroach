@@ -77,7 +77,7 @@ func (p *planner) addEnumValue(
 	if err := n.desc.AddEnumValue(node); err != nil {
 		return err
 	}
-	return p.writeTypeChange(params.ctx, n.desc, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return p.writeTypeSchemaChange(params.ctx, n.desc, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 func (p *planner) renameType(params runParams, n *alterTypeNode, newName string) error {
@@ -149,7 +149,7 @@ func (p *planner) performRenameTypeDesc(
 	})
 	// Set the descriptor up with the new name.
 	desc.Name = newName
-	if err := p.writeTypeChange(ctx, desc, jobDesc); err != nil {
+	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
 	// Construct the new namespace key.
@@ -190,7 +190,7 @@ func (p *planner) renameTypeValue(
 
 	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
 
-	return p.writeTypeChange(
+	return p.writeTypeSchemaChange(
 		params.ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
