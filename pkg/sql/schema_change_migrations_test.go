@@ -358,7 +358,7 @@ func migrateJobToOldFormat(
 
 	// Write the table descriptor back.
 	return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
@@ -443,7 +443,7 @@ func migrateGCJobToOldFormat(
 
 		// Write the table descriptor back.
 		return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
@@ -882,7 +882,7 @@ func TestGCJobCreated(t *testing.T) {
 	tableDesc.Version++
 	tableDesc.DropTime = 1
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		if err := sqlbase.RemoveObjectNamespaceEntry(
@@ -965,7 +965,7 @@ func TestMissingMutation(t *testing.T) {
 	tableDesc.Mutations = nil
 	require.NoError(
 		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
