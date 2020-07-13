@@ -71,6 +71,7 @@ const (
 	VersionNoOriginFKIndexes
 	VersionClientRangeInfosOnBatchResponse
 	VersionNodeMembershipStatus
+	VersionRangeStatsRespHasDesc
 
 	// Add new versions here (step one of two).
 )
@@ -538,6 +539,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// details.
 		Key:     VersionNodeMembershipStatus,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
+	},
+	{
+		// VersionRangeStatsRespHasDesc adds the RangeStatsResponse.RangeInfo field.
+		Key:     VersionRangeStatsRespHasDesc,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
 	},
 
 	// Add new versions here (step two of two).

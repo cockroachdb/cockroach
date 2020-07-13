@@ -16,6 +16,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -174,14 +175,14 @@ func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
 
-	ba := roachpb.BatchRequest{
-		Header: roachpb.Header{
-			ReturnRangeInfo: true,
-		},
-	}
+	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
+
+	if !mq.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionRangeStatsRespHasDesc) {
+		ba.Header.ReturnRangeInfo = true
+	}
 
 	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
@@ -189,12 +190,18 @@ func (mq *mergeQueue) requestRangeStats(
 	}
 	res := br.Responses[0].GetInner().(*roachpb.RangeStatsResponse)
 
-	if len(br.RangeInfos) != 1 {
-		return nil, enginepb.MVCCStats{}, 0, errors.AssertionFailedf(
-			"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
-			len(br.RangeInfos))
+	var desc *roachpb.RangeDescriptor
+	if res.RangeInfo != nil {
+		desc = &res.RangeInfo.Desc
+	} else {
+		if len(br.RangeInfos) != 1 {
+			return nil, enginepb.MVCCStats{}, 0, errors.AssertionFailedf(
+				"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
+				len(br.RangeInfos))
+		}
+		desc = &br.RangeInfos[0].Desc
 	}
-	return &br.RangeInfos[0].Desc, res.MVCCStats, res.QueriesPerSecond, nil
+	return desc, res.MVCCStats, res.QueriesPerSecond, nil
 }
 
 func (mq *mergeQueue) process(
