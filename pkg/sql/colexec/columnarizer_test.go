@@ -100,6 +100,10 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 	require.True(t, len(meta) == 1)
 	require.True(t, testutils.IsError(meta[0].Err, errMsg))
 	require.True(t, rb.Done)
+	require.Equal(t, execinfra.DrainRequested, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
+	// Closing the Columnarizer should call ConsumerClosed on the processor.
+	require.NoError(t, c.Close(ctx))
+	require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
 }
 
 func BenchmarkColumnarize(b *testing.B) {

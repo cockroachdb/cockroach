@@ -50,17 +50,10 @@ type explainPlanNode struct {
 func (p *planner) makeExplainPlanNodeWithPlan(
 	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents, stmtType tree.StatementType,
 ) (planNode, error) {
-	var flags explainFlags
-	if opts.Flags[tree.ExplainFlagVerbose] || opts.Flags[tree.ExplainFlagTypes] {
-		flags.showMetadata = true
-		flags.qualifyNames = true
-	}
-	if opts.Flags[tree.ExplainFlagTypes] {
-		flags.showTypes = true
-	}
+	flags := explain.MakeFlags(opts)
 
 	columns := sqlbase.ExplainPlanColumns
-	if flags.showMetadata {
+	if flags.Verbose {
 		columns = sqlbase.ExplainPlanVerboseColumns
 	}
 	// Make a copy (to allow changes through planMutableColumns).
@@ -77,7 +70,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	node.explainer.init(flags)
 
 	noPlaceholderFlags := tree.FmtExpr(
-		tree.FmtSymbolicSubqueries, flags.showTypes, false /* symbolicVars */, flags.qualifyNames,
+		tree.FmtSymbolicSubqueries, flags.ShowTypes, false /* symbolicVars */, flags.Verbose,
 	)
 	node.explainer.fmtFlags = noPlaceholderFlags
 	node.explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
@@ -123,25 +116,9 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 	e.run.results.Close(ctx)
 }
 
-// explainFlags contains parameters for the EXPLAIN logic.
-type explainFlags struct {
-	// showMetadata indicates whether the output has separate columns for the
-	// schema signature and ordering information of the intermediate
-	// nodes.
-	showMetadata bool
-
-	// qualifyNames determines whether column names in expressions
-	// should be fully qualified during pretty-printing.
-	qualifyNames bool
-
-	// showTypes indicates whether to print the type of embedded
-	// expressions and result columns.
-	showTypes bool
-}
-
 // explainFlags represents the run-time state of the EXPLAIN logic.
 type explainer struct {
-	explainFlags
+	flags explain.Flags
 
 	// fmtFlags is the formatter to use for pretty-printing expressions.
 	// This can change during the execution of EXPLAIN.
@@ -155,9 +132,9 @@ type explainer struct {
 	ob *explain.OutputBuilder
 }
 
-func (e *explainer) init(flags explainFlags) {
-	*e = explainer{explainFlags: flags}
-	e.ob = explain.NewOutputBuilder(flags.showMetadata, flags.showTypes)
+func (e *explainer) init(flags explain.Flags) {
+	*e = explainer{flags: flags}
+	e.ob = explain.NewOutputBuilder(flags)
 }
 
 // populateExplain walks the plan and generates rows in a valuesNode.
@@ -332,10 +309,7 @@ func observePlan(
 // infrastructure.
 func planToString(ctx context.Context, p *planTop) string {
 	var e explainer
-	e.init(explainFlags{
-		showMetadata: true,
-		showTypes:    true,
-	})
+	e.init(explain.Flags{Verbose: true, ShowTypes: true})
 	e.fmtFlags = tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true)
 
 	e.populate(ctx, &p.planComponents, explainSubqueryFmtFlags)
@@ -368,7 +342,7 @@ func (e *explainer) spans(
 // expr implements the planObserver interface.
 func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr) {
 	if expr != nil {
-		if !e.showMetadata && v == observeMetadata {
+		if !e.flags.Verbose && v == observeMetadata {
 			return
 		}
 		if nodeName == "join" {

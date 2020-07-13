@@ -470,6 +470,7 @@ func (r opResult) createAndWrapRowSource(
 	// own, so the used memory will be accounted for.
 	r.Op, r.IsStreaming = c, true
 	r.MetadataSources = append(r.MetadataSources, c)
+	r.ToClose = append(r.ToClose, c)
 	return nil
 }
 
