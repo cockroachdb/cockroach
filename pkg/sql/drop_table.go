@@ -36,7 +36,7 @@ type dropTableNode struct {
 }
 
 type toDelete struct {
-	tn   *tree.TableName
+	tn   tree.ObjectName
 	desc *sqlbase.MutableTableDescriptor
 }
 
@@ -318,9 +318,13 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	// Remove any references to types that this table has.
-	if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
-		return droppedViews, err
+	// Remove any references to types that this table has if a job is meant to be
+	// queued. If not, then the job that is handling the drop table will also
+	// clean up all of the types to be dropped.
+	if queueJob {
+		if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
+			return droppedViews, err
+		}
 	}
 
 	err = p.initiateDropTable(ctx, tableDesc, queueJob, jobDesc, true /* drain name */)
