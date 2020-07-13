@@ -153,11 +153,9 @@ var validationMap = []struct {
 	{
 		obj: ColumnDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name": {status: thisFieldReferencesNoObjects},
-			"ID":   {status: thisFieldReferencesNoObjects},
-			"Type": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(rohan): add validation for custom types"},
+			"Name":     {status: thisFieldReferencesNoObjects},
+			"ID":       {status: thisFieldReferencesNoObjects},
+			"Type":     {status: iSolemnlySwearThisFieldIsValidated},
 			"Nullable": {status: thisFieldReferencesNoObjects},
 			"DefaultExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,

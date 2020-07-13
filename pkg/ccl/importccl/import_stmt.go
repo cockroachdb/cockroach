@@ -686,6 +686,16 @@ func importPlanHook(
 				jobDesc = descStr
 			}
 
+			for _, tbl := range tableDescs {
+				// For reasons relating to #37691, we disallow user defined types in
+				// the standard IMPORT case.
+				for _, col := range tbl.Columns {
+					if col.Type.UserDefined() {
+						return errors.Newf("IMPORT cannot be used with user defined types; use IMPORT INTO instead")
+					}
+				}
+			}
+
 			tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
 			for i := range tableDescs {
 				tableDetails[i] = jobspb.ImportDetails_Table{Desc: tableDescs[i], SeqVal: seqVals[tableDescs[i].ID], IsNew: true}
