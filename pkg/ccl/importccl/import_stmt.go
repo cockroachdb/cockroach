@@ -964,7 +964,7 @@ func prepareExistingTableDescForIngestion(
 	importing.OfflineReason = "importing"
 	// TODO(dt): de-validate all the FKs.
 
-	if err := txn.SetSystemConfigTrigger(); err != nil {
+	if err := txn.SetSystemConfigTrigger(execCfg.Codec.ForSystemTenant()); err != nil {
 		return nil, err
 	}
 
@@ -1212,7 +1212,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 
 	// Needed to trigger the schema change manager.
 	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(execCfg.Codec.ForSystemTenant()); err != nil {
 			return err
 		}
 		b := txn.NewBatch()

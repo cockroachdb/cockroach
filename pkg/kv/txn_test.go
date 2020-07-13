@@ -520,6 +520,6 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 			}),
 		clock)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	require.EqualError(t, txn.SetSystemConfigTrigger(), "unimplemented")
+	require.EqualError(t, txn.SetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
 	require.False(t, txn.systemConfigTrigger)
 }
