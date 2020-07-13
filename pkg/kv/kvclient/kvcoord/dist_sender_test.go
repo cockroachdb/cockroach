@@ -579,78 +579,123 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		StoreID: 999,
 	}
 
-	testutils.RunTrueAndFalse(t, "leaseholder in descriptor", func(t *testing.T, lhRecognized bool) {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
+	// We got through different NotLeaseholderErrors and, depending on what
+	// information is present in it, we expect the cache to be updated.
+	tests := []struct {
+		name           string
+		nlhe           roachpb.NotLeaseHolderError
+		expLeaseholder *roachpb.ReplicaDescriptor
+		expLease       bool
+	}{
+		{
+			name: "leaseholder in desc",
+			nlhe: roachpb.NotLeaseHolderError{
+				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+				Lease:   &roachpb.Lease{Replica: recognizedLeaseHolder, Sequence: 1},
+			},
+			expLeaseholder: &recognizedLeaseHolder,
+			expLease:       true,
+		},
+		{
+			name: "leaseholder in desc, no lease",
+			nlhe: roachpb.NotLeaseHolderError{
+				RangeID:     testUserRangeDescriptor3Replicas.RangeID,
+				LeaseHolder: &recognizedLeaseHolder,
+			},
+			expLeaseholder: &recognizedLeaseHolder,
+			expLease:       false,
+		},
+		{
+			name: "leaseholder not in desc",
+			nlhe: roachpb.NotLeaseHolderError{
+				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+				Lease:   &roachpb.Lease{Replica: unrecognizedLeaseHolder, Sequence: 2},
+			},
+			expLeaseholder: nil,
+		},
+		{
+			name: "leaseholder unknown",
+			nlhe: roachpb.NotLeaseHolderError{
+				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+			},
+			expLeaseholder: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
 
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-		rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-		g := makeGossip(t, stopper, rpcContext)
-		for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
-			require.NoError(t, g.AddInfoProto(
-				gossip.MakeNodeIDKey(n.NodeID),
-				newNodeDesc(n.NodeID),
-				gossip.NodeDescriptorTTL,
-			))
-		}
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+				require.NoError(t, g.AddInfoProto(
+					gossip.MakeNodeIDKey(n.NodeID),
+					newNodeDesc(n.NodeID),
+					gossip.NodeDescriptorTTL,
+				))
+			}
 
-		first := true
+			first := true
 
-		var testFn simpleSendFn = func(
-			_ context.Context,
-			_ SendOptions,
-			_ ReplicaSlice,
-			args roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, error) {
-			reply := &roachpb.BatchResponse{}
-			if first {
-				leaseHolder := recognizedLeaseHolder
-				if !lhRecognized {
-					leaseHolder = unrecognizedLeaseHolder
+			var testFn simpleSendFn = func(
+				_ context.Context,
+				_ SendOptions,
+				_ ReplicaSlice,
+				args roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, error) {
+				reply := &roachpb.BatchResponse{}
+				if first {
+					reply.Error = roachpb.NewError(&tc.nlhe)
+					first = false
+					return reply, nil
 				}
-
-				reply.Error = roachpb.NewError(
-					&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder})
-				first = false
+				// Return an error to avoid activating a code path that would update the
+				// cache with the leaseholder from the successful response. That's not
+				// what this test wants to test.
+				reply.Error = roachpb.NewErrorf("boom")
 				return reply, nil
 			}
-			// Return an error to avoid activating a code path that would update the
-			// cache with the leaseholder from the successful response. That's not
-			// what this test wants to test.
-			reply.Error = roachpb.NewErrorf("boom")
-			return reply, nil
-		}
 
-		cfg := DistSenderConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-			Clock:      clock,
-			NodeDescs:  g,
-			RPCContext: rpcContext,
-			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptSimpleTransport(testFn),
-			},
-			RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
-			NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
-			Settings:          cluster.MakeTestingClusterSettings(),
-		}
-		ds := NewDistSender(cfg)
-		v := roachpb.MakeValueFromString("value")
-		put := roachpb.NewPut(roachpb.Key("a"), v)
-		if _, pErr := kv.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
-			t.Fatalf("unexpected error: %v", pErr)
-		}
-		if first {
-			t.Fatal("the request did not retry")
-		}
-		rng := ds.rangeCache.GetCached(testUserRangeDescriptor.StartKey, false /* inverted */)
-		require.NotNil(t, rng)
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				NodeDescs:  g,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(testFn),
+				},
+				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+			v := roachpb.MakeValueFromString("value")
+			put := roachpb.NewPut(roachpb.Key("a"), v)
+			if _, pErr := kv.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+				t.Fatalf("unexpected error: %v", pErr)
+			}
+			if first {
+				t.Fatal("the request did not retry")
+			}
+			rng := ds.rangeCache.GetCached(testUserRangeDescriptor.StartKey, false /* inverted */)
+			require.NotNil(t, rng)
 
-		if lhRecognized {
-			require.Equal(t, recognizedLeaseHolder, rng.Lease.Replica)
-		} else {
-			require.Equal(t, roachpb.ReplicaDescriptor{}, rng.Lease.Replica)
-		}
-	})
+			if tc.expLeaseholder != nil {
+				lh := rng.Leaseholder()
+				require.NotNil(t, lh)
+				require.Equal(t, tc.expLeaseholder, lh)
+				if tc.expLease {
+					l := rng.Lease()
+					require.NotNil(t, l)
+					require.Equal(t, *tc.expLeaseholder, l.Replica)
+				} else {
+					require.Nil(t, rng.Lease())
+				}
+			}
+		})
+	}
 }
 
 // TestBackoffOnNotLeaseHolderErrorDuringTransfer verifies that the DistSender
@@ -687,15 +732,19 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 		if len(sequences) > 0 {
 			seq := sequences[0]
 			sequences = sequences[1:]
-			lease := roachpb.Lease{
-				Sequence: seq,
-				Replica:  leaseHolders[int(seq)%2],
+			var lease *roachpb.Lease
+			// If seq == 0, we'll return a leaseholder but no lease.
+			if seq > 0 {
+				lease = &roachpb.Lease{
+					Sequence: seq,
+					Replica:  leaseHolders[int(seq)%2],
+				}
 			}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{
 					Replica:     leaseHolders[int(seq)%2],
 					LeaseHolder: &leaseHolders[(int(seq)+1)%2],
-					Lease:       &lease,
+					Lease:       lease,
 				})
 			return reply, nil
 		}
@@ -849,7 +898,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	}
 
 	rng := ds.rangeCache.GetCached(testUserRangeDescriptor.StartKey, false /* inverted */)
-	require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
+	require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
 }
 
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
@@ -1127,7 +1176,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			if tc.shouldClearReplica {
 				require.Nil(t, rng)
 			} else if tc.shouldClearLeaseHolder {
-				require.True(t, rng.Lease.Empty())
+				require.True(t, rng.Lease().Empty())
 			}
 		})
 	}
@@ -1663,8 +1712,12 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 				entry, err := ds.rangeCache.Lookup(ctx, rk)
 				require.NoError(t, err)
 				require.NotNil(t, entry)
-				require.Equal(t, entry.Desc, ri.Desc)
-				require.Equal(t, entry.Lease, ri.Lease)
+				require.Equal(t, &ri.Desc, entry.Desc())
+				if ri.Lease.Empty() {
+					require.Nil(t, entry.Leaseholder())
+				} else {
+					require.Equal(t, &ri.Lease, entry.Lease())
+				}
 			}
 		})
 	}
@@ -1734,7 +1787,10 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 				// Pretend that this replica is the leaseholder in the cache to verify
 				// that the response evicts it.
 				rng := ds.rangeCache.GetCached(descriptor.StartKey, false /* inverse */)
-				rng.Lease.Replica = ba.Replica
+				ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+					Desc:  *rng.Desc(),
+					Lease: roachpb.Lease{Replica: ba.Replica},
+				})
 			}
 			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
 			return br, nil
@@ -1769,7 +1825,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 
 	rng := ds.rangeCache.GetCached(descriptor.StartKey, false /* inverted */)
 	require.NotNil(t, rng)
-	require.Equal(t, leaseholderStoreID, rng.Lease.Replica.StoreID)
+	require.Equal(t, leaseholderStoreID, rng.Lease().Replica.StoreID)
 }
 
 // TestGetNodeDescriptor checks that the Node descriptor automatically gets
@@ -3422,8 +3478,10 @@ func TestCanSendToFollower(t *testing.T) {
 			ds := NewDistSender(cfg)
 			ds.clusterID = &base.ClusterIDContainer{}
 			// Make store 2 the leaseholder.
-			var lease roachpb.Lease
-			lease.Replica = testUserRangeDescriptor3Replicas.InternalReplicas[1]
+			lease := roachpb.Lease{
+				Replica:  testUserRangeDescriptor3Replicas.InternalReplicas[1],
+				Sequence: 1,
+			}
 			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 				Desc:  testUserRangeDescriptor3Replicas,
 				Lease: lease,
@@ -3440,7 +3498,8 @@ func TestCanSendToFollower(t *testing.T) {
 			// leaseholder.
 			rng := ds.rangeCache.GetCached(testUserRangeDescriptor.StartKey, false /* inverted */)
 			require.NotNil(t, rng)
-			require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
+			require.NotNil(t, rng.Lease())
+			require.Equal(t, roachpb.StoreID(2), rng.Lease().Replica.StoreID)
 		})
 	}
 }
@@ -3608,9 +3667,9 @@ func TestEvictMetaRange(t *testing.T) {
 
 		// Verify that there is one meta2 cached range.
 		cachedRange := ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
+		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
+				keys.Meta2Prefix, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
 		}
 
 		// Simulate a split on the meta2 range and mark it as stale.
@@ -3623,14 +3682,14 @@ func TestEvictMetaRange(t *testing.T) {
 
 		// Verify that there are two meta2 cached ranges.
 		cachedRange = ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("a")), false)
-		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(splitKey) {
+		if !cachedRange.Desc().StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc().EndKey.Equal(splitKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				keys.Meta2Prefix, splitKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
+				keys.Meta2Prefix, splitKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
 		}
 		cachedRange = ds.rangeCache.GetCached(keys.RangeMetaKey(roachpb.RKey("b")), false)
-		if !cachedRange.Desc.StartKey.Equal(splitKey) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
+		if !cachedRange.Desc().StartKey.Equal(splitKey) || !cachedRange.Desc().EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
-				splitKey, testMetaEndKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
+				splitKey, testMetaEndKey, cachedRange.Desc().StartKey, cachedRange.Desc().EndKey)
 		}
 	})
 }
@@ -4124,7 +4183,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			require.NoError(t, err)
 			tok := EvictionToken{
 				rdc:   rc,
-				entry: ent,
+				entry: ent.(*rangeCacheEntry),
 			}
 
 			var called bool
@@ -4193,7 +4252,8 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				require.Nil(t, cached)
 			} else {
 				require.NotNil(t, cached)
-				require.Equal(t, tc.expLeaseholder, cached.Lease.Replica.ReplicaID)
+				require.NotNil(t, cached.Leaseholder())
+				require.Equal(t, tc.expLeaseholder, cached.Leaseholder().ReplicaID)
 			}
 		})
 	}

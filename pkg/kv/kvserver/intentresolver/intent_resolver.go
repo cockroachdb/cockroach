@@ -163,12 +163,30 @@ func setConfigDefaults(c *Config) {
 
 type nopRangeDescriptorCache struct{}
 
-var zeroCacheEntry = kvbase.RangeCacheEntry{}
+type zeroCacheEntry struct{}
+
+func (z zeroCacheEntry) Desc() *roachpb.RangeDescriptor {
+	return &roachpb.RangeDescriptor{}
+}
+
+func (z zeroCacheEntry) DescSpeculative() bool {
+	return false
+}
+
+func (z zeroCacheEntry) Leaseholder() *roachpb.ReplicaDescriptor {
+	return nil
+}
+
+func (z zeroCacheEntry) Lease() *roachpb.Lease {
+	return nil
+}
+
+var _ kvbase.RangeCacheEntry = zeroCacheEntry{}
 
 func (nrdc nopRangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (*kvbase.RangeCacheEntry, error) {
-	return &zeroCacheEntry, nil
+) (kvbase.RangeCacheEntry, error) {
+	return zeroCacheEntry{}, nil
 }
 
 // New creates an new IntentResolver.
@@ -774,7 +792,7 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 		}
 		return 0
 	}
-	return rInfo.Desc.RangeID
+	return rInfo.Desc().RangeID
 }
 
 // ResolveIntent synchronously resolves an intent according to opts.

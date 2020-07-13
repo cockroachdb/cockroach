@@ -215,7 +215,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		} else {
 			r := b.rc.GetCached(k, false /* inverted */)
 			if r != nil {
-				b.flushKey = r.Desc.EndKey.AsRawKey()
+				b.flushKey = r.Desc().EndKey.AsRawKey()
 				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)
 			} else {
 				log.VEventf(ctx, 3, "no cached range desc available to determine sst flush key")

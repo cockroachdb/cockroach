@@ -1727,10 +1727,7 @@ func (ds *DistSender) sendToReplicas(
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
-	var leaseholder *roachpb.ReplicaDescriptor
-	if routing.Lease() != nil {
-		leaseholder = &routing.Lease().Replica
-	}
+	leaseholder := routing.Leaseholder()
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder)
 	if err != nil {
 		return nil, err
@@ -1743,13 +1740,13 @@ func (ds *DistSender) sendToReplicas(
 	// Try the leaseholder first, if the request wants it.
 	{
 		canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
-		sendToLeaseholder := (routing.Lease() != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
+		sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
 		if sendToLeaseholder {
-			idx := replicas.Find(routing.Lease().Replica.ReplicaID)
+			idx := replicas.Find(leaseholder.ReplicaID)
 			if idx != -1 {
 				replicas.MoveToFront(idx)
 			} else {
-				log.Eventf(ctx, "leaseholder missing from replicas; lease: %s", routing.Lease())
+				log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
 			}
 		}
 	}
@@ -1803,9 +1800,18 @@ func (ds *DistSender) sendToReplicas(
 		} else {
 			log.VEventf(ctx, 2, "trying next peer %s", curReplica.String())
 		}
+		// Communicate to the server the information our cache has about the range.
+		// If it's stale, the serve will return an update.
 		ba.ClientRangeInfo = &roachpb.ClientRangeInfo{
-			DescriptorGeneration: routing.entry.Desc.Generation,
-			LeaseSequence:        routing.entry.Lease.Sequence,
+			// Note that DescriptorGeneration will be 0 if the cached descriptor is
+			// "speculative". Even if the speculation is correct, we want the serve to
+			// return an update, at which point the cached entry will no longer be
+			// "speculative".
+			DescriptorGeneration: routing.Desc().Generation,
+			// The LeaseSequence will be 0 if the cache doen't have lease info, or has
+			// a speculative lease. Like above, this asks the server to return an
+			// update.
+			LeaseSequence: routing.LeaseSeq(),
 		}
 		br, err = transport.SendNext(ctx, ba)
 
@@ -1873,7 +1879,7 @@ func (ds *DistSender) sendToReplicas(
 			// account that the local node can't be down) it won't take long until we
 			// talk to a replica that tells us who the leaseholder is.
 			if ctx.Err() == nil {
-				if routing.Lease() != nil && routing.Lease().Replica == curReplica {
+				if lh := routing.Leaseholder(); lh != nil && *lh == curReplica {
 					routing = routing.ClearLease(ctx)
 				}
 			}
@@ -1912,25 +1918,24 @@ func (ds *DistSender) sendToReplicas(
 				// leaseholder in the range cache.
 			case *roachpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
-				if tErr.LeaseHolder != nil {
+				// If we got some lease information, we use it. If not, we loop around
+				// and try the next replica.
+				if tErr.Lease != nil || tErr.LeaseHolder != nil {
 					// Update the leaseholder in the range cache. Naively this would also
 					// happen when the next RPC comes back, but we don't want to wait out
 					// the additional RPC latency.
 
-					// Figure out the lease we want to put in the cache.
-					l := tErr.Lease
-					// tErr.LeaseHolder might be set when tErr.Lease isn't.
-					if l == nil {
-						l = &roachpb.Lease{
-							Replica: *tErr.LeaseHolder,
-						}
-					}
-
 					var ok bool
-					routing, ok = routing.UpdateLease(ctx, l)
+					if tErr.Lease != nil {
+						routing, ok = routing.UpdateLease(ctx, tErr.Lease)
+					} else if tErr.LeaseHolder != nil {
+						// tErr.LeaseHolder might be set when tErr.Lease isn't.
+						routing = routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder)
+						ok = true
+					}
 					// Move the new lease holder to the head of the queue for the next retry.
-					if !routing.Empty() && routing.Lease() != nil {
-						transport.MoveToFront(routing.Lease().Replica)
+					if lh := routing.Leaseholder(); lh != nil {
+						transport.MoveToFront(*lh)
 					}
 					// See if we want to backoff a little before the next attempt. If the lease info
 					// we got is stale, we backoff because it might be the case that there's a
@@ -1975,8 +1980,12 @@ func (ds *DistSender) sendToReplicas(
 }
 
 // skipStaleReplicas advances the transport until it's positioned on a replica
-// that's part of routing. The routing might be updated as the DistSender tries
-// replicas one by one, and so the transport can get out of date.
+// that's part of routing. This is called as the DistSender tries replicas one
+// by one, as the routing can be updated in the process and so the transport can
+// get out of date.
+//
+// It's valid to pass in an empty routing, in which case the transport will be
+// considered to be exhausted.
 //
 // Returns an error if the transport is exhausted.
 func skipStaleReplicas(
@@ -1998,7 +2007,7 @@ func skipStaleReplicas(
 			return noMoreReplicasErr(ambiguousError, lastErr)
 		}
 
-		if _, ok := routing.entry.Desc.GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
+		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
 			return nil
 		}
 		transport.SkipReplica()

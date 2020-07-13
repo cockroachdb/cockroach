@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -212,7 +213,7 @@ type EvictionToken struct {
 
 	// entry is the cache entry that this EvictionToken refers to - the entry that
 	// Evict() will evict from rdc.
-	entry *kvbase.RangeCacheEntry
+	entry *rangeCacheEntry
 	// nextDesc, if not nil, is the descriptor that should replace desc if desc
 	// proves to be stale - i.e. nextDesc is inserted in the cache automatically
 	// by Evict(). This is used when the range descriptor lookup that populated
@@ -226,8 +227,18 @@ type EvictionToken struct {
 }
 
 func (rdc *RangeDescriptorCache) makeEvictionToken(
-	entry *kvbase.RangeCacheEntry, nextDesc *roachpb.RangeDescriptor,
+	entry *rangeCacheEntry, nextDesc *roachpb.RangeDescriptor,
 ) EvictionToken {
+	if nextDesc != nil {
+		// nextDesc comes from intents. Being uncommitted, it is speculative. We reset
+		// its generation to indicate this fact and allow it to be easily overwritten.
+		// Putting a speculative descriptor in the cache with a generation might make
+		// it hard for the real descriptor with the same generation to overwrite it,
+		// in case the speculation fails.
+		nextCpy := *nextDesc
+		nextCpy.Generation = 0
+		nextDesc = &nextCpy
+	}
 	return EvictionToken{
 		rdc:      rdc,
 		entry:    entry,
@@ -242,29 +253,44 @@ func (et EvictionToken) Empty() bool {
 
 // Desc returns the RangeDescriptor that was retrieved from the cache. The
 // result is to be considered immutable.
+//
+// Note that the returned descriptor might have Generation = 0. This means that
+// the descriptor is speculative; it is not know to have committed.
 func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
-	if et.entry == nil {
+	if et.Empty() {
 		return nil
 	}
-	return &et.entry.Desc
+	return et.entry.Desc()
 }
 
-// Lease returns the lease that was retrieved from the cache. If the cache
-// didn't have any lease information, returns nil. The result is to be
-// considered immutable.
+// Leaseholder returns the cached leaseholder. If the cache didn't have any
+// lease information, returns nil. The result is to be considered immutable.
 //
-// If a non-nil lease is returned, it will correspond to one of the replicas in
+// If a leaseholder is returned, it will correspond to one of the replicas in
 // et.Desc().
-func (et EvictionToken) Lease() *roachpb.Lease {
-	if et.entry.Lease.Empty() {
+func (et EvictionToken) Leaseholder() *roachpb.ReplicaDescriptor {
+	if et.Empty() {
 		return nil
 	}
-	return &et.entry.Lease
+	return et.entry.Leaseholder()
+}
+
+// LeaseSeq returns the sequence of the cached lease. If no lease is cached, or
+// the cached lease is speculative, 0 is returned.
+func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
+	if et.Empty() {
+		panic("invalid LeaseSeq() call on empty EvictionToken")
+	}
+	return et.entry.lease.Sequence
 }
 
 // UpdateLease updates the leaseholder for the token's cache entry to the
 // specified lease, and returns an updated EvictionToken, tied to the new cache
 // entry.
+//
+// The bool retval is true if the requested update was performed (i.e. the
+// passed-in lease was compatible with the descriptor and more recent than the
+// cached lease).
 //
 // UpdateLease also acts as a synchronization point between the caller and the
 // RangeDescriptorCache. In the spirit of a Compare-And-Swap operation (but
@@ -284,21 +310,25 @@ func (et EvictionToken) Lease() *roachpb.Lease {
 // stale to be useful, and it should use a range iterator again to get an
 // updated cache entry.
 //
-// The bool retval is true if the requested update was performed (i.e. the
-// passed-in lease was compatible with the descriptor and more recent than the
-// cached lease).
+// It's legal to pass in a lease with a zero Sequence; it will be treated as a
+// speculative lease and considered newer than any existing lease.
 func (et EvictionToken) UpdateLease(
 	ctx context.Context, lease *roachpb.Lease,
 ) (EvictionToken, bool) {
 	// If the lease we've been given is older than what the cache entry already has,
 	// then short-circuit and don't evict the current entry.
 	{
-		shouldUpdate, _ := et.entry.UpdateLease(lease)
+		shouldUpdate, _ := et.entry.updateLease(lease)
 		if !shouldUpdate {
 			return et, false
 		}
 	}
+	return et.updateLeaseInternal(ctx, lease)
+}
 
+func (et EvictionToken) updateLeaseInternal(
+	ctx context.Context, lease *roachpb.Lease,
+) (EvictionToken, bool) {
 	// Notes for what follows: We can't simply update the cache
 	// entry in place since entries are immutable. So, we're going to evict the
 	// old cache entry and insert a new one, and then change this eviction token
@@ -322,7 +352,7 @@ func (et EvictionToken) UpdateLease(
 		et.entry = curEntry
 	}
 
-	shouldUpdate, updatedEntry := et.entry.UpdateLease(lease)
+	shouldUpdate, updatedEntry := et.entry.updateLease(lease)
 	if !shouldUpdate {
 		return et, false
 	}
@@ -339,7 +369,19 @@ func (et EvictionToken) UpdateLease(
 	et.entry = updatedEntry
 	et.rdc.mustInsertLocked(ctx, updatedEntry)
 	return et, true
+}
 
+// UpdateLeaseholder is like UpdateLease(), but it only takes a leaseholder, not
+// a full lease. This is called when a likely leaseholder is known, but not a
+// full lease. The lease we'll insert into the cache will be considered
+// "speculative".
+func (et EvictionToken) UpdateLeaseholder(
+	ctx context.Context, lh roachpb.ReplicaDescriptor,
+) EvictionToken {
+	// Notice that we don't initialize Lease.Sequence, which will make
+	// entry.leaseSpeculative() return true.
+	et, _ /* ok */ = et.updateLeaseInternal(ctx, &roachpb.Lease{Replica: lh})
+	return et
 }
 
 // ClearLease evicts information about the current lease from the cache, if the
@@ -360,19 +402,19 @@ func (et EvictionToken) ClearLease(ctx context.Context) EvictionToken {
 	et.rdc.rangeCache.Lock()
 	defer et.rdc.rangeCache.Unlock()
 
-	if et.entry.Lease.Empty() {
+	if et.entry.lease.Empty() {
 		log.Fatalf(ctx, "attempting to clear lease from cache entry without lease")
 	}
 
-	var replacementEntry *kvbase.RangeCacheEntry
+	var replacementEntry *rangeCacheEntry
 	ok, newerEntry := et.rdc.evictLocked(ctx, et.entry)
 	if ok {
 		// This is the happy case: our entry was in the cache and we just evicted
 		// it. We'll now insert a replacement without a lease.
-		replacementEntry = &kvbase.RangeCacheEntry{
-			Desc: et.entry.Desc,
+		replacementEntry = &rangeCacheEntry{
+			desc: et.entry.desc,
 			// No lease.
-			Lease: roachpb.Lease{},
+			lease: roachpb.Lease{},
 		}
 	} else if newerEntry != nil {
 		// We're trying to clear a lease, but we find out that the cache might have
@@ -382,16 +424,16 @@ func (et EvictionToken) ClearLease(ctx context.Context) EvictionToken {
 		// trying the known leaseholder and failing - so it's a particular node that
 		// we have a problem with, not a particular lease (i.e. we want to evict
 		// even a newer lease, but with the same leaseholder).
-		if newerEntry.Lease.Replica != et.entry.Lease.Replica {
+		if newerEntry.lease.Replica != et.entry.lease.Replica {
 			et.entry = newerEntry
 			return et
 		}
 		// The newer entry has the same lease, so we still want to clear it. We
 		// replace the entry, but keep the possibly newer descriptor.
 		et.rdc.mustEvictLocked(ctx, newerEntry)
-		replacementEntry = &kvbase.RangeCacheEntry{
-			Desc:  newerEntry.Desc,
-			Lease: roachpb.Lease{},
+		replacementEntry = &rangeCacheEntry{
+			desc:  *newerEntry.Desc(),
+			lease: roachpb.Lease{},
 		}
 	} else {
 		// The cache doesn't have info about this range any more, or the range keys
@@ -473,7 +515,7 @@ func (rdc *RangeDescriptorCache) LookupWithEvictionToken(
 // to lower level clients through the kvbase.RangeDescriptorCache interface.
 func (rdc *RangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (*kvbase.RangeCacheEntry, error) {
+) (kvbase.RangeCacheEntry, error) {
 	tok, err := rdc.lookupInternal(
 		ctx, key, EvictionToken{}, false /* useReverseScan */)
 	if err != nil {
@@ -486,11 +528,11 @@ func (rdc *RangeDescriptorCache) Lookup(
 // span.
 func (rdc *RangeDescriptorCache) GetCachedOverlapping(
 	ctx context.Context, span roachpb.RSpan,
-) []*kvbase.RangeCacheEntry {
+) []kvbase.RangeCacheEntry {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
 	rawEntries := rdc.getCachedOverlappingRLocked(ctx, span)
-	entries := make([]*kvbase.RangeCacheEntry, len(rawEntries))
+	entries := make([]kvbase.RangeCacheEntry, len(rawEntries))
 	for i, e := range rawEntries {
 		entries[i] = rdc.getValue(e)
 	}
@@ -511,7 +553,7 @@ func (rdc *RangeDescriptorCache) getCachedOverlappingRLocked(
 		cached := rdc.getValue(e)
 		// Stop when we hit a descriptor to the right of span. The end key is
 		// exclusive, so if span is [a,b) and we hit [b,c), we stop.
-		if span.EndKey.Compare(cached.Desc.StartKey) <= 0 {
+		if span.EndKey.Compare(cached.Desc().StartKey) <= 0 {
 			return true
 		}
 		res = append(res, e)
@@ -627,14 +669,14 @@ func (rdc *RangeDescriptorCache) tryLookup(
 			// rs[0]'s eviction token. Note that ranges for which the cache has more
 			// up-to-date information will not be clobbered - for example ranges for
 			// which the cache has the prefetched descriptor already plus a lease.
-			newEntries := make([]*kvbase.RangeCacheEntry, len(preRs)+1)
-			newEntries[0] = &kvbase.RangeCacheEntry{
-				Desc: rs[0],
+			newEntries := make([]*rangeCacheEntry, len(preRs)+1)
+			newEntries[0] = &rangeCacheEntry{
+				desc: rs[0],
 				// We don't have any lease information.
-				Lease: roachpb.Lease{},
+				lease: roachpb.Lease{},
 			}
 			for i, preR := range preRs {
-				newEntries[i+1] = &kvbase.RangeCacheEntry{Desc: preR}
+				newEntries[i+1] = &rangeCacheEntry{desc: preR}
 			}
 			insertedEntries := rdc.insertLockedInner(ctx, newEntries)
 			// entry corresponds to rs[0], which is the descriptor covering the key
@@ -656,9 +698,9 @@ func (rdc *RangeDescriptorCache) tryLookup(
 			// didn't insert anything).
 			// TODO(andrei): It'd be better to retry the cache/database lookup in case 3.
 			if entry == nil {
-				entry = &kvbase.RangeCacheEntry{
-					Desc:  rs[0],
-					Lease: roachpb.Lease{},
+				entry = &rangeCacheEntry{
+					desc:  rs[0],
+					lease: roachpb.Lease{},
 				}
 			}
 			if len(rs) == 1 {
@@ -718,7 +760,7 @@ func (rdc *RangeDescriptorCache) tryLookup(
 	// the descriptor it's looking for in the cache if it was pre-fetched by the
 	// original lookup.
 	lookupRes := res.Val.(EvictionToken)
-	desc := &lookupRes.entry.Desc
+	desc := lookupRes.Desc()
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if useReverseScan {
 		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
@@ -785,18 +827,23 @@ func (rdc *RangeDescriptorCache) EvictByKey(ctx context.Context, descKey roachpb
 // and newer, that entry is returned. The caller can use this returned entry as
 // more recent data than the version it was trying to evict.
 func (rdc *RangeDescriptorCache) evictLocked(
-	ctx context.Context, entry *kvbase.RangeCacheEntry,
-) (ok bool, updatedEntry *kvbase.RangeCacheEntry) {
-	cachedEntry, rawEntry := rdc.getCachedLocked(entry.Desc.StartKey, false /* inverted */)
+	ctx context.Context, entry *rangeCacheEntry,
+) (ok bool, updatedEntry *rangeCacheEntry) {
+	cachedEntry, rawEntry := rdc.getCachedLocked(entry.desc.StartKey, false /* inverted */)
 	if cachedEntry != entry {
-		if cachedEntry != nil &&
-			descsCompatible(&cachedEntry.Desc, &entry.Desc) &&
-			// cachedEntry is almost certainly newer than entry, but we still check
-			// explicitly. I think it's theoretically possible for cachedEntry to be
-			// older in case entry was evicted due to memory pressure, and an old
-			// entry somehow was inserted afterwards.
-			cachedEntry.NewerThan(entry) {
+		if cachedEntry != nil && descsCompatible(cachedEntry.Desc(), entry.Desc()) {
 			return false, cachedEntry
+			//// cachedEntry is almost certainly newer than entry, but we still check
+			//// explicitly. I think it's theoretically possible for cachedEntry to be
+			//// older in case entry was evicted due to memory pressure, and an old
+			//// entry somehow was inserted afterwards.
+			//entry.overrides(cachedEntry)
+			//comp := entry.overrides(entry, cachedEntry)
+			//if comp < 0 {
+			//	// Note that this includes the case of incomparable speculative entries;
+			//	// in this case we want to return a replacement.
+			//	return false, cachedEntry
+			//}
 		}
 		return false, nil
 	}
@@ -809,9 +856,7 @@ func (rdc *RangeDescriptorCache) evictLocked(
 // mustEvictLocked is like evictLocked, except it asserts that the eviction was
 // successful (i.e. that entry is present in the cache). This is used when we're
 // evicting an entry that we just looked up, under the lock.
-func (rdc *RangeDescriptorCache) mustEvictLocked(
-	ctx context.Context, entry *kvbase.RangeCacheEntry,
-) {
+func (rdc *RangeDescriptorCache) mustEvictLocked(ctx context.Context, entry *rangeCacheEntry) {
 	ok, newer := rdc.evictLocked(ctx, entry)
 	if !ok {
 		log.Fatalf(ctx, "failed to evict %s. newer: %v", entry, newer)
@@ -824,13 +869,15 @@ func (rdc *RangeDescriptorCache) mustEvictLocked(
 // `inverted` determines the behavior at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
-func (rdc *RangeDescriptorCache) GetCached(
-	key roachpb.RKey, inverted bool,
-) *kvbase.RangeCacheEntry {
+func (rdc *RangeDescriptorCache) GetCached(key roachpb.RKey, inverted bool) kvbase.RangeCacheEntry {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
 	entry, _ := rdc.getCachedLocked(key, inverted)
-	return entry
+	if entry == nil {
+		// This return avoids boxing a nil into a non-nil iface.
+		return nil
+	}
+	return kvbase.RangeCacheEntry(entry)
 }
 
 // getCachedLocked is like GetCached, but it assumes that the caller holds a
@@ -840,7 +887,7 @@ func (rdc *RangeDescriptorCache) GetCached(
 // used for descriptor eviction.
 func (rdc *RangeDescriptorCache) getCachedLocked(
 	key roachpb.RKey, inverted bool,
-) (*kvbase.RangeCacheEntry, *cache.Entry) {
+) (*rangeCacheEntry, *cache.Entry) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inverted by default.
 	var metaKey roachpb.RKey
@@ -855,7 +902,7 @@ func (rdc *RangeDescriptorCache) getCachedLocked(
 		return nil, nil
 	}
 	entry := rdc.getValue(rawEntry)
-	desc := &entry.Desc
+	desc := &entry.desc
 
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if inverted {
@@ -883,10 +930,8 @@ func (rdc *RangeDescriptorCache) Insert(ctx context.Context, rs ...roachpb.Range
 // fatals if the entry fails to be inserted. It's used when it's known that
 // there's nothing in the cache conflicting with the ent because we've just
 // successfully evicted a similar entry.
-func (rdc *RangeDescriptorCache) mustInsertLocked(
-	ctx context.Context, ent *kvbase.RangeCacheEntry,
-) {
-	entry := rdc.insertLockedInner(ctx, []*kvbase.RangeCacheEntry{ent})[0]
+func (rdc *RangeDescriptorCache) mustInsertLocked(ctx context.Context, ent *rangeCacheEntry) {
+	entry := rdc.insertLockedInner(ctx, []*rangeCacheEntry{ent})[0]
 	if entry == nil {
 		log.Fatalf(ctx, "unexpected failure to insert desc: %s", ent)
 	}
@@ -899,30 +944,30 @@ func (rdc *RangeDescriptorCache) mustInsertLocked(
 // stale.
 func (rdc *RangeDescriptorCache) insertLocked(
 	ctx context.Context, rs ...roachpb.RangeInfo,
-) []*kvbase.RangeCacheEntry {
-	entries := make([]*kvbase.RangeCacheEntry, len(rs))
+) []*rangeCacheEntry {
+	entries := make([]*rangeCacheEntry, len(rs))
 	for i, r := range rs {
-		entries[i] = &kvbase.RangeCacheEntry{
-			Desc:  r.Desc,
-			Lease: r.Lease,
+		entries[i] = &rangeCacheEntry{
+			desc:  r.Desc,
+			lease: r.Lease,
 		}
 	}
 	return rdc.insertLockedInner(ctx, entries)
 }
 
 func (rdc *RangeDescriptorCache) insertLockedInner(
-	ctx context.Context, rs []*kvbase.RangeCacheEntry,
-) []*kvbase.RangeCacheEntry {
+	ctx context.Context, rs []*rangeCacheEntry,
+) []*rangeCacheEntry {
 	// entries will have the same element as rs, except the ones that couldn't be
 	// inserted for which the slots will remain nil.
-	entries := make([]*kvbase.RangeCacheEntry, len(rs))
+	entries := make([]*rangeCacheEntry, len(rs))
 	for i, ent := range rs {
-		if !ent.Desc.IsInitialized() {
+		if !ent.desc.IsInitialized() {
 			log.Fatalf(ctx, "inserting uninitialized desc: %s", ent)
 		}
-		if !ent.Lease.Empty() {
-			replID := ent.Lease.Replica.ReplicaID
-			_, ok := ent.Desc.GetReplicaDescriptorByID(replID)
+		if !ent.lease.Empty() {
+			replID := ent.lease.Replica.ReplicaID
+			_, ok := ent.desc.GetReplicaDescriptorByID(replID)
 			if !ok {
 				log.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
 					replID, ent.Desc, ent.Lease)
@@ -944,7 +989,7 @@ func (rdc *RangeDescriptorCache) insertLockedInner(
 			entries[i] = newerEntry
 			continue
 		}
-		rangeKey := keys.RangeMetaKey(ent.Desc.EndKey)
+		rangeKey := keys.RangeMetaKey(ent.Desc().EndKey)
 		if log.V(2) {
 			log.Infof(ctx, "adding cache entry: key=%s value=%s", rangeKey, ent)
 		}
@@ -954,13 +999,13 @@ func (rdc *RangeDescriptorCache) insertLockedInner(
 	return entries
 }
 
-func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCacheEntry {
-	return entry.Value.(*kvbase.RangeCacheEntry)
+func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *rangeCacheEntry {
+	return entry.Value.(*rangeCacheEntry)
 }
 
 func (rdc *RangeDescriptorCache) clearOlderOverlapping(
-	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
-) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
+	ctx context.Context, newEntry *rangeCacheEntry,
+) (ok bool, newerEntry *rangeCacheEntry) {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
 	return rdc.clearOlderOverlappingLocked(ctx, newEntry)
@@ -977,22 +1022,22 @@ func (rdc *RangeDescriptorCache) clearOlderOverlapping(
 // Note that even if false is returned, older descriptors are still cleared from
 // the cache.
 func (rdc *RangeDescriptorCache) clearOlderOverlappingLocked(
-	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
-) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
-	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.Desc)
+	ctx context.Context, newEntry *rangeCacheEntry,
+) (ok bool, newerEntry *rangeCacheEntry) {
+	log.VEventf(ctx, 2, "clearing entries overlapping %s", newEntry.Desc())
 	newest := true
-	var newerFound *kvbase.RangeCacheEntry
-	overlapping := rdc.getCachedOverlappingRLocked(ctx, newEntry.Desc.RSpan())
+	var newerFound *rangeCacheEntry
+	overlapping := rdc.getCachedOverlappingRLocked(ctx, newEntry.Desc().RSpan())
 	for _, e := range overlapping {
 		entry := rdc.getValue(e)
-		if newEntry.NewerThan(entry) {
+		if newEntry.overrides(entry) {
 			if log.V(2) {
 				log.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rdc.getValue(e))
 			}
 			rdc.rangeCache.cache.DelEntry(e)
 		} else {
 			newest = false
-			if descsCompatible(&entry.Desc, &newEntry.Desc) {
+			if descsCompatible(entry.Desc(), newEntry.Desc()) {
 				newerFound = entry
 				// We've found a similar descriptor in the cache; there can't be any
 				// other overlapping ones so let's stop the iteration.
@@ -1005,4 +1050,216 @@ func (rdc *RangeDescriptorCache) clearOlderOverlappingLocked(
 		}
 	}
 	return newest, newerFound
+}
+
+// rangeCacheEntry represents one cache entry.
+//
+// The cache stores *rangeCacheEntry. Entries are immutable: cache lookups
+// returns the same *rangeCacheEntry to multiple queriers for efficiency, but
+// nobody should modify the lookup result.
+type rangeCacheEntry struct {
+	// desc is always populated.
+	desc roachpb.RangeDescriptor
+	// Lease has info on the range's lease. It can be Empty() if no lease
+	// information is known. When a lease is known, it is guaranteed that the
+	// lease comes from Desc's range id (i.e. we'll never put a lease from another
+	// range in here). This allows UpdateLease() to use Lease.Sequence to compare
+	// leases. Moreover, the lease will correspond to one of the replicas in Desc.
+	lease roachpb.Lease
+}
+
+func (e rangeCacheEntry) String() string {
+	return fmt.Sprintf("desc:%s, lease:%s", e.Desc(), e.Lease())
+}
+
+func (e *rangeCacheEntry) Desc() *roachpb.RangeDescriptor {
+	return &e.desc
+}
+
+func (e *rangeCacheEntry) Leaseholder() *roachpb.ReplicaDescriptor {
+	if e.lease.Empty() {
+		return nil
+	}
+	return &e.lease.Replica
+}
+
+func (e *rangeCacheEntry) Lease() *roachpb.Lease {
+	if e.lease.Empty() {
+		return nil
+	}
+	if e.leaseSpeculative() {
+		return nil
+	}
+	return &e.lease
+}
+
+// DescSpeculative returns true if the descriptor in the entry is "speculative"
+// - i.e. it doesn't correspond to a committed value. Such descriptors have been
+// inserted in the cache with Generation=0.
+func (e *rangeCacheEntry) DescSpeculative() bool {
+	return e.desc.Generation == 0
+}
+
+// leaseSpeculative returns true if the lease in the entry is "speculative"
+// - i.e. it doesn't correspond to a committed lease. Such leases have been
+// inserted in the cache with Sequence=0.
+func (e *rangeCacheEntry) leaseSpeculative() bool {
+	if e.lease.Empty() {
+		panic(fmt.Sprintf("leaseSpeculative called on entry with empty lease: %s", e))
+	}
+	return e.lease.Sequence == 0
+}
+
+// overrides returns true if o should replace e in the cache. It is assumed that
+// e's and o'd descriptors overlap (and so they can't co-exist in the cache). A
+// newer entry overrides an older entry. What entry is newer is decided based
+// the descriptor's generation and, for equal generations, by the lease's
+// sequence.
+//
+// In situations where it can't be determined which entry represents newer
+// information, e wins - the assumption is that o is already in the cache and we
+// have some reason to believe e should get in the cache instead (generally
+// because a server gave us this information recently). Situations where it
+// can't be determined what information is newer is when at least one of the
+// descriptors is "speculative" (generation=0), or when the lease information is
+// speculative.
+func (e *rangeCacheEntry) overrides(o *rangeCacheEntry) bool {
+	if util.RaceEnabled {
+		if _, err := e.Desc().RSpan().Intersect(o.Desc()); err != nil {
+			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", e.Desc(), o.Desc()))
+		}
+	}
+
+	if res := compareEntryDescs(o, e); res != 0 {
+		return res < 0
+	}
+
+	// Equal descriptor generations. Let's look at the lease sequence.
+
+	// If two RangeDescriptors overlap and have the same Generation, they must
+	// be referencing the same range, in which case their lease sequences are
+	// comparable.
+	if e.Desc().RangeID != o.Desc().RangeID {
+		panic(fmt.Sprintf("overlapping descriptors with same gen but different IDs: %s vs %s",
+			e.Desc(), o.Desc()))
+	}
+
+	return compareEntryLeases(o, e) < 0
+}
+
+// compareEntryDescs returns -1, 0 or 1 depending on whether a's descriptor is
+// considered older, equal to, or newer than b's.
+//
+// In case at least one of the descriptors is "speculative", a is considered
+// older; this matches the semantics of b.overrides(a).
+func compareEntryDescs(a, b *rangeCacheEntry) int {
+	if util.RaceEnabled {
+		if _, err := a.Desc().RSpan().Intersect(b.Desc()); err != nil {
+			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", a.Desc(), b.Desc()))
+		}
+	}
+
+	if a.desc.Equal(b.desc) {
+		return 0
+	}
+
+	if a.DescSpeculative() || b.DescSpeculative() {
+		return -1
+	}
+
+	if a.Desc().Generation < b.Desc().Generation {
+		return -1
+	}
+	if a.Desc().Generation > b.Desc().Generation {
+		return 1
+	}
+	return 0
+}
+
+// compareEntryLeases returns -1, 0 or 1 depending on whether a's lease is
+// considered older, equal to, or newer than b's. The descriptors in a and b are
+// assumed to be the same.
+//
+// An empty lease is considered older than any other. In case at least one of
+// the leases is "speculative", a is considered older; this matches the
+// semantics of b.overrides(a).
+func compareEntryLeases(a, b *rangeCacheEntry) int {
+	if aEmpty, bEmpty := a.lease.Empty(), b.lease.Empty(); aEmpty || bEmpty {
+		if aEmpty && !bEmpty {
+			return -1
+		}
+		if !aEmpty && bEmpty {
+			return 1
+		}
+		return 0
+	}
+
+	// A speculative lease always loses; we don't know the sequence number of a
+	// speculative lease.
+	if a.leaseSpeculative() || b.leaseSpeculative() {
+		return -1
+	}
+
+	if a.Lease().Sequence < b.Lease().Sequence {
+		return -1
+	}
+	if a.Lease().Sequence > b.Lease().Sequence {
+		return 1
+	}
+	return 0
+}
+
+// updateLease returns a new rangeCacheEntry with the receiver's descriptor and
+// a new lease. The updated retval indicates whether the passed-in lease appears
+// to be newer than the lease the entry had before. If updated is returned true,
+// the caller should evict the existing entry (the receiver) and replace it with
+// newEntry. (true, nil) can be returned meaning that the existing entry should
+// be evicted, but there's no replacement that this function can provide; this
+// happens when the passed-in lease indicates a leaseholder that's not part of
+// the entry's descriptor. The descriptor must be really stale, and the caller
+// should read a new version.
+//
+// If updated=false is returned, then newEntry will be the same as the receiver.
+// This means that the passed-in lease is older than the lease already in the
+// entry.
+//
+// If the new leaseholder is not a replica in the descriptor, we assume the
+// lease information to be more recent than the entry's descriptor, and we
+// return true, nil. The caller should evict the receiver from the cache, but
+// it'll have to do extra work to figure out what to insert instead.
+func (e *rangeCacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry *rangeCacheEntry) {
+	// If l is older than what the entry has (or the same), return early.
+	//
+	// This method handles speculative leases: a new lease with a sequence of 0 is
+	// presumed to be newer than anything, and an existing lease with a sequence
+	// of 0 is presumed to be older than anything.
+	//
+	// We handle the case of a lease with the sequence equal to the existing
+	// entry, but otherwise different. This results in the new lease updating the
+	// entry, because the existing lease might correspond to a proposed lease that
+	// a replica returned speculatively while a lease acquisition was in progress.
+	if l.Sequence != 0 && e.lease.Sequence != 0 && l.Sequence < e.lease.Sequence {
+		return false, e
+	}
+
+	if l.Equal(e.Lease()) {
+		return false, e
+	}
+
+	// Check whether the lease we were given is compatible with the replicas in
+	// the descriptor. If it's not, the descriptor must be really stale, and the
+	// RangeCacheEntry needs to be evicted.
+	_, ok := e.desc.GetReplicaDescriptorByID(l.Replica.ReplicaID)
+	if !ok {
+		return true, nil
+	}
+
+	// TODO(andrei): If the leaseholder is present, but the descriptor lists the
+	// replica as a learner, this is a sign of a stale descriptor. I'm not sure
+	// what to do about it, though.
+
+	return true, &rangeCacheEntry{
+		desc:  e.desc,
+		lease: *l,
+	}
 }
