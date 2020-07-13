@@ -267,3 +267,9 @@ TABLE abx
            ├── table=59 index=1 (1 key column)
            └── table=60 index=1 (1 key column)
 scan abx
+
+query T
+EXPLAIN (OPT) select * from pg_type where oid = 1000
+----
+  scan pg_type@pg_type_oid_idx
+   └── constraint: /2: [/1000 - /1000]
