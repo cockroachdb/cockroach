@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -93,18 +92,14 @@ func MakeDeleter(
 // orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
 // be nil if not.
 func (rd *Deleter) DeleteRow(
-	ctx context.Context,
-	b *kv.Batch,
-	values []tree.Datum,
-	ignoreIndexes util.FastIntSet,
-	traceKV bool,
+	ctx context.Context, b *kv.Batch, values []tree.Datum, pm PartialIndexUpdateHelper, traceKV bool,
 ) error {
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
-		// If the index ID exists in ignoreIndexes, do not attempt to delete
-		// from the index.
-		if ignoreIndexes.Contains(int(rd.Helper.Indexes[i].ID)) {
+		// If the index ID exists in the set of indexes to ignore, do not
+		// attempt to delete from the index.
+		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].ID)) {
 			continue
 		}
 

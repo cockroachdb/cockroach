@@ -461,9 +461,9 @@ DELETE FROM partial_indexes
 delete partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:5 b:6 c:7
- ├── partial index del columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+ ├── partial index del columns: column9:9 column10:10 column11:11 column12:12
  └── project
-      ├── columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      ├── columns: column9:9 column10:10 column11:11 column12:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       ├── scan partial_indexes
       │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       │    └── partial index predicates
@@ -473,7 +473,7 @@ delete partial_indexes
       │              ├── a:5 > b:6
       │              └── c:7 = 'bar'
       └── projections
-           ├── c:7 = 'foo' [as=partial_index_del1:9]
-           ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
-           ├── c:7 = 'delete-only' [as=partial_index_del3:11]
-           └── c:7 = 'write-only' [as=partial_index_del4:12]
+           ├── c:7 = 'foo' [as=column9:9]
+           ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
+           ├── c:7 = 'delete-only' [as=column11:11]
+           └── c:7 = 'write-only' [as=column12:12]
