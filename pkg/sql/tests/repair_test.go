@@ -1,0 +1,356 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package tests
+
+import (
+	"context"
+	gosql "database/sql"
+	"fmt"
+	"regexp"
+	"testing"
+
+	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+// TestDescriptorRepairOrphanedDescriptors exercises cases where corruptions to
+// the catalog could exist due to bugs and can now be repaired programmatically
+// from SQL.
+//
+// We manually create the corruption by injecting values into namespace and
+// descriptor, ensure that the doctor would detect these problems, repair them
+// with sql queries, and show that not invalid objects are found.
+func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		return s, db, func() {
+			s.Stopper().Stop(ctx)
+		}
+	}
+	// The below descriptors were created by performing the following on a
+	// 20.1.1 cluster:
+	//
+	//  SET experimental_serial_normalization = 'sql_sequence';
+	//  CREATE DATABASE db;
+	//  USE db;
+	//  CREATE TABLE foo(i SERIAL PRIMARY KEY);
+	//  USE defaultdb;
+	//  DROP DATABASE db CASCADE;
+	//
+	// This, due to #51782, leads to the table remaining public but with no
+	// parent database (52).
+	const (
+		orphanedTable = `0aeb010a03666f6f1835203428013a0042380a016910011a0c08011040180030005014600020002a1d6e65787476616c2827666f6f5f695f736571273a3a3a535452494e472930005036480252440a077072696d61727910011801220169300140004a10080010001a00200028003000380040005a007a020800800100880100900101980100a20106080012001800a8010060026a150a090a0561646d696e10020a080a04726f6f741002800101880103980100b201120a077072696d61727910001a016920012800b80101c20100e80100f2010408001200f801008002009202009a0200b20200b80200c0021d`
+	)
+	// We want to inject a descriptor that has no parent. This will block
+	// backups among other things.
+	const (
+		parentID  = 52
+		schemaID  = 29
+		descID    = 53
+		tableName = "foo"
+	)
+	// This test will inject the table an demonstrate
+	// that there are problems. It will then repair it by just dropping the
+	// descriptor and namespace entry. This would normally be unsafe because
+	// it would leave table data around.
+	t.Run("orphaned view - 51782", func(t *testing.T) {
+		_, db, cleanup := setup(t)
+		defer cleanup()
+
+		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			if _, err := tx.Exec(
+				"SELECT crdb_internal.unsafe_upsert_descriptor($1, decode($2, 'hex'));",
+				descID, orphanedTable); err != nil {
+				return err
+			}
+			_, err := tx.Exec("SELECT crdb_internal.unsafe_upsert_namespace_entry($1, $2, $3, $4, true);",
+				parentID, schemaID, tableName, descID)
+			return err
+		}))
+
+		// Ideally we should be able to query `crdb_internal.invalid_object` but it
+		// does not do enough validation. Instead we'll just observe the issue that
+		// the parent descriptor cannot be found.
+		_, err := db.Exec(
+			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
+			descID)
+		require.Regexp(t, "internal error: parentID 52 does not exist", err)
+
+		// In this case, we're treating the injected descriptor as having no data
+		// so we can clean it up by just deleting the erroneous descriptor and
+		// namespace entry that was introduced. In the next case we'll go through
+		// the dance of adding back a parent database in order to drop the table.
+		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			if _, err := tx.Exec(
+				"SELECT crdb_internal.unsafe_delete_descriptor($1);",
+				descID); err != nil {
+				return err
+			}
+			_, err := tx.Exec("SELECT crdb_internal.unsafe_delete_namespace_entry($1, $2, $3, $4);",
+				parentID, schemaID, tableName, descID)
+			return err
+		}))
+
+		rows, err := db.Query(
+			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
+			descID)
+		require.NoError(t, err)
+		rowMat, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		require.EqualValues(t, [][]string{{"0"}}, rowMat)
+	})
+	// This test will inject the table an demonstrate that there are problems. It
+	// will then repair it by injecting a new database descriptor and namespace
+	// entry and then demonstrate the the problem is resolved.
+	t.Run("orphaned table with data - 51782", func(t *testing.T) {
+		_, db, cleanup := setup(t)
+		defer cleanup()
+
+		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			if _, err := tx.Exec(
+				"SELECT crdb_internal.unsafe_upsert_descriptor($1, decode($2, 'hex'));",
+				descID, orphanedTable); err != nil {
+				return err
+			}
+			_, err := tx.Exec("SELECT crdb_internal.unsafe_upsert_namespace_entry($1, $2, $3, $4, true);",
+				parentID, schemaID, tableName, descID)
+			return err
+		}))
+
+		// Ideally we should be able to query `crdb_internal.invalid_objects` but it
+		// does not do enough validation. Instead we'll just observe the issue that
+		// the parent descriptor cannot be found.
+		_, err := db.Exec(
+			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
+			descID)
+		require.Regexp(t, "internal error: parentID 52 does not exist", err)
+
+		// In this case, we're going to inject a parent database
+		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			if _, err := tx.Exec(
+				"SELECT crdb_internal.unsafe_upsert_descriptor($1, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', $2))",
+				parentID, `{
+  "database": {
+    "id": 52,
+    "name": "to_drop",
+    "privileges": {
+      "owner": "root",
+      "users": [
+        {
+          "privileges": 2,
+          "user": "admin"
+        },
+        {
+          "privileges": 2,
+          "user": "root"
+        }
+      ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "version": 1
+  }
+}
+`,
+			); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(
+				"SELECT crdb_internal.unsafe_upsert_namespace_entry($1, $2, $3, $4);",
+				0, 0, "to_drop", parentID,
+			); err != nil {
+				return err
+			}
+			if _, err := tx.Exec("SELECT crdb_internal.unsafe_upsert_namespace_entry($1, $2, $3, $4);",
+				parentID, 0, "public", schemaID); err != nil {
+				return err
+			}
+
+			// We also need to remove the reference to the sequence.
+
+			if _, err := tx.Exec(`
+SELECT crdb_internal.unsafe_upsert_descriptor(
+        $1,
+        crdb_internal.json_to_pb(
+            'cockroach.sql.sqlbase.Descriptor',
+            jsonb_set(
+                jsonb_set(
+                    crdb_internal.pb_to_json(
+                        'cockroach.sql.sqlbase.Descriptor',
+                        descriptor
+                    ),
+                    ARRAY['table', 'columns', '0', 'default_expr'],
+                    '"unique_rowid()"'
+                ),
+                ARRAY['table', 'columns', '0', 'usesSequenceIds'],
+                '[]'
+            )
+        )
+       )
+  FROM system.descriptor
+ WHERE id = $1;`,
+				descID); err != nil {
+				return err
+			}
+			return nil
+		}))
+
+		{
+			rows, err := db.Query(
+				"SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) FROM system.descriptor WHERE id = 53")
+			require.NoError(t, err)
+			mat, err := sqlutils.RowsToStrMatrix(rows)
+			require.NoError(t, err)
+			fmt.Println(sqlutils.MatrixToStr(mat))
+		}
+
+		rows, err := db.Query(
+			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
+			descID)
+		require.NoError(t, err)
+		rowMat, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		require.EqualValues(t, [][]string{{"1"}}, rowMat)
+
+		_, err = db.Exec("DROP DATABASE to_drop CASCADE")
+		require.NoError(t, err)
+	})
+}
+
+func TestDescriptorRepair(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		return s, db, func() {
+			s.Stopper().Stop(ctx)
+		}
+	}
+	type eventLogPattern struct {
+		typ  string
+		info string
+	}
+	for _, tc := range []struct {
+		before             []string
+		op                 string
+		expErrRE           string
+		expEventLogEntries []eventLogPattern
+	}{
+		{
+			op: `
+SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
+'{
+  "table": {
+    "columns": [ { "id": 1, "name": "i" } ],
+    "families": [
+      {
+        "columnIds": [ 1 ],
+        "columnNames": [ "i" ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 59,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 1,
+    "parentId": 52,
+    "primaryIndex": {
+      "columnDirections": [ "ASC" ],
+      "columnIds": [ 1 ],
+      "columnNames": [ "i" ],
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 1
+    },
+    "privileges": {
+      "owner": "root",
+      "users": [ { "privileges": 2, "user": "admin" }, { "privileges": 2, "user": "root" } ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}
+'))
+`,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  "unsafe_upsert_descriptor",
+					info: `"id":59`,
+				},
+			},
+		},
+		{
+			before: []string{
+				`CREATE SCHEMA foo`,
+			},
+			op: `
+SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
+  FROM system.namespace WHERE name = 'foo';
+`,
+			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
+		},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			s, db, cleanup := setup(t)
+			now := s.Clock().Now().GoTime()
+			defer cleanup()
+			tdb := sqlutils.MakeSQLRunner(db)
+			for _, op := range tc.before {
+				tdb.Exec(t, op)
+			}
+			_, err := db.Exec(tc.op)
+			if tc.expErrRE == "" {
+				require.NoError(t, err)
+			} else {
+				require.Regexp(t, tc.expErrRE, err)
+			}
+			rows := tdb.Query(t, `SELECT "eventType", info FROM system.eventlog WHERE timestamp > $1`,
+				now)
+			mat, err := sqlutils.RowsToStrMatrix(rows)
+			require.NoError(t, err)
+		outer:
+			for _, exp := range tc.expEventLogEntries {
+				for _, e := range mat {
+					if e[0] != exp.typ {
+						continue
+					}
+					if matched, err := regexp.MatchString(exp.info, e[1]); err != nil {
+						t.Fatal(err)
+					} else if matched {
+						continue outer
+					}
+				}
+				t.Errorf("failed to find log entry matching %s in %s", exp, sqlutils.MatrixToStr(mat))
+			}
+		})
+	}
+}
