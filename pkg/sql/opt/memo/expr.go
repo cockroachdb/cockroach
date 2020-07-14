@@ -576,6 +576,15 @@ func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
 	return IsPartialIndex(tabMeta, s.Index)
 }
 
+// PartialIndexPredicate returns the FiltersExpr representing the predicate of
+// the partial index that the scan uses. If the scan does not use a partial
+// index, this function panics. UsesPartialIndex should be called first to
+// determine if the scan operates over a partial index.
+func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
+	tabMeta := md.TableMeta(s.Table)
+	return PartialIndexPredicate(tabMeta, s.Index)
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {

@@ -1,0 +1,226 @@
+# ------------------------
+# Tests without Histograms
+# TODO(mgartner): Add more interesting tests for constrained partial index
+# scans, with and without histograms.
+# ------------------------
+
+exec-ddl
+CREATE TABLE a (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  t STRING,
+  INDEX idx_s_foo (i) WHERE s = 'foo',
+  INDEX idx_i_0_to_100 (s) WHERE i > 0 AND i < 100,
+  INDEX idx_not_tight (i) WHERE i < k AND i % 3 = 0,
+  INDEX idx_equiv (s, t) WHERE s = t,
+  INDEX idx_s_null (i) WHERE s IS NULL,
+  INDEX idx_i_200_to_250 (i) WHERE i > 200 AND i < 250
+)
+----
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 50,
+    "null_count": 275
+  },
+  {
+    "columns": ["t"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500,
+    "null_count": 50
+  }
+]'
+----
+
+# Distinct and null counts are updated based on the partial index predicate.
+opt
+SELECT * FROM a WHERE s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string)
+ ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx_s_foo,partial
+      ├── columns: k:1(int!null) i:2(int)
+      ├── stats: [rows=96.4285714, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# Test for Select filter applied after partial index scan.
+opt
+SELECT * FROM a WHERE i > 25 AND i < 50
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=240, distinct(2)=24, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=990]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx_i_0_to_100,partial
+ │         ├── columns: k:1(int!null) s:3(string)
+ │         ├── stats: [rows=990, distinct(2)=99, null(2)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── (i:2 > 25) AND (i:2 < 50) [type=bool, outer=(2), constraints=(/2: [/26 - /49]; tight)]
+
+# Test for multiple unapplied conjunctions due to non-tight constraints.
+opt
+SELECT * FROM a WHERE i < k AND i % 3 = 0
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── immutable
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=500, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx_not_tight,partial
+      ├── columns: k:1(int!null) i:2(int)
+      ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=500, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# Test for an indexed column that is also constrained by partial index predicate.
+opt
+SELECT * FROM a WHERE i > 215 AND i < 230
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a@idx_i_200_to_250,partial
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── stats: [rows=490, distinct(1)=490, null(1)=0, distinct(2)=49, null(2)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (i:2 > 215) AND (i:2 < 230) [type=bool, outer=(2), constraints=(/2: [/216 - /229]; tight)]
+
+# Test for FuncDep equivalencies.
+opt
+SELECT * FROM a WHERE s = t AND s LIKE '%foo%' AND t LIKE '%bar%'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string!null)
+ ├── stats: [rows=1.04895, distinct(3)=1.04895, null(3)=0, distinct(4)=1.04895, null(4)=0, distinct(3,4)=1.04895, null(3,4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)==(4), (4)==(3)
+ └── select
+      ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
+      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(3,4)
+      ├── scan a@idx_equiv,partial
+      │    ├── columns: k:1(int!null) s:3(string) t:4(string)
+      │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4)
+      └── filters
+           ├── s:3 LIKE '%foo%' [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+           └── t:4 LIKE '%bar%' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
+
+# Test for null predicate.
+opt
+SELECT * FROM a WHERE s IS NULL
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ ├── stats: [rows=275, distinct(3)=1, null(3)=275]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx_s_null,partial
+      ├── columns: k:1(int!null) i:2(int)
+      ├── stats: [rows=275, distinct(3)=1, null(3)=275]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# ---------------------
+# Tests with Histograms
+# ---------------------
+
+exec-ddl
+CREATE TABLE hist (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  INDEX idx_i (s) WHERE i > 100 AND i <= 200
+)
+----
+
+exec-ddl
+ALTER TABLE hist INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+# TODO(mgartner): The distinct(2) stat for the partial index scan should be 10
+# not 11. It is currently one more than it should be because
+# updateDistinctCountFromHistogram increments the distinct count before the null
+# count has been set to zero.
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=190]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx_i,partial
+ │         ├── columns: k:1(int!null) s:3(string)
+ │         ├── stats: [rows=190, distinct(2)=11, null(2)=0]
+ │         │   histogram(2)=  0   0   180  10
+ │         │                <--- 100 ----- 200
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3)
+ └── filters
+      └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
