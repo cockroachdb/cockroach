@@ -133,7 +133,7 @@ func NewDatabaseAlreadyExistsError(name string) error {
 // when an error occurs while trying to get the colliding object for an
 // ObjectAlreadyExistsErr.
 func WrapErrorWhileConstructingObjectAlreadyExistsErr(err error) error {
-	return errors.Wrap(err, "object already exists")
+	return pgerror.WithCandidateCode(errors.Wrap(err, "object already exists"), pgcode.DuplicateObject)
 }
 
 // MakeObjectAlreadyExistsError creates an error for a namespace collision
