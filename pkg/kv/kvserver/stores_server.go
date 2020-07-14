@@ -42,6 +42,8 @@ func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) er
 }
 
 // CollectChecksum implements PerReplicaServer.
+// XXX: Type out the entire control flow of consistency checker/checksum
+// collection somewhere.
 func (is Server) CollectChecksum(
 	ctx context.Context, req *CollectChecksumRequest,
 ) (*CollectChecksumResponse, error) {

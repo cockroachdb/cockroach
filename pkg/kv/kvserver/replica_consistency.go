@@ -184,7 +184,7 @@ func (r *Replica) CheckConsistency(
 	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && haveDelta {
 		if delta.ContainsEstimates > 0 {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
-			// result when we recompute from scratch.
+			// result when we recompute from scratch. // XXX: Area of interest.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
 		} else {
 			// When ContainsEstimates is unset, we expect the recomputation to agree with the stored stats.
@@ -549,7 +549,7 @@ func (r *Replica) computeChecksumDone(
 }
 
 type replicaHash struct {
-	SHA512                    [sha512.Size]byte
+	SHA512                    [sha512.Size]byte // XXX: Marker for self.
 	PersistedMS, RecomputedMS enginepb.MVCCStats
 }
 
@@ -621,10 +621,10 @@ func (r *Replica) sha512(
 
 	var ms enginepb.MVCCStats
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
-	// all of the replicated key space.
+	// all of the replicated key space. // XXX: Maybe we could try seeing if stats only mode still fails.
 	if !statsOnly {
 		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-			spanMS, err := storage.ComputeStatsGo(
+			spanMS, err := storage.ComputeStatsGo( // XXX: Why are we computing an extra ten bytes here?
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
 			if err != nil {
@@ -636,6 +636,8 @@ func (r *Replica) sha512(
 
 	var result replicaHash
 	result.RecomputedMS = ms
+
+	// XXX: Gross hack to adjust by sysbytes by 10?
 
 	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
 	if err != nil {
@@ -679,5 +681,9 @@ func (r *Replica) sha512(
 	// the same timestamp.
 	result.RecomputedMS.AgeTo(result.PersistedMS.LastUpdateNanos)
 
+	// XXX: What happens, given that checksums, before the version bump, will be
+	// computed using the new field in mind?
+
+	log.Infof(ctx, "=== SHA512 results: shasum: %x\npersisted: %v\ncomputed:  %v", result.SHA512[:], result.PersistedMS.String(), result.RecomputedMS.String())
 	return &result, nil
 }
