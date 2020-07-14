@@ -451,28 +451,36 @@ func (im *Implicator) atomImpliesPredicate(
 
 	default:
 		// atom A => atom B iff B contains A.
-		return im.atomContainsAtom(pred, e)
+		return im.atomImpliesAtom(e, pred, exactMatches)
 	}
 }
 
-// atomContainsAtom returns true if atom expression a contains atom expression
-// b, meaning that all values for variables in which b evaluates to true, a also
-// evaluates to true.
+// atomImpliesAtom returns true if the predicate atom expression, pred, contains
+// atom expression a, meaning that all values for variables in which e evaluates
+// to true, pred also evaluates to true.
 //
 // Constraints are used to prove containment because they make it easy to assess
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
-func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
-	// Build constraint sets for a and b, unless they have been cached.
-	aSet, aTight, ok := im.fetchConstraint(a)
-	if !ok {
-		aSet, aTight = memo.BuildConstraints(a, im.md, im.evalCtx)
-		im.cacheConstraint(a, aSet, aTight)
+func (im *Implicator) atomImpliesAtom(
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+) bool {
+	// Check for containment of comparison expressions with two variables, like
+	// a = b.
+	if res, ok := im.twoVarComparisonImpliesTwoVarComparison(e, pred, exactMatches); ok {
+		return res
 	}
-	bSet, bTight, ok := im.fetchConstraint(b)
+
+	// Build constraint sets for e and pred, unless they have been cached.
+	eSet, eTight, ok := im.fetchConstraint(e)
 	if !ok {
-		bSet, bTight = memo.BuildConstraints(b, im.md, im.evalCtx)
-		im.cacheConstraint(b, bSet, bTight)
+		eSet, eTight = memo.BuildConstraints(e, im.md, im.evalCtx)
+		im.cacheConstraint(e, eSet, eTight)
+	}
+	predSet, predTight, ok := im.fetchConstraint(pred)
+	if !ok {
+		predSet, predTight = memo.BuildConstraints(pred, im.md, im.evalCtx)
+		im.cacheConstraint(pred, predSet, predTight)
 	}
 
 	// If either set has more than one constraint, then constraints cannot be
@@ -485,28 +493,104 @@ func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	//
 	//   /1: (/NULL - ]; /2: (/NULL - ]
 	//
-	// TODO(mgartner): Prove implication in cases like (a > b) => (a >= b),
-	// without using constraints.
-	if aSet.Length() > 1 || bSet.Length() > 1 {
+	if eSet.Length() > 1 || predSet.Length() > 1 {
 		return false
 	}
 
 	// Containment cannot be proven if either constraint is not tight, because
 	// the constraint does not fully represent the expression.
-	if !aTight || !bTight {
+	if !eTight || !predTight {
 		return false
 	}
 
-	ac := aSet.Constraint(0)
-	bc := bSet.Constraint(0)
+	eConstraint := eSet.Constraint(0)
+	predConstraint := predSet.Constraint(0)
 
 	// If the columns in ac are not a prefix of the columns in bc, then ac
 	// cannot contain bc.
-	if !ac.Columns.IsPrefixOf(&bc.Columns) {
+	if !predConstraint.Columns.IsPrefixOf(&eConstraint.Columns) {
 		return false
 	}
 
-	return ac.Contains(im.evalCtx, bc)
+	return predConstraint.Contains(im.evalCtx, eConstraint)
+}
+
+// twoVarComparisonImpliesTwoVarComparison returns true if a contains b, where
+// both expressions are comparisons (=, <, >, <=, >=, !=) of two variables. If
+// either expressions is not a comparison of two variables, this function
+// returns ok=false.
+//
+// Note that this function does not handle expressions that are identical, such
+// as a > b => a > b. Identical atom matches are already handled in
+// scalarExprImpliesPredicate using pointer equality, so there is no need for
+// supporting them here.
+//
+// For example, it can be prove that (a > b) implies (a >= b) because all
+// values of a and b that satisfy the first expression also satisfy the second
+// expression.
+func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+) (containment bool, ok bool) {
+	if !isTwoVarComparison(e) || !isTwoVarComparison(pred) {
+		return false, false
+	}
+
+	eLeft := e.Child(0).(*memo.VariableExpr)
+	eRight := e.Child(1).(*memo.VariableExpr)
+	predLeft := pred.Child(0).(*memo.VariableExpr)
+	predRight := pred.Child(1).(*memo.VariableExpr)
+
+	columnMatch := eLeft.Col == predLeft.Col && eRight.Col == predRight.Col
+	inverseColumnMatch := eLeft.Col == predRight.Col && eRight.Col == predLeft.Col
+
+	isInverseOp := func(a, b opt.Operator) bool {
+		return (a == opt.EqOp && b == opt.EqOp) ||
+			(a == opt.NeOp && b == opt.NeOp) ||
+			(a == opt.LtOp && b == opt.GtOp) ||
+			(a == opt.GtOp && b == opt.LtOp) ||
+			(a == opt.LeOp && b == opt.GeOp) ||
+			(a == opt.GeOp && b == opt.LeOp)
+	}
+
+	switch {
+	case isInverseOp(e.Op(), pred.Op()) && inverseColumnMatch:
+		// If the operators are inverses of each other and the columns are
+		// inverted, then they are equal and e implies pred. The expressions are
+		// equal, so e can be removed from the remaining filters by adding e to
+		// exactMatches.
+		containment = true
+		exactMatches[e] = struct{}{}
+
+	case (e.Op() == opt.LtOp || e.Op() == opt.GtOp) && pred.Op() == opt.NeOp:
+		// a < b and a > b imply a != b and b != a.
+		containment = columnMatch || inverseColumnMatch
+
+	case e.Op() == opt.EqOp && pred.Op() == opt.LeOp:
+		// a = b and b = a imply a <= b.
+		containment = columnMatch || inverseColumnMatch
+
+	case e.Op() == opt.LtOp && pred.Op() == opt.LeOp:
+		// a < b implies a <= b.
+		containment = columnMatch
+
+	case e.Op() == opt.LtOp && pred.Op() == opt.GeOp:
+		// a < b implies b >= a .
+		containment = inverseColumnMatch
+
+	case e.Op() == opt.EqOp && pred.Op() == opt.GeOp:
+		// a = b and b = a imply a >= b.
+		containment = columnMatch || inverseColumnMatch
+
+	case e.Op() == opt.GtOp && pred.Op() == opt.GeOp:
+		// a > b implies a >= b.
+		containment = columnMatch
+
+	case e.Op() == opt.GtOp && pred.Op() == opt.LeOp:
+		// a > b implies b <= a .
+		containment = inverseColumnMatch
+	}
+
+	return containment, true
 }
 
 // cacheConstraint caches a constraint set and a tight boolean for the given
@@ -638,4 +722,14 @@ func flattenOrExpr(or *memo.OrExpr) []opt.ScalarExpr {
 	collect(or)
 
 	return ors
+}
+
+// isTwoVarComparison returns true if the expression is a comparison
+// expression (=, <, >, <=, >=, !=) and both side of the comparison are
+// variables.
+func isTwoVarComparison(e opt.ScalarExpr) bool {
+	op := e.Op()
+	return (op == opt.EqOp || op == opt.LtOp || op == opt.GtOp || op == opt.LeOp || op == opt.GeOp || op == opt.NeOp) &&
+		e.Child(0).Op() == opt.VariableOp &&
+		e.Child(1).Op() == opt.VariableOp
 }
