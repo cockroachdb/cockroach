@@ -630,7 +630,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
-%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
@@ -4705,6 +4705,14 @@ targets:
 | TABLE table_pattern_list
   {
     $$.val = tree.TargetList{Tables: $2.tablePatterns()}
+  }
+| TENANT iconst64
+  {
+    tenID := uint64($2.int64())
+    if tenID == 0 {
+		  return setErr(sqllex, errors.New("invalid tenant ID"))
+	  }
+    $$.val = tree.TargetList{Tenant: roachpb.MakeTenantID(tenID)}
   }
 | DATABASE name_list
   {
@@ -10715,6 +10723,7 @@ unreserved_keyword:
 | TEMP
 | TEMPLATE
 | TEMPORARY
+| TENANT
 | TESTING_RELOCATE
 | TEXT
 | TIES

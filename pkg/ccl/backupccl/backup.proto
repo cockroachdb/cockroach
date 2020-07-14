@@ -91,6 +91,11 @@ message BackupManifest {
 
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
+  message Tenant {
+    uint64 id = 1 [(gogoproto.customname) = "ID"];
+    bytes info = 2;
+  }
+  repeated Tenant tenants = 24 [(gogoproto.nullable) = false];
   // databases in descriptors that have all tables also in descriptors.
   repeated uint32 complete_dbs = 14 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
@@ -123,6 +128,8 @@ message BackupManifest {
     ];
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
+
+  // NEXT ID: 25
 }
 
 message BackupPartitionDescriptor{

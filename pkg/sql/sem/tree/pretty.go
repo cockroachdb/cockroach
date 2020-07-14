@@ -12,8 +12,10 @@ package tree
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -1978,6 +1980,9 @@ func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
 func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Databases != nil {
 		return p.row("DATABASE", p.Doc(&node.Databases))
+	}
+	if node.Tenant != (roachpb.TenantID{}) {
+		return p.row("TENANT", pretty.Text(strconv.FormatUint(node.Tenant.ToUint64(), 10)))
 	}
 	return p.row("TABLE", p.Doc(&node.Tables))
 }
