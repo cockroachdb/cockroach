@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -108,7 +109,11 @@ func showComments(
 
 	if tc.comment != nil {
 		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", table.Name, *tc.comment))
+		buf.WriteString(fmt.Sprintf(
+			"COMMENT ON TABLE %s IS %s",
+			table.Name,
+			lex.EscapeSQLString(*tc.comment),
+		))
 	}
 
 	for _, columnComment := range tc.columns {
@@ -118,7 +123,12 @@ func showComments(
 		}
 
 		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'", table.Name, col.Name, columnComment.comment))
+		buf.WriteString(fmt.Sprintf(
+			"COMMENT ON COLUMN %s.%s IS %s",
+			table.Name,
+			col.Name,
+			lex.EscapeSQLString(columnComment.comment),
+		))
 	}
 
 	for _, indexComment := range tc.indexes {
@@ -128,7 +138,12 @@ func showComments(
 		}
 
 		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON INDEX %s IS '%s'", idx.Name, indexComment.comment))
+		buf.WriteString(fmt.Sprintf(
+			"COMMENT ON INDEX %s@%s IS %s",
+			table.Name,
+			idx.Name,
+			lex.EscapeSQLString(indexComment.comment),
+		))
 	}
 
 	return nil

@@ -1,0 +1,20 @@
+# Ensure quotes in comments are properly escaped.
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (x INT PRIMARY KEY);
+COMMENT ON TABLE d.t IS 'has '' quotes';
+COMMENT ON INDEX d.t@primary IS 'has '' more '' quotes';
+COMMENT ON COLUMN d.t.x IS 'i '' just '' love '' quotes';
+----
+COMMENT ON COLUMN
+
+dump d
+----
+CREATE TABLE t (
+	x INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (x ASC),
+	FAMILY "primary" (x)
+);
+COMMENT ON TABLE t IS e'has \' quotes';
+COMMENT ON COLUMN t.x IS e'i \' just \' love \' quotes';
+COMMENT ON INDEX t@primary IS e'has \' more \' quotes';
