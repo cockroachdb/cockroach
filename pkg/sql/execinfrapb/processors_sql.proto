@@ -604,6 +604,8 @@ message AggregatorSpec {
     PERCENTILE_CONT_IMPL = 26;
     JSON_OBJECT_AGG = 27;
     JSONB_OBJECT_AGG = 28;
+    VAR_POP = 29;
+    STDDEV_POP = 30;
   }
 
   enum Type {

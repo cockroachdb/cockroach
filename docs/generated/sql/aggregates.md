@@ -191,6 +191,12 @@
 </span></td></tr>
 <tr><td><a name="stddev"></a><code>stddev(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
 </span></td></tr>
+<tr><td><a name="stddev_pop"></a><code>stddev_pop(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the population standard deviation of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="stddev_pop"></a><code>stddev_pop(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population standard deviation of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="stddev_pop"></a><code>stddev_pop(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the population standard deviation of the selected values.</p>
+</span></td></tr>
 <tr><td><a name="stddev_samp"></a><code>stddev_samp(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
 </span></td></tr>
 <tr><td><a name="stddev_samp"></a><code>stddev_samp(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
@@ -210,6 +216,12 @@
 <tr><td><a name="sum"></a><code>sum(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the sum of the selected values.</p>
 </span></td></tr>
 <tr><td><a name="sum_int"></a><code>sum_int(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the sum of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="var_pop"></a><code>var_pop(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the population variance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="var_pop"></a><code>var_pop(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the population variance of the selected values.</p>
+</span></td></tr>
+<tr><td><a name="var_pop"></a><code>var_pop(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the population variance of the selected values.</p>
 </span></td></tr>
 <tr><td><a name="var_samp"></a><code>var_samp(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the variance of the selected values.</p>
 </span></td></tr>
