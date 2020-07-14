@@ -168,10 +168,11 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
-		fqTableName, err = n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
+		fqName, err := n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
 		if err != nil {
 			return nil, err
 		}
+		fqTableName = fqName.FQString()
 	}
 
 	if tableDesc.IsVirtualTable() {

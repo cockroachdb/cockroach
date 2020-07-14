@@ -12,6 +12,7 @@ package resolver
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -211,7 +212,7 @@ func ResolveTargetObject(
 		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
 		return nil, prefix, err
 	}
-	if prefix.Schema() != tree.PublicSchema {
+	if prefix.Schema() != tree.PublicSchema && !strings.HasPrefix(prefix.Schema(), sessiondata.PgTempSchemaName) {
 		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}

@@ -101,7 +101,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			toTruncate[other.ID] = otherName
+			toTruncate[other.ID] = otherName.FQString()
 			toTraverse = append(toTraverse, *other)
 			return nil
 		}

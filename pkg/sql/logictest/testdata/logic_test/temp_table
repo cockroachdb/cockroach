@@ -242,7 +242,7 @@ SELECT * FROM regression_47030
 ----
 2
 
-# renaming a temp table should not move it to the public schema.
+# Renaming a temp table should not move it to the public schema.
 subtest regression_48233
 
 statement ok
@@ -256,11 +256,11 @@ SELECT * FROM system.namespace WHERE name LIKE '%48233'
 ----
 50  65  reg_48233  79
 
-statement error cannot convert a temporary table to a persistent table during renames
+statement error pq: cannot change schema of table with RENAME
 ALTER TABLE reg_48233 RENAME TO public.reg_48233
 
 statement ok
 CREATE TABLE persistent_48233(a int)
 
-statement error schema cannot be modified: "pg_temp"
-ALTER TABLE reg_48233 RENAME TO pg_temp.pers_48233
+statement error pq: cannot change schema of table with RENAME
+ALTER TABLE persistent_48233 RENAME TO pg_temp.pers_48233

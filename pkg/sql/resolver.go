@@ -304,22 +304,22 @@ func getDescriptorsFromTargetList(
 // reverse of the Resolve() functions.
 func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc *sqlbase.TableDescriptor,
-) (string, error) {
+) (*tree.TableName, error) {
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
 	schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID, schemaID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
 		tree.Name(schemaName),
 		tree.Name(desc.Name),
 	)
-	return tbName.String(), nil
+	return &tbName, nil
 }
 
 // findTableContainingIndex returns the descriptor of a table
