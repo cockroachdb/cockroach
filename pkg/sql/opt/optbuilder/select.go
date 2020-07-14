@@ -393,7 +393,7 @@ func (b *Builder) buildScanFromTableRef(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"an explicit list of column IDs must include at least one column"))
 		}
-		ordinals = cat.ConvertColumnIDsToOrdinals(tab, ref.Columns)
+		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	}
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
