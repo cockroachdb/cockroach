@@ -239,6 +239,9 @@ var zipCtx struct {
 	// redactLogs indicates whether log files should be redacted
 	// server-side during retrieval.
 	redactLogs bool
+
+	// Duration (in seconds) to run CPU profile for.
+	cpuProfDuration time.Duration
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -247,6 +250,7 @@ var zipCtx struct {
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
 	zipCtx.redactLogs = false
+	zipCtx.cpuProfDuration = 5 * time.Second
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -378,6 +379,64 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			livenessByNodeID = lresponse.Statuses
 		}
 
+		// Collect CPU profiles in parallel over all nodes (this is useful since
+		// these profiles contain profiler labels, which can then be correlated
+		// across nodes). Do this first and in isolation, before other zip
+		// operations possibly influence the node.
+		if zipCtx.cpuProfDuration > 0 {
+			var wg sync.WaitGroup
+			type profData struct {
+				data []byte
+				err  error
+			}
+
+			// NB: this takes care not to produce non-deterministic log output.
+			resps := make([]profData, len(nodeList))
+			for i := range nodeList {
+				if livenessByNodeID[nodeList[i].Desc.NodeID] == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+					continue
+				}
+				wg.Add(1)
+				go func(ctx context.Context, i int) {
+					defer wg.Done()
+
+					secs := int32(zipCtx.cpuProfDuration / time.Second)
+					if secs < 1 {
+						secs = 1
+					}
+
+					ctx, cancel := context.WithTimeout(ctx, timeout+zipCtx.cpuProfDuration)
+					defer cancel()
+					resp, err := status.Profile(ctx, &serverpb.ProfileRequest{
+						NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
+						Type:    serverpb.ProfileRequest_CPU,
+						Seconds: secs,
+					})
+					var pd profData
+					if err != nil {
+						pd = profData{err: err}
+					} else {
+						pd = profData{data: resp.Data}
+					}
+					resps[i] = pd
+				}(baseCtx, i)
+			}
+
+			fmt.Print("requesting CPU profiles... ")
+			wg.Wait()
+			fmt.Println("ok")
+
+			for i, pd := range resps {
+				if len(pd.data) == 0 && pd.err == nil {
+					continue // skipped node
+				}
+				prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeList[i].Desc.NodeID))
+				if err := z.createRawOrError(prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
+					return err
+				}
+			}
+		}
+
 		for _, node := range nodeList {
 			nodeID := node.Desc.NodeID
 
@@ -686,6 +745,14 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				}
 			}
 		}
+	}
+
+	// Add a little helper script to draw attention to the existence of tags in
+	// the profiles.
+	{
+		z.createRaw(base+"/pprof-summary.sh", []byte(`#!/bin/sh
+find . -name cpu.pprof | xargs go tool pprof -tags
+`))
 	}
 
 	return nil

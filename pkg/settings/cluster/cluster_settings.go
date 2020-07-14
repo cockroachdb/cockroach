@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // Settings is the collection of cluster settings. For a running CockroachDB
@@ -39,8 +40,10 @@ type Settings struct {
 	Tracer        *tracing.Tracer
 	ExternalIODir string
 
-	// Set to 1 if a profile is active (if the profile is being grabbed through
-	// the `pprofui` server as opposed to the raw endpoint).
+	// Tracks whether a CPU profile is going on and if so, which kind. See
+	// CPUProfileType().
+	// This is used so that we can enable "non-cheap" instrumentation only when it
+	// is useful.
 	cpuProfiling int32 // atomic
 
 	// Version provides a read-only view to the active cluster version and this
@@ -57,21 +60,41 @@ func TelemetryOptOut() bool {
 // (for example, a CLI subcommand that does not connect to a cluster).
 var NoSettings *Settings // = nil
 
-// IsCPUProfiling returns true if a pprofui CPU profile is being recorded. This can
-// be used by moving parts across the system to add profiler labels which are
-// too expensive to be enabled at all times.
-func (s *Settings) IsCPUProfiling() bool {
-	return atomic.LoadInt32(&s.cpuProfiling) == 1
+// CPUProfileType tracks whether a CPU profile is in progress.
+type CPUProfileType int32
+
+const (
+	// CPUProfileNone means that no CPU profile is currently taken.
+	CPUProfileNone CPUProfileType = iota
+	// CPUProfileDefault means that a CPU profile is currently taken, but
+	// pprof labels are not enabled.
+	CPUProfileDefault
+	// CPUProfileWithLabels means that a CPU profile is currently taken and
+	// pprof labels are enabled.
+	CPUProfileWithLabels
+)
+
+// CPUProfileType returns the type of CPU profile being recorded, if any.
+// This can be used by moving parts across the system to add profiler labels
+// which are too expensive to be enabled at all times. If no profile is
+// currently being recorded, returns CPUProfileNone.
+func (s *Settings) CPUProfileType() CPUProfileType {
+	return CPUProfileType(atomic.LoadInt32(&s.cpuProfiling))
 }
 
 // SetCPUProfiling is called from the pprofui to inform the system that a CPU
-// profile is being recorded.
-func (s *Settings) SetCPUProfiling(to bool) {
-	i := int32(0)
-	if to {
-		i = 1
+// profile is being recorded. If an error is returned, a profile was already in
+// progress and the caller must try again later.
+func (s *Settings) SetCPUProfiling(to CPUProfileType) error {
+	if to == CPUProfileNone {
+		atomic.StoreInt32(&s.cpuProfiling, int32(CPUProfileNone))
+	} else if !atomic.CompareAndSwapInt32(&s.cpuProfiling, int32(CPUProfileNone), int32(to)) {
+		return errors.New("a CPU profile is already in process, try again later")
 	}
-	atomic.StoreInt32(&s.cpuProfiling, i)
+	if log.V(1) {
+		log.Infof(context.Background(), "active CPU profile type set to: %d", to)
+	}
+	return nil
 }
 
 // MakeUpdater returns a new Updater, pre-alloced to the registry size. Note

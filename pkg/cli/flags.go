@@ -615,6 +615,7 @@ func init() {
 		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
 		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
 		boolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
+		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 	}
 
 	// Decommission command.
