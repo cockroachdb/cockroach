@@ -101,6 +101,9 @@ type SessionData struct {
 	// VectorizeRowCountThreshold indicates the row count above which the
 	// vectorized execution engine will be used if possible.
 	VectorizeRowCountThreshold uint64
+	// VectorizeBatchSize (when non-zero) indicates the size of coldata.Batches
+	// that should be used in the vectorized execution engine.
+	VectorizeBatchSize int32
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic

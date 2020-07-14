@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -294,6 +295,25 @@ var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSettin
 		}
 		return nil
 	},
+)
+
+func checkVectorizeBatchSize(newBatchSize int64) error {
+	if newBatchSize < 0 || newBatchSize > coldata.MaxBatchSize {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"batch size must be an integer in [0, %d] range", coldata.MaxBatchSize,
+		)
+	}
+	return nil
+}
+
+// VectorizeTestingBatchSize is a testing cluster setting that sets the default
+// batch size used by the vectorized execution engine. A low batch size is
+// useful to test batch reuse.
+var VectorizeTestingBatchSize = settings.RegisterValidatedIntSetting(
+	"sql.testing.vectorize.batch_size",
+	fmt.Sprintf("the size of a batch of rows in the vectorized engine (0=default, value must be less than %d)", coldata.MaxBatchSize),
+	0,
+	checkVectorizeBatchSize,
 )
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
@@ -2048,6 +2068,10 @@ func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
 
 func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
+}
+
+func (m *sessionDataMutator) SetVectorizeBatchSize(val int32) {
+	m.data.VectorizeBatchSize = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {

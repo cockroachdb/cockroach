@@ -565,6 +565,28 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`vectorize_batch_size`: {
+		GetStringVal: makeIntGetStringValFn(`vectorize_batch_size`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			newBatchSize, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if err = checkVectorizeBatchSize(newBatchSize); err != nil {
+				return err
+			}
+			m.SetVectorizeBatchSize(int32(newBatchSize))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(int64(evalCtx.SessionData.VectorizeBatchSize), 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(VectorizeTestingBatchSize.Get(sv), 10)
+		},
+	},
+
+	// CockroachDB extension.
 	// This is deprecated; the only allowable setting is "on".
 	`optimizer`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

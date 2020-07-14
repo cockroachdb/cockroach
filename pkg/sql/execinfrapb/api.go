@@ -55,6 +55,7 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		BytesEncodeFormat:   be,
 		ExtraFloatDigits:    int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
 		Vectorize:           int32(evalCtx.SessionData.VectorizeMode),
+		VectorizeBatchSize:  evalCtx.SessionData.VectorizeBatchSize,
 	}
 
 	// Populate the search path. Make sure not to include the implicit pg_catalog,

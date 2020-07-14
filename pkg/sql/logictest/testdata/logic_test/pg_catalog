@@ -1713,7 +1713,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id' AND name != 'vectorize_batch_size'
 ----
 name                                           setting             category  short_desc  extra_desc  vartype
 application_name                               ·                   NULL      NULL        NULL        string
@@ -1781,7 +1781,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id' AND name != 'vectorize_batch_size'
 ----
 name                                           setting             unit  context  enumvals  boot_val            reset_val
 application_name                               ·                   NULL  user     NULL      ·                   ·
@@ -1907,6 +1907,7 @@ transaction_priority                           NULL    NULL     NULL     NULL   
 transaction_read_only                          NULL    NULL     NULL     NULL        NULL
 transaction_status                             NULL    NULL     NULL     NULL        NULL
 vectorize                                      NULL    NULL     NULL     NULL        NULL
+vectorize_batch_size                           NULL    NULL     NULL     NULL        NULL
 vectorize_row_count_threshold                  NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
