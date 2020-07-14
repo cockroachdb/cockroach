@@ -41,7 +41,7 @@ func TestOldForeignKeyRepresentationGetsUpgraded(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.t1 (x INT);
+CREATE TABLE t.t1 (x INT, INDEX i (x));
 CREATE TABLE t.t2 (x INT, UNIQUE INDEX (x));
 ALTER TABLE t.t1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES t.t2 (x);
 CREATE INDEX ON t.t1 (x);
@@ -120,7 +120,7 @@ CREATE INDEX ON t.t1 (x);
 		t.Fatal(err)
 	}
 	// Run a DROP INDEX statement and ensure that the downgraded descriptor gets upgraded successfully.
-	if _, err := sqlDB.Exec(`DROP INDEX t.t1@t1_auto_index_fk1`); err != nil {
+	if _, err := sqlDB.Exec(`DROP INDEX t.t1@i`); err != nil {
 		t.Fatal(err)
 	}
 	desc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
