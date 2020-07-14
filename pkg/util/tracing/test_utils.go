@@ -10,24 +10,29 @@
 
 package tracing
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // FindMsgInRecording returns the index of the first span containing msg in its
 // logs, or -1 if no span is found.
 func FindMsgInRecording(recording Recording, msg string) int {
-	for i, recSp := range recording {
-		spMsg := ""
-		for _, l := range recSp.Logs {
-			for _, f := range l.Fields {
-				spMsg = spMsg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
-			}
-		}
-		if strings.Contains(spMsg, msg) {
+	for i, sp := range recording {
+		if LogsContainMsg(sp, msg) {
 			return i
 		}
 	}
 	return -1
+}
+
+// LogsContainMsg returns true if a span's logs contain the given message.
+func LogsContainMsg(sp RecordedSpan, msg string) bool {
+	for _, l := range sp.Logs {
+		// NOTE: With out logs, each LogRecord has a single field ("event") and
+		// value.
+		for _, f := range l.Fields {
+			if strings.Contains(f.Value, msg) {
+				return true
+			}
+		}
+	}
+	return false
 }

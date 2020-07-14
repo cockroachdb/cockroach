@@ -250,6 +250,9 @@ type DistSender struct {
 	// disableParallelBatches instructs DistSender to never parallelize
 	// the transmission of partial batch requests across ranges.
 	disableParallelBatches bool
+
+	// LatencyFunc is used to estimate the latency to other nodes.
+	latencyFunc LatencyFunc
 }
 
 var _ kv.Sender = &DistSender{}
@@ -362,6 +365,12 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 			log.VEventf(ctx, 1, "gossiped first range descriptor: %+v", desc.Replicas())
 			ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
 		})
+	}
+
+	if cfg.TestingKnobs.LatencyFunc != nil {
+		ds.latencyFunc = cfg.TestingKnobs.LatencyFunc
+	} else {
+		ds.latencyFunc = ds.rpcContext.RemoteClocks.Latency
 	}
 	return ds
 }
@@ -1729,7 +1738,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Rearrange the replicas so that they're ordered in expectation of
 	// request latency. Leaseholder considerations come below.
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
+	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
 
 	// Try the leaseholder first, if the request wants it.
 	{
@@ -1886,6 +1895,7 @@ func (ds *DistSender) sendToReplicas(
 			case nil:
 				// If the server gave us updated range info, lets update our cache with it.
 				if len(br.RangeInfos) > 0 {
+					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
 				}
 				return br, nil
