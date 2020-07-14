@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -82,39 +83,58 @@ func (n *renameTableNode) ReadingOwnWrites() {}
 func (n *renameTableNode) startExec(params runParams) error {
 	p := params.p
 	ctx := params.ctx
-	oldTn := n.oldTn
-	newTn := n.newTn
 	tableDesc := n.tableDesc
 
-	oldUn := oldTn.ToUnresolvedObjectName()
-	prevDbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, oldUn)
+	// Get the qualified name of the table.
+	oldTn, err := p.getQualifiedTableName(params.ctx, tableDesc.TableDesc())
 	if err != nil {
 		return err
 	}
-	oldTn.ObjectNamePrefix = prefix
+	prevDBID := tableDesc.ParentID
 
-	// Check if target database exists.
-	// We also look at uncached descriptors here.
-	newUn := newTn.ToUnresolvedObjectName()
-	targetDbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, newUn)
-	if err != nil {
-		return err
+	var targetDbDesc *UncachedDatabaseDescriptor
+	// If the target new name has no qualifications, then assume that the table
+	// is intended to be renamed into the same database and schema.
+	newTn := n.newTn
+	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
+		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
+		var err error
+		targetDbDesc, err = p.ResolveUncachedDatabaseByName(ctx, string(oldTn.CatalogName), true /* required */)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, resolve the new qualified name of the table. We are in the
+		// process of deprecating qualified rename targets, so issue a notice.
+		// TODO (rohany): Convert this to take in an unqualified name after 20.1 is released.
+		params.p.noticeSender.AppendNotice(
+			errors.WithHintf(
+				pgnotice.Newf("renaming tables with a qualification is deprecated"),
+				"use ALTER TABLE %s RENAME TO %s instead",
+				newTn.String(),
+				oldTn.Table(),
+			),
+		)
+
+		newUn := newTn.ToUnresolvedObjectName()
+		var prefix tree.ObjectNamePrefix
+		var err error
+		targetDbDesc, prefix, err = p.ResolveUncachedDatabase(ctx, newUn)
+		if err != nil {
+			return err
+		}
+		newTn.ObjectNamePrefix = prefix
 	}
-	newTn.ObjectNamePrefix = prefix
 
 	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
 		return err
 	}
 
-	isNewSchemaTemp, _, err := temporarySchemaSessionID(newTn.Schema())
-	if err != nil {
-		return err
-	}
-
-	if newTn.ExplicitSchema && !isNewSchemaTemp && tableDesc.Temporary {
-		return pgerror.New(
-			pgcode.FeatureNotSupported,
-			"cannot convert a temporary table to a persistent table during renames",
+	// Disable renaming objects between schemas of the same database.
+	if newTn.Catalog() == oldTn.Catalog() && newTn.Schema() != oldTn.Schema() {
+		return errors.WithHint(
+			pgerror.Newf(pgcode.InvalidName, "cannot change schema of table with RENAME"),
+			"use ALTER TABLE ... SET SCHEMA instead",
 		)
 	}
 
@@ -140,7 +160,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	parentSchemaID := tableDesc.GetParentSchemaID()
 
 	renameDetails := sqlbase.NameInfo{
-		ParentID:       prevDbDesc.GetID(),
+		ParentID:       prevDBID,
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
@@ -196,14 +216,14 @@ func (p *planner) dependentViewRenameError(
 	}
 	viewName := viewDesc.Name
 	if viewDesc.ParentID != parentID {
-		var err error
-		viewName, err = p.getQualifiedTableName(ctx, viewDesc)
+		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
 			return sqlbase.NewDependentObjectErrorf(
 				"cannot rename %s %q because a view depends on it",
 				typeName, objName)
 		}
+		viewName = viewFQName.FQString()
 	}
 	return errors.WithHintf(
 		sqlbase.NewDependentObjectErrorf("cannot rename %s %q because view %q depends on it",
