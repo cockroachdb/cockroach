@@ -1204,6 +1204,14 @@ confidential data or PII.
 `,
 	}
 
+	ZipCPUProfileDuration = FlagInfo{
+		Name: "cpu-profile-duration",
+		Description: `
+Fetch CPU profiles from the cluster with the specified sample duration.
+The zip command will block for the duration specified. Zero disables this feature.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

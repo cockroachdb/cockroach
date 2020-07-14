@@ -121,7 +121,7 @@ func TestZip(t *testing.T) {
 	})
 	defer c.cleanup()
 
-	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ create table defaultdb."pg_catalog.pg_class"(x int);
 create table defaultdb."../system"(x int);
 `})
 
-	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestUnavailableZip(t *testing.T) {
 	defer func() { stderr = log.OrigStderr }()
 
 	// Keep the timeout short so that the test doesn't take forever.
-	out, err := c.RunWithCapture("debug zip " + os.DevNull + " --timeout=.5s")
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +313,9 @@ func TestPartialZip(t *testing.T) {
 	stderr = os.Stdout
 	defer func() { stderr = log.OrigStderr }()
 
-	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	// NB: we spend a second profiling here to make sure it actually tries the
+	// down nodes (and fails only there, succeeding on the available node).
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +329,7 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2")
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2 --cpu-profile-duration=1s")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +362,7 @@ func TestPartialZip(t *testing.T) {
 		func(t *testing.T, td *datadriven.TestData) string {
 
 			testutils.SucceedsSoon(t, func() error {
-				out, err = c.RunWithCapture("debug zip " + os.DevNull)
+				out, err = c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -468,7 +470,7 @@ func TestToHex(t *testing.T) {
 	// Create a job to have non-empty system.jobs table.
 	c.RunWithArgs([]string{"sql", "-e", "CREATE STATISTICS foo FROM system.namespace"})
 
-	_, err := c.RunWithCapture("debug zip " + dir + "/debug.zip")
+	_, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + dir + "/debug.zip")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 zip
 ----
-debug zip /dev/null
+debug zip --cpu-profile-duration=1s /dev/null
 establishing RPC connection to ...
 retrieving the node status to get the SQL address...
 using SQL address: ...
@@ -27,6 +27,12 @@ retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal
 retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
 requesting nodes... writing: debug/nodes.json
 requesting liveness... writing: debug/liveness.json
+requesting CPU profiles... ok
+writing: debug/nodes/1/cpu.pprof
+writing: debug/nodes/2/cpu.pprof.err.txt
+  ^- resulted in ...
+writing: debug/nodes/3/cpu.pprof.err.txt
+  ^- resulted in ...
 writing: debug/nodes/1/status.json
 using SQL connection URL for node 1: postgresql://...
 retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/1/crdb_internal.feature_usage.txt
@@ -254,3 +260,4 @@ requesting table details for system.ui... writing: debug/schema/system/ui.json
 requesting table details for system.users... writing: debug/schema/system/users.json
 requesting table details for system.web_sessions... writing: debug/schema/system/web_sessions.json
 requesting table details for system.zones... writing: debug/schema/system/zones.json
+writing: debug/pprof-summary.sh
