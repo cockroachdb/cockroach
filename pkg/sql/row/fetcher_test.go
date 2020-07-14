@@ -77,7 +77,6 @@ func initFetcher(
 		fetcherCodec,
 		reverseScan,
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		alloc,
 		fetcherArgs...,
@@ -1062,7 +1061,7 @@ func TestRowFetcherReset(t *testing.T) {
 
 	fetcherArgs := makeFetcherArgs(args)
 	if err := resetFetcher.Init(
-		keys.SystemSQLCodec, false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, fetcherArgs...,
+		keys.SystemSQLCodec, false /*reverse*/, 0 /* todo */, false /* isCheck */, &da, fetcherArgs...,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1078,10 +1077,8 @@ func idLookupKey(tableID sqlbase.ID, indexID sqlbase.IndexID) uint64 {
 }
 
 func TestFetcherUninitialized(t *testing.T) {
-	// Regression test for #39013: make sure it's okay to call GetRangesInfo and
-	// GetBytesReader even before the fetcher was fully initialized.
+	// Regression test for #39013: make sure it's okay to call GetBytesReader even
+	// before the fetcher was fully initialized.
 	var fetcher Fetcher
-
-	assert.Nil(t, fetcher.GetRangesInfo())
 	assert.Zero(t, fetcher.GetBytesRead())
 }

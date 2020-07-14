@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -159,6 +160,12 @@ type ServerConfig struct {
 	// subsystem. It is queried during the GC process and in the handling of
 	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampProvider protectedts.Provider
+
+	// RangeCache is used by processors that were supposed to have been planned on
+	// the leaseholders of the data ranges that they're consuming. These
+	// processors query the cache to see if they should communicate updates to the
+	// gateway.
+	RangeCache *kvcoord.RangeDescriptorCache
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

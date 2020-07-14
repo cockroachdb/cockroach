@@ -114,7 +114,6 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		c.codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&c.a,
 		row.FetcherTableArgs{

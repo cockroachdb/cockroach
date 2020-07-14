@@ -48,7 +48,6 @@ type rowFetcher interface {
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	GetRangesInfo() []roachpb.RangeInfo
 	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
 }
 
@@ -88,7 +87,6 @@ func initRowFetcher(
 		flowCtx.Codec(),
 		reverseScan,
 		lockStr,
-		true, /* returnRangeInfo */
 		isCheck,
 		alloc,
 		tableArgs,
