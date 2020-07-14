@@ -118,8 +118,10 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 		md := t.Memo().Metadata()
 		baseTable := md.Table(t.Table)
 		if t.IsUnfiltered(md) {
-			for i, cnt := 0, baseTable.ColumnCount(); i < cnt; i++ {
-				unfilteredCols.Add(t.Table.ColumnID(i))
+			for i, cnt := 0, baseTable.AllColumnCount(); i < cnt; i++ {
+				if !cat.IsMutationColumn(baseTable, i) {
+					unfilteredCols.Add(t.Table.ColumnID(i))
+				}
 			}
 		}
 

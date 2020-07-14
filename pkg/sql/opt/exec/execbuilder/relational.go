@@ -411,7 +411,7 @@ func (b *Builder) getColumns(
 	var needed exec.TableColumnOrdinalSet
 	var output opt.ColMap
 
-	columnCount := b.mem.Metadata().Table(tableID).DeletableColumnCount()
+	columnCount := b.mem.Metadata().Table(tableID).AllColumnCount()
 	n := 0
 	for i := 0; i < columnCount; i++ {
 		colID := tableID.ColumnID(i)
