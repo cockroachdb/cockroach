@@ -10,6 +10,10 @@ pkg/roachpb/metadata.go | `RangeID`
 pkg/roachpb/metadata.go | `ReplicaID`
 pkg/roachpb/metadata.go | `ReplicaType`
 pkg/util/hlc/timestamp.go | `Timestamp`
+vendor/github.com/cockroachdb/redact/api.go | `SafeString`
+vendor/github.com/cockroachdb/redact/api.go | `SafeRune`
+vendor/github.com/cockroachdb/redact/wrappers.go:40:func Safe(a interface{}) SafeValue {
+vendor/github.com/cockroachdb/redact/wrappers.go | `safeWrapper`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`
 pkg/util/log/redact.go | `reflect.TypeOf(int8(0))`

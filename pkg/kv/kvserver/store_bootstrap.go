@@ -234,7 +234,7 @@ func WriteInitialClusterData(
 		}
 
 		sl := stateloader.Make(rangeID)
-		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
+		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil { // XXX: Suspicious. Why are we doing this?
 			return err
 		}
 

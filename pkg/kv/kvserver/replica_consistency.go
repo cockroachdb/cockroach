@@ -129,11 +129,13 @@ func (r *Replica) CheckConsistency(
 
 	if minoritySHA != "" {
 		var buf bytes.Buffer
+		_, _ = fmt.Fprint(&buf, "\n")
 		for sha, idxs := range shaToIdxs {
 			minority := ""
 			if sha == minoritySHA {
 				minority = " [minority]"
 			}
+			// XXX: Both stats and checksum should be aligned. Why is the delta weird?
 			for _, idx := range idxs {
 				_, _ = fmt.Fprintf(&buf, "%s: checksum %x%s\n"+
 					"- stats: %+v\n"+
@@ -168,7 +170,7 @@ func (r *Replica) CheckConsistency(
 		res.Detail += fmt.Sprintf("%s: error: %v\n", result.Replica, result.Err)
 	}
 
-	delta := enginepb.MVCCStats(results[0].Response.Delta)
+	delta := results[0].Response.Delta.ToStats()
 	var haveDelta bool
 	{
 		d2 := delta
@@ -183,7 +185,7 @@ func (r *Replica) CheckConsistency(
 	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && haveDelta {
 		if delta.ContainsEstimates > 0 {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
-			// result when we recompute from scratch.
+			// result when we recompute from scratch. // XXX: Area of interest.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
 		} else {
 			// When ContainsEstimates is unset, we expect the recomputation to agree with the stored stats.
@@ -191,7 +193,7 @@ func (r *Replica) CheckConsistency(
 			// or stats maintenance, but it could also hint at the replica having diverged from its peers.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
-		res.Detail += fmt.Sprintf("stats - recomputation: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
+		res.Detail += fmt.Sprintf("stats - recomputation: %+v\n", results[0].Response.Delta.ToStats())
 	} else if len(missing) > 0 {
 		// No inconsistency was detected, but we didn't manage to inspect all replicas.
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
@@ -521,7 +523,7 @@ func (r *Replica) computeChecksumDone(
 
 			delta := result.PersistedMS
 			delta.Subtract(result.RecomputedMS)
-			c.Delta = enginepb.MVCCStatsDelta(delta)
+			c.Delta = delta.ToStatsDelta()
 			c.Persisted = result.PersistedMS
 		}
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
@@ -538,7 +540,7 @@ func (r *Replica) computeChecksumDone(
 }
 
 type replicaHash struct {
-	SHA512                    [sha512.Size]byte
+	SHA512                    [sha512.Size]byte // XXX: Marker for self.
 	PersistedMS, RecomputedMS enginepb.MVCCStats
 }
 
@@ -610,10 +612,10 @@ func (r *Replica) sha512(
 
 	var ms enginepb.MVCCStats
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
-	// all of the replicated key space.
+	// all of the replicated key space. // XXX: Maybe we could try seeing if stats only mode still fails.
 	if !statsOnly {
 		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-			spanMS, err := storage.ComputeStatsGo(
+			spanMS, err := storage.ComputeStatsGo( // XXX: Why are we computing an extra ten bytes here?
 				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
 			if err != nil {
@@ -668,5 +670,9 @@ func (r *Replica) sha512(
 	// the same timestamp.
 	result.RecomputedMS.AgeTo(result.PersistedMS.LastUpdateNanos)
 
+	// XXX: What happens, given that checksums, before the version bump, will be
+	// computed using the new field in mind?
+
+	log.Infof(ctx, "=== SHA512 results: shasum: %x\npersisted: %v\ncomputed:  %v", result.SHA512[:], result.PersistedMS.String(), result.RecomputedMS.String())
 	return &result, nil
 }

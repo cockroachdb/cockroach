@@ -128,8 +128,10 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		// auto-upgrade disabled, then rolling back, and then rolling forward
 		// and finalizing on the auto-upgrade path.
 		preventAutoUpgradeStep(1),
+		binaryUpgradeStep(c.Node(2), ""), // XXX: Roll a specific node forward.
+		sleepStep(time.Minute),           // XXX: Manual sleep.
 		// Roll nodes forward.
-		binaryUpgradeStep(c.All(), ""),
+		//binaryUpgradeStep(c.All(), ""),
 		testFeaturesStep,
 		// Run a quick schemachange workload in between each upgrade.
 		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
@@ -296,6 +298,13 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) version
 	}
 }
 
+func sleepStep(dur time.Duration) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.l.Printf("sleeping for %s", dur.String())
+		time.Sleep(dur)
+	}
+}
+
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
@@ -428,7 +437,11 @@ func stmtFeatureTest(
 // the artifacts. The test will fail on purpose when it's done with instructions
 // on where to move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c *cluster, predecessorVersion string, makeFixtureVersion string,
+	ctx context.Context,
+	t *test,
+	c *cluster,
+	predecessorVersion string,
+	makeFixtureVersion string,
 ) {
 	c.l.Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
 	c.encryptDefault = false

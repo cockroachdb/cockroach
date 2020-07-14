@@ -65,6 +65,7 @@ func getExpAbortSpanBytes(
 	metaValSize := int64(meta.Size())
 	expBytes := metaKeySize + metaValSize
 
+	t.Logf("===== expected bytes: %d", expBytes)
 	return expBytes, nil
 }
 
@@ -139,6 +140,7 @@ func TestAbortSpanEmptyParams(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %+v", err)
 	}
+
 	if ms.AbortSpanBytes != expAbortSpanBytes {
 		t.Errorf("got AbortSpanBytes: %d; expected %d", ms.AbortSpanBytes, expAbortSpanBytes)
 	}

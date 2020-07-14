@@ -203,8 +203,8 @@ func updateStatsForInline(
 			if isAbortSpan {
 				// We only do this check in updateStatsForInline since
 				// abort span keys are always inlined - we don't associate
-				// timestamps with them.
-				ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
+				// timestamps with them. // XXX:
+				// ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
 			}
 		} else {
 			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
@@ -225,7 +225,8 @@ func updateStatsForInline(
 				return err
 			}
 			if isAbortSpan {
-				ms.AbortSpanBytes += metaKeySize + metaValSize
+				// XXX:
+				//ms.AbortSpanBytes += metaKeySize + metaValSize
 			}
 		} else {
 			ms.LiveBytes += metaKeySize + metaValSize
@@ -3492,6 +3493,7 @@ func ComputeStatsGo(
 				// Replicated RangeID-local key.
 				if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
 					// RangeAppliedState key. Ignore.
+					// XXX: MVCCStats stored here, so where are we adding the size?
 					continue
 				}
 			}
@@ -3534,7 +3536,8 @@ func ComputeStatsGo(
 					return ms, err
 				}
 				if isAbortSpan {
-					ms.AbortSpanBytes += totalBytes
+					// XXX:
+					//ms.AbortSpanBytes += totalBytes
 				}
 			} else {
 				if !meta.Deleted {

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -111,6 +110,6 @@ func RecomputeStats(
 		cArgs.Stats.Add(delta)
 	}
 
-	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)
+	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = delta.ToStatsDelta()
 	return result.Result{}, nil
 }
