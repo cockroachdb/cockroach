@@ -103,7 +103,6 @@ SELECT * FROM a FULL JOIN b ON i=5 AND ((k<1 AND k>2) OR (k<4 AND k>5)) AND s='f
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 x:6 y:7
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -703,7 +702,6 @@ project
       │    ├── left-join (cross)
       │    │    ├── columns: x:6!null y:7 "?column?":10
       │    │    ├── outer: (1)
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       │    │    ├── immutable
       │    │    ├── fd: (6)-->(7)
       │    │    ├── scan b
@@ -826,7 +824,6 @@ project
  │    │    │    ├── full-join (cross)
  │    │    │    │    ├── columns: b.x:4
  │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:4!null
  │    │    │    │    │    └── key: (4)
@@ -895,7 +892,6 @@ project
  │    │    │    ├── full-join (cross)
  │    │    │    │    ├── columns: b.x:9
  │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:9!null
  │    │    │    │    │    └── key: (9)
@@ -1195,7 +1191,6 @@ project
  │    │    │    ├── fd: (10-13)-->(19,40)
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19 true:39
- │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    │    ├── fd: (10-13)-->(19)
  │    │    │    │    ├── scan order_line
  │    │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19
@@ -2061,7 +2056,6 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k<a2.k
 ----
 full-join (cross)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2081,7 +2075,6 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.f=1 AND a.f=a2.f
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2102,7 +2095,6 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.s=a2.s
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:6 i:7 f:8 s:9 j:10
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -2938,7 +2930,6 @@ SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
@@ -2958,7 +2949,6 @@ SELECT * FROM xy FULL OUTER JOIN uv ON 1=u+v
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
@@ -2998,7 +2988,6 @@ project
       │    ├── left-join (cross)
       │    │    ├── columns: u:3!null v:4 k:5 i:6
       │    │    ├── outer: (1)
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       │    │    ├── key: (3,5)
       │    │    ├── fd: (3)-->(4), (5)-->(6)
       │    │    ├── scan uv
@@ -3072,7 +3061,6 @@ SELECT * FROM xy FULL JOIN uv ON (substring('', ')') = '') = (u > 0)
 ----
 full-join (cross)
  ├── columns: x:1 y:2 u:3 v:4
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)

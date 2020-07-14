@@ -13,6 +13,7 @@ package props
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,62 +77,116 @@ var bothPreservedRightNoDup = JoinMultiplicity{
 	RightMultiplicity: MultiplicityPreservedVal | MultiplicityNotDuplicatedVal,
 }
 
+func TestJoinMultiplicity_JoinFiltersDoNotDuplicateLeftRows(t *testing.T) {
+	require.Equal(t, false, bothIndeterminate.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, bothNoDup.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, false, bothPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, bothNoDupBothPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, false, leftIndeterminateRightPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, false, leftIndeterminateRightNoDup.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, rightIndeterminateLeftNoDup.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, bothNoDupLeftPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, bothPreservedLeftNoDup.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, true, bothNoDupRightPreserved.JoinFiltersDoNotDuplicateLeftRows())
+	require.Equal(t, false, bothPreservedRightNoDup.JoinFiltersDoNotDuplicateLeftRows())
+}
+
+func TestJoinMultiplicity_JoinFiltersDoNotDuplicateRightRows(t *testing.T) {
+	require.Equal(t, false, bothIndeterminate.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, bothNoDup.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, false, bothPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, bothNoDupBothPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, false, leftIndeterminateRightPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, leftIndeterminateRightNoDup.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, bothNoDupLeftPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, false, bothPreservedLeftNoDup.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, bothNoDupRightPreserved.JoinFiltersDoNotDuplicateRightRows())
+	require.Equal(t, true, bothPreservedRightNoDup.JoinFiltersDoNotDuplicateRightRows())
+}
+
+func TestJoinMultiplicity_JoinFiltersMatchAllLeftRows(t *testing.T) {
+	require.Equal(t, false, bothIndeterminate.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, false, bothNoDup.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, bothPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, bothNoDupBothPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, false, leftIndeterminateRightPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, false, leftIndeterminateRightNoDup.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, rightIndeterminateLeftPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, bothNoDupLeftPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, bothPreservedLeftNoDup.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, false, bothNoDupRightPreserved.JoinFiltersMatchAllLeftRows())
+	require.Equal(t, true, bothPreservedRightNoDup.JoinFiltersMatchAllLeftRows())
+}
+
+func TestJoinMultiplicity_JoinFiltersMatchAllRightRows(t *testing.T) {
+	require.Equal(t, false, bothIndeterminate.JoinFiltersMatchAllRightRows())
+	require.Equal(t, false, bothNoDup.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, bothPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, bothNoDupBothPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, leftIndeterminateRightPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, false, leftIndeterminateRightNoDup.JoinFiltersMatchAllRightRows())
+	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinFiltersMatchAllRightRows())
+	require.Equal(t, false, bothNoDupLeftPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, bothPreservedLeftNoDup.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, bothNoDupRightPreserved.JoinFiltersMatchAllRightRows())
+	require.Equal(t, true, bothPreservedRightNoDup.JoinFiltersMatchAllRightRows())
+}
+
 func TestJoinMultiplicity_JoinDoesNotDuplicateLeftRows(t *testing.T) {
-	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, bothNoDup.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, false, bothPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, bothNoDupBothPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, false, leftIndeterminateRightPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, false, leftIndeterminateRightNoDup.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, bothNoDupLeftPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, bothPreservedLeftNoDup.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, true, bothNoDupRightPreserved.JoinDoesNotDuplicateLeftRows())
-	require.Equal(t, false, bothPreservedRightNoDup.JoinDoesNotDuplicateLeftRows())
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateLeftRows(opt.InnerJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateLeftRows(opt.LeftJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateLeftRows(opt.FullJoinOp))
+	require.Equal(t, true, bothIndeterminate.JoinDoesNotDuplicateLeftRows(opt.SemiJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateLeftRows(opt.InnerJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateLeftRows(opt.LeftJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateLeftRows(opt.FullJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateLeftRows(opt.SemiJoinOp))
 }
 
 func TestJoinMultiplicity_JoinDoesNotDuplicateRightRows(t *testing.T) {
-	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, bothNoDup.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, false, bothPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, bothNoDupBothPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, false, leftIndeterminateRightPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, leftIndeterminateRightNoDup.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, bothNoDupLeftPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, false, bothPreservedLeftNoDup.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, bothNoDupRightPreserved.JoinDoesNotDuplicateRightRows())
-	require.Equal(t, true, bothPreservedRightNoDup.JoinDoesNotDuplicateRightRows())
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateRightRows(opt.InnerJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateRightRows(opt.LeftJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinDoesNotDuplicateRightRows(opt.FullJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightNoDup.JoinDoesNotDuplicateRightRows(opt.InnerJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightNoDup.JoinDoesNotDuplicateRightRows(opt.LeftJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightNoDup.JoinDoesNotDuplicateRightRows(opt.FullJoinOp))
 }
 
 func TestJoinMultiplicity_JoinPreservesLeftRows(t *testing.T) {
-	require.Equal(t, false, bothIndeterminate.JoinPreservesLeftRows())
-	require.Equal(t, false, bothNoDup.JoinPreservesLeftRows())
-	require.Equal(t, true, bothPreserved.JoinPreservesLeftRows())
-	require.Equal(t, true, bothNoDupBothPreserved.JoinPreservesLeftRows())
-	require.Equal(t, false, leftIndeterminateRightPreserved.JoinPreservesLeftRows())
-	require.Equal(t, false, leftIndeterminateRightNoDup.JoinPreservesLeftRows())
-	require.Equal(t, true, rightIndeterminateLeftPreserved.JoinPreservesLeftRows())
-	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinPreservesLeftRows())
-	require.Equal(t, true, bothNoDupLeftPreserved.JoinPreservesLeftRows())
-	require.Equal(t, true, bothPreservedLeftNoDup.JoinPreservesLeftRows())
-	require.Equal(t, false, bothNoDupRightPreserved.JoinPreservesLeftRows())
-	require.Equal(t, true, bothPreservedRightNoDup.JoinPreservesLeftRows())
+	require.Equal(t, false, bothIndeterminate.JoinPreservesLeftRows(opt.InnerJoinOp))
+	require.Equal(t, true, bothIndeterminate.JoinPreservesLeftRows(opt.LeftJoinOp))
+	require.Equal(t, true, bothIndeterminate.JoinPreservesLeftRows(opt.FullJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinPreservesLeftRows(opt.SemiJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftPreserved.JoinPreservesLeftRows(opt.InnerJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftPreserved.JoinPreservesLeftRows(opt.LeftJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftPreserved.JoinPreservesLeftRows(opt.FullJoinOp))
+	require.Equal(
+		t, true, rightIndeterminateLeftPreserved.JoinPreservesLeftRows(opt.SemiJoinOp))
 }
 
 func TestJoinMultiplicity_JoinPreservesRightRows(t *testing.T) {
-	require.Equal(t, false, bothIndeterminate.JoinPreservesRightRows())
-	require.Equal(t, false, bothNoDup.JoinPreservesRightRows())
-	require.Equal(t, true, bothPreserved.JoinPreservesRightRows())
-	require.Equal(t, true, bothNoDupBothPreserved.JoinPreservesRightRows())
-	require.Equal(t, true, leftIndeterminateRightPreserved.JoinPreservesRightRows())
-	require.Equal(t, false, leftIndeterminateRightNoDup.JoinPreservesRightRows())
-	require.Equal(t, false, rightIndeterminateLeftPreserved.JoinPreservesRightRows())
-	require.Equal(t, false, rightIndeterminateLeftNoDup.JoinPreservesRightRows())
-	require.Equal(t, false, bothNoDupLeftPreserved.JoinPreservesRightRows())
-	require.Equal(t, true, bothPreservedLeftNoDup.JoinPreservesRightRows())
-	require.Equal(t, true, bothNoDupRightPreserved.JoinPreservesRightRows())
-	require.Equal(t, true, bothPreservedRightNoDup.JoinPreservesRightRows())
+	require.Equal(t, false, bothIndeterminate.JoinPreservesRightRows(opt.InnerJoinOp))
+	require.Equal(t, false, bothIndeterminate.JoinPreservesRightRows(opt.LeftJoinOp))
+	require.Equal(t, true, bothIndeterminate.JoinPreservesRightRows(opt.FullJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightPreserved.JoinPreservesRightRows(opt.InnerJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightPreserved.JoinPreservesRightRows(opt.LeftJoinOp))
+	require.Equal(
+		t, true, leftIndeterminateRightPreserved.JoinPreservesRightRows(opt.FullJoinOp))
 }

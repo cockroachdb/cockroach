@@ -133,6 +133,7 @@ var changes = struct {
 	i1A      int
 	fA       int
 	dA       int
+	duA      int
 	eA       int
 	byteSize int
 	mA       int
@@ -146,6 +147,7 @@ var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
 var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
 var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
+var duA = settings.RegisterPublicNonNegativeDurationSettingWithExplicitUnit("d_with_explicit_unit", "desc", time.Second)
 var _ = settings.RegisterPublicNonNegativeDurationSettingWithMaximum("d_with_maximum", "desc", time.Second, time.Hour)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
@@ -212,6 +214,7 @@ func TestCache(t *testing.T) {
 	i1A.SetOnChange(sv, func() { changes.i1A++ })
 	fA.SetOnChange(sv, func() { changes.fA++ })
 	dA.SetOnChange(sv, func() { changes.dA++ })
+	duA.SetOnChange(sv, func() { changes.duA++ })
 	eA.SetOnChange(sv, func() { changes.eA++ })
 	byteSize.SetOnChange(sv, func() { changes.byteSize++ })
 	mA.SetOnChange(sv, func() { changes.mA++ })
@@ -298,6 +301,9 @@ func TestCache(t *testing.T) {
 		if expected, actual := time.Second, dA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := time.Second, duA.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 		if expected, actual := time.Second, dVal.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
@@ -338,6 +344,9 @@ func TestCache(t *testing.T) {
 		}
 		if actual, ok := settings.Lookup("statemachine", settings.LookupForLocalAccess); !ok || mA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
+		}
+		if actual, ok := settings.Lookup("d_with_explicit_unit", settings.LookupForLocalAccess); !ok || duA != actual {
+			t.Fatalf("expected %v, got %v (exists: %v)", duA, actual, ok)
 		}
 		if actual, ok := settings.Lookup("dne", settings.LookupForLocalAccess); ok {
 			t.Fatalf("expected nothing, got %v", actual)
@@ -392,6 +401,15 @@ func TestCache(t *testing.T) {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.dA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		if expected, actual := 0, changes.duA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		if err := u.Set("d_with_explicit_unit", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.duA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if err := u.Set("dVal", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
@@ -455,6 +473,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 2*time.Hour, dA.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := 2*time.Hour, duA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := 2*time.Hour, dVal.Get(sv); expected != actual {

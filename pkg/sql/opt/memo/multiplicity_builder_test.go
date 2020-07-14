@@ -97,7 +97,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			expected: "left-rows(one-or-more), right-rows(one-or-more)",
 		},
 		{ // 2
-			// SELECT * FROM xy LEFT JOIN uv ON True;
+			// SELECT * FROM xy LEFT JOIN uv ON x = u;
 			joinOp:   opt.LeftJoinOp,
 			left:     xyScan,
 			right:    uvScan,
@@ -110,7 +110,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			left:     uvScan,
 			right:    xyScan,
 			on:       TrueFilter,
-			expected: "left-rows(one-or-more), right-rows(one-or-more)",
+			expected: "",
 		},
 		{ // 4
 			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x;
@@ -262,6 +262,14 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
 			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
 		},
+		{ // 18
+			// SELECT * FROM fk_tab WHERE EXISTS (SELECT * FROM xy WHERE x = r1);
+			joinOp:   opt.SemiJoinOp,
+			left:     fkScan,
+			right:    xyScan,
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -269,8 +277,8 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			join := ob.makeJoin(tc.joinOp, tc.left, tc.right, tc.on)
 			joinWithMult, _ := join.(joinWithMultiplicity)
 			multiplicity := joinWithMult.getMultiplicity()
-			if multiplicity.String() != tc.expected {
-				t.Fatalf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.String())
+			if multiplicity.Format(tc.joinOp) != tc.expected {
+				t.Fatalf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
 			}
 		})
 	}
@@ -366,6 +374,10 @@ func (ob *testOpBuilder) makeFullJoin(left, right RelExpr, on FiltersExpr) RelEx
 	return ob.mem.MemoizeFullJoin(left, right, on, EmptyJoinPrivate)
 }
 
+func (ob *testOpBuilder) makeSemiJoin(left, right RelExpr, on FiltersExpr) RelExpr {
+	return ob.mem.MemoizeSemiJoin(left, right, on, EmptyJoinPrivate)
+}
+
 func (ob *testOpBuilder) makeJoin(
 	joinOp opt.Operator, left, right RelExpr, on FiltersExpr,
 ) RelExpr {
@@ -378,6 +390,9 @@ func (ob *testOpBuilder) makeJoin(
 
 	case opt.FullJoinOp:
 		return ob.makeFullJoin(left, right, on)
+
+	case opt.SemiJoinOp:
+		return ob.makeSemiJoin(left, right, on)
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator type: %v", joinOp.String()))
