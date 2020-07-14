@@ -62,6 +62,17 @@ func Scope(t tShim) *TestLogScope {
 // ScopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
 // that require the logs go to files.
 func ScopeWithoutShowLogs(t tShim) *TestLogScope {
+	return scopeWithoutShowLogsInternal(t, false /* captureStderr */)
+}
+
+// ScopeWithoutShowLogsAndForcedStderrCapture ignores the -show-logs flag and forces
+// redirecting writes to stderr to go to a stderr log file.
+// This should be used by tests that check the stderr capture behavior.
+func ScopeWithoutShowLogsAndForcedStderrCapture(t tShim) *TestLogScope {
+	return scopeWithoutShowLogsInternal(t, true /* captureStderr */)
+}
+
+func scopeWithoutShowLogsInternal(t tShim, captureStderr bool) *TestLogScope {
 	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +80,7 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}
-	undo, err := enableLogFileOutput(tempDir, Severity_NONE)
+	undo, err := enableLogFileOutput(tempDir, Severity_NONE, captureStderr)
 	if err != nil {
 		undo()
 		t.Fatal(err)
@@ -80,7 +91,7 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 
 // enableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
-func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
+func enableLogFileOutput(dir string, stderrSeverity Severity, captureStderr bool) (func(), error) {
 	oldStderrThreshold, err := func() (Severity, error) {
 		mainLog.mu.Lock()
 		defer mainLog.mu.Unlock()
@@ -104,7 +115,7 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	}
 
 	mainLog.stderrThreshold.set(stderrSeverity)
-	cancelStderr, err = SetupRedactionAndStderrRedirects()
+	cancelStderr, err = setupRedactionAndStderrRedirectsInternal(captureStderr)
 	return undo, err
 }
 

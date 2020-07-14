@@ -75,7 +75,7 @@ func TestSecondaryLog(t *testing.T) {
 }
 
 func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
+	s := ScopeWithoutShowLogsAndForcedStderrCapture(t)
 	defer s.Close(t)
 
 	setFlags()

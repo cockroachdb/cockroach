@@ -47,6 +47,17 @@ func init() {
 // ensures that any Go runtime assertion failures on the way to
 // termination can be properly captured.
 func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
+	return setupRedactionAndStderrRedirectsInternal(true /* captureStderr */)
+}
+
+// setupRedactionAndStderrRedirectsInternal does the work for
+// SetupRedactionAndStderrRedirects.
+//
+// The boolean argument should be set to true in the general case,
+// i.e. a running server. It is set to false by TestLogScope, to
+// ensure that tests see uncaught Go runtime errors in the test
+// output, instead of a stderr log file in artifacts.
+func setupRedactionAndStderrRedirectsInternal(captureStderr bool) (cleanup func(), err error) {
 	// The general goal of this function is to set up a secondary logger
 	// to capture internal Go writes to os.Stderr / fd 2 and redirect
 	// them to a separate (non-redactable) log file, This is, of course,
@@ -65,7 +76,20 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 	// won't be positioned outside of log redaction markers and
 	// mistakenly considered as "safe for reporting".
 
-	if mainLog.logDir.IsSet() {
+	sendingStderrToFile := mainLog.logDir.IsSet() && captureStderr
+
+	// If redaction is requested,
+	// and we have a chance to produce some log entries on stderr,
+	// and stderr is not being sent to a separate log file,
+	//
+	// that's a configuration we cannot support safely. Reject it.
+	if redactableLogsRequested && (mainLog.stderrThreshold.get() != Severity_NONE) && !sendingStderrToFile {
+		return nil, errors.WithHint(
+			errors.New("cannot enable redactable logging without creating a stderr log file"),
+			"Check that the logging output directory is properly configured.")
+	}
+
+	if sendingStderrToFile {
 		// We have a log directory. We can enable stderr redirection.
 
 		// Our own cancellable context to stop the secondary logger.
@@ -114,15 +138,6 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 		mainLog.redactableLogs.Set(redactableLogsRequested)
 
 		return cleanup, nil
-	}
-
-	// There is no log directory.
-
-	// If redaction is requested and we have a change to produce some
-	// log entries on stderr, that's a configuration we cannot support
-	// safely. Reject it.
-	if redactableLogsRequested && mainLog.stderrThreshold.get() != Severity_NONE {
-		return nil, errors.New("cannot enable redactable logging without a logging directory")
 	}
 
 	// Configuration valid. Assign it.

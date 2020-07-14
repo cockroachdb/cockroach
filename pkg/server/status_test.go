@@ -499,7 +499,7 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Skip("Test only works with low verbosity levels")
 	}
 
-	s := log.ScopeWithoutShowLogs(t)
+	s := log.ScopeWithoutShowLogsAndForcedStderrCapture(t)
 	defer s.Close(t)
 
 	ts := startServer(t)
@@ -686,7 +686,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "redactableLogs",
 		func(t *testing.T, redactableLogs bool) {
-			s := log.ScopeWithoutShowLogs(t)
+			s := log.ScopeWithoutShowLogsAndForcedStderrCapture(t)
 			defer s.Close(t)
 
 			// Apply the redactable log boolean for this test.

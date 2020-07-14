@@ -615,7 +615,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 }
 
 func TestRedirectStderr(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
+	s := ScopeWithoutShowLogsAndForcedStderrCapture(t)
 	defer s.Close(t)
 
 	setFlags()
