@@ -112,7 +112,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	ltc.tester = t
-	ltc.Stopper = stop.NewStopper()
+	if ltc.Stopper == nil {
+		ltc.Stopper = stop.NewStopper()
+	}
 	cfg.RPCContext = rpc.NewContext(rpc.ContextOptions{
 		AmbientCtx: ambient,
 		Config:     baseCtx,
