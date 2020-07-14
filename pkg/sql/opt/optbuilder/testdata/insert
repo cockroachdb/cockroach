@@ -1251,6 +1251,22 @@ CREATE TABLE partial_indexes (
 )
 ----
 
+exec-ddl
+CREATE TABLE partial_indexes_ambiguous_columns (
+    a INT PRIMARY KEY,
+    check1 INT,
+    check2 INT,
+    partial_index_put1 INT,
+    partial_index_put2 INT,
+    partial_index_del1 INT,
+    partial_index_del2 INT,
+    CHECK (check1 > 0),
+    CHECK (check2 > 0),
+    INDEX (check1) WHERE partial_index_put1 > 0,
+    INDEX (check2) WHERE partial_index_del1 > 0
+)
+----
+
 build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar')
 ----
@@ -1271,3 +1287,36 @@ insert partial_indexes
            ├── (column1:5 > column2:6) AND (column3:7 = 'bar') [as=partial_index_put2:9]
            ├── column3:7 = 'delete-only' [as=partial_index_put3:10]
            └── column3:7 = 'write-only' [as=partial_index_put4:11]
+
+build
+INSERT INTO partial_indexes_ambiguous_columns (a, check1, check2, partial_index_put1) VALUES (1, 1, 1, 1)
+----
+insert partial_indexes_ambiguous_columns
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => partial_indexes_ambiguous_columns.check1:2
+ │    ├── column3:11 => partial_indexes_ambiguous_columns.check2:3
+ │    ├── column4:12 => partial_indexes_ambiguous_columns.partial_index_put1:4
+ │    ├── column13:13 => partial_indexes_ambiguous_columns.partial_index_put2:5
+ │    ├── column13:13 => partial_index_del1:6
+ │    └── column13:13 => partial_index_del2:7
+ ├── check columns: check1:14 check2:15
+ ├── partial index put columns: partial_index_put1:16 partial_index_put2:17
+ └── project
+      ├── columns: partial_index_put1:16!null partial_index_put2:17 column1:9!null column2:10!null column3:11!null column4:12!null column13:13 check1:14!null check2:15!null
+      ├── project
+      │    ├── columns: check1:14!null check2:15!null column1:9!null column2:10!null column3:11!null column4:12!null column13:13
+      │    ├── project
+      │    │    ├── columns: column13:13 column1:9!null column2:10!null column3:11!null column4:12!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column4:12!null
+      │    │    │    └── (1, 1, 1, 1)
+      │    │    └── projections
+      │    │         └── NULL::INT8 [as=column13:13]
+      │    └── projections
+      │         ├── column2:10 > 0 [as=check1:14]
+      │         └── column3:11 > 0 [as=check2:15]
+      └── projections
+           ├── column4:12 > 0 [as=partial_index_put1:16]
+           └── column13:13 > 0 [as=partial_index_put2:17]

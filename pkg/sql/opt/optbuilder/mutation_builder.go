@@ -230,7 +230,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	//
 	// NOTE: Include mutation columns, but be careful to never use them for any
 	//       reason other than as "fetch columns". See buildScan comment.
-	mb.outScope = mb.b.buildScan(
+	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		indexFlags,
@@ -238,6 +238,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		includeMutations,
 		inScope,
 	)
+	mb.outScope = scanScope
 
 	// Set list of columns that will be fetched by the input expression.
 	for i := range mb.outScope.cols {
@@ -309,6 +310,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 				pkCols, mb.outScope, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		}
 	}
+
+	// Add partial index del boolean columns to the input.
+	mb.projectPartialIndexDelCols(scanScope)
 }
 
 // buildInputForDelete constructs a Select expression from the fields in
@@ -340,7 +344,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// NOTE: Include mutation columns, but be careful to never use them for any
 	//       reason other than as "fetch columns". See buildScan comment.
 	// TODO(andyk): Why does execution engine need mutation columns for Delete?
-	mb.outScope = mb.b.buildScan(
+	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		indexFlags,
@@ -348,6 +352,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		includeMutations,
 		inScope,
 	)
+	mb.outScope = scanScope
 
 	// WHERE
 	mb.b.buildWhere(where, mb.outScope)
@@ -373,6 +378,9 @@ func (mb *mutationBuilder) buildInputForDelete(
 			mb.fetchColIDs[i] = mb.outScope.cols[i].id
 		}
 	}
+
+	// Add partial index boolean columns to the input.
+	mb.projectPartialIndexDelCols(scanScope)
 }
 
 // addTargetColsByName adds one target column for each of the names in the given
@@ -728,27 +736,42 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 	}
 }
 
-// addPartialIndexCols synthesizes boolean output columns for each partial index
-// defined on the target table. The execution code uses these booleans to
-// determine whether or not to add a row in the partial index.
-func (mb *mutationBuilder) addPartialIndexPutCols() {
-	mb.addPartialIndexCols("partial_index_put", mb.partialIndexPutColIDs)
+// projectPartialIndexPutCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. The execution
+// code uses these booleans to determine whether or not to add a row in the
+// partial index.
+//
+// predScope is the scope of columns available to the partial index predicate
+// expression.
+func (mb *mutationBuilder) projectPartialIndexPutCols(predScope *scope) {
+	mb.projectPartialIndexCols("partial_index_put", mb.partialIndexPutColIDs, predScope)
 }
 
-// addPartialIndexPutCols synthesizes a boolean output column for each partial
-// index defined on the target table. The execution code uses these booleans to
-// determine whether or not to delete a row in the partial index.
-func (mb *mutationBuilder) addPartialIndexDelCols() {
-	mb.addPartialIndexCols("partial_index_del", mb.partialIndexDelColIDs)
+// projectPartialIndexPutCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. The execution
+// code uses these booleans to determine whether or not to remove a row in the
+// partial index.
+//
+// predScope is the scope of columns available to the partial index predicate
+// expression.
+func (mb *mutationBuilder) projectPartialIndexDelCols(predScope *scope) {
+	mb.projectPartialIndexCols("partial_index_del", mb.partialIndexDelColIDs, predScope)
+	// Disambiguate the newly added columns only. All columns cannot be
+	// disambiguated at this point because there may be columns with the same
+	// name but from different tables that we need to preserve the names of
+	// until later, like in the case of UPDATE ... FROM.
+	mb.disambiguateColumnsWithIDs(mb.partialIndexDelColIDs.ToSet())
 }
 
-// addPartialIndexCols synthesizes a boolean output column for each partial
-// index defined on the target table. Each synthesized column is prefixed with
-// aliasPrefix and added to the ords list.
-func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, colIDs opt.ColList) {
+// projectPartialIndexCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. Each synthesized
+// column is prefixed with aliasPrefix and added to the cols list.
+func (mb *mutationBuilder) projectPartialIndexCols(
+	aliasPrefix string, colIDs opt.ColList, predScope *scope,
+) {
 	if partialIndexCount(mb.tab) > 0 {
-		projectionsScope := mb.outScope.replace()
-		projectionsScope.appendColumnsFromScope(mb.outScope)
+		projectionScope := mb.outScope.replace()
+		projectionScope.appendColumnsFromScope(mb.outScope)
 
 		ord := 0
 		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
@@ -764,17 +787,17 @@ func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, colIDs opt.Co
 			}
 
 			alias := fmt.Sprintf("%s%d", aliasPrefix, ord+1)
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+			texpr := predScope.resolveAndRequireType(expr, types.Bool)
+			scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
 
-			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
+			mb.b.buildScalar(texpr, predScope, projectionScope, scopeCol, nil)
 			colIDs[ord] = scopeCol.id
 
 			ord++
 		}
 
-		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-		mb.outScope = projectionsScope
+		mb.b.constructProjectForScope(mb.outScope, projectionScope)
+		mb.outScope = projectionScope
 	}
 }
 
@@ -793,6 +816,26 @@ func (mb *mutationBuilder) disambiguateColumns() {
 	// Clear names of all non-preserved columns.
 	for i := range mb.outScope.cols {
 		if !preserve.Contains(mb.outScope.cols[i].id) {
+			mb.outScope.cols[i].clearName()
+		}
+	}
+}
+
+// disambiguateColumnsWithIDs is similar to disambiguateColumns, but only clears
+// ambiguous columns with IDs in the given set. Any ambigious columns with IDs
+// not in the given set are unchanged.
+func (mb *mutationBuilder) disambiguateColumnsWithIDs(colIDs opt.ColSet) {
+	// Determine the set of scope columns that will have their names preserved.
+	var preserve opt.ColSet
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		if colID := mb.mapToReturnColID(i); colID != 0 {
+			preserve.Add(colID)
+		}
+	}
+
+	// Clear names of all non-preserved columns.
+	for i := range mb.outScope.cols {
+		if !preserve.Contains(mb.outScope.cols[i].id) && colIDs.Contains(mb.outScope.cols[i].id) {
 			mb.outScope.cols[i].clearName()
 		}
 	}

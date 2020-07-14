@@ -474,10 +474,10 @@ func (n *createTableNode) startExec(params runParams) error {
 					}
 				}
 
-				// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+				// TODO(mgartner): Add partial index IDs to pm that we should
 				// not add entries to.
-				var ignoreIndexes util.FastIntSet
-				if err := tw.row(params.ctx, rowBuffer, ignoreIndexes, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				var pm sqlbase.PartialIndexUpdateManager
+				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}

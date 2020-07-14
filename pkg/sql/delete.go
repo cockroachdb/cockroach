@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -174,38 +173,27 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
-	// Create a set of index IDs to not delete from. Indexes should not be
-	// deleted from when they are partial indexes and the row does not satisfy
-	// the predicate and therefore do not exist in the partial index. This
-	// set is passed as a argument to tableDeleter.row below.
-	var ignoreIndexes util.FastIntSet
+	// Create a set of partial index IDs to not delete from. Indexes should not
+	// be deleted from when they are partial indexes and the row does not
+	// satisfy the predicate and therefore do not exist in the partial index.
+	// This set is passed as a argument to tableDeleter.row below.
+	var pm sqlbase.PartialIndexUpdateManager
 	partialIndexOrds := d.run.td.tableDesc().PartialIndexOrds()
 	if !partialIndexOrds.Empty() {
 		partialIndexDelVals := sourceVals[d.run.partialIndexDelValsOffset:]
-		colIdx := 0
-		indexes := d.run.td.tableDesc().Indexes
-		for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
-			index := &indexes[i]
-			if index.IsPartial() {
-				val, err := tree.GetBool(partialIndexDelVals[colIdx])
-				if err != nil {
-					return err
-				}
 
-				if !val {
-					// If the value of the column for the index predicate expression
-					// is false, the row should not be removed from the partial
-					// index because it does not exist.
-					ignoreIndexes.Add(int(index.ID))
-				}
-
-				colIdx++
-			}
+		err := pm.Init(tree.Datums{}, partialIndexDelVals, d.run.td.tableDesc())
+		if err != nil {
+			return err
 		}
+
+		// Truncate sourceVals so that it no longer includes partial index
+		// predicate values.
+		sourceVals = sourceVals[:d.run.partialIndexDelValsOffset]
 	}
 
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(params.ctx, sourceVals, ignoreIndexes, d.run.traceKV); err != nil {
+	if err := d.run.td.row(params.ctx, sourceVals, pm, d.run.traceKV); err != nil {
 		return err
 	}
 

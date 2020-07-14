@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -153,6 +152,28 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		return err
 	}
 
+	// Create a set of partial index IDs to not add or remove entries from.
+	var pm sqlbase.PartialIndexUpdateManager
+	partialIndexOrds := n.run.tw.tableDesc().PartialIndexOrds()
+	if !partialIndexOrds.Empty() {
+		partialIndexValOffset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
+		if n.run.tw.canaryOrdinal != -1 {
+			partialIndexValOffset++
+		}
+		partialIndexVals := rowVals[partialIndexValOffset:]
+		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
+		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+
+		err := pm.Init(partialIndexPutVals, partialIndexDelVals, n.run.tw.tableDesc())
+		if err != nil {
+			return err
+		}
+
+		// Truncate rowVals so that it no longer includes partial index predicate
+		// values.
+		rowVals = rowVals[:partialIndexValOffset]
+	}
+
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
 	if !n.run.checkOrds.Empty() {
@@ -169,10 +190,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-	// not write entries to.
-	var ignoreIndexes util.FastIntSet
-	return n.run.tw.row(params.ctx, rowVals, ignoreIndexes, n.run.traceKV)
+	return n.run.tw.row(params.ctx, rowVals, pm, n.run.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.

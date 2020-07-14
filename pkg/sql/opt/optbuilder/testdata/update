@@ -1678,6 +1678,22 @@ CREATE TABLE partial_indexes (
 )
 ----
 
+exec-ddl
+CREATE TABLE partial_indexes_ambiguous_columns (
+    a INT PRIMARY KEY,
+    check1 INT,
+    check2 INT,
+    partial_index_put1 INT,
+    partial_index_put2 INT,
+    partial_index_del1 INT,
+    partial_index_del2 INT,
+    CHECK (check1 > 0),
+    CHECK (check2 > 0),
+    INDEX (check1) WHERE partial_index_put1 > 0,
+    INDEX (check2) WHERE partial_index_del1 > 0
+)
+----
+
 build
 UPDATE partial_indexes SET a = 1
 ----
@@ -1711,3 +1727,117 @@ update partial_indexes
       │         └── 1 [as=a_new:13]
       └── projections
            └── (a_new:13 > b:6) AND (c:7 = 'bar') [as=partial_index_put2:14]
+
+build
+UPDATE partial_indexes SET a = a + 5 RETURNING *
+----
+update partial_indexes
+ ├── columns: a:1!null b:2 c:3
+ ├── fetch columns: a:5 b:6 c:7
+ ├── update-mapping:
+ │    └── a_new:13 => a:1
+ ├── partial index put columns: partial_index_del1:9 partial_index_put2:14 partial_index_del3:11 partial_index_del4:12
+ ├── partial index del columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+ └── project
+      ├── columns: partial_index_put2:14 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+      │    ├── project
+      │    │    ├── columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── scan partial_indexes
+      │    │    │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    └── partial index predicates
+      │    │    │         ├── secondary: filters
+      │    │    │         │    └── c:7 = 'foo'
+      │    │    │         └── secondary: filters
+      │    │    │              ├── a:5 > b:6
+      │    │    │              └── c:7 = 'bar'
+      │    │    └── projections
+      │    │         ├── c:7 = 'foo' [as=partial_index_del1:9]
+      │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
+      │    │         ├── c:7 = 'delete-only' [as=partial_index_del3:11]
+      │    │         └── c:7 = 'write-only' [as=partial_index_del4:12]
+      │    └── projections
+      │         └── a:5 + 5 [as=a_new:13]
+      └── projections
+           └── (a_new:13 > b:6) AND (c:7 = 'bar') [as=partial_index_put2:14]
+
+build
+UPDATE partial_indexes_ambiguous_columns SET check1 = check2 + 1, partial_index_put1 = 5, partial_index_del1 = partial_index_del2
+----
+update partial_indexes_ambiguous_columns
+ ├── columns: <none>
+ ├── fetch columns: a:9 partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15
+ ├── update-mapping:
+ │    ├── check1_new:19 => partial_indexes_ambiguous_columns.check1:2
+ │    ├── partial_index_put1_new:20 => partial_indexes_ambiguous_columns.partial_index_put1:4
+ │    └── partial_indexes_ambiguous_columns.partial_index_del2:15 => partial_indexes_ambiguous_columns.partial_index_del1:6
+ ├── check columns: check1:21 check2:22
+ ├── partial index put columns: partial_index_put1:23 partial_index_put2:24
+ ├── partial index del columns: partial_index_del1:17 partial_index_del2:18
+ └── project
+      ├── columns: partial_index_put1:23!null partial_index_put2:24 a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16 partial_index_del1:17 partial_index_del2:18 check1_new:19 partial_index_put1_new:20!null check1:21 check2:22
+      ├── project
+      │    ├── columns: check1:21 check2:22 a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16 partial_index_del1:17 partial_index_del2:18 check1_new:19 partial_index_put1_new:20!null
+      │    ├── project
+      │    │    ├── columns: check1_new:19 partial_index_put1_new:20!null a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16 partial_index_del1:17 partial_index_del2:18
+      │    │    ├── project
+      │    │    │    ├── columns: partial_index_del1:17 partial_index_del2:18 a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16
+      │    │    │    ├── scan partial_indexes_ambiguous_columns
+      │    │    │    │    ├── columns: a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_indexes_ambiguous_columns.partial_index_put1:12 partial_indexes_ambiguous_columns.partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         ├── secondary: filters
+      │    │    │    │         │    └── partial_indexes_ambiguous_columns.partial_index_put1:12 > 0
+      │    │    │    │         └── secondary: filters
+      │    │    │    │              └── partial_indexes_ambiguous_columns.partial_index_del1:14 > 0
+      │    │    │    └── projections
+      │    │    │         ├── partial_indexes_ambiguous_columns.partial_index_put1:12 > 0 [as=partial_index_del1:17]
+      │    │    │         └── partial_indexes_ambiguous_columns.partial_index_del1:14 > 0 [as=partial_index_del2:18]
+      │    │    └── projections
+      │    │         ├── partial_indexes_ambiguous_columns.check2:11 + 1 [as=check1_new:19]
+      │    │         └── 5 [as=partial_index_put1_new:20]
+      │    └── projections
+      │         ├── check1_new:19 > 0 [as=check1:21]
+      │         └── partial_indexes_ambiguous_columns.check2:11 > 0 [as=check2:22]
+      └── projections
+           ├── partial_index_put1_new:20 > 0 [as=partial_index_put1:23]
+           └── partial_indexes_ambiguous_columns.partial_index_del2:15 > 0 [as=partial_index_put2:24]
+
+build
+UPDATE partial_indexes_ambiguous_columns SET check1 = partial_index_put1 + partial_index_del1 WHERE check2 = partial_index_put2 RETURNING check1
+----
+project
+ ├── columns: check1:2
+ └── update partial_indexes_ambiguous_columns
+      ├── columns: a:1!null partial_indexes_ambiguous_columns.check1:2 partial_indexes_ambiguous_columns.check2:3!null partial_index_put1:4 partial_index_put2:5!null partial_indexes_ambiguous_columns.partial_index_del1:6 partial_indexes_ambiguous_columns.partial_index_del2:7
+      ├── fetch columns: a:9 partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_index_put1:12 partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15
+      ├── update-mapping:
+      │    └── check1_new:19 => partial_indexes_ambiguous_columns.check1:2
+      ├── check columns: check1:20 check2:21
+      ├── partial index put columns: partial_index_del1:17 partial_index_del2:18
+      ├── partial index del columns: partial_index_del1:17 partial_index_del2:18
+      └── project
+           ├── columns: check1:20 check2:21!null a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11!null partial_index_put1:12 partial_index_put2:13!null partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16 partial_index_del1:17 partial_index_del2:18 check1_new:19
+           ├── project
+           │    ├── columns: check1_new:19 a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11!null partial_index_put1:12 partial_index_put2:13!null partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16 partial_index_del1:17 partial_index_del2:18
+           │    ├── project
+           │    │    ├── columns: partial_index_del1:17 partial_index_del2:18 a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11!null partial_index_put1:12 partial_index_put2:13!null partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16
+           │    │    ├── select
+           │    │    │    ├── columns: a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11!null partial_index_put1:12 partial_index_put2:13!null partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16
+           │    │    │    ├── scan partial_indexes_ambiguous_columns
+           │    │    │    │    ├── columns: a:9!null partial_indexes_ambiguous_columns.check1:10 partial_indexes_ambiguous_columns.check2:11 partial_index_put1:12 partial_index_put2:13 partial_indexes_ambiguous_columns.partial_index_del1:14 partial_indexes_ambiguous_columns.partial_index_del2:15 crdb_internal_mvcc_timestamp:16
+           │    │    │    │    └── partial index predicates
+           │    │    │    │         ├── secondary: filters
+           │    │    │    │         │    └── partial_index_put1:12 > 0
+           │    │    │    │         └── secondary: filters
+           │    │    │    │              └── partial_indexes_ambiguous_columns.partial_index_del1:14 > 0
+           │    │    │    └── filters
+           │    │    │         └── partial_indexes_ambiguous_columns.check2:11 = partial_index_put2:13
+           │    │    └── projections
+           │    │         ├── partial_index_put1:12 > 0 [as=partial_index_del1:17]
+           │    │         └── partial_indexes_ambiguous_columns.partial_index_del1:14 > 0 [as=partial_index_del2:18]
+           │    └── projections
+           │         └── partial_index_put1:12 + partial_indexes_ambiguous_columns.partial_index_del1:14 [as=check1_new:19]
+           └── projections
+                ├── check1_new:19 > 0 [as=check1:20]
+                └── partial_indexes_ambiguous_columns.check2:11 > 0 [as=check2:21]

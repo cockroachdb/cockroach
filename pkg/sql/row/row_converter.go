@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -513,7 +512,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	}
 	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
 	// not delete entries from.
-	var ignoreIndexes util.FastIntSet
+	var pm sqlbase.PartialIndexUpdateManager
 	if err := c.ri.InsertRow(
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {
@@ -521,7 +520,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		}),
 		insertRow,
-		ignoreIndexes,
+		pm,
 		true,  /* ignoreConflicts */
 		false, /* traceKV */
 	); err != nil {
