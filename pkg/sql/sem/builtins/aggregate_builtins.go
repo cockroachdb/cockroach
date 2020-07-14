@@ -310,6 +310,14 @@ var aggregates = map[string]builtinDefinition{
 	// variance is a historical alias for var_samp.
 	"variance": makeVarianceBuiltin(),
 	"var_samp": makeVarianceBuiltin(),
+	"var_pop": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
+	),
 
 	// stddev is a historical alias for stddev_samp.
 	"stddev":      makeStdDevBuiltin(),
@@ -2473,6 +2481,113 @@ func (a *decimalVarianceAggregate) Close(ctx context.Context) {
 
 // Size is part of the tree.AggregateFunc interface.
 func (a *decimalVarianceAggregate) Size() int64 {
+	return sizeOfDecimalVarianceAggregate
+}
+
+type floatVarPopAggregate struct {
+	agg floatSqrDiff
+}
+
+type decimalVarPopAggregate struct {
+	agg decimalSqrDiff
+}
+
+func newIntVarPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newIntSqrDiff(evalCtx)}
+}
+
+func newFloatVarPopAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &floatVarPopAggregate{agg: newFloatSqrDiff()}
+}
+
+func newDecimalVarPopAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newDecimalSqrDiff(evalCtx)}
+}
+
+// Add is part of the tree.AggregateFunc interface.
+//  Variance: VALUE(float)
+//  FinalVariance: SQRDIFF(float), SUM(float), COUNT(int)
+func (a *floatVarPopAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Add is part of the tree.AggregateFunc interface.
+//  Variance: VALUE(int|decimal)
+//  FinalVariance: SQRDIFF(decimal), SUM(decimal), COUNT(int)
+func (a *decimalVarPopAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Result calculates the variance from the member square difference aggregator.
+func (a *floatVarPopAggregate) Result() (tree.Datum, error) {
+	if a.agg.Count() < 2 {
+		return tree.DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDFloat(tree.DFloat(float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count())))), nil
+}
+
+// Result calculates the variance from the member square difference aggregator.
+func (a *decimalVarPopAggregate) Result() (tree.Datum, error) {
+	if a.agg.Count().Cmp(decimalTwo) < 0 {
+		return tree.DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	dd := &tree.DDecimal{}
+	if _, err = tree.DecimalCtx.Quo(&dd.Decimal, &sqrDiff.(*tree.DDecimal).Decimal, a.agg.Count()); err != nil {
+		return nil, err
+	}
+	// Remove trailing zeros. Depending on the order in which the input is
+	// processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of
+	// order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Close(ctx context.Context) {
+	a.agg.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Size() int64 {
+	return sizeOfFloatVarianceAggregate
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Close(ctx context.Context) {
+	a.agg.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Size() int64 {
 	return sizeOfDecimalVarianceAggregate
 }
 
