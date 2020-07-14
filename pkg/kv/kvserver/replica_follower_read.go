@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	ctstorage "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -93,7 +94,7 @@ func (r *Replica) canServeFollowerRead(
 	//
 	// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
 	// serve reads for that and smaller timestamps forever.
-	log.Event(ctx, "serving via follower read")
+	log.Event(ctx, kvbase.FollowerReadServingMsg)
 	r.store.metrics.FollowerReadsCount.Inc(1)
 	return nil
 }
