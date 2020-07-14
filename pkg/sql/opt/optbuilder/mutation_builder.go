@@ -110,25 +110,25 @@ type mutationBuilder struct {
 	// (see opt.Table.CheckCount).
 	checkOrds []scopeOrdinal
 
-	// partialIndexPutOrds lists the outScope columns storing the boolean
+	// partialIndexPutCols lists the outScope columns storing the boolean
 	// results of evaluating partial index predicate expressions of the target
 	// table. The predicate expressions are evaluated with their variables
 	// assigned from newly inserted or updated row values. When these columns
 	// evaluate to true, it signifies that the inserted or updated row should be
 	// added to the corresponding partial index. The length of
-	// partialIndexPutOrds is always equal to the number of partial indexes on
+	// partialIndexPutCols is always equal to the number of partial indexes on
 	// the table.
-	partialIndexPutOrds []scopeOrdinal
+	partialIndexPutCols opt.ColList
 
-	// partialIndexDelOrds lists the outScope columns storing the boolean
+	// partialIndexDelCols lists the outScope columns storing the boolean
 	// results of evaluating partial index predicate expressions of the target
 	// table. The predicate expressions are evaluated with their variables
 	// assigned from existing row values of deleted or updated rows. When these
 	// columns evaluate to true, it signifies that the deleted or updated row
 	// should be removed from the corresponding partial index. The length of
-	// partialIndexPutOrds is always equal to the number of partial indexes on
+	// partialIndexPutCols is always equal to the number of partial indexes on
 	// the table.
-	partialIndexDelOrds []scopeOrdinal
+	partialIndexDelCols opt.ColList
 
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
@@ -174,8 +174,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.targetColList = make(opt.ColList, 0, n)
 
 	// Allocate segmented array of scope column ordinals.
-	numPartialIndexes := partialIndexCount(tab)
-	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount()+2*numPartialIndexes)
+	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount())
 	for i := range scopeOrds {
 		scopeOrds[i] = -1
 	}
@@ -184,8 +183,11 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.updateOrds = scopeOrds[n*2 : n*3]
 	mb.upsertOrds = scopeOrds[n*3 : n*4]
 	mb.checkOrds = scopeOrds[n*4 : n*4+tab.CheckCount()]
-	mb.partialIndexPutOrds = scopeOrds[n*4+tab.CheckCount() : n*4+tab.CheckCount()+numPartialIndexes]
-	mb.partialIndexDelOrds = scopeOrds[n*4+tab.CheckCount()+numPartialIndexes:]
+
+	// Allocate partial index predicate columns.
+	numPartialIndexes := partialIndexCount(tab)
+	mb.partialIndexPutCols = make(opt.ColList, numPartialIndexes)
+	mb.partialIndexDelCols = make(opt.ColList, numPartialIndexes)
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
@@ -331,6 +333,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	for i := 0; i < numCols; i++ {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
+
+	// Add partial index del boolean columns to the input.
+	mb.outScope = mb.projectPartialIndexDelCols(mb.outScope)
 }
 
 // buildInputForDelete constructs a Select expression from the fields in
@@ -392,6 +397,10 @@ func (mb *mutationBuilder) buildInputForDelete(
 	for i := range mb.outScope.cols {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
+
+	// Add partial index boolean columns to the input.
+	mb.outScope = mb.projectPartialIndexDelCols(mb.outScope)
+
 }
 
 // addTargetColsByName adds one target column for each of the names in the given
@@ -723,29 +732,39 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 	}
 }
 
-// addPartialIndexCols synthesizes boolean output columns for each partial index
-// defined on the target table. The execution code uses these booleans to
-// determine whether or not to add a row in the partial index.
-func (mb *mutationBuilder) addPartialIndexPutCols() {
-	mb.addPartialIndexCols("partial_index_put", mb.partialIndexPutOrds)
+// projectPartialIndexPutCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. The execution
+// code uses these booleans to determine whether or not to add a row in the
+// partial index.
+//
+// inScope is the scope of columns available to the Project. A new scope
+// is returned that includes the newly projectect columns.
+func (mb *mutationBuilder) projectPartialIndexPutCols(inScope *scope) *scope {
+	return mb.projectPartialIndexCols("partial_index_put", mb.partialIndexPutCols, inScope)
 }
 
-// addPartialIndexPutCols synthesizes a boolean output column for each partial
-// index defined on the target table. The execution code uses these booleans to
-// determine whether or not to delete a row in the partial index.
-func (mb *mutationBuilder) addPartialIndexDelCols() {
-	mb.addPartialIndexCols("partial_index_del", mb.partialIndexDelOrds)
+// projectPartialIndexPutCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. The execution
+// code uses these booleans to determine whether or not to remove a row in the
+// partial index.
+//
+// inScope is the scope of columns available to the Project. A new scope
+// is returned that includes the newly projectect columns.
+func (mb *mutationBuilder) projectPartialIndexDelCols(inScope *scope) *scope {
+	return mb.projectPartialIndexCols("partial_index_del", mb.partialIndexDelCols, inScope)
 }
 
-// addPartialIndexCols synthesizes a boolean output column for each partial
-// index defined on the target table. Each synthesized column is prefixed with
-// aliasPrefix and added to the ords list.
-func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, ords []scopeOrdinal) {
+// projectPartialIndexCols builds a Project that synthesizes boolean output
+// columns for each partial index defined on the target table. Each synthesized
+// column is prefixed with aliasPrefix and added to the cols list.
+func (mb *mutationBuilder) projectPartialIndexCols(
+	aliasPrefix string, cols opt.ColList, inScope *scope,
+) *scope {
 	if partialIndexCount(mb.tab) > 0 {
-		projectionsScope := mb.outScope.replace()
-		projectionsScope.appendColumnsFromScope(mb.outScope)
+		projectionScope := inScope.replace()
+		projectionScope.appendColumnsFromScope(inScope)
 
-		ord := 0
+		colIdx := 0
 		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
 			index := mb.tab.Index(i)
 			predicate, ok := index.Predicate()
@@ -758,19 +777,21 @@ func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, ords []scopeO
 				panic(err)
 			}
 
-			alias := fmt.Sprintf("%s%d", aliasPrefix, ord+1)
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+			alias := fmt.Sprintf("%s%d", aliasPrefix, colIdx+1)
+			texpr := inScope.resolveAndRequireType(expr, types.Bool)
+			scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
 
-			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
-			ords[ord] = scopeOrdinal(len(projectionsScope.cols) - 1)
+			mb.b.buildScalar(texpr, inScope, projectionScope, scopeCol, nil)
+			cols[colIdx] = scopeCol.id
 
-			ord++
+			colIdx++
 		}
 
-		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-		mb.outScope = projectionsScope
+		mb.b.constructProjectForScope(inScope, projectionScope)
+		return projectionScope
 	}
+
+	return inScope
 }
 
 // disambiguateColumns ranges over the scope and ensures that at most one column
@@ -818,8 +839,8 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		UpdateCols:          makeColList(mb.updateOrds),
 		CanaryCol:           mb.canaryColID,
 		CheckCols:           makeColList(mb.checkOrds),
-		PartialIndexPutCols: makeColList(mb.partialIndexPutOrds),
-		PartialIndexDelCols: makeColList(mb.partialIndexDelOrds),
+		PartialIndexPutCols: mb.partialIndexPutCols,
+		PartialIndexDelCols: mb.partialIndexDelCols,
 		FKCascades:          mb.cascades,
 	}
 

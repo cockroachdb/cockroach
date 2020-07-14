@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -139,37 +138,23 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		return err
 	}
 
-	// Create a set of index IDs to not write to. Indexes should not be written
-	// to when they are partial indexes and the row does not satisfy the
+	// Create a set of partial index IDs to not write to. Indexes should not be
+	// written to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
-	var ignoreIndexes util.FastIntSet
+	var pm sqlbase.PartialIndexUpdateManager
 	partialIndexOrds := r.ti.tableDesc().PartialIndexOrds()
 	if !partialIndexOrds.Empty() {
 		partialIndexPutVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
-		colIdx := 0
-		indexes := r.ti.tableDesc().Indexes
-		for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
-			index := &indexes[i]
-			if index.IsPartial() {
-				val, err := tree.GetBool(partialIndexPutVals[colIdx])
-				if err != nil {
-					return err
-				}
 
-				if !val {
-					// If the value of the column for the index predicate expression
-					// is false, the row should not be added to the partial index.
-					ignoreIndexes.Add(int(index.ID))
-				}
-
-				colIdx++
-			}
+		err := pm.Init(partialIndexPutVals, tree.Datums{}, r.ti.tableDesc())
+		if err != nil {
+			return err
 		}
-	}
 
-	// Truncate rowVals so that it no longer includes partial index predicate
-	// values.
-	rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
+		// Truncate rowVals so that it no longer includes partial index predicate
+		// values.
+		rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
+	}
 
 	// Verify the CHECK constraint results, if any.
 	if !r.checkOrds.Empty() {
@@ -181,7 +166,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, rowVals, ignoreIndexes, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, rowVals, pm, r.traceKV); err != nil {
 		return err
 	}
 

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -245,10 +244,8 @@ func (tu *optTableUpserter) makeResultFromRow(
 func (*optTableUpserter) desc() string { return "opt upserter" }
 
 // row is part of the tableWriter interface.
-// TODO(mgartner): Use ignoreIndexes to avoid writing to partial indexes when
-// the row does not match the partial index predicate.
 func (tu *optTableUpserter) row(
-	ctx context.Context, row tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
+	ctx context.Context, row tree.Datums, pm sqlbase.PartialIndexUpdateManager, traceKV bool,
 ) error {
 	tu.batchSize++
 	tu.resultCount++
@@ -260,11 +257,11 @@ func (tu *optTableUpserter) row(
 	if tu.canaryOrdinal == -1 {
 		// No canary column means that existing row should be overwritten (i.e.
 		// the insert and update columns are the same, so no need to choose).
-		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], true /* overwrite */, traceKV)
+		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], pm, true /* overwrite */, traceKV)
 	}
 	if row[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], false /* overwrite */, traceKV)
+		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], pm, false /* overwrite */, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -284,6 +281,7 @@ func (tu *optTableUpserter) row(
 		tu.b,
 		row[insertEnd:fetchEnd],
 		row[fetchEnd:updateEnd],
+		pm,
 		tu.tableDesc(),
 		traceKV,
 	)
@@ -299,13 +297,14 @@ func (tu *optTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error 
 // there was no conflict. If the RETURNING clause was specified, then the
 // inserted row is stored in the rowsUpserted collection.
 func (tu *optTableUpserter) insertNonConflictingRow(
-	ctx context.Context, b *kv.Batch, insertRow tree.Datums, overwrite, traceKV bool,
+	ctx context.Context,
+	b *kv.Batch,
+	insertRow tree.Datums,
+	pm sqlbase.PartialIndexUpdateManager,
+	overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
-	// TODO(mgartner): Pass ignoreIndexes to InsertRow and do not write index
-	// entries for indexes in the set.
-	var ignoreIndexes util.FastIntSet
-	if err := tu.ri.InsertRow(ctx, b, insertRow, ignoreIndexes, overwrite, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, b, insertRow, pm, overwrite, traceKV); err != nil {
 		return err
 	}
 
@@ -350,6 +349,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	b *kv.Batch,
 	fetchRow tree.Datums,
 	updateValues tree.Datums,
+	pm sqlbase.PartialIndexUpdateManager,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
@@ -367,10 +367,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-	// not add entries to or delete entries from.
-	var ignoreIndexes util.FastIntSet
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, ignoreIndexes, ignoreIndexes, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, traceKV)
 	if err != nil {
 		return err
 	}
