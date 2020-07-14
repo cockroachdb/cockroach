@@ -89,6 +89,11 @@ message RestoreDetails {
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
   repeated BackupLocalityInfo backup_locality_info = 7 [(gogoproto.nullable) = false];
   repeated sqlbase.TableDescriptor table_descs = 5;
+  message Tenant {
+    uint64 id = 1 [(gogoproto.customname) = "ID"];
+    bytes info = 2;
+  }
+  repeated Tenant tenants = 13 [(gogoproto.nullable) = false];
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
   bool prepare_completed = 8;
   bool stats_inserted = 9;
@@ -97,6 +102,7 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   roachpb.FileEncryptionOptions encryption = 12;
+  // NEXT ID: 14.
 }
 
 message RestoreProgress {

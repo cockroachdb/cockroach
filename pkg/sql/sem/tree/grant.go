@@ -19,7 +19,12 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+)
 
 // Grant represents a GRANT statement.
 type Grant struct {
@@ -33,6 +38,7 @@ type Grant struct {
 type TargetList struct {
 	Databases NameList
 	Tables    TablePatterns
+	Tenant    roachpb.TenantID
 
 	// ForRoles and Roles are used internally in the parser and not used
 	// in the AST. Therefore they do not participate in pretty-printing,
@@ -46,6 +52,8 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
+	} else if tl.Tenant != (roachpb.TenantID{}) {
+		ctx.WriteString(fmt.Sprintf("TENANT %d", tl.Tenant.ToUint64()))
 	} else {
 		ctx.WriteString("TABLE ")
 		ctx.FormatNode(&tl.Tables)

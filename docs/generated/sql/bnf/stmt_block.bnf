@@ -264,6 +264,7 @@ targets ::=
 	| complex_table_pattern
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
+	| 'TENANT' iconst64
 	| 'DATABASE' name_list
 
 name_list ::=
@@ -871,6 +872,7 @@ unreserved_keyword ::=
 	| 'TEMP'
 	| 'TEMPLATE'
 	| 'TEMPORARY'
+	| 'TENANT'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
 	| 'TIES'
@@ -967,6 +969,9 @@ table_pattern ::=
 
 table_pattern_list ::=
 	( table_pattern ) ( ( ',' table_pattern ) )*
+
+iconst64 ::=
+	'ICONST'
 
 privilege ::=
 	name
@@ -1890,9 +1895,6 @@ enum_val_list ::=
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
 	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
-
-iconst64 ::=
-	'ICONST'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*

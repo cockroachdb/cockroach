@@ -605,10 +605,12 @@ func makeSQLServerArgs(
 func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ error) {
 	ctx := context.Background()
 
-	if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-		ctx, "testserver-create-tenant", nil /* txn */, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", params.TenantID.ToUint64()),
-	); err != nil {
-		return "", err
+	if !params.Existing {
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)", params.TenantID.ToUint64(), params.TenantInfo,
+		); err != nil {
+			return "", err
+		}
 	}
 
 	st := cluster.MakeTestingClusterSettings()

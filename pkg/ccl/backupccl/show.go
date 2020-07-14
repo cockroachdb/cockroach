@@ -254,6 +254,17 @@ func backupShowerDefault(
 						rows = append(rows, row)
 					}
 				}
+				for _, t := range manifest.Tenants {
+					rows = append(rows, tree.Datums{
+						tree.NewDString("TENANT"),
+						tree.NewDString(roachpb.MakeTenantID(t.ID).String()),
+						start,
+						end,
+						tree.DNull,
+						tree.DNull,
+						tree.DNull,
+					})
+				}
 			}
 			return rows, nil
 		},
