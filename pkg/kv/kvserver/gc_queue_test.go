@@ -639,6 +639,9 @@ func TestGCQueueProcess(t *testing.T) {
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/51402")
+
 	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
