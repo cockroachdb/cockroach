@@ -575,7 +575,7 @@ func makeSQLServerArgs(
 			nodeDialer:   nodeDialer,
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
-			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
+			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
 			nodeIDContainer: idContainer,

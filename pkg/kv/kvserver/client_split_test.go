@@ -2639,7 +2639,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 			cfg:                    &cfg},
 		stopper)
 
-	cap, err := s.Capacity(false /* useCached */)
+	cap, err := s.Capacity(context.Background(), false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2666,7 +2666,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	cap, err = s.Capacity(false /* useCached */)
+	cap, err = s.Capacity(context.Background(), false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2704,7 +2704,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	cap, err = s.Capacity(false /* useCached */)
+	cap, err = s.Capacity(context.Background(), false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
 	}

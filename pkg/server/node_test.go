@@ -444,7 +444,7 @@ func TestNodeStatusWritten(t *testing.T) {
 
 	expectedStoreStatuses := make(map[roachpb.StoreID]statuspb.StoreStatus)
 	if err := ts.node.stores.VisitStores(func(s *kvserver.Store) error {
-		desc, err := s.Descriptor(false /* useCached */)
+		desc, err := s.Descriptor(ctx, false /* useCached */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -585,7 +585,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		}
 
 		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			desc, err := store.Descriptor(false /* useCached */)
+			desc, err := store.Descriptor(ctx, false /* useCached */)
 			if err != nil {
 				t.Fatal(err)
 			}

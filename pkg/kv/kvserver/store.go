@@ -844,7 +844,7 @@ func NewStore(
 			s.cfg.Settings,
 			s.engine,
 			func() (roachpb.StoreCapacity, error) {
-				return s.Capacity(false /* useCached */)
+				return s.Capacity(ctx, false /* useCached */)
 			},
 			func(ctx context.Context) {
 				s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
@@ -1107,7 +1107,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 					// leader, so only consider the `Voters` replicas.
 					needsLeaseTransfer := len(r.Desc().Replicas().Voters()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
-						r.IsLeaseValid(drainingLease, s.Clock().Now())
+						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
 
 					if !needsLeaseTransfer && !needsRaftTransfer {
 						if log.V(1) {
@@ -1853,7 +1853,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, -1)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
 
-	storeDesc, err := s.Descriptor(useCached)
+	storeDesc, err := s.Descriptor(ctx, useCached)
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
@@ -2241,7 +2241,7 @@ func (s *Store) Attrs() roachpb.Attributes {
 // this does not include reservations.
 // Note that Capacity() has the side effect of updating some of the store's
 // internal statistics about its replicas.
-func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
+func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapacity, error) {
 	if useCached {
 		s.cachedCapacity.Lock()
 		capacity := s.cachedCapacity.StoreCapacity
@@ -2268,7 +2268,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	rankingsAccumulator := s.replRankings.newAccumulator()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		rangeCount++
-		if r.OwnsValidLease(now) {
+		if r.OwnsValidLease(ctx, now) {
 			leaseCount++
 		}
 		mvccStats := r.GetMVCCStats()
@@ -2335,8 +2335,8 @@ func (s *Store) Metrics() *StoreMetrics {
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
-	capacity, err := s.Capacity(useCached)
+func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreDescriptor, error) {
+	capacity, err := s.Capacity(ctx, useCached)
 	if err != nil {
 		return nil, err
 	}
@@ -2514,7 +2514,7 @@ func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
 // method. It is used to compute some metrics less frequently than others.
 func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	ctx = s.AnnotateCtx(ctx)
-	if err := s.updateCapacityGauges(); err != nil {
+	if err := s.updateCapacityGauges(ctx); err != nil {
 		return err
 	}
 	if err := s.updateReplicationGauges(ctx); err != nil {

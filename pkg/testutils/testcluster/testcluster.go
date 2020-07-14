@@ -672,7 +672,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return roachpb.ReplicationTarget{}, err
 	}
-	if !replica.IsLeaseValid(lease, now) {
+	if !replica.IsLeaseValid(context.TODO(), lease, now) {
 		return roachpb.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica

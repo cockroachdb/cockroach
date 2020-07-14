@@ -242,7 +242,7 @@ type replicaInQueue interface {
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
 	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *roachpb.Error)
-	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
+	IsLeaseValid(context.Context, roachpb.Lease, hlc.Timestamp) bool
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }
 
@@ -643,7 +643,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) &&
+		if lease, _ := repl.GetLease(); repl.IsLeaseValid(ctx, lease, now) &&
 			!lease.OwnedBy(repl.StoreID()) {
 			if log.V(1) {
 				log.Infof(ctx, "needs lease; not adding: %+v", lease)

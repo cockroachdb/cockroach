@@ -2381,7 +2381,7 @@ func (r *Replica) adminScatter(
 	// queue would do on its own (#17341), do so after the replicate queue is
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
-	if args.RandomizeLeases && r.OwnsValidLease(r.store.Clock().Now()) {
+	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().Now()) {
 		desc := r.Desc()
 		// Learner replicas aren't allowed to become the leaseholder or raft leader,
 		// so only consider the `Voters` replicas.
