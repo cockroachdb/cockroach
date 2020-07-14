@@ -17,9 +17,12 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +40,34 @@ Uploads a file to the user scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: maybeShoutError(runUserFileUpload),
+}
+
+var userFileListCmd = &cobra.Command{
+	Use:   "ls <file|dir glob>",
+	Short: "List files matching the provided glob",
+	Long: `
+Lists the files stored in the user scoped file storage which match the glob, using a SQL connection.
+`,
+	Args: cobra.MinimumNArgs(0),
+	RunE: maybeShoutError(runUserFileList),
+}
+
+func runUserFileList(cmd *cobra.Command, args []string) error {
+	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var glob string
+	if len(args) > 0 {
+		glob = args[0]
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	return listUserFile(ctx, conn, glob)
 }
 
 func runUserFileUpload(cmd *cobra.Command, args []string) error {
@@ -115,6 +146,102 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	return userFileURL.String()
 }
 
+func constructUserfileListURI(glob, user string) string {
+	// User has not specified a glob pattern and so we construct a URI which will
+	// list all the files stored in the UserFileTableStorage.
+	if glob == "" {
+		userFileURL := url.URL{
+			Scheme: defaultUserfileScheme,
+			Host:   defaultQualifiedNamePrefix + user,
+			Path:   "",
+		}
+		return userFileURL.String()
+	}
+
+	// If the destination is a well-formed userfile URI of the form
+	// userfile://db.schema.tablename_prefix/glob/pattern, then we
+	// use that as the final URI.
+	if userfileURL, err := url.ParseRequestURI(glob); err == nil {
+		if userfileURL.Scheme == defaultUserfileScheme && userfileURL.Host != "" {
+			return userfileURL.String()
+		}
+	}
+
+	// If destination is not a well formed userfile URI, we use the default
+	// userfile URI schema and host, and the glob as the path.
+	userfileURL := url.URL{
+		Scheme: defaultUserfileScheme,
+		Host:   defaultQualifiedNamePrefix + user,
+	}
+
+	// We cannot assign the glob to the userfileURL.path because
+	// userfileURL.String() escapes glob characters such as *.
+	userfileURI := fmt.Sprintf("%s/%s", userfileURL.String(), glob)
+	return userfileURI
+}
+
+func getPrefixBeforeWildcard(p string) string {
+	globIndex := strings.IndexAny(p, "*?[")
+	if globIndex < 0 {
+		return p
+	}
+	return p[:globIndex]
+}
+
+func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
+
+	ex := conn.conn.(driver.ExecerContext)
+	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
+		return err
+	}
+
+	connURL, err := url.Parse(conn.url)
+	if err != nil {
+		return err
+	}
+
+	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
+	userfileParsedURL, err := url.ParseRequestURI(userfileListURI)
+	if err != nil {
+		return err
+	}
+	f := filetable.NewNetworkBackedFileToTableSystem(ctx, userfileParsedURL.Host, conn.conn,
+		connURL.User.String())
+
+	// Get all files from the FileTableSystem which match a stable prefix before
+	// the glob pattern.
+	stablePrefix := getPrefixBeforeWildcard(userfileParsedURL.Path)
+	matchingFiles, err := f.ListFiles(ctx, stablePrefix)
+	if err != nil {
+		return err
+	}
+
+	for _, match := range matchingFiles {
+		// If there is no glob pattern, then the user wishes to list all the uploaded
+		// files stored in the userfile table storage.
+		if userfileParsedURL.Path == "" {
+			match = strings.TrimPrefix(match, "/")
+			fmt.Println(match)
+			continue
+		}
+
+		doesMatch, matchErr := path.Match(userfileParsedURL.Path, match)
+		if matchErr != nil {
+			continue
+		}
+
+		if doesMatch {
+			match = strings.TrimPrefix(match, "/")
+			fmt.Println(match)
+		}
+	}
+
+	return nil
+}
+
 func uploadUserFile(
 	ctx context.Context, conn *sqlConn, reader io.Reader, source, destination string,
 ) error {
@@ -136,9 +263,6 @@ func uploadUserFile(
 	// Currently we hardcode the db.schema prefix, in the future we might allow
 	// users to specify this.
 	userfileURI := constructUserfileDestinationURI(source, destination, connURL.User.Username())
-	if err != nil {
-		return err
-	}
 	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(userfileURI, sql.CrdbInternalName,
 		sql.UserFileUploadTable))
 	if err != nil {
@@ -183,12 +307,13 @@ func uploadUserFile(
 
 var userFileCmds = []*cobra.Command{
 	userFileUploadCmd,
+	userFileListCmd,
 }
 
 var userFileCmd = &cobra.Command{
 	Use:   "userfile [command]",
-	Short: "upload and delete user scoped files",
-	Long:  "Upload and delete files from the user scoped file storage.",
+	Short: "upload, list and delete user scoped files",
+	Long:  "Upload, list and delete files from the user scoped file storage.",
 	RunE:  usageAndErr,
 }
 

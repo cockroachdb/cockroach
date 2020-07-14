@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"os"
@@ -34,20 +35,32 @@ const ChunkDefaultSize = 1024 * 1024 * 4 // 4 Mib
 var fileTableNameSuffix = "_upload_files"
 var payloadTableNameSuffix = "_upload_payload"
 
-// FileToTableSystem can be used to store, retrieve and delete the blobs and
-// metadata of files, from user scoped tables. Access to these tables is
-// restricted to the root/admin user and the user responsible for triggering
+// FileToTableSystem is an interface to interact with the underlying user scoped
+// file storage SQL tables.
+type FileToTableSystem interface {
+	FileSize(ctx context.Context, filename string) (int64, error)
+	ListFiles(ctx context.Context, pattern string) ([]string, error)
+	DeleteFile(ctx context.Context, filename string) error
+	ReadFile(ctx context.Context, filename string) (io.ReadCloser, error)
+	NewFileWriter(ctx context.Context, filename string, chunkSize int) (io.WriteCloser, error)
+}
+
+// InternalConnFileToTableSystem can be used to store, retrieve and delete the
+// blobs and metadata of files, from user scoped tables. Access to these tables
+// is restricted to the root/admin user and the user responsible for triggering
 // table creation in the first place.
 // All methods operate within the scope of the provided database db, as the user
 // with the provided username.
 //
 // Refer to the method headers for more details about the user scoped tables.
-type FileToTableSystem struct {
+type InternalConnFileToTableSystem struct {
 	qualifiedTableName string
 	ie                 *sql.InternalExecutor
 	db                 *kv.DB
 	username           string
 }
+
+var _ FileToTableSystem = &InternalConnFileToTableSystem{}
 
 // FileTable which contains records for every uploaded file.
 const fileTableSchema = `CREATE TABLE %s (filename STRING PRIMARY KEY, 
@@ -65,17 +78,17 @@ PRIMARY KEY(filename, byte_offset))
 INTERLEAVE IN PARENT %s(filename)`
 
 // GetFQFileTableName returns the qualified File table name.
-func (f *FileToTableSystem) GetFQFileTableName() string {
+func (f *InternalConnFileToTableSystem) GetFQFileTableName() string {
 	return f.qualifiedTableName + fileTableNameSuffix
 }
 
 // GetFQPayloadTableName returns the qualified Payload table name.
-func (f *FileToTableSystem) GetFQPayloadTableName() string {
+func (f *InternalConnFileToTableSystem) GetFQPayloadTableName() string {
 	return f.qualifiedTableName + payloadTableNameSuffix
 }
 
 // GetSimpleFileTableName returns the non-qualified File table name.
-func (f *FileToTableSystem) GetSimpleFileTableName() (string, error) {
+func (f *InternalConnFileToTableSystem) GetSimpleFileTableName() (string, error) {
 	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
 	if err != nil {
 		return "", err
@@ -85,7 +98,7 @@ func (f *FileToTableSystem) GetSimpleFileTableName() (string, error) {
 }
 
 // GetSimplePayloadTableName returns the non-qualified Payload table name.
-func (f *FileToTableSystem) GetSimplePayloadTableName() (string, error) {
+func (f *InternalConnFileToTableSystem) GetSimplePayloadTableName() (string, error) {
 	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
 	if err != nil {
 		return "", err
@@ -95,8 +108,8 @@ func (f *FileToTableSystem) GetSimplePayloadTableName() (string, error) {
 }
 
 // GetDatabaseAndSchema returns the database.schema of the current
-// FileToTableSystem.
-func (f *FileToTableSystem) GetDatabaseAndSchema() (string, error) {
+// InternalConnFileToTableSystem.
+func (f *InternalConnFileToTableSystem) GetDatabaseAndSchema() (string, error) {
 	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
 	if err != nil {
 		return "", err
@@ -105,25 +118,25 @@ func (f *FileToTableSystem) GetDatabaseAndSchema() (string, error) {
 	return tableName.ObjectNamePrefix.String(), nil
 }
 
-// NewFileToTableSystem returns a FileToTableSystem object. It creates the File
-// and Payload user tables, grants the current user all read/edit privileges on
-// the tables and revokes access of every other user and role (except
-// root/admin).
+// NewFileToTableSystem returns a InternalConnFileToTableSystem object. It
+// creates the File and Payload user tables, grants the current user all
+// read/edit privileges on the tables and revokes access of every other user and
+// role (except root/admin).
 func NewFileToTableSystem(
 	ctx context.Context,
 	qualifiedTableName string,
 	ie *sql.InternalExecutor,
 	db *kv.DB,
 	username string,
-) (*FileToTableSystem, error) {
-	f := FileToTableSystem{
+) (*InternalConnFileToTableSystem, error) {
+	f := InternalConnFileToTableSystem{
 		qualifiedTableName: qualifiedTableName, ie: ie, db: db, username: username,
 	}
 
 	if err := f.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// TODO(adityamaru): Handle scenario where the user has already created
-		// tables with the same names not via the FileToTableSystem object. Not sure
-		// if we want to error out or work around it.
+		// tables with the same names not via the InternalConnFileToTableSystem
+		// object. Not sure if we want to error out or work around it.
 		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx)
 		if err != nil {
 			return err
@@ -151,7 +164,9 @@ func NewFileToTableSystem(
 }
 
 // FileSize returns the size of the filename blob in bytes.
-func (f *FileToTableSystem) FileSize(ctx context.Context, filename string) (int64, error) {
+func (f *InternalConnFileToTableSystem) FileSize(
+	ctx context.Context, filename string,
+) (int64, error) {
 	getFileSizeQuery := fmt.Sprintf(`SELECT file_size FROM %s WHERE filename='%s'`,
 		f.GetFQFileTableName(), filename)
 	rows, err := f.ie.QueryRowEx(ctx, "payload-table-storage-size", nil,
@@ -166,10 +181,13 @@ func (f *FileToTableSystem) FileSize(ctx context.Context, filename string) (int6
 
 // ListFiles returns a list of all the files which are currently stored in the
 // user scoped tables.
-func (f *FileToTableSystem) ListFiles(ctx context.Context, pattern string) ([]string, error) {
+func (f *InternalConnFileToTableSystem) ListFiles(
+	ctx context.Context, pattern string,
+) ([]string, error) {
 	var files []string
 	listFilesQuery := fmt.Sprintf(`SELECT filename FROM %s WHERE filename LIKE '%s' ORDER BY
 filename`, f.GetFQFileTableName(), pattern+"%")
+
 	rows, err := f.ie.QueryEx(ctx, "file-table-storage-list", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: f.username},
 		listFilesQuery)
@@ -187,8 +205,8 @@ filename`, f.GetFQFileTableName(), pattern+"%")
 
 // DestroyUserFileSystem drops the user scoped tables effectively deleting the
 // blobs and metadata of every file.
-// The FileToTableSystem object is unusable after this method returns.
-func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
+// The InternalConnFileToTableSystem object is unusable after this method returns.
+func DestroyUserFileSystem(ctx context.Context, f *InternalConnFileToTableSystem) error {
 	if err := f.db.Txn(ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
@@ -217,7 +235,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 
 // DeleteFile deletes the blobs and metadata of filename from the user scoped
 // tables.
-func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) error {
+func (f *InternalConnFileToTableSystem) DeleteFile(ctx context.Context, filename string) error {
 	if err := f.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleteFileQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename='%s'`, f.GetFQFileTableName(),
 			filename)
@@ -454,13 +472,17 @@ func newFileTableReader(
 // TODO(adityamaru): Reading currently involves aggregating all chunks of a
 // file from the Payload table. In the future we might want to implement a pull
 // x rows system, or a scan based interface.
-func (f *FileToTableSystem) ReadFile(ctx context.Context, filename string) (io.ReadCloser, error) {
+func (f *InternalConnFileToTableSystem) ReadFile(
+	ctx context.Context, filename string,
+) (io.ReadCloser, error) {
 	var reader, err = newFileReader(ctx, filename, f.username, f.GetFQFileTableName(),
 		f.GetFQPayloadTableName(), f.ie)
 	return reader, err
 }
 
-func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(ctx context.Context) (bool, error) {
+func (f *InternalConnFileToTableSystem) checkIfFileAndPayloadTableExist(
+	ctx context.Context,
+) (bool, error) {
 	fileTableName, err := f.GetSimpleFileTableName()
 	if err != nil {
 		return false, err
@@ -490,7 +512,9 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(ctx context.Context)
 	return len(rows) == 2, nil
 }
 
-func (f *FileToTableSystem) createFileAndPayloadTables(ctx context.Context, txn *kv.Txn) error {
+func (f *InternalConnFileToTableSystem) createFileAndPayloadTables(
+	ctx context.Context, txn *kv.Txn,
+) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
 	_, err := f.ie.QueryEx(ctx, "create-file-table", txn,
@@ -514,7 +538,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(ctx context.Context, txn 
 
 // Grant the current user all read/edit privileges for the file and payload
 // tables.
-func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
+func (f *InternalConnFileToTableSystem) grantCurrentUserTablePrivileges(
 	ctx context.Context, txn *kv.Txn,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
@@ -531,7 +555,9 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 
 // Revoke all privileges from every user and role except root/admin and the
 // current user.
-func (f *FileToTableSystem) revokeOtherUserTablePrivileges(ctx context.Context, txn *kv.Txn) error {
+func (f *InternalConnFileToTableSystem) revokeOtherUserTablePrivileges(
+	ctx context.Context, txn *kv.Txn,
+) error {
 	getUsersQuery := fmt.Sprintf(`SELECT username FROM system.
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = '%s'`,
 		f.username)
@@ -567,10 +593,90 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 // the user File and Payload tables. The io.WriteCloser must be closed to flush
 // the last chunk and commit the txn within which all writes occur.
 // An error at any point of the write aborts the txn.
-func (f *FileToTableSystem) NewFileWriter(
+func (f *InternalConnFileToTableSystem) NewFileWriter(
 	ctx context.Context, filename string, chunkSize int,
 ) (io.WriteCloser, error) {
 	return newChunkWriter(ctx, chunkSize, filename, f.username, f.GetFQFileTableName(),
 		f.GetFQPayloadTableName(), f.ie,
 		f.db.NewTxn(ctx, f.qualifiedTableName)), nil
+}
+
+// NetworkConnFileToTableSystem is used by the CLI client to support certain
+// FileTableReadWriter methods. Unlike the InternalConnFileToTableSystem which
+// uses an internal SQL conn to execute queries, the
+// NetworkConnFileToTableSystem executes queries using a network backed conn
+// setup in the CLI client.
+type NetworkConnFileToTableSystem struct {
+	qualifiedTableName string
+	conn               driver.Queryer
+	username           string
+}
+
+var _ FileToTableSystem = &NetworkConnFileToTableSystem{}
+
+// NewNetworkBackedFileToTableSystem returns a new instance of the
+// NetworkConnFileToTableSystem.
+func NewNetworkBackedFileToTableSystem(
+	ctx context.Context, qualifiedTableName string, conn driver.Queryer, username string,
+) *NetworkConnFileToTableSystem {
+	f := NetworkConnFileToTableSystem{
+		qualifiedTableName: qualifiedTableName, conn: conn, username: username,
+	}
+
+	return &f
+}
+
+// FileSize implements the FileToTableSystem interface.
+func (*NetworkConnFileToTableSystem) FileSize(ctx context.Context, filename string) (int64, error) {
+	return 0, errors.New("FileSize method is unimplemented")
+}
+
+func (f *NetworkConnFileToTableSystem) getFQFileTableName() string {
+	return f.qualifiedTableName + fileTableNameSuffix
+}
+
+// ListFiles implements the FileToTableSystem interface.
+func (f *NetworkConnFileToTableSystem) ListFiles(
+	ctx context.Context, pattern string,
+) ([]string, error) {
+	var files []string
+	listFilesQuery := fmt.Sprintf(`SELECT filename FROM %s WHERE filename LIKE '%s' ORDER BY
+filename`, f.getFQFileTableName(), pattern+"%")
+	rows, err := f.conn.Query(listFilesQuery, nil)
+	if err != nil {
+		return files, errors.Wrap(err, "failed to list files from file table")
+	}
+	defer rows.Close()
+
+	vals := make([]driver.Value, 1)
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return files, errors.Wrap(err, "failed to list files from file table")
+		}
+		filename := vals[0].(string)
+		files = append(files, filename)
+	}
+
+	return files, nil
+}
+
+// DeleteFile implements the FileToTableSystem interface.
+func (*NetworkConnFileToTableSystem) DeleteFile(ctx context.Context, filename string) error {
+	return errors.New("DeleteFile method is unimplemented")
+}
+
+// ReadFile implements the FileToTableSystem interface.
+func (*NetworkConnFileToTableSystem) ReadFile(
+	ctx context.Context, filename string,
+) (io.ReadCloser, error) {
+	return nil, errors.New("ReadFile method is unimplemented")
+}
+
+// NewFileWriter implements the FileToTableSystem interface.
+func (*NetworkConnFileToTableSystem) NewFileWriter(
+	ctx context.Context, filename string, chunkSize int,
+) (io.WriteCloser, error) {
+	return nil, errors.New("NewFileWriter method is unimplemented")
 }

@@ -36,7 +36,10 @@ const qualifiedTableName = database + ".public.file_table_read_writer"
 // uploadFile generates random data and copies it to the FileTableSystem via
 // the FileWriter.
 func uploadFile(
-	ctx context.Context, filename string, fileSize, chunkSize int, ft *filetable.FileToTableSystem,
+	ctx context.Context,
+	filename string,
+	fileSize, chunkSize int,
+	ft *filetable.InternalConnFileToTableSystem,
 ) ([]byte, error) {
 	data := make([]byte, fileSize)
 	randGen, _ := randutil.NewPseudoRand()
@@ -152,7 +155,7 @@ func TestReadWriteFile(t *testing.T) {
 
 	testFileName := "testfile"
 
-	isContentEqual := func(filename string, expected []byte, ft *filetable.FileToTableSystem) bool {
+	isContentEqual := func(filename string, expected []byte, ft *filetable.InternalConnFileToTableSystem) bool {
 		reader, err := fileTableReadWriter.ReadFile(ctx, filename)
 		require.NoError(t, err)
 		got, err := ioutil.ReadAll(reader)
@@ -260,7 +263,7 @@ func TestReadWriteFile(t *testing.T) {
 }
 
 // TestUserGrants tests that a new user with only CREATE privileges can use all
-// the FileToTableSystem methods after creating the FileToTableSystem, which is
+// the InternalConnFileToTableSystem methods after creating the InternalConnFileToTableSystem, which is
 // responsible for granting SELECT, INSERT, DELETE and DROP privileges on the
 // file and payload tables.
 func TestUserGrants(t *testing.T) {
@@ -369,7 +372,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Under normal circumstances Doe should have ALL privileges on the file and
-	// payload tables created by john above. FileToTableSystem should have revoked
+	// payload tables created by john above. InternalConnFileToTableSystem should have revoked
 	// these privileges.
 	//
 	// Only grantees on the table should be admin, root and john (5 privileges).
@@ -424,7 +427,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Under normal circumstances Doe should have ALL privileges on the file and
-	// payload tables created by john above. FileToTableSystem should have
+	// payload tables created by john above. InternalConnFileToTableSystem should have
 	// revoked these privileges.
 	//
 	// Only grantees on the table should be admin, root and john (5 privileges).
@@ -437,7 +440,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
 }
 
-// TestDatabaseScope tests that the FileToTableSystem executes all of its
+// TestDatabaseScope tests that the InternalConnFileToTableSystem executes all of its
 // internal queries wrt the database it is given.
 func TestDatabaseScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()

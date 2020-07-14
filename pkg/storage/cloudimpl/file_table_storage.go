@@ -30,7 +30,7 @@ import (
 const defaultUserfileScheme = "userfile"
 
 type fileTableStorage struct {
-	fs     *filetable.FileToTableSystem
+	fs     *filetable.InternalConnFileToTableSystem
 	cfg    roachpb.ExternalStorage_FileTable
 	prefix string // relative filepath
 }
@@ -100,7 +100,7 @@ func joinFilePathWithoutClean(prefix, basename string) string {
 }
 
 // ReadFile implements the ExternalStorage interface and returns the contents of
-// the file stored in the user scoped FileToTableSystem.
+// the file stored in the user scoped InternalConnFileToTableSystem.
 func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	reader, err := f.fs.ReadFile(ctx, joinFilePathWithoutClean(f.prefix, basename))
 	if os.IsNotExist(err) {
@@ -113,7 +113,7 @@ func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.Re
 }
 
 // WriteFile implements the ExternalStorage interface and writes the file to the
-// user scoped FileToTableSystem.
+// user scoped InternalConnFileToTableSystem.
 func (f *fileTableStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
@@ -135,7 +135,7 @@ func (f *fileTableStorage) WriteFile(
 }
 
 // ListFiles implements the ExternalStorage interface and lists the files stored
-// in the user scoped FileToTableSystem.
+// in the user scoped InternalConnFileToTableSystem.
 func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	matches, err := f.fs.ListFiles(ctx, getPrefixBeforeWildcard(f.prefix))
@@ -175,13 +175,13 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 }
 
 // Delete implements the ExternalStorage interface and deletes the file from the
-// user scoped FileToTableSystem.
+// user scoped InternalConnFileToTableSystem.
 func (f *fileTableStorage) Delete(ctx context.Context, basename string) error {
 	return f.fs.DeleteFile(ctx, joinFilePathWithoutClean(f.prefix, basename))
 }
 
 // Size implements the ExternalStorage interface and returns the size of the
-// file stored in the user scoped FileToTableSystem.
+// file stored in the user scoped InternalConnFileToTableSystem.
 func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, error) {
 	return f.fs.FileSize(ctx, joinFilePathWithoutClean(f.prefix, basename))
 }
