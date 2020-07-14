@@ -565,8 +565,8 @@ func newOptTable(
 	}
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
-	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
-	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.AllColumnCount())
+	for i, n := 0, ot.AllColumnCount(); i < n; i++ {
 		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
 	}
 
@@ -634,15 +634,18 @@ func newOptTable(
 
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []cat.CheckConstraint
-	// TODO (rohany): We don't allow referencing columns in mutations in these
-	//  expressions. However, it seems like we will need to have these checks
-	//  operate on columns in mutations. Consider the following case:
-	//  * a user adds a column with an enum type.
-	//  * the column has a default expression of an enum that is not in the
-	//    writeable state.
-	//  * We will need a check constraint here to ensure that writes to the
-	//    column are not successful, but we wouldn't be able to add that now.
-	for i := 0; i < ot.ColumnCount(); i++ {
+	for i := 0; i < ot.AllColumnCount(); i++ {
+		if cat.IsMutationColumn(ot, i) {
+			// TODO (rohany): We don't allow referencing columns in mutations in these
+			//  expressions. However, it seems like we will need to have these checks
+			//  operate on columns in mutations. Consider the following case:
+			//  * a user adds a column with an enum type.
+			//  * the column has a default expression of an enum that is not in the
+			//    writeable state.
+			//  * We will need a check constraint here to ensure that writes to the
+			//    column are not successful, but we wouldn't be able to add that now.
+			continue
+		}
 		col := ot.Column(i)
 		colType := col.DatumType()
 		if colType.UserDefined() {
@@ -781,24 +784,26 @@ func (ot *optTable) IsVirtualTable() bool {
 	return false
 }
 
-// ColumnCount is part of the cat.Table interface.
-func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.Columns)
-}
-
-// WritableColumnCount is part of the cat.Table interface.
-func (ot *optTable) WritableColumnCount() int {
-	return len(ot.desc.WritableColumns())
-}
-
-// DeletableColumnCount is part of the cat.Table interface.
-func (ot *optTable) DeletableColumnCount() int {
+// AllColumnCount is part of the cat.Table interface.
+func (ot *optTable) AllColumnCount() int {
 	return len(ot.desc.DeletableColumns())
 }
 
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) cat.Column {
 	return &ot.desc.DeletableColumns()[i]
+}
+
+// ColumnKind is part of the cat.Table interface.
+func (ot *optTable) ColumnKind(i int) cat.ColumnKind {
+	switch {
+	case i < len(ot.desc.Columns):
+		return cat.Ordinary
+	case i < len(ot.desc.WritableColumns()):
+		return cat.WriteOnly
+	default:
+		return cat.DeleteOnly
+	}
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -920,18 +925,18 @@ func (oi *optIndex) init(
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
-		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.DeletableColumnCount()-len(desc.ColumnIDs))
+		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.AllColumnCount()-len(desc.ColumnIDs))
 		var pkCols util.FastIntSet
 		for i := range desc.ColumnIDs {
 			pkCols.Add(int(desc.ColumnIDs[i]))
 		}
-		for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
+		for i, n := 0, tab.AllColumnCount(); i < n; i++ {
 			id := tab.Column(i).ColID()
 			if !pkCols.Contains(int(id)) {
 				oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
 			}
 		}
-		oi.numCols = tab.DeletableColumnCount()
+		oi.numCols = tab.AllColumnCount()
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
@@ -1392,8 +1397,8 @@ func newOptVirtualTable(
 	}
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
-	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
-	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.AllColumnCount())
+	for i, n := 0, ot.AllColumnCount(); i < n; i++ {
 		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
 	}
 
@@ -1409,7 +1414,7 @@ func newOptVirtualTable(
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
 		indexOrdinal: 0,
-		numCols:      ot.ColumnCount(),
+		numCols:      ot.AllColumnCount(),
 		isPrimary:    true,
 		desc: &sqlbase.IndexDescriptor{
 			ID:   0,
@@ -1429,7 +1434,7 @@ func newOptVirtualTable(
 			desc:         idxDesc,
 			indexOrdinal: i + 1,
 			// The virtual indexes don't return the bogus PK key?
-			numCols: ot.ColumnCount(),
+			numCols: ot.AllColumnCount(),
 		}
 	}
 
@@ -1473,20 +1478,9 @@ func (ot *optVirtualTable) IsVirtualTable() bool {
 	return true
 }
 
-// ColumnCount is part of the cat.Table interface.
-func (ot *optVirtualTable) ColumnCount() int {
-	// Virtual tables expose an extra (bogus) PK column.
+// AllColumnCount is part of the cat.Table interface.
+func (ot *optVirtualTable) AllColumnCount() int {
 	return len(ot.desc.Columns) + 1
-}
-
-// WritableColumnCount is part of the cat.Table interface.
-func (ot *optVirtualTable) WritableColumnCount() int {
-	return len(ot.desc.WritableColumns()) + 1
-}
-
-// DeletableColumnCount is part of the cat.Table interface.
-func (ot *optVirtualTable) DeletableColumnCount() int {
-	return len(ot.desc.DeletableColumns()) + 1
 }
 
 // Column is part of the cat.Table interface.
@@ -1495,7 +1489,12 @@ func (ot *optVirtualTable) Column(i int) cat.Column {
 		// Column 0 is a dummy PK column.
 		return optDummyVirtualPKColumn{}
 	}
-	return &ot.desc.DeletableColumns()[i-1]
+	return &ot.desc.Columns[i-1]
+}
+
+// ColumnKind is part of the cat.Table interface.
+func (ot *optVirtualTable) ColumnKind(i int) cat.ColumnKind {
+	return cat.Ordinary
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -1803,7 +1802,7 @@ func (oi *optVirtualFamily) Name() tree.Name {
 
 // ColumnCount is part of the cat.Family interface.
 func (oi *optVirtualFamily) ColumnCount() int {
-	return oi.tab.ColumnCount()
+	return oi.tab.AllColumnCount()
 }
 
 // Column is part of the cat.Family interface.

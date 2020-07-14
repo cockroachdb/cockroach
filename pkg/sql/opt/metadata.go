@@ -336,7 +336,7 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	}
 	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias})
 
-	colCount := tab.DeletableColumnCount()
+	colCount := tab.AllColumnCount()
 	if md.cols == nil {
 		md.cols = make([]ColumnMeta, 0, colCount)
 	}

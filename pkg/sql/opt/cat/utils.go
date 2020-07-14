@@ -122,15 +122,15 @@ func ResolveTableIndex(
 }
 
 // ConvertColumnIDsToOrdinals converts a list of ColumnIDs (such as from a
-// tree.TableRef), to a list of ordinal positions of columns within the given
-// table. See tree.Table for more information on column ordinals.
+// tree.TableRef), to a list of ordinal positions of non-mutation columns within
+// the given table. See tree.Table for more information on column ordinals.
 func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []int) {
 	ordinals = make([]int, len(columns))
 	for i, c := range columns {
 		ord := 0
-		cnt := tab.ColumnCount()
+		cnt := tab.AllColumnCount()
 		for ord < cnt {
-			if tab.Column(ord).ColID() == StableID(c) {
+			if !IsMutationColumn(tab, ord) && tab.Column(ord).ColID() == StableID(c) {
 				break
 			}
 			ord++
@@ -147,8 +147,8 @@ func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []
 // FindTableColumnByName returns the ordinal of the non-mutation column having
 // the given name, if one exists in the given table. Otherwise, it returns -1.
 func FindTableColumnByName(tab Table, name tree.Name) int {
-	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
-		if tab.Column(ord).ColName() == name {
+	for ord, n := 0, tab.AllColumnCount(); ord < n; ord++ {
+		if !IsMutationColumn(tab, ord) && tab.Column(ord).ColName() == name {
 			return ord
 		}
 	}
@@ -164,7 +164,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	var buf bytes.Buffer
-	for i := 0; i < tab.DeletableColumnCount(); i++ {
+	for i := 0; i < tab.AllColumnCount(); i++ {
 		buf.Reset()
 		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
 		child.Child(buf.String())
