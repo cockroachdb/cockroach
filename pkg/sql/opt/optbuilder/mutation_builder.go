@@ -169,10 +169,11 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.opName = opName
 	mb.tab = tab
 	mb.alias = alias
-	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
+
+	n := tab.AllColumnCount()
+	mb.targetColList = make(opt.ColList, 0, n)
 
 	// Allocate segmented array of scope column ordinals.
-	n := tab.DeletableColumnCount()
 	numPartialIndexes := partialIndexCount(tab)
 	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount()+2*numPartialIndexes)
 	for i := range scopeOrds {
@@ -545,9 +546,12 @@ func (mb *mutationBuilder) addSynthesizedCols(
 ) {
 	var projectionsScope *scope
 
-	// Skip delete-only mutation columns, since they are ignored by all mutation
-	// operators that synthesize columns.
-	for i, n := 0, mb.tab.WritableColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+		if mb.tab.ColumnKind(i) == cat.DeleteOnly {
+			// Skip delete-only mutation columns, since they are ignored by all
+			// mutation operators that synthesize columns.
+			continue
+		}
 		// Skip columns that are already specified.
 		if scopeOrds[i] != -1 {
 			continue
@@ -775,7 +779,7 @@ func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, ords []scopeO
 func (mb *mutationBuilder) disambiguateColumns() {
 	// Determine the set of scope columns that will have their names preserved.
 	var preserve util.FastIntSet
-	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
 		scopeOrd := mb.mapToReturnScopeOrd(i)
 		if scopeOrd != -1 {
 			preserve.Add(int(scopeOrd))
@@ -825,11 +829,12 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	if needResults {
-		// Only non-mutation columns are output columns. ReturnCols needs to have
-		// DeletableColumnCount entries, but only the first ColumnCount entries
-		// can be defined (i.e. >= 0).
-		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
-		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		private.ReturnCols = make(opt.ColList, mb.tab.AllColumnCount())
+		for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+			if cat.IsMutationColumn(mb.tab, i) {
+				// Only non-mutation columns are output columns.
+				continue
+			}
 			scopeOrd := mb.mapToReturnScopeOrd(i)
 			if scopeOrd == -1 {
 				panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
@@ -936,7 +941,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 // reuse.
 func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
 	if mb.parsedExprs == nil {
-		mb.parsedExprs = make([]tree.Expr, mb.tab.DeletableColumnCount())
+		mb.parsedExprs = make([]tree.Expr, mb.tab.AllColumnCount())
 	}
 
 	// Return expression from cache, if it was already parsed previously.

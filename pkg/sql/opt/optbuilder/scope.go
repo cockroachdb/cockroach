@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -221,14 +222,17 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 }
 
-// appendColumnsFromTable adds all columns from the given table metadata to this
-// scope.
+// appendColumnsFromTable adds all non-mutation columns from the given table
+// metadata to this scope.
 func (s *scope) appendColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
 	tab := tabMeta.Table
 	if s.cols == nil {
-		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
+		s.cols = make([]scopeColumn, 0, tab.AllColumnCount())
 	}
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+		if cat.IsMutationColumn(tab, i) {
+			continue
+		}
 		tabCol := tab.Column(i)
 		s.cols = append(s.cols, scopeColumn{
 			name:   tabCol.ColName(),
