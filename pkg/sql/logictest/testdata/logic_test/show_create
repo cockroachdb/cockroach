@@ -19,7 +19,7 @@ COMMENT ON INDEX c_a_b_idx IS 'index'
 query TT colnames
 SHOW CREATE c
 ----
-table_name create_statement
+table_name  create_statement
 c           CREATE TABLE c (
             a INT8 NOT NULL,
             b INT8 NULL,
@@ -29,4 +29,4 @@ c           CREATE TABLE c (
 );
 COMMENT ON TABLE c IS 'table';
 COMMENT ON COLUMN c.a IS 'column';
-COMMENT ON INDEX c_a_b_idx IS 'index'
+COMMENT ON INDEX c@c_a_b_idx IS 'index'
