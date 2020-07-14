@@ -1624,6 +1624,10 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGCAssert", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		var buf strings.Builder
 		if err := gcassert.GCAssert(&buf, "../../col/coldata", "../../sql/colexec"); err != nil {
