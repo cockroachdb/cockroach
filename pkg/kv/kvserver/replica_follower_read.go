@@ -38,7 +38,7 @@ var FollowerReadsEnabled = settings.RegisterPublicBoolSetting(
 // follower read.
 func (r *Replica) canServeFollowerRead(
 	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
-) *roachpb.Error {
+) (_pErr *roachpb.Error) {
 	canServeFollowerRead := false
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
@@ -93,7 +93,7 @@ func (r *Replica) canServeFollowerRead(
 	//
 	// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
 	// serve reads for that and smaller timestamps forever.
-	log.Event(ctx, "serving via follower read")
+	log.Event(ctx, "serving via follower read") // This message is tested for.
 	r.store.metrics.FollowerReadsCount.Inc(1)
 	return nil
 }

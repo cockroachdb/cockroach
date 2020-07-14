@@ -56,3 +56,25 @@ func (b *AtomicBool) Swap(v bool) bool {
 	}
 	return atomic.SwapUint32((*uint32)(b), wanted) != 0
 }
+
+// AtomicString gives you atomic-style APIs for string.
+type AtomicString struct {
+	mu struct {
+		Mutex
+		s string
+	}
+}
+
+// Set atomically sets str as new value.
+func (s *AtomicString) Set(val string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.s = val
+}
+
+// Get atomically returns the current value.
+func (s *AtomicString) Get() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.s
+}
