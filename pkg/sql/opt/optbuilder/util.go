@@ -658,3 +658,15 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 	}
 	return ordinals
 }
+
+// findPublicTableColumnByName returns the ordinal of the non-mutation column
+// having the given name, if one exists in the given table. Otherwise, it
+// returns -1.
+func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
+	for ord, n := 0, tab.AllColumnCount(); ord < n; ord++ {
+		if tab.Column(ord).ColName() == name && !cat.IsMutationColumn(tab, ord) {
+			return ord
+		}
+	}
+	return -1
+}

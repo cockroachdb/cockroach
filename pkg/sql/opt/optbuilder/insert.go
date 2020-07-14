@@ -904,7 +904,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		for _, name := range insertCols {
 			// Table column must exist, since existence of insertCols has already
 			// been checked previously.
-			ord := cat.FindTableColumnByName(mb.tab, name)
+			ord := findPublicTableColumnByName(mb.tab, name)
 			mb.updateOrds[ord] = mb.insertOrds[ord]
 		}
 	} else {
