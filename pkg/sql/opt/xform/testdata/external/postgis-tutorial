@@ -6299,26 +6299,26 @@ memo (optimized, ~32KB, required=[presentation: route:27,white_pct:32,black_pct:
  ├── G1: (project G2 G3 route sum)
  │    ├── [presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 5944868.19
+ │    │    └── cost: 23087936.79
  │    └── []
  │         ├── best: (project G2 G3 route sum)
- │         └── cost: 5944865.78
+ │         └── cost: 23087934.38
  ├── G2: (group-by G4 G5 cols=(27))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(27))
- │         └── cost: 5944865.11
+ │         └── cost: 23087933.71
  ├── G3: (projections G6 G7)
  ├── G4: (inner-join G8 G9 G10) (inner-join G9 G8 G10) (inner-join G11 G12 G13) (inner-join G14 G15 G16) (inner-join G12 G11 G13) (inner-join G15 G14 G16)
  │    └── []
  │         ├── best: (inner-join G8 G9 G10)
- │         └── cost: 3616793.83
+ │         └── cost: 20759862.43
  ├── G5: (aggregations G17 G18 G19)
  ├── G6: (div G20 G21)
  ├── G7: (div G22 G21)
  ├── G8: (inner-join G11 G14 G13) (inner-join G14 G11 G13)
  │    └── []
  │         ├── best: (inner-join G11 G14 G13)
- │         └── cost: 2140562.06
+ │         └── cost: 19283630.66
  ├── G9: (scan lines,cols=(27))
  │    └── []
  │         ├── best: (scan lines,cols=(27))
