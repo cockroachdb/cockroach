@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -374,8 +373,8 @@ func insertStmtToKVs(
 		}
 		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
 		// not add entries to.
-		var ignoreIndexes util.FastIntSet
-		if err := ri.InsertRow(ctx, b, insertRow, ignoreIndexes, true, false /* traceKV */); err != nil {
+		var pm row.PartialIndexUpdateHelper
+		if err := ri.InsertRow(ctx, b, insertRow, pm, true, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}

@@ -1946,12 +1946,12 @@ update partial_indexes
  ├── fetch columns: a:5 b:6 c:7
  ├── update-mapping:
  │    └── c_new:11 => c:3
- ├── partial index put columns: partial_index_put1:12 partial_index_put2:13
- ├── partial index del columns: partial_index_del1:9 partial_index_del2:10
+ ├── partial index put columns: column12:12 column13:13
+ ├── partial index del columns: column9:9 column10:10
  ├── volatile, mutations
  ├── key: (1)
  └── project
-      ├── columns: partial_index_put1:12!null partial_index_put2:13 c_new:11!null partial_index_del1:9 partial_index_del2:10 a:5!null b:6 c:7
+      ├── columns: column12:12!null column13:13 c_new:11!null column9:9 column10:10 a:5!null b:6 c:7
       ├── key: (5)
       ├── fd: ()-->(11,12), (5)-->(6,7,10,13), (7)-->(9)
       ├── scan partial_indexes
@@ -1965,11 +1965,11 @@ update partial_indexes
       │    ├── key: (5)
       │    └── fd: (5)-->(6,7)
       └── projections
-           ├── false [as=partial_index_put1:12]
-           ├── a:5 > b:6 [as=partial_index_put2:13, outer=(5,6)]
+           ├── false [as=column12:12]
+           ├── a:5 > b:6 [as=column13:13, outer=(5,6)]
            ├── 'bar' [as=c_new:11]
-           ├── c:7 = 'foo' [as=partial_index_del1:9, outer=(7)]
-           └── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10, outer=(5-7)]
+           ├── c:7 = 'foo' [as=column9:9, outer=(7)]
+           └── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10, outer=(5-7)]
 
 # Prune secondary family column not needed for the update.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)

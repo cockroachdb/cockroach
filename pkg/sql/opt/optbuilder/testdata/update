@@ -1686,14 +1686,14 @@ update partial_indexes
  ├── fetch columns: a:5 b:6 c:7
  ├── update-mapping:
  │    └── a_new:13 => a:1
- ├── partial index put columns: partial_index_del1:9 partial_index_put2:14 partial_index_del3:11 partial_index_del4:12
- ├── partial index del columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+ ├── partial index put columns: column9:9 column14:14 column11:11 column12:12
+ ├── partial index del columns: column9:9 column10:10 column11:11 column12:12
  └── project
-      ├── columns: partial_index_put2:14 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a_new:13!null
+      ├── columns: column14:14 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 column9:9 column10:10 column11:11 column12:12 a_new:13!null
       ├── project
-      │    ├── columns: a_new:13!null a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
+      │    ├── columns: a_new:13!null a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 column9:9 column10:10 column11:11 column12:12
       │    ├── project
-      │    │    ├── columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: column9:9 column10:10 column11:11 column12:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       │    │    │    └── partial index predicates
@@ -1703,11 +1703,45 @@ update partial_indexes
       │    │    │              ├── a:5 > b:6
       │    │    │              └── c:7 = 'bar'
       │    │    └── projections
-      │    │         ├── c:7 = 'foo' [as=partial_index_del1:9]
-      │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
-      │    │         ├── c:7 = 'delete-only' [as=partial_index_del3:11]
-      │    │         └── c:7 = 'write-only' [as=partial_index_del4:12]
+      │    │         ├── c:7 = 'foo' [as=column9:9]
+      │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
+      │    │         ├── c:7 = 'delete-only' [as=column11:11]
+      │    │         └── c:7 = 'write-only' [as=column12:12]
       │    └── projections
       │         └── 1 [as=a_new:13]
       └── projections
-           └── (a_new:13 > b:6) AND (c:7 = 'bar') [as=partial_index_put2:14]
+           └── (a_new:13 > b:6) AND (c:7 = 'bar') [as=column14:14]
+
+build
+UPDATE partial_indexes SET a = a + 5 RETURNING *
+----
+update partial_indexes
+ ├── columns: a:1!null b:2 c:3
+ ├── fetch columns: a:5 b:6 c:7
+ ├── update-mapping:
+ │    └── a_new:13 => a:1
+ ├── partial index put columns: column9:9 column14:14 column11:11 column12:12
+ ├── partial index del columns: column9:9 column10:10 column11:11 column12:12
+ └── project
+      ├── columns: column14:14 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 column9:9 column10:10 column11:11 column12:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 column9:9 column10:10 column11:11 column12:12
+      │    ├── project
+      │    │    ├── columns: column9:9 column10:10 column11:11 column12:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── scan partial_indexes
+      │    │    │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    └── partial index predicates
+      │    │    │         ├── secondary: filters
+      │    │    │         │    └── c:7 = 'foo'
+      │    │    │         └── secondary: filters
+      │    │    │              ├── a:5 > b:6
+      │    │    │              └── c:7 = 'bar'
+      │    │    └── projections
+      │    │         ├── c:7 = 'foo' [as=column9:9]
+      │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
+      │    │         ├── c:7 = 'delete-only' [as=column11:11]
+      │    │         └── c:7 = 'write-only' [as=column12:12]
+      │    └── projections
+      │         └── a:5 + 5 [as=a_new:13]
+      └── projections
+           └── (a_new:13 > b:6) AND (c:7 = 'bar') [as=column14:14]
