@@ -57,7 +57,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeAddValue:
 		err = unimplemented.NewWithIssue(48670, "ALTER TYPE ADD VALUE unsupported")
 	case *tree.AlterTypeRenameValue:
-		err = unimplemented.NewWithIssue(48697, "ALTER TYPE RENAME VALUE unsupported")
+		err = params.p.renameTypeValue(params, n, t.OldVal, t.NewVal)
 	case *tree.AlterTypeRename:
 		err = params.p.renameType(params, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
@@ -155,6 +155,44 @@ func (p *planner) performRenameTypeDesc(
 	).Key(p.ExecCfg().Codec)
 	b.CPut(key, desc.ID, nil /* expected */)
 	return p.txn.Run(ctx, b)
+}
+
+func (p *planner) renameTypeValue(
+	params runParams, n *alterTypeNode, oldVal string, newVal string,
+) error {
+	newNameFound := false
+
+	enumMemberIndex := -1
+
+	// Do one pass to verify that the oldVal exists and there isn't already
+	// a member that is named newVal.
+	for i := range n.desc.EnumMembers {
+		member := n.desc.EnumMembers[i]
+		if member.LogicalRepresentation == oldVal {
+			enumMemberIndex = i
+		} else if member.LogicalRepresentation == newVal {
+			newNameFound = true
+		}
+	}
+
+	// An enum member with the name oldVal was not found.
+	if enumMemberIndex == -1 {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"%s is not an existing enum label", oldVal)
+	}
+
+	if newNameFound {
+		return pgerror.Newf(pgcode.DuplicateObject,
+			"enum label %s already exists", newVal)
+	}
+
+	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
+
+	return p.writeTypeChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	)
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }

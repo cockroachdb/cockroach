@@ -80,3 +80,52 @@ query T
 SELECT ARRAY['hi']::___why
 ----
 {hi}
+
+statement ok
+CREATE TYPE names AS ENUM ('james', 'johnny')
+
+# Cannot rename a value to a value that already a member of the type.
+statement error enum label johnny already exists
+ALTER TYPE names RENAME VALUE 'james' TO 'johnny'
+
+# Cannot rename a value that is not a member of the type.
+statement error jim is not an existing enum label
+ALTER TYPE names RENAME VALUE 'jim' TO 'jimmy'
+
+statement ok
+ALTER TYPE names RENAME VALUE 'james' to 'jimmy'
+
+# Make sure james is renamed to jimmy.
+query T
+SELECT enum_range('jimmy'::names);
+----
+{jimmy,johnny}
+
+# James should not be a member of names.
+statement error invalid input value for enum names: "james"
+SELECT 'james'::names
+
+# Try multiply renames in a single transaction.
+statement ok
+BEGIN
+
+statement ok
+ALTER TYPE names RENAME VALUE 'jimmy' TO 'jim'
+
+statement ok
+ALTER TYPE names RENAME VALUE 'johnny' TO 'john'
+
+statement ok
+COMMIT
+
+# Make sure both names were renamed and the old names are not members of names.
+query T
+SELECT enum_range('jim'::names);
+----
+{jim,john}
+
+statement error invalid input value for enum names: "jimmy"
+SELECT 'jimmy'::names
+
+statement error invalid input value for enum names: "johnny"
+SELECT 'johnny'::names
