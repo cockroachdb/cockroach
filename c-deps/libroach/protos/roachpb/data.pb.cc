@@ -3523,8 +3523,6 @@ void Transaction::InitAsDefaultInstance() {
       ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->last_heartbeat_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->deprecated_orig_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->read_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
@@ -3541,12 +3539,6 @@ void Transaction::clear_last_heartbeat() {
     delete last_heartbeat_;
   }
   last_heartbeat_ = NULL;
-}
-void Transaction::clear_deprecated_orig_timestamp() {
-  if (GetArenaNoVirtual() == NULL && deprecated_orig_timestamp_ != NULL) {
-    delete deprecated_orig_timestamp_;
-  }
-  deprecated_orig_timestamp_ = NULL;
 }
 void Transaction::clear_read_timestamp() {
   if (GetArenaNoVirtual() == NULL && read_timestamp_ != NULL) {
@@ -3568,7 +3560,6 @@ const int Transaction::kMetaFieldNumber;
 const int Transaction::kNameFieldNumber;
 const int Transaction::kStatusFieldNumber;
 const int Transaction::kLastHeartbeatFieldNumber;
-const int Transaction::kDeprecatedOrigTimestampFieldNumber;
 const int Transaction::kCommitTimestampFixedFieldNumber;
 const int Transaction::kReadTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
@@ -3608,11 +3599,6 @@ Transaction::Transaction(const Transaction& from)
   } else {
     last_heartbeat_ = NULL;
   }
-  if (from.has_deprecated_orig_timestamp()) {
-    deprecated_orig_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.deprecated_orig_timestamp_);
-  } else {
-    deprecated_orig_timestamp_ = NULL;
-  }
   if (from.has_max_timestamp()) {
     max_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.max_timestamp_);
   } else {
@@ -3645,7 +3631,6 @@ void Transaction::SharedDtor() {
   name_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete meta_;
   if (this != internal_default_instance()) delete last_heartbeat_;
-  if (this != internal_default_instance()) delete deprecated_orig_timestamp_;
   if (this != internal_default_instance()) delete max_timestamp_;
   if (this != internal_default_instance()) delete read_timestamp_;
 }
@@ -3678,10 +3663,6 @@ void Transaction::Clear() {
     delete last_heartbeat_;
   }
   last_heartbeat_ = NULL;
-  if (GetArenaNoVirtual() == NULL && deprecated_orig_timestamp_ != NULL) {
-    delete deprecated_orig_timestamp_;
-  }
-  deprecated_orig_timestamp_ = NULL;
   if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) {
     delete max_timestamp_;
   }
@@ -3759,17 +3740,6 @@ bool Transaction::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_last_heartbeat()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 6: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_deprecated_orig_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -3922,11 +3892,6 @@ void Transaction::SerializeWithCachedSizes(
       5, this->_internal_last_heartbeat(), output);
   }
 
-  if (this->has_deprecated_orig_timestamp()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      6, this->_internal_deprecated_orig_timestamp(), output);
-  }
-
   if (this->has_max_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       7, this->_internal_max_timestamp(), output);
@@ -4049,12 +4014,6 @@ size_t Transaction::ByteSizeLong() const {
         *last_heartbeat_);
   }
 
-  if (this->has_deprecated_orig_timestamp()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *deprecated_orig_timestamp_);
-  }
-
   if (this->has_max_timestamp()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -4114,9 +4073,6 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.has_last_heartbeat()) {
     mutable_last_heartbeat()->::cockroach::util::hlc::Timestamp::MergeFrom(from.last_heartbeat());
   }
-  if (from.has_deprecated_orig_timestamp()) {
-    mutable_deprecated_orig_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.deprecated_orig_timestamp());
-  }
   if (from.has_max_timestamp()) {
     mutable_max_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_timestamp());
   }
@@ -4159,7 +4115,6 @@ void Transaction::InternalSwap(Transaction* other) {
     GetArenaNoVirtual());
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);
-  swap(deprecated_orig_timestamp_, other->deprecated_orig_timestamp_);
   swap(max_timestamp_, other->max_timestamp_);
   swap(read_timestamp_, other->read_timestamp_);
   swap(status_, other->status_);

@@ -102,7 +102,6 @@ var mvccEngineImpls = []struct {
 func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction {
 	txn := baseTxn.Clone()
 	txn.ReadTimestamp = ts
-	txn.DeprecatedOrigTimestamp = ts
 	txn.WriteTimestamp = ts
 	return txn
 }
@@ -1395,11 +1394,10 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				TxnMeta: enginepb.TxnMeta{
 					WriteTimestamp: hlc.Timestamp{WallTime: 10},
 				},
-				Name:                    "test",
-				Status:                  roachpb.PENDING,
-				DeprecatedOrigTimestamp: hlc.Timestamp{WallTime: 10},
-				ReadTimestamp:           hlc.Timestamp{WallTime: 10},
-				MaxTimestamp:            hlc.Timestamp{WallTime: 10},
+				Name:          "test",
+				Status:        roachpb.PENDING,
+				ReadTimestamp: hlc.Timestamp{WallTime: 10},
+				MaxTimestamp:  hlc.Timestamp{WallTime: 10},
 			}
 			iter := batch.NewIterator(IterOptions{
 				LowerBound: testKey1,
