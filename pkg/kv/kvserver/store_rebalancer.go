@@ -622,7 +622,7 @@ func shouldNotMoveAway(
 	now hlc.Timestamp,
 	minQPS float64,
 ) bool {
-	if !replWithStats.repl.OwnsValidLease(now) {
+	if !replWithStats.repl.OwnsValidLease(ctx, now) {
 		log.VEventf(ctx, 3, "store doesn't own the lease for r%d", replWithStats.repl.RangeID)
 		return true
 	}

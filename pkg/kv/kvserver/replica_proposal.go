@@ -403,14 +403,14 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
 		r.gossipFirstRange(ctx)
 	}
 
 	// Whenever we first acquire an expiration-based lease, notify the lease
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:

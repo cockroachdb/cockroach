@@ -79,7 +79,7 @@ var recordHistogramQuantiles = []quantile{
 // directly in order to simplify testing.
 type storeMetrics interface {
 	StoreID() roachpb.StoreID
-	Descriptor(bool) (*roachpb.StoreDescriptor, error)
+	Descriptor(context.Context, bool) (*roachpb.StoreDescriptor, error)
 	Registry() *metric.Registry
 }
 
@@ -457,7 +457,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		})
 
 		// Gather descriptor from store.
-		descriptor, err := mr.mu.stores[storeID].Descriptor(false /* useCached */)
+		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
 		if err != nil {
 			log.Errorf(ctx, "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue

@@ -368,7 +368,7 @@ func (s *statusServer) Allocator(
 						}
 						return true, err
 					}
-					if !rep.OwnsValidLease(store.Clock().Now()) {
+					if !rep.OwnsValidLease(ctx, store.Clock().Now()) {
 						return false, nil
 					}
 					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
@@ -391,7 +391,7 @@ func (s *statusServer) Allocator(
 				// Not found: continue.
 				continue
 			}
-			if !rep.OwnsValidLease(store.Clock().Now()) {
+			if !rep.OwnsValidLease(ctx, store.Clock().Now()) {
 				continue
 			}
 			allocatorSpans, err := store.AllocatorDryRun(ctx, rep)

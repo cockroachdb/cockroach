@@ -1469,7 +1469,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		return
 	}
 
-	leaseStatus := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
 	raftStatus := r.mu.internalRaftGroup.Status()
 	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")

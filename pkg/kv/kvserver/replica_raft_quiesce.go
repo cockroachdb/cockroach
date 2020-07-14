@@ -167,7 +167,7 @@ type quiescer interface {
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
-	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
+	ownsValidLeaseRLocked(ctx context.Context, ts hlc.Timestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -254,7 +254,7 @@ func shouldReplicaQuiesce(
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if !q.ownsValidLeaseRLocked(now) {
+	if !q.ownsValidLeaseRLocked(ctx, now) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
