@@ -55,6 +55,11 @@ type ScheduledJob struct {
 	// directly (except in tests); Use Get/Set methods on ScheduledJob instead.
 	rec scheduledJobRecord
 
+	// The time this scheduled job was supposed to run.
+	// This field is initialized to rec.NextRun when the scheduled job record
+	// is loaded from the table.
+	scheduledTime time.Time
+
 	// Set of changes to this job that need to be persisted.
 	dirty map[string]struct{}
 }
@@ -82,6 +87,13 @@ func (j *ScheduledJob) SetScheduleName(name string) {
 // A sentinel value of time.Time{} indicates this schedule is paused.
 func (j *ScheduledJob) NextRun() time.Time {
 	return j.rec.NextRun
+}
+
+// ScheduledRunTime returns the time this schedule was supposed to execute.
+// This value reflects the 'next_run' value loaded from the system.scheduled_jobs table,
+// prior to any mutations to the 'next_run' value.
+func (j *ScheduledJob) ScheduledRunTime() time.Time {
+	return j.scheduledTime
 }
 
 // IsPaused returns true if this schedule is paused.
@@ -229,6 +241,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []sqlbase.Result
 		}
 	}
 
+	j.scheduledTime = j.rec.NextRun
 	return nil
 }
 

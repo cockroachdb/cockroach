@@ -227,6 +227,9 @@ type TestingKnobs struct {
 
 	// Forces bulk adder flush every time a KV batch is processed.
 	BulkAdderFlushesEveryBatch bool
+
+	// JobsTestingKnobs is jobs infra specific testing knobs
+	JobsTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

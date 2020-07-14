@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -23,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
-const createdByName = "crdb_schedule"
+// CreatedByScheduledJobs identifies the job that was created
+// by scheduled jobs system.
+const CreatedByScheduledJobs = "crdb_schedule"
 
 // jobScheduler is responsible for finding and starting scheduled
 // jobs that need to be executed.
@@ -71,7 +75,7 @@ SELECT
 FROM %s S
 WHERE next_run < %s
 ORDER BY next_run
-%s`, env.SystemJobsTableName(), createdByName,
+%s`, env.SystemJobsTableName(), CreatedByScheduledJobs,
 		StatusSucceeded, StatusCanceled, StatusFailed,
 		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
 }
@@ -174,6 +178,33 @@ func (s *jobScheduler) executeSchedules(
 	return nil
 }
 
+func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		for waitPeriod :=
+			getInitialScanDelay(s.TestingKnobs); ; waitPeriod =
+			getWaitPeriod(&s.Settings.SV, s.TestingKnobs) {
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-time.After(waitPeriod):
+				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
+					continue
+				}
+
+				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&s.Settings.SV)
+				err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return s.executeSchedules(ctx, maxSchedules, txn)
+				})
+				if err != nil {
+					// TODO(yevgeniy): Add more visibility into failed daemon runs.
+					log.Errorf(ctx, "error executing schedules: %+v", err)
+				}
+
+			}
+		}
+	})
+}
+
 var schedulerEnabledSetting = settings.RegisterBoolSetting(
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
@@ -193,8 +224,11 @@ var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
 )
 
 // Returns the amount of time to wait before starting initial scan.
-// Package visible for testing.
-var getInitialScanDelay = func() time.Duration {
+func getInitialScanDelay(knobs base.ModuleTestingKnobs) time.Duration {
+	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonInitialScanDelay != nil {
+		return k.SchedulerDaemonInitialScanDelay()
+	}
+
 	// By default, we'll wait between 2 and 5 minutes before performing initial scan.
 	return time.Minute * time.Duration(2+rand.Intn(3))
 }
@@ -205,10 +239,14 @@ const minPacePeriod = 10 * time.Second
 // Frequency to recheck if the daemon is enabled.
 const recheckEnabledAfterPeriod = 5 * time.Minute
 
-// Returns duration to wait before scanning system.scheduled_jobs.
-// Package visible for testing.
 var warnIfPaceTooLow = log.Every(time.Minute)
-var getWaitPeriod = func(sv *settings.Values) time.Duration {
+
+// Returns duration to wait before scanning system.scheduled_jobs.
+func getWaitPeriod(sv *settings.Values, knobs base.ModuleTestingKnobs) time.Duration {
+	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
+		return k.SchedulerDaemonScanDelay()
+	}
+
 	if !schedulerEnabledSetting.Get(sv) {
 		return recheckEnabledAfterPeriod
 	}
@@ -233,27 +271,56 @@ func StartJobSchedulerDaemon(
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 ) {
-	scheduler := newJobScheduler(cfg, env)
+	schedulerEnv := env
+	var daemonKnobs *TestingKnobs
+	if jobsKnobs, ok := cfg.TestingKnobs.(*TestingKnobs); ok {
+		daemonKnobs = jobsKnobs
+	}
 
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		for waitPeriod := getInitialScanDelay(); ; waitPeriod = getWaitPeriod(&cfg.Settings.SV) {
-			select {
-			case <-stopper.ShouldQuiesce():
-				return
-			case <-time.After(waitPeriod):
-				if !schedulerEnabledSetting.Get(&cfg.Settings.SV) {
-					continue
-				}
+	if daemonKnobs != nil && daemonKnobs.CaptureJobExecutionConfig != nil {
+		daemonKnobs.CaptureJobExecutionConfig(cfg)
+	}
+	if daemonKnobs != nil && daemonKnobs.JobSchedulerEnv != nil {
+		schedulerEnv = daemonKnobs.JobSchedulerEnv
+	}
 
-				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&cfg.Settings.SV)
-				err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					return scheduler.executeSchedules(ctx, maxSchedules, txn)
-				})
-				if err != nil {
-					// TODO(yevgeniy): Add more visibility into failed daemon runs.
-					log.Errorf(ctx, "error executing schedules: %+v", err)
-				}
-			}
-		}
-	})
+	scheduler := newJobScheduler(cfg, schedulerEnv)
+
+	if daemonKnobs != nil && daemonKnobs.TakeOverJobsScheduling != nil {
+		daemonKnobs.TakeOverJobsScheduling(
+			func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error {
+				return scheduler.executeSchedules(ctx, maxSchedules, txn)
+			})
+		return
+	}
+
+	scheduler.runDaemon(ctx, stopper)
+}
+
+// MarkJobCreatedBy updates record for system job with jobID id, and sets
+// jobs created_by_type and created_by_id to the specified values.
+// The update is performed using specified executor and transaction.
+// TODO(yevgeniy): Remove this method.  We should be able to mark
+//    created by columns when we create job records.
+func MarkJobCreatedBy(
+	ctx context.Context,
+	jobID int64,
+	createdByName string,
+	createdByID int64,
+	env scheduledjobs.JobSchedulerEnv,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	updateQuery := fmt.Sprintf(
+		"UPDATE %s SET created_by_type=$1, created_by_id=$2 WHERE id=$3",
+		env.SystemJobsTableName())
+	n, err := ex.Exec(ctx, "mark-job-created-by", txn,
+		updateQuery, createdByName, createdByID, jobID)
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return errors.Newf("expected to update 1 row, updated %d for job %d", n, jobID)
+	}
+	return nil
 }
