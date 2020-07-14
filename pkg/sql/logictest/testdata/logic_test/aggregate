@@ -10,10 +10,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRRRBBTII
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), var_samp(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
+query IIIIRRRRRRRRBBTII
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -42,10 +42,10 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 ----
 NULL NULL NULL NULL
 
-query IIIIRRRRBBT
-SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
+query IIIIRRRRRRBBT
+SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), stddev_pop(v), variance(v), var_pop(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT array_agg(v) FROM kv
@@ -63,10 +63,10 @@ SELECT jsonb_agg(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+query IIIIRRRRRRBBT
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), stddev_pop(1), variance(1), var_pop(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
-1 1 1 1 1 1 NULL NULL true true 01
+1  1  1  1  1  1  NULL  NULL  NULL  NULL  true  true  01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -162,10 +162,10 @@ INSERT INTO kv VALUES
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-query IIIIRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
+query IIIIRRRRRRBBT
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), stddev_pop(1), variance(1)::float, var_pop(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')) FROM kv
 ----
-1 6 1 6 1 6 0 0 true true 00
+1 6 1 6 1 6 0 0 0 0 true true 00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -789,12 +789,37 @@ SELECT variance(x) FROM xyz WHERE x = 1
 NULL
 
 query RRR
+SELECT var_pop(x), var_pop(y::decimal), round(var_pop(z), 14) FROM xyz
+----
+6 2.25 4.22222222222222
+
+query R
+SELECT var_pop(x) FROM xyz WHERE x = 10
+----
+NULL
+
+query R
+SELECT var_pop(x) FROM xyz WHERE x = 1
+----
+NULL
+
+query RRR
 SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
 3  2.1213203435596425732  2.51661147842358
 
 query R
 SELECT stddev(x) FROM xyz WHERE x = 1
+----
+NULL
+
+query RRR
+SELECT stddev_pop(x), stddev_pop(y::decimal), round(stddev_pop(z), 14) FROM xyz
+----
+2.4494897427831780982  1.5  2.05480466765633
+
+query R
+SELECT stddev_pop(x) FROM xyz WHERE x = 1
 ----
 NULL
 
@@ -832,9 +857,18 @@ SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mno
 ----
 0.08 0.08 8
 
+query RRR
+SELECT round(var_pop(n), 2), round(var_pop(n), 2), round(var_pop(p)) FROM mnop
+----
+0.08 0.08 8
 
 query RRR
 SELECT round(stddev_samp(n), 2), round(stddev(n), 2), round(stddev_samp(p)) FROM mnop
+----
+0.29 0.29 3
+
+query RRR
+SELECT round(stddev_pop(n), 2), round(stddev_pop(n), 2), round(stddev_pop(p)) FROM mnop
 ----
 0.29 0.29 3
 
@@ -859,9 +893,19 @@ SELECT variance(1::int), variance(1::float), variance(1::decimal)
 NULL NULL NULL
 
 query RRR
+SELECT var_pop(1::int), var_pop(1::float), var_pop(1::decimal)
+----
+NULL  NULL  NULL
+
+query RRR
 SELECT stddev(1::int), stddev_samp(1::float), stddev(1::decimal)
 ----
 NULL NULL NULL
+
+query RRR
+SELECT stddev_pop(1::int), stddev_pop(1::float), stddev_pop(1::decimal)
+----
+NULL  NULL  NULL
 
 statement ok
 CREATE TABLE bits (b INT)
