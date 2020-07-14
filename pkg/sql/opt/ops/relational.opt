@@ -231,6 +231,7 @@ define SemiJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]

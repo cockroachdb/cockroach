@@ -449,6 +449,10 @@ func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
 	initJoinMultiplicity(fj)
 }
 
+func (sj *SemiJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(sj)
+}
+
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
@@ -473,6 +477,7 @@ type joinWithMultiplicity interface {
 var _ joinWithMultiplicity = &InnerJoinExpr{}
 var _ joinWithMultiplicity = &LeftJoinExpr{}
 var _ joinWithMultiplicity = &FullJoinExpr{}
+var _ joinWithMultiplicity = &SemiJoinExpr{}
 
 func (ij *InnerJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
 	ij.multiplicity = multiplicity
@@ -496,6 +501,14 @@ func (fj *FullJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
 
 func (fj *FullJoinExpr) getMultiplicity() props.JoinMultiplicity {
 	return fj.multiplicity
+}
+
+func (sj *SemiJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	sj.multiplicity = multiplicity
+}
+
+func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return sj.multiplicity
 }
 
 // WindowFrame denotes the definition of a window frame for an individual

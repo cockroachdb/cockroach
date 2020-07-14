@@ -449,11 +449,8 @@ func (c *CustomFuncs) GetEquivFD(
 func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	left, right memo.RelExpr, on memo.FiltersExpr,
 ) bool {
-	// Asking whether a join will match all left rows is the same as asking
-	// whether an inner join with the same inputs would filter any rows from its
-	// left input.
-	multiplicity := memo.DeriveJoinMultiplicityFromInputs(opt.InnerJoinOp, left, right, on)
-	return multiplicity.JoinPreservesLeftRows()
+	multiplicity := memo.DeriveJoinMultiplicityFromInputs(left, right, on)
+	return multiplicity.JoinFiltersMatchAllLeftRows()
 }
 
 // CanExtractJoinEquality returns true if:

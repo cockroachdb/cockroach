@@ -1437,7 +1437,6 @@ with &1 (t)
  │    ├── stats: [rows=4e+20]
  │    ├── left-join (cross)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
- │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── stats: [rows=4e+20]
  │    │    ├── scan t1
  │    │    │    ├── columns: t1.x:1(bool)

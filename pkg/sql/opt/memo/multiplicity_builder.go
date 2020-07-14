@@ -19,18 +19,18 @@ import (
 )
 
 // initJoinMultiplicity initializes a JoinMultiplicity for the given InnerJoin,
-// LeftJoin or FullJoin and returns it. initJoinMultiplicity should only be
-// called during construction of the join by the initUnexportedFields methods.
-// Panics if called on an operator other than an InnerJoin, LeftJoin, or
-// FullJoin.
+// LeftJoin, FullJoin, or SemiJoin and returns it. initJoinMultiplicity should
+// only be called during construction of the join by the initUnexportedFields
+// methods. Panics if called on an operator that does not support
+// JoinMultiplicity.
 func initJoinMultiplicity(in RelExpr) {
 	switch t := in.(type) {
-	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr:
-		// Calculate JoinMultiplicity.
+	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr, *SemiJoinExpr:
+		// Calculate JoinMultiplicity and set the multiplicity field of the join.
 		left := t.Child(0).(RelExpr)
 		right := t.Child(1).(RelExpr)
 		filters := *t.Child(2).(*FiltersExpr)
-		multiplicity := DeriveJoinMultiplicityFromInputs(t.Op(), left, right, filters)
+		multiplicity := DeriveJoinMultiplicityFromInputs(left, right, filters)
 		t.(joinWithMultiplicity).setMultiplicity(multiplicity)
 
 	default:
@@ -53,28 +53,17 @@ func GetJoinMultiplicity(in RelExpr) props.JoinMultiplicity {
 }
 
 // DeriveJoinMultiplicityFromInputs returns a JoinMultiplicity that describes
-// how a join of the given type with the given inputs and filters will affect
-// the rows of its inputs. When possible, GetJoinMultiplicity should be called
-// instead because DeriveJoinMultiplicityFromInputs cannot take advantage of a
+// how an inner join with the given inputs and filters will affect the rows of
+// its inputs. When possible, GetJoinMultiplicity should be called instead
+// because DeriveJoinMultiplicityFromInputs cannot take advantage of a
 // previously calculated JoinMultiplicity. The UnfilteredCols Relational
 // property is used in calculating the JoinMultiplicity, and is lazily derived
 // by a call to deriveUnfilteredCols.
 func DeriveJoinMultiplicityFromInputs(
-	joinOp opt.Operator, left, right RelExpr, filters FiltersExpr,
+	left, right RelExpr, filters FiltersExpr,
 ) props.JoinMultiplicity {
-
-	switch joinOp {
-	case opt.InnerJoinOp, opt.LeftJoinOp, opt.FullJoinOp:
-
-	default:
-		panic(errors.AssertionFailedf("invalid operator: %v", joinOp))
-	}
-
-	isLeftOuter := joinOp == opt.LeftJoinOp || joinOp == opt.FullJoinOp
-	isRightOuter := joinOp == opt.FullJoinOp
-
-	leftMultiplicity := getJoinLeftMultiplicityVal(left, right, filters, isLeftOuter)
-	rightMultiplicity := getJoinLeftMultiplicityVal(right, left, filters, isRightOuter)
+	leftMultiplicity := getJoinLeftMultiplicityVal(left, right, filters)
+	rightMultiplicity := getJoinLeftMultiplicityVal(right, left, filters)
 
 	return props.JoinMultiplicity{
 		LeftMultiplicity:  leftMultiplicity,
@@ -131,16 +120,21 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr:
 		left := t.Child(0).(RelExpr)
 		right := t.Child(1).(RelExpr)
-		filters := *t.Child(2).(*FiltersExpr)
-		multiplicity := DeriveJoinMultiplicityFromInputs(t.Op(), left, right, filters)
+		multiplicity := GetJoinMultiplicity(t)
 
 		// Use the UnfilteredCols to determine whether unfiltered columns can be
 		// passed through.
-		if multiplicity.JoinPreservesLeftRows() {
+		if multiplicity.JoinPreservesLeftRows(t.Op()) {
 			unfilteredCols.UnionWith(deriveUnfilteredCols(left))
 		}
-		if multiplicity.JoinPreservesRightRows() {
+		if multiplicity.JoinPreservesRightRows(t.Op()) {
 			unfilteredCols.UnionWith(deriveUnfilteredCols(right))
+		}
+
+	case *SemiJoinExpr:
+		multiplicity := GetJoinMultiplicity(t)
+		if multiplicity.JoinPreservesLeftRows(t.Op()) {
+			unfilteredCols.UnionWith(deriveUnfilteredCols(t.Left))
 		}
 
 	default:
@@ -156,14 +150,12 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 //
 // The duplicated and filtered flags will be set unless it can be statically
 // proven that no rows will be duplicated or filtered respectively.
-func getJoinLeftMultiplicityVal(
-	left, right RelExpr, filters FiltersExpr, isLeftOuter bool,
-) props.MultiplicityValue {
+func getJoinLeftMultiplicityVal(left, right RelExpr, filters FiltersExpr) props.MultiplicityValue {
 	multiplicity := props.MultiplicityIndeterminateVal
 	if filtersMatchLeftRowsAtMostOnce(left, right, filters) {
 		multiplicity |= props.MultiplicityNotDuplicatedVal
 	}
-	if isLeftOuter || filtersMatchAllLeftRows(left, right, filters) {
+	if filtersMatchAllLeftRows(left, right, filters) {
 		multiplicity |= props.MultiplicityPreservedVal
 	}
 	return multiplicity

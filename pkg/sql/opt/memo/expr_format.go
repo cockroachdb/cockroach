@@ -646,7 +646,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 		if join, ok := e.(joinWithMultiplicity); ok {
 			mult := join.getMultiplicity()
-			if s := mult.String(); s != "" {
+			if s := mult.Format(e.Op()); s != "" {
 				tp.Childf("multiplicity: %s", s)
 			}
 		}
