@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,7 +56,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeAddValue:
 		err = unimplemented.NewWithIssue(48670, "ALTER TYPE ADD VALUE unsupported")
 	case *tree.AlterTypeRenameValue:
-		err = unimplemented.NewWithIssue(48697, "ALTER TYPE RENAME VALUE unsupported")
+		err = params.p.renameTypeValue(params, n, t.OldVal, t.NewVal)
 	case *tree.AlterTypeRename:
 		err = params.p.renameType(params, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
@@ -155,6 +154,44 @@ func (p *planner) performRenameTypeDesc(
 	).Key(p.ExecCfg().Codec)
 	b.CPut(key, desc.ID, nil /* expected */)
 	return p.txn.Run(ctx, b)
+}
+
+func (p *planner) renameTypeValue(params runParams, n *alterTypeNode, oldVal string, newVal string) error {
+	oldNameFound := false
+	newNameFound := false
+
+	var enumMemberIndex int
+
+	// Do one pass to verify that the oldVal exists and there isn't already
+	// a member that is named newVal.
+	for i, t := range n.desc.GetEnumMembers() {
+		if t.LogicalRepresentation == oldVal {
+			oldNameFound = true
+			enumMemberIndex = i
+		} else if t.LogicalRepresentation == newVal {
+			newNameFound = true
+		}
+	}
+
+	if !oldNameFound {
+		return errors.Newf("%s is not an existing enum label", oldVal)
+	}
+
+	if newNameFound {
+		return errors.Newf("enum label %s already exists", newVal)
+	}
+
+	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
+
+	if err := p.writeTypeChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
