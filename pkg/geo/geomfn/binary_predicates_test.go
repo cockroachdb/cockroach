@@ -158,6 +158,30 @@ func TestCrosses(t *testing.T) {
 	})
 }
 
+func TestDisjoint(t *testing.T) {
+	testCases := []struct {
+		a        *geo.Geometry
+		b        *geo.Geometry
+		expected bool
+	}{
+		{rightRect, rightRectPoint, false},
+		{leftRect, rightRectPoint, true},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			g, err := Disjoint(tc.a, tc.b)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, g)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Crosses(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
 func TestEquals(t *testing.T) {
 	testCases := []struct {
 		a        *geo.Geometry
