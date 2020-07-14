@@ -17,9 +17,11 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
+	"path"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +39,31 @@ Uploads a file to the user scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: maybeShoutError(runUserFileUpload),
+}
+
+var userFileListCmd = &cobra.Command{
+	Use:   "ls <file|dir glob>",
+	Short: "List files matching the provided glob",
+	Long: `
+Lists the files stored in the user scoped file storage which match the glob, using a SQL connection.
+`,
+	Args: cobra.MinimumNArgs(0),
+	RunE: maybeShoutError(runUserFileList),
+}
+
+func runUserFileList(cmd *cobra.Command, args []string) error {
+	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var glob string
+	if len(args) > 0 {
+		glob = args[0]
+	}
+
+	return listUserFile(context.Background(), conn, glob)
 }
 
 func runUserFileUpload(cmd *cobra.Command, args []string) error {
@@ -82,7 +109,7 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	// User has not specified a destination URI/path. We use the default URI
 	// scheme and host, and the basename from the source arg as the path.
 	if destination == "" {
-		sourceFilename := filepath.Base(source)
+		sourceFilename := path.Base(source)
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
 			Host:   defaultQualifiedNamePrefix + user,
@@ -110,6 +137,80 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 		Path:   destination,
 	}
 	return userFileURL.String()
+}
+
+func constructUserfileListURI(glob, user string) string {
+	// User has not specified a glob pattern and so we construct a URI which will
+	// list all the files stored in the UserFileTableStorage.
+	if glob == "" {
+		userFileURL := url.URL{
+			Scheme: defaultUserfileScheme,
+			Host:   defaultQualifiedNamePrefix + user,
+			Path:   "",
+		}
+		return userFileURL.String()
+	}
+
+	// If the destination is a well-formed userfile URI of the form
+	// userfile://db.schema.tablename_prefix/glob/pattern, then we
+	// use that as the final URI.
+	if userfileURL, err := url.ParseRequestURI(glob); err == nil {
+		if userfileURL.Scheme == defaultUserfileScheme && userfileURL.Host != "" {
+			return userfileURL.String()
+		}
+	}
+
+	// If destination is not a well formed userfile URI, we use the default
+	// userfile URI schema and host, and the glob as the path.
+	userfileURL := url.URL{
+		Scheme: defaultUserfileScheme,
+		Host:   defaultQualifiedNamePrefix + user,
+		Path:   glob,
+	}
+
+	return userfileURL.String()
+}
+
+func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
+
+	connURL, err := url.Parse(conn.url)
+	if err != nil {
+		return err
+	}
+
+	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
+	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
+	if err != nil {
+		return err
+	}
+
+	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
+	if err != nil {
+		return err
+	}
+	userFileTableConf := roachpb.ExternalStorage_FileTable{
+		User:               connURL.User.Username(),
+		QualifiedTableName: userfileParsedURL.Host,
+		Path:               userfileParsedURL.Path,
+	}
+	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf, conn.conn.(driver.QueryerContext))
+	if err != nil {
+		return err
+	}
+
+	files, err := f.ListFiles(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		fmt.Println(file)
+	}
+
+	return nil
 }
 
 func uploadUserFile(
@@ -184,12 +285,13 @@ func uploadUserFile(
 
 var userFileCmds = []*cobra.Command{
 	userFileUploadCmd,
+	userFileListCmd,
 }
 
 var userFileCmd = &cobra.Command{
 	Use:   "userfile [command]",
-	Short: "upload and delete user scoped files",
-	Long:  "Upload and delete files from the user scoped file storage.",
+	Short: "upload, list and delete user scoped files",
+	Long:  "Upload, list and delete files from the user scoped file storage.",
 	RunE:  usageAndErr,
 }
 

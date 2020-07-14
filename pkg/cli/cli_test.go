@@ -1411,7 +1411,7 @@ Available Commands:
   dump              dump sql tables
 
   nodelocal         upload and delete nodelocal files
-  userfile          upload and delete user scoped files
+  userfile          upload, list and delete user scoped files
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information
