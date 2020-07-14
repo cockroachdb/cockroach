@@ -87,6 +87,32 @@ func (so *DummySequenceOperators) SetSequenceValue(
 // errors.
 type DummyEvalPlanner struct{}
 
+// UnsafeUpsertDescriptor is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
+	ctx context.Context, descID int64, encodedDescriptor []byte,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// UnsafeDeleteDescriptor is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(ctx context.Context, descID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// UnsafeUpsertNamespaceEntry is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// UnsafeDeleteNamespaceEntry is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
