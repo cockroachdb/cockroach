@@ -620,8 +620,8 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	const expectedBatchSize = 1024
 	batchSize := coldata.BatchSize()
 	if batchSize != expectedBatchSize {
-		require.NoError(t, coldata.SetBatchSizeForTests(expectedBatchSize))
-		defer func(batchSize int) { require.NoError(t, coldata.SetBatchSizeForTests(batchSize)) }(batchSize)
+		require.NoError(t, coldata.SetBatchSize(expectedBatchSize))
+		defer func(batchSize int) { require.NoError(t, coldata.SetBatchSize(batchSize)) }(batchSize)
 		batchSize = expectedBatchSize
 	}
 	data := make(tuples, batchSize)

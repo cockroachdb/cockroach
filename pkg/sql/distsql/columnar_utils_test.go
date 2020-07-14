@@ -77,7 +77,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	if rng.Float64() < 0.5 {
 		randomBatchSize := 1 + rng.Intn(3)
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
-		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+		if err := coldata.SetBatchSize(randomBatchSize); err != nil {
 			return err
 		}
 	}

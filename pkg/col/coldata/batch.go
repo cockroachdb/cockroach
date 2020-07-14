@@ -80,9 +80,9 @@ func BatchSize() int {
 // MaxBatchSize is the maximum acceptable size of batches.
 const MaxBatchSize = 4096
 
-// SetBatchSizeForTests modifies batchSize variable. It should only be used in
-// tests. batch sizes greater than MaxBatchSize will return an error.
-func SetBatchSizeForTests(newBatchSize int) error {
+// SetBatchSize modifies batchSize variable. Batch sizes greater than
+// MaxBatchSize will return an error.
+func SetBatchSize(newBatchSize int) error {
 	if newBatchSize > MaxBatchSize {
 		return errors.Errorf("batch size %d greater than maximum allowed batch size %d", newBatchSize, MaxBatchSize)
 	}
@@ -90,9 +90,8 @@ func SetBatchSizeForTests(newBatchSize int) error {
 	return nil
 }
 
-// ResetBatchSizeForTests resets the batchSize variable to the default batch
-// size. It should only be used in tests.
-func ResetBatchSizeForTests() {
+// ResetBatchSize resets the batchSize variable to the default batch size.
+func ResetBatchSize() {
 	atomic.SwapInt64(&batchSize, defaultBatchSize)
 }
 

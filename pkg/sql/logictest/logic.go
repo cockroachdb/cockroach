@@ -1367,7 +1367,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		}
 
 		if _, err := conn.Exec(
-			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
+			fmt.Sprintf("SET CLUSTER SETTING sql.defaults.vectorize_batch_size to %d",
 				t.randomizedVectorizedBatchSize),
 		); err != nil {
 			t.Fatal(err)

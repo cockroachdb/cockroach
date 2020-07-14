@@ -71,6 +71,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer_foreign_keys.enabled":                      {},
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
 	"sql.parallel_scans.enabled":                                       {},
+	"sql.testing.vectorize.batch_size":                                 {},
 }
 
 // register adds a setting to the registry.

@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 			// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
 			randomBatchSize := generateBatchSize()
 			fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
-			if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+			if err := coldata.SetBatchSize(randomBatchSize); err != nil {
 				colexecerror.InternalError(err)
 			}
 		}

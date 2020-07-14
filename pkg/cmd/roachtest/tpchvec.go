@@ -86,6 +86,11 @@ var (
 		tpchVecVersion20_1: 1.2,
 		tpchVecVersion20_2: 1.2,
 	}
+
+	batchSizeSettingName = map[crdbVersion]string{
+		tpchVecVersion20_1: "sql.testing.vectorize.batch_size",
+		tpchVecVersion20_2: "sql.defaults.vectorize_batch_size",
+	}
 )
 
 var tpchTables = []string{
@@ -155,7 +160,7 @@ func (b tpchVecTestCaseBase) getRunConfig(
 	}
 	if version != tpchVecVersion19_2 {
 		runConfig.clusterSetups[0] = append(runConfig.clusterSetups[0],
-			"RESET CLUSTER SETTING sql.testing.vectorize.batch_size",
+			"RESET CLUSTER SETTING %s", batchSizeSettingName[version],
 		)
 	}
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
@@ -525,10 +530,11 @@ func (d tpchVecDiskTest) preTestRunHook(
 
 // setSmallBatchSize sets a cluster setting to override the batch size to be in
 // [1, 5) range.
-func setSmallBatchSize(t *test, conn *gosql.DB, rng *rand.Rand) {
+func setSmallBatchSize(t *test, conn *gosql.DB, rng *rand.Rand, version crdbVersion) {
 	batchSize := 1 + rng.Intn(4)
-	t.Status(fmt.Sprintf("setting sql.testing.vectorize.batch_size to %d", batchSize))
-	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size=%d", batchSize)); err != nil {
+	settingName := batchSizeSettingName[version]
+	t.Status(fmt.Sprintf("setting %s to %d", settingName, batchSize))
+	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING %s=%d", settingName, batchSize)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -548,7 +554,7 @@ func (b tpchVecSmallBatchSizeTest) preTestRunHook(
 	b.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
 	createStatsFromTables(t, conn, tpchTables)
 	rng, _ := randutil.NewPseudoRand()
-	setSmallBatchSize(t, conn, rng)
+	setSmallBatchSize(t, conn, rng, version)
 }
 
 func baseTestRun(
@@ -619,7 +625,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	// of the runs.
 	rng, _ := randutil.NewPseudoRand()
 	if rng.Float64() < 0.5 {
-		setSmallBatchSize(t, conn, rng)
+		setSmallBatchSize(t, conn, rng, version)
 	}
 }
 
@@ -754,7 +760,7 @@ func registerTPCHVec(r *testRegistry) {
 			var setupNames []string
 			for _, batchSize := range []int{512, 1024, 1536} {
 				clusterSetups = append(clusterSetups, []string{
-					fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size=%d", batchSize),
+					fmt.Sprintf("SET CLUSTER SETTING sql.defaults.vectorize_batch_size=%d", batchSize),
 				})
 				setupNames = append(setupNames, fmt.Sprintf("%d", batchSize))
 			}
