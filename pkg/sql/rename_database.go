@@ -152,8 +152,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				)
 				var dependentDescQualifiedString string
 				if dbDesc.GetID() != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
-					var err error
-					dependentDescQualifiedString, err = p.getQualifiedTableName(ctx, dependentDesc)
+					descFQName, err := p.getQualifiedTableName(ctx, dependentDesc)
 					if err != nil {
 						log.Warningf(
 							ctx,
@@ -166,6 +165,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 							"cannot rename database because a relation depends on relation %q",
 							tbTableName.String())
 					}
+					dependentDescQualifiedString = descFQName.FQString()
 				} else {
 					dependentDescTableName := tree.MakeTableNameWithSchema(
 						tree.Name(dbDesc.GetName()),
