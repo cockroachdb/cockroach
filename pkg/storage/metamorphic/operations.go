@@ -395,10 +395,9 @@ func (t txnOpenOp) run(ctx context.Context) string {
 			WriteTimestamp: t.ts,
 			Sequence:       0,
 		},
-		Name:                    string(t.id),
-		DeprecatedOrigTimestamp: t.ts,
-		ReadTimestamp:           t.ts,
-		Status:                  roachpb.PENDING,
+		Name:          string(t.id),
+		ReadTimestamp: t.ts,
+		Status:        roachpb.PENDING,
 	}
 	t.m.setTxn(t.id, txn)
 	return txn.Name
