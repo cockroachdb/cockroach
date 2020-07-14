@@ -400,7 +400,7 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 	for _, name := range names {
 		// Determine the ordinal position of the named column in the table and
 		// add it as a target column.
-		if ord := cat.FindTableColumnByName(mb.tab, name); ord != -1 {
+		if ord := findPublicTableColumnByName(mb.tab, name); ord != -1 {
 			mb.addTargetCol(ord)
 			continue
 		}
