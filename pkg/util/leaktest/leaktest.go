@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
@@ -107,6 +108,10 @@ func AfterTest(t testing.TB) func() {
 			}
 			return
 		}
+
+		// TODO(tbg): make this call 't.Error' instead of 't.Logf' once there is
+		// enough Stopper discipline.
+		stop.PrintLeakedStoppers(t)
 
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
