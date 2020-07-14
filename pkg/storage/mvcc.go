@@ -3259,14 +3259,17 @@ func MVCCGarbageCollect(
 			var foundPrevNanos bool
 			{
 				const nextsBeforeSeek = 4
+				var foundNextKey bool
 				for i := 0; i < nextsBeforeSeek; i++ {
 					if ok, err := iter.Valid(); err != nil {
 						return err
 					} else if !ok {
+						foundNextKey = true
 						break
 					}
 					unsafeIterKey := iter.UnsafeKey()
 					if !unsafeIterKey.Key.Equal(encKey.Key) {
+						foundNextKey = true
 						break
 					}
 					if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
@@ -3275,6 +3278,10 @@ func MVCCGarbageCollect(
 					}
 					prevNanos = unsafeIterKey.Timestamp.WallTime
 					iter.Next()
+				}
+				// We have nothing to GC for this key if we found the next key.
+				if foundNextKey {
+					continue
 				}
 			}
 
