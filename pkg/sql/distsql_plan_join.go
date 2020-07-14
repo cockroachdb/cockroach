@@ -360,6 +360,11 @@ func useInterleavedJoin(n *joinNode) bool {
 		return false
 	}
 
+	// We cannot do an interleaved join if there are hard limits on the scans.
+	if ancestor.hardLimit != 0 || descendant.hardLimit != 0 {
+		return false
+	}
+
 	var ancestorEqIndices []int
 	var descendantEqIndices []int
 	// We are guaranteed that both of the sources are scan nodes from

@@ -326,6 +326,9 @@ func newInterleavedReaderJoiner(
 			numAncestorPKCols = len(index.ColumnIDs)
 		}
 
+		if table.Post.Limit != 0 || table.Post.Offset != 0 {
+			return nil, errors.AssertionFailedf("interleaved joiner cannot be used with limits")
+		}
 		if err := tables[i].post.Init(
 			&table.Post, table.Desc.ColumnTypes(), flowCtx.NewEvalCtx(), nil, /*output*/
 		); err != nil {
