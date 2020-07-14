@@ -51,6 +51,7 @@ func createTestDBWithContextAndKnobs(
 ) *localtestcluster.LocalTestCluster {
 	s := &localtestcluster.LocalTestCluster{
 		DBContext:         &dbCtx,
+		Stopper:           dbCtx.Stopper,
 		StoreTestingKnobs: knobs,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -42,7 +43,8 @@ var ErrUnavailable = &roachpb.NodeUnavailableError{}
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()
-	trackedStoppers.stoppers = append(trackedStoppers.stoppers, s)
+	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
+		stopperWithStack{s: s, stack: debug.Stack()})
 	trackedStoppers.Unlock()
 }
 
@@ -51,7 +53,7 @@ func unregister(s *Stopper) {
 	defer trackedStoppers.Unlock()
 	sl := trackedStoppers.stoppers
 	for i, tracked := range sl {
-		if tracked == s {
+		if tracked.s == s {
 			trackedStoppers.stoppers = sl[:i+copy(sl[i:], sl[i+1:])]
 			return
 		}
@@ -59,9 +61,14 @@ func unregister(s *Stopper) {
 	panic("attempt to unregister untracked stopper")
 }
 
+type stopperWithStack struct {
+	s     *Stopper
+	stack []byte
+}
+
 var trackedStoppers struct {
 	syncutil.Mutex
-	stoppers []*Stopper
+	stoppers []stopperWithStack
 }
 
 // HandleDebug responds with the list of stopper tasks actively running.
@@ -69,10 +76,23 @@ func HandleDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
-	for _, s := range trackedStoppers.stoppers {
+	for _, ss := range trackedStoppers.stoppers {
+		s := ss.s
 		s.mu.Lock()
 		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.mu.numTasks, s.runningTasksLocked())
 		s.mu.Unlock()
+	}
+}
+
+// PrintLeakedStoppers prints (using `t`) the creation site of each Stopper
+// for which `.Stop()` has not yet been called.
+func PrintLeakedStoppers(t interface {
+	Logf(string, ...interface{})
+}) {
+	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
+	for _, tracked := range trackedStoppers.stoppers {
+		t.Logf("leaked stopper, created at:\n%s", tracked.stack)
 	}
 }
 
