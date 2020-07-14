@@ -127,8 +127,8 @@ github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62/go.mod h1
 github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0 h1:O4yb+RtkmDaXFlHSBpZodXaghfTd3Prdea0nk0eZCT4=
 github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0/go.mod h1:uY/PY/C5c2cIFaeWGjdZSd0eptkmXiX5vd92GMZZ50M=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
-github.com/cockroachdb/datadriven v0.0.0-20200708140406-a8a63ef9e03e h1:oFQShIBawaogI9PVfZ58+HE5CL8wj2h/5kw2dvAcdpo=
-github.com/cockroachdb/datadriven v0.0.0-20200708140406-a8a63ef9e03e/go.mod h1:h6jFvWxBdQXxjopDMZyH2UVceIRfR84bdzbkoKrsWNo=
+github.com/cockroachdb/datadriven v0.0.0-20200714090401-bf6692d28da5 h1:xD/lrqdvwsc+O2bjSSi3YqY73Ke3LAiSCx49aCesA0E=
+github.com/cockroachdb/datadriven v0.0.0-20200714090401-bf6692d28da5/go.mod h1:h6jFvWxBdQXxjopDMZyH2UVceIRfR84bdzbkoKrsWNo=
 github.com/cockroachdb/errors v1.2.4 h1:Lap807SXTH5tri2TivECb/4abUkMZC9zRoLarvcKDqs=
 github.com/cockroachdb/errors v1.2.4/go.mod h1:rQD95gz6FARkaKkQXUksEje/d9a6wBJoCr5oaCLELYA=
 github.com/cockroachdb/errors v1.5.0 h1:QR6H/GgNSyIrt+AOhC3CdMi7UExDp2pJRXZ/39vXPH8=
