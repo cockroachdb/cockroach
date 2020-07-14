@@ -17,18 +17,11 @@ INSERT INTO test.parent values (1)
 statement ok
 CREATE TABLE test.child (id int primary key, parent_id int)
 
-# The index on parent_id is added automatically because test.child is empty
 statement ok
 ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
 
 statement ok
 INSERT INTO test.child VALUES (1, 1)
-
-# Check that the auto-created index is visible
-query II rowsort
-SELECT * FROM test.child@child_auto_index_fk_child_parent_id
-----
-1 1
 
 statement ok
 COMMIT
@@ -68,7 +61,6 @@ CREATE TABLE test.child (id int primary key, parent_id int)
 statement ok
 BEGIN
 
-# The index on parent_id is added automatically because test.child is empty
 statement ok
 ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
 
@@ -77,12 +69,6 @@ INSERT INTO test.child VALUES (1, 1)
 
 statement ok
 COMMIT
-
-# Check that the auto-created index is visible
-query II rowsort
-SELECT * FROM test.child@child_auto_index_fk_child_parent_id
-----
-1 1
 
 # Verify that the constraint is validated.
 query TTTTB
@@ -105,7 +91,6 @@ CREATE TABLE parent_composite_index (a_id INT NOT NULL, b_id INT NOT NULL, PRIMA
 statement ok
 CREATE TABLE child_composite_index (id SERIAL NOT NULL, parent_a_id INT, parent_b_id INT, PRIMARY KEY (id))
 
-# The (composite) index needed for the fk constraint is automatically added because the table is empty
 statement ok
 ALTER TABLE child_composite_index ADD CONSTRAINT fk_id FOREIGN KEY (parent_a_id, parent_b_id) REFERENCES parent_composite_index;
 
@@ -114,12 +99,6 @@ INSERT INTO parent_composite_index VALUES (100, 200)
 
 statement ok
 INSERT INTO child_composite_index VALUES (1, 100, 200)
-
-# Check that the auto-created index is visible
-query III rowsort
-SELECT * FROM child_composite_index@child_composite_index_auto_index_fk_id
-----
-1 100 200
 
 statement ok
 COMMIT
@@ -144,8 +123,7 @@ INSERT INTO nonempty_b VALUES (1), (2), (3);
 statement ok
 INSERT INTO nonempty_a VALUES (1, NULL, 1)
 
-# Fails because self_id is not indexed, and an index will not be automatically created because the table is nonempty
-statement error foreign key requires an existing index on columns \("self_id"\)
+statement ok
 ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
 
 statement ok
@@ -187,7 +165,7 @@ statement ok
 CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
 
 # The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
-statement error index \"child_duplicate_cols_auto_index_fk\" contains duplicate column \"parent_id\"
+statement error foreign key contains duplicate column \"parent_id\"
 ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
 
 statement ok
@@ -297,7 +275,6 @@ b  CREATE TABLE b (
    parent_id INT8 NULL,
    d INT8 NULL DEFAULT 23:::INT8,
    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent(id),
-   INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
    INDEX foo (parent_id ASC),
    UNIQUE INDEX bar (parent_id ASC),
    FAMILY "primary" (parent_id, rowid, d)

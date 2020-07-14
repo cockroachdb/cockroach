@@ -432,7 +432,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok
-CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id))
+CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id), INDEX (cust))
 
 query TTT
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
@@ -445,7 +445,7 @@ merge-join  ·                   ·
  │          right cols are key  ·
  │          mergeJoinOrder      +"(cust=id)"
  ├── scan   ·                   ·
- │          table               cards@cards_auto_index_fk_cust_ref_customers
+ │          table               cards@cards_cust_idx
  │          spans               FULL SCAN
  └── scan   ·                   ·
 ·           table               customers@primary
