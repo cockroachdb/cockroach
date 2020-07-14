@@ -33,4 +33,5 @@ type TestingKnobs struct {
 	RegistryLiveness     ModuleTestingKnobs
 	Server               ModuleTestingKnobs
 	TenantTestingKnobs   ModuleTestingKnobs
+	JobsTestingKnobs     ModuleTestingKnobs
 }

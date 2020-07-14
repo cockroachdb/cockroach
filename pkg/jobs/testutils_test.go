@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -25,29 +26,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
 
 type testHelper struct {
-	env     *jobstest.JobSchedulerTestEnv
-	cfg     *scheduledjobs.JobExecutionConfig
-	sqlDB   *sqlutils.SQLRunner
-	stopper *stop.Stopper
+	env   *jobstest.JobSchedulerTestEnv
+	cfg   *scheduledjobs.JobExecutionConfig
+	sqlDB *sqlutils.SQLRunner
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
 // returning testHelper as well as a cleanup function.
+// This test helper does not use system tables for jobs and scheduled jobs.
+// It creates separate tables for the test, that are then dropped when cleanup
+// function executes.  Because of this, the execution of job scheduler daemon
+// is disabled by this test helper.
+// If you want to run daemon, invoke it directly.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
-	cfg := &scheduledjobs.JobExecutionConfig{
-		Settings:         s.ClusterSettings(),
-		InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
-		DB:               kvdb,
-		PlanHookMaker:    nil,
-	}
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &TestingKnobs{
+				TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+				},
+			},
+		},
+	})
+
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup test scheduled jobs table.
@@ -58,10 +64,13 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 
 	restoreRegistry := settings.TestingSaveRegistry()
 	return &testHelper{
-			env:     env,
-			cfg:     cfg,
-			sqlDB:   sqlDB,
-			stopper: s.Stopper(),
+			env: env,
+			cfg: &scheduledjobs.JobExecutionConfig{
+				Settings:         s.ClusterSettings(),
+				InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
+				DB:               kvDB,
+			},
+			sqlDB: sqlDB,
 		}, func() {
 			sqlDB.Exec(t, "DROP TABLE "+env.SystemJobsTableName())
 			sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
@@ -106,11 +115,6 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	require.Equal(t, 1, len(rows))
 	require.NoError(t, j.InitFromDatums(rows[0], cols))
 	return j
-}
-
-// startJobSchedulerDaemon starts running job scheduler daemon.
-func (h *testHelper) startJobSchedulerDaemon() {
-	StartJobSchedulerDaemon(context.Background(), h.stopper, h.cfg, h.env)
 }
 
 // registerScopedScheduledJobExecutor registers executor under the name,

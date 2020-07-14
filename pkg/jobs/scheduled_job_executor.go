@@ -27,16 +27,25 @@ import (
 type ScheduledJobExecutor interface {
 	// Executes scheduled job;  Implementation may use provided transaction.
 	// Modifications to the ScheduledJob object will be persisted.
-	ExecuteJob(ctx context.Context,
-		cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv,
-		schedule *ScheduledJob, txn *kv.Txn) error
+	ExecuteJob(
+		ctx context.Context,
+		cfg *scheduledjobs.JobExecutionConfig,
+		env scheduledjobs.JobSchedulerEnv,
+		schedule *ScheduledJob,
+		txn *kv.Txn,
+	) error
 
 	// Notifies that the system.job started by the ScheduledJob completed.
 	// Implementation may use provided transaction to perform any additional mutations.
 	// Modifications to the ScheduledJob object will be persisted.
-	NotifyJobTermination(ctx context.Context,
-		cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv,
-		md *JobMetadata, schedule *ScheduledJob, txn *kv.Txn) error
+	NotifyJobTermination(
+		ctx context.Context,
+		cfg *scheduledjobs.JobExecutionConfig,
+		env scheduledjobs.JobSchedulerEnv,
+		md *JobMetadata,
+		schedule *ScheduledJob,
+		txn *kv.Txn,
+	) error
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
