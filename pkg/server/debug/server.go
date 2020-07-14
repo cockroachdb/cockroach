@@ -103,7 +103,9 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	// https://golang.org/src/net/http/pprof/pprof.go
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/profile", func(w http.ResponseWriter, r *http.Request) {
+		CPUProfileHandler(st, w, r)
+	})
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
@@ -139,16 +141,26 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
 		tBegin := timeutil.Now()
 
-		extra := ""
-		if profile == "profile" && labels {
-			extra = " (enabling profiler labels)"
-			st.SetCPUProfiling(true)
-			defer st.SetCPUProfiling(false)
+		if profile != "profile" {
+			do()
+			return
 		}
-		log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
 
-		do()
-
+		if err := CPUProfileDo(st, CPUProfileOptions{WithLabels: labels}.Type(), func() error {
+			var extra string
+			if labels {
+				extra = " (enabling profiler labels)"
+			}
+			log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
+			do()
+			return nil
+		}); err != nil {
+			// NB: we don't have good error handling here. Could be changed if we find
+			// this problematic. In practice, `do()` wraps the pprof handler which will
+			// return an error if there's already a profile going on just the same.
+			log.Infof(context.Background(), "unable to start CPU profile: %s", err)
+			return
+		}
 		log.Infof(context.Background(), "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
 	})
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
