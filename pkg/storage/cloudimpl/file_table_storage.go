@@ -12,12 +12,12 @@ package cloudimpl
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -62,7 +62,28 @@ func makeFileTableStorage(
 			cfg.Path, path.Clean(cfg.Path))
 	}
 
-	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, ie, db,
+	executor := filetable.MakeInternalFileToTableExecutor(ie, db)
+	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, executor,
+		cfg.User)
+	if err != nil {
+		return nil, err
+	}
+	return &fileTableStorage{
+		fs:     fileToTableSystem,
+		cfg:    cfg,
+		prefix: cfg.Path,
+	}, nil
+}
+
+// MakeSQLConnFileTableStorage returns an instance of a FileTableStorage which
+// uses a network connection backed SQL executor. This is used by the CLI to
+// interact with the underlying FileToTableSystem. It only supports a subset of
+// methods compared to the internal SQL connection backed FileTableStorage.
+func MakeSQLConnFileTableStorage(
+	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn driver.QueryerContext,
+) (cloud.ExternalStorage, error) {
+	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
+	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, executor,
 		cfg.User)
 	if err != nil {
 		return nil, err
@@ -81,7 +102,6 @@ func MakeUserFileStorageURI(qualifiedTableName, filename string) string {
 }
 
 func makeUserFileURIWithQualifiedName(qualifiedTableName, path string) string {
-	path = strings.TrimPrefix(path, "/")
 	userfileURL := url.URL{
 		Scheme: defaultUserfileScheme,
 		Host:   qualifiedTableName,
@@ -118,7 +138,7 @@ func checkBaseAndJoinFilePath(prefix, basename string) (string, error) {
 		return "", errors.Newf("basename %s changes to %s on normalization. "+
 			"userfile does not permit such constructs.", basename, path.Clean(basename))
 	}
-	return filepath.Join(prefix, basename), nil
+	return path.Join(prefix, basename), nil
 }
 
 // ReadFile implements the ExternalStorage interface and returns the contents of
@@ -162,11 +182,21 @@ func (f *fileTableStorage) WriteFile(
 	return nil
 }
 
+// This method is different from the utility method getPrefixBeforeWildcard() in
+// external_storage.go in that it does not invoke path.Dir on the return value.
+func getPrefixBeforeWildcardForFileTable(p string) string {
+	globIndex := strings.IndexAny(p, "*?[")
+	if globIndex < 0 {
+		return p
+	}
+	return p[:globIndex]
+}
+
 // ListFiles implements the ExternalStorage interface and lists the files stored
 // in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
-	matches, err := f.fs.ListFiles(ctx, getPrefixBeforeWildcard(f.prefix))
+	matches, err := f.fs.ListFiles(ctx, getPrefixBeforeWildcardForFileTable(f.prefix))
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
@@ -183,6 +213,19 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 	}
 
 	for _, match := range matches {
+		// If there is no glob pattern, then the user wishes to list all the uploaded
+		// files stored in the userfile table storage.
+		if f.prefix == "" {
+			match = strings.TrimPrefix(match, "/")
+			unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.
+				QualifiedTableName, match))
+			if err != nil {
+				return nil, err
+			}
+			fileList = append(fileList, unescapedURI)
+			continue
+		}
+
 		doesMatch, matchErr := path.Match(pattern, match)
 		if matchErr != nil {
 			continue
@@ -196,8 +239,13 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(match, f.prefix),
 					"/"))
 			} else {
-				fileList = append(fileList, makeUserFileURIWithQualifiedName(f.cfg.QualifiedTableName,
-					match))
+				match = strings.TrimPrefix(match, "/")
+				unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.
+					QualifiedTableName, match))
+				if err != nil {
+					return nil, err
+				}
+				fileList = append(fileList, unescapedURI)
 			}
 		}
 	}
