@@ -13,7 +13,6 @@ import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import sinon, { SinonSpy } from "sinon";
 import Long from "long";
-import classNames from "classnames/bind";
 
 import "src/enzymeInit";
 import { DiagnosticsView, EmptyDiagnosticsView } from "./diagnosticsView";
@@ -21,9 +20,7 @@ import { Table } from "src/components";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import buttonStyles from "src/components/button/button.module.styl";
 
-const cx = classNames.bind(buttonStyles);
 const sandbox = sinon.createSandbox();
 
 describe("DiagnosticsView", () => {
@@ -53,7 +50,7 @@ describe("DiagnosticsView", () => {
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(`.${cx("crl-button")}`).first();
+      const activateButtonComponent = wrapper.find("button").first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });
@@ -82,7 +79,7 @@ describe("DiagnosticsView", () => {
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(`.${cx("crl-button")}`).first();
+      const activateButtonComponent = wrapper.find("button").first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });

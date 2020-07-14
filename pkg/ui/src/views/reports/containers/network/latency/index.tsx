@@ -18,7 +18,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { getValueFromString, Identity } from "..";
 import "./latency.styl";
-import { Empty } from "src/components/empty";
+import { Empty } from "@cockroachlabs/admin-ui-components";
 
 interface StdDev {
   stddev: number;

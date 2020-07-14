@@ -14,7 +14,7 @@ import { Moment } from "moment";
 import React from "react";
 import { createSelector } from "reselect";
 import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
-import { EmptyProps } from "oss/src/components/empty";
+import { EmptyProps } from "@cockroachlabs/admin-ui-components";
 
 export interface ISortedTablePagination {
   current: number;
@@ -234,7 +234,6 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         rowClass={this.rowClass(this.props)}
         className={this.props.className}
         expandableConfig={expandableConfig}
-        drawer={this.props.drawer}
         firstCellBordered={firstCellBordered}
         renderNoResult={renderNoResult}
         loading={loading}

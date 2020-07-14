@@ -19,7 +19,7 @@ import { trackTableSort } from "src/util/analytics";
 import styles from "./sortabletable.module.styl";
 import { Spin, Icon } from "antd";
 import SpinIcon from "src/components/icon/spin";
-import { Empty, EmptyProps } from "src/components/empty";
+import { Empty, EmptyProps } from "@cockroachlabs/admin-ui-components";
 
 const cx = classNames.bind(styles);
 /**

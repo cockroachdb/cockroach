@@ -49,6 +49,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@cockroachlabs/admin-ui-components": "^0.1.1",
     "@storybook/react": "5.0.6",
     "@types/analytics-node": "^0.0.32",
     "@types/assert": "^1.4.0",

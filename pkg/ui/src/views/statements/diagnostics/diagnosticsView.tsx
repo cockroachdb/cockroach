@@ -45,7 +45,7 @@ import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } fr
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
-import { Empty } from "src/components/empty";
+import { Empty } from "@cockroachlabs/admin-ui-components";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
