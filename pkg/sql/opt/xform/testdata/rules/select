@@ -146,160 +146,87 @@ project
 
 # Generate a partial index scan inside an index-join when the index is not
 # covering and there no remaining filters.
-#
-# TODO(mgartner): The statistics builder does not consider the cardinality of
-# the partial index predicate. It does not know that scanning the partial index
-# will produce fewer results than scanning the primary index. Once the
-# statistics builder considers this, a scan over the partial index should be
-# selected here, and the test directive should be changed from "memo" to "opt".
-memo expect=GeneratePartialIndexScans
+opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo'
 ----
-memo (optimized, ~7KB, required=[presentation: b:4])
- ├── G1: (project G2 G3 b)
- │    └── [presentation: b:4]
- │         ├── best: (project G2 G3 b)
- │         └── cost: 1080.15
- ├── G2: (select G4 G5) (index-join G6 p,cols=(3,4))
- │    └── []
- │         ├── best: (select G4 G5)
- │         └── cost: 1080.04
- ├── G3: (projections)
- ├── G4: (scan p,cols=(3,4))
- │    └── []
- │         ├── best: (scan p,cols=(3,4))
- │         └── cost: 1070.02
- ├── G5: (filters G7)
- ├── G6: (scan p@if_s,partial,cols=(3,5))
- │    └── []
- │         ├── best: (scan p@if_s,partial,cols=(3,5))
- │         └── cost: 1060.01
- ├── G7: (eq G8 G9)
- ├── G8: (variable s)
- └── G9: (const 'foo')
+project
+ ├── columns: b:4
+ └── index-join p
+      ├── columns: s:3!null b:4
+      ├── fd: ()-->(3)
+      └── scan p@if_s,partial
+           ├── columns: s:3 rowid:5!null
+           ├── key: (5)
+           └── fd: (5)-->(3)
 
 # Generate a partial index scan inside a select inside an index-join when the
 # index is not covering and there are remaining filters that are covered by the
 # index.
-#
-# TODO(mgartner): Change "memo" to "opt".
-memo expect=GeneratePartialIndexScans
+opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND (i = 1 OR f = 2.0)
 ----
-memo (optimized, ~8KB, required=[presentation: b:4])
- ├── G1: (project G2 G3 b)
- │    └── [presentation: b:4]
- │         ├── best: (project G2 G3 b)
- │         └── cost: 1100.09
- ├── G2: (select G4 G5) (index-join G6 p,cols=(1-4))
- │    └── []
- │         ├── best: (select G4 G5)
- │         └── cost: 1100.05
- ├── G3: (projections)
- ├── G4: (scan p,cols=(1-4))
- │    └── []
- │         ├── best: (scan p,cols=(1-4))
- │         └── cost: 1090.02
- ├── G5: (filters G7 G8)
- ├── G6: (select G9 G10)
- │    └── []
- │         ├── best: (select G9 G10)
- │         └── cost: 1090.03
- ├── G7: (eq G11 G12)
- ├── G8: (or G13 G14)
- ├── G9: (scan p@if_s,partial,cols=(1-3,5))
- │    └── []
- │         ├── best: (scan p@if_s,partial,cols=(1-3,5))
- │         └── cost: 1080.01
- ├── G10: (filters G8)
- ├── G11: (variable s)
- ├── G12: (const 'foo')
- ├── G13: (eq G15 G16)
- ├── G14: (eq G17 G18)
- ├── G15: (variable i)
- ├── G16: (const 1)
- ├── G17: (variable f)
- └── G18: (const 2.0)
+project
+ ├── columns: b:4
+ └── index-join p
+      ├── columns: i:1 f:2 s:3!null b:4
+      ├── fd: ()-->(3)
+      └── select
+           ├── columns: i:1 f:2 s:3 rowid:5!null
+           ├── key: (5)
+           ├── fd: (5)-->(1-3)
+           ├── scan p@if_s,partial
+           │    ├── columns: i:1 f:2 s:3 rowid:5!null
+           │    ├── key: (5)
+           │    └── fd: (5)-->(1-3)
+           └── filters
+                └── (i:1 = 1) OR (f:2 = 2.0) [outer=(1,2)]
 
 # Generate a partial index scan inside an index-join inside a select when the
 # index is not covering and the remaining filters are not covered by the index.
-#
-# TODO(mgartner): Change "memo" to "opt".
-memo expect=GeneratePartialIndexScans
+opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND b
 ----
-memo (optimized, ~8KB, required=[presentation: b:4])
- ├── G1: (project G2 G3 b)
- │    └── [presentation: b:4]
- │         ├── best: (project G2 G3 b)
- │         └── cost: 1080.10
- ├── G2: (select G4 G5) (select G6 G7)
- │    └── []
- │         ├── best: (select G4 G5)
- │         └── cost: 1080.05
- ├── G3: (projections)
- ├── G4: (scan p,cols=(3,4))
- │    └── []
- │         ├── best: (scan p,cols=(3,4))
- │         └── cost: 1070.02
- ├── G5: (filters G8 G9)
- ├── G6: (index-join G10 p,cols=(3,4))
- │    └── []
- │         ├── best: (index-join G10 p,cols=(3,4))
- │         └── cost: 5140.02
- ├── G7: (filters G9)
- ├── G8: (eq G11 G12)
- ├── G9: (variable b)
- ├── G10: (scan p@if_s,partial,cols=(3,5))
- │    └── []
- │         ├── best: (scan p@if_s,partial,cols=(3,5))
- │         └── cost: 1060.01
- ├── G11: (variable s)
- └── G12: (const 'foo')
+project
+ ├── columns: b:4!null
+ ├── fd: ()-->(4)
+ └── select
+      ├── columns: s:3!null b:4!null
+      ├── fd: ()-->(3,4)
+      ├── index-join p
+      │    ├── columns: s:3 b:4
+      │    └── scan p@if_s,partial
+      │         ├── columns: s:3 rowid:5!null
+      │         ├── key: (5)
+      │         └── fd: (5)-->(3)
+      └── filters
+           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
 
 # Generate a partial index scan inside a Select/IndexJoin/Select when the index
 # is not covering and the remaining filters are partially covered by the index.
-#
-# TODO(mgartner): Change "memo" to "opt".
-memo expect=GeneratePartialIndexScans
+opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND i = 1 AND b
 ----
-memo (optimized, ~9KB, required=[presentation: b:4])
- ├── G1: (project G2 G3 b)
- │    └── [presentation: b:4]
- │         ├── best: (project G2 G3 b)
- │         └── cost: 1090.08
- ├── G2: (select G4 G5) (select G6 G7)
- │    └── []
- │         ├── best: (select G4 G5)
- │         └── cost: 1090.06
- ├── G3: (projections)
- ├── G4: (scan p,cols=(1,3,4))
- │    └── []
- │         ├── best: (scan p,cols=(1,3,4))
- │         └── cost: 1080.02
- ├── G5: (filters G8 G9 G10)
- ├── G6: (index-join G11 p,cols=(1,3,4))
- │    └── []
- │         ├── best: (index-join G11 p,cols=(1,3,4))
- │         └── cost: 1120.94
- ├── G7: (filters G10)
- ├── G8: (eq G12 G13)
- ├── G9: (eq G14 G15)
- ├── G10: (variable b)
- ├── G11: (select G16 G17)
- │    └── []
- │         ├── best: (select G16 G17)
- │         └── cost: 1080.03
- ├── G12: (variable s)
- ├── G13: (const 'foo')
- ├── G14: (variable i)
- ├── G15: (const 1)
- ├── G16: (scan p@if_s,partial,cols=(1,3,5))
- │    └── []
- │         ├── best: (scan p@if_s,partial,cols=(1,3,5))
- │         └── cost: 1070.01
- └── G17: (filters G9)
+project
+ ├── columns: b:4!null
+ ├── fd: ()-->(4)
+ └── select
+      ├── columns: i:1!null s:3!null b:4!null
+      ├── fd: ()-->(1,3,4)
+      ├── index-join p
+      │    ├── columns: i:1 s:3 b:4
+      │    ├── fd: ()-->(1)
+      │    └── select
+      │         ├── columns: i:1!null s:3 rowid:5!null
+      │         ├── key: (5)
+      │         ├── fd: ()-->(1), (5)-->(3)
+      │         ├── scan p@if_s,partial
+      │         │    ├── columns: i:1 s:3 rowid:5!null
+      │         │    ├── key: (5)
+      │         │    └── fd: (5)-->(1,3)
+      │         └── filters
+      │              └── i:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── filters
+           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
 
 # Generate multiple partial index scans when there are multiple partial indexes
 # that have predicates implied by the filters.
@@ -309,8 +236,8 @@ SELECT * FROM q WHERE i > 0 AND s = 'foo'
 memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G5)
  │    └── [presentation: i:1,s:2,b:3]
- │         ├── best: (select G2 G3)
- │         └── cost: 1080.05
+ │         ├── best: (select G6 G7)
+ │         └── cost: 51.34
  ├── G2: (scan q,cols=(1-3))
  │    └── []
  │         ├── best: (scan q,cols=(1-3))
@@ -319,12 +246,12 @@ memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
  ├── G4: (index-join G11 q,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G11 q,cols=(1-3))
- │         └── cost: 5120.02
+ │         └── cost: 1706.69
  ├── G5: (filters G10)
  ├── G6: (index-join G12 q,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G12 q,cols=(1-3))
- │         └── cost: 5120.02
+ │         └── cost: 51.22
  ├── G7: (filters G9)
  ├── G8: (index-join G13 q,cols=(1-3))
  │    └── []
@@ -335,11 +262,11 @@ memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
  ├── G11: (scan q@i_gt_0,partial,cols=(1,4))
  │    └── []
  │         ├── best: (scan q@i_gt_0,partial,cols=(1,4))
- │         └── cost: 1040.01
+ │         └── cost: 346.68
  ├── G12: (scan q@s_eq_foo,partial,cols=(2,4))
  │    └── []
  │         ├── best: (scan q@s_eq_foo,partial,cols=(2,4))
- │         └── cost: 1040.01
+ │         └── cost: 10.41
  ├── G13: (scan q@i,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan q@i,cols=(1,4),constrained)
