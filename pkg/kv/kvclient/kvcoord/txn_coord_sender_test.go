@@ -1191,8 +1191,8 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This put will lay down an intent, txn timestamp will increase
-	// beyond DeprecatedOrigTimestamp.
+	// This put will lay down an intent, txn write timestamp will increase beyond
+	// the read timestamp.
 	if err := txn.Put(ctx, writeKey, value); err != nil {
 		t.Fatal(err)
 	}

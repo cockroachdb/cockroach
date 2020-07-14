@@ -461,18 +461,17 @@ var nonZeroTxn = Transaction{
 		Priority:       957356782,
 		Sequence:       123,
 	},
-	Name:                    "name",
-	Status:                  COMMITTED,
-	LastHeartbeat:           makeTS(1, 2),
-	DeprecatedOrigTimestamp: makeTS(30, 31),
-	ReadTimestamp:           makeTS(20, 22),
-	MaxTimestamp:            makeTS(40, 41),
-	ObservedTimestamps:      []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	WriteTooOld:             true,
-	LockSpans:               []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	CommitTimestampFixed:    true,
-	IgnoredSeqNums:          []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	Name:                 "name",
+	Status:               COMMITTED,
+	LastHeartbeat:        makeTS(1, 2),
+	ReadTimestamp:        makeTS(20, 22),
+	MaxTimestamp:         makeTS(40, 41),
+	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	WriteTooOld:          true,
+	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	CommitTimestampFixed: true,
+	IgnoredSeqNums:       []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -689,7 +688,6 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Sequence = 0
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
-	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
 	expTxn.CommitTimestampFixed = false
 	expTxn.LockSpans = nil
