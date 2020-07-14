@@ -194,7 +194,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		}
 
 		ins.Columns = make(tree.NameList, len(refColumns))
-		for i, ord := range cat.ConvertColumnIDsToOrdinals(tab, refColumns) {
+		for i, ord := range resolveNumericColumnRefs(tab, refColumns) {
 			ins.Columns[i] = tab.Column(ord).ColName()
 		}
 	}
