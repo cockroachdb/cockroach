@@ -116,7 +116,7 @@ project
       │         │    │    │    ├── save-table-name: q2_lookup_join_7
       │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:11(int!null) s_name:12(char!null) s_address:13(varchar!null) s_nationkey:14(int!null) s_phone:15(char!null) s_acctbal:16(float!null) s_comment:17(varchar!null) ps_partkey:19(int!null) ps_suppkey:20(int!null) ps_supplycost:22(float!null) n_nationkey:25(int!null) n_name:26(char!null) n_regionkey:27(int!null) r_regionkey:30(int!null) r_name:31(char!null) ps_partkey:34(int!null) ps_suppkey:35(int!null) ps_supplycost:37(float!null)
       │         │    │    │    ├── key columns: [1] = [34]
-      │         │    │    │    ├── stats: [rows=4452.37425, distinct(1)=1333.31636, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=1, null(6)=0, distinct(11)=3587.31881, null(11)=0, distinct(12)=3592.54448, null(12)=0, distinct(13)=3593.28589, null(13)=0, distinct(14)=25, null(14)=0, distinct(15)=3593.28589, null(15)=0, distinct(16)=3590.83442, null(16)=0, distinct(17)=3588.36899, null(17)=0, distinct(19)=4401.6666, null(19)=0, distinct(20)=3587.31881, null(20)=0, distinct(22)=4355.01344, null(22)=0, distinct(25)=25, null(25)=0, distinct(26)=25, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=1, null(31)=0, distinct(34)=1333.31636, null(34)=0, distinct(35)=3587.31881, null(35)=0, distinct(37)=4355.01344, null(37)=0]
+      │         │    │    │    ├── stats: [rows=4452.37425, distinct(1)=1333.31636, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=150, null(5)=0, distinct(6)=1, null(6)=0, distinct(11)=3587.31881, null(11)=0, distinct(12)=3592.54448, null(12)=0, distinct(13)=3593.28589, null(13)=0, distinct(14)=25, null(14)=0, distinct(15)=3593.28589, null(15)=0, distinct(16)=3590.83442, null(16)=0, distinct(17)=3588.36899, null(17)=0, distinct(19)=1333.31636, null(19)=0, distinct(20)=3587.31881, null(20)=0, distinct(22)=4355.01344, null(22)=0, distinct(25)=25, null(25)=0, distinct(26)=25, null(26)=0, distinct(27)=1, null(27)=0, distinct(30)=1, null(30)=0, distinct(31)=1, null(31)=0, distinct(34)=4401.6666, null(34)=0, distinct(35)=3587.31881, null(35)=0, distinct(37)=4355.01344, null(37)=0]
       │         │    │    │    ├── key: (20,34,35)
       │         │    │    │    ├── fd: ()-->(6,31), (1)-->(3,5), (25)-->(26,27), (11)-->(12-17), (19,20)-->(22), (34,35)-->(37), (19)==(1,34), (34)==(1,19), (11)==(20), (20)==(11), (14)==(25), (25)==(14), (27)==(30), (30)==(27), (1)==(19,34)
       │         │    │    │    ├── inner-join (hash)
@@ -519,8 +519,8 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {p_partkey}        4452.00        1.73           1333.00             2.90 <==            0.00            1.00
 {p_size}           4452.00        1.73           1.00                1.00                0.00            1.00
 {p_type}           4452.00        1.73           150.00              5.00 <==            0.00            1.00
-{ps_partkey}       4452.00        1.73           4402.00             9.57 <==            0.00            1.00
-{ps_partkey_1}     4452.00        1.73           1333.00             2.90 <==            0.00            1.00
+{ps_partkey}       4452.00        1.73           1333.00             2.90 <==            0.00            1.00
+{ps_partkey_1}     4452.00        1.73           4402.00             9.57 <==            0.00            1.00
 {ps_suppkey}       4452.00        1.73           3587.00             6.55 <==            0.00            1.00
 {ps_suppkey_1}     4452.00        1.73           3587.00             2.16 <==            0.00            1.00
 {ps_supplycost}    4452.00        1.73           4355.00             6.80 <==            0.00            1.00
