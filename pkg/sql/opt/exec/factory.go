@@ -26,6 +26,34 @@ import (
 // (currently maps to sql.planNode).
 type Node interface{}
 
+// The Factory interface which defines the interface for building an execution
+// plan, which consists of a tree of execution nodes (currently a sql.planNode tree).
+//
+// See FactoryInternal for a detailed explanation and individual functions part
+// of the interface.
+type Factory interface {
+	FactoryInternal
+
+	ContainsFullTableScan() bool
+	ContainsFullIndexScan() bool
+}
+
+// StubFactory is a do-nothing implementation of Factory methods used for
+// testing.
+type StubFactory struct {
+	StubFactoryInternal
+}
+
+var _ Factory = StubFactory{}
+
+func (StubFactory) ContainsFullTableScan() bool {
+	return false
+}
+
+func (StubFactory) ContainsFullIndexScan() bool {
+	return false
+}
+
 // Plan represents the plan for a query (currently maps to sql.planTop).
 // For simple queries, the plan is associated with a single Node tree.
 // For queries containing subqueries, the plan is associated with multiple Node

@@ -344,6 +344,12 @@ var SerialNormalizationMode = settings.RegisterPublicEnumSetting(
 	},
 )
 
+var disallowFullTableScans = settings.RegisterPublicBoolSetting(
+	`sql.defaults.disallow_full_table_scans`,
+	"setting to true rejects queries that have planned a full table scan",
+	false,
+)
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2162,6 +2168,10 @@ func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
 	m.data.HashShardedIndexesEnabled = val
+}
+
+func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
+	m.data.DisallowFullTableScans = val
 }
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
