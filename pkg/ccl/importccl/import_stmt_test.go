@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -4538,5 +4539,124 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 					}
 				})
 		}
+	}
+}
+
+//
+// type importSafeDefaultExprVisitor struct {
+// 	ctx    *tree.EvalContext
+// 	isSafe bool
+// }
+//
+// func (v *importSafeDefaultExprVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+// 	if v.isSafe {
+// 		if tree.ContainsVars(expr) || !operatorIsSafe(expr) {
+// 			v.isSafe = false
+// 			return false, expr
+// 		}
+// 	}
+// 	return true, expr
+// }
+//
+// func (v *importSafeDefaultExprVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
+// 	return expr
+// }
+//
+// func IsImportSafeDefaultExpr(evalCtx *tree.EvalContext, expr tree.Expr) bool {
+// 	if tree.IsConst(evalCtx, expr) {
+// 		return true
+// 	}
+//
+// 	v := &importSafeDefaultExprVisitor{ctx: evalCtx, isSafe: true}
+// 	tree.WalkExprConst(v, expr)
+// 	return v.isSafe
+// }
+
+// var _ tree.Visitor = &importSafeDefaultExprVisitor{}
+
+func TestFunWithTrees(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	expectErrorType := types.Any
+
+	testCases := []struct {
+		name string
+		expr string
+		typ  *types.T
+	}{
+		{
+			name: "current_timestamp",
+			expr: "current_timestamp()",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "current_timestamp_as_int",
+			expr: "current_timestamp()::int",
+			typ:  types.Int,
+		},
+		{
+			name: "add_timestamps",
+			expr: "current_timestamp()::int + 1 + current_timestamp()::int",
+			typ:  types.Int,
+		},
+		{
+			name: "localtimestamp",
+			expr: "localtimestamp()",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "localtimestamp_with_precision",
+			expr: "localtimestamp(5)",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "localtimestamp_with_precision_expression",
+			expr: "localtimestamp(1 + 2 + 3)",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "now",
+			expr: "now()",
+			typ:  types.Date,
+		},
+		{
+			name: "now_with_cast",
+			expr: "now()::TIMESTAMPTZ",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "random",
+			expr: "random()",
+			typ:  expectErrorType,
+		},
+		{
+			name: "nextval",
+			expr: "nextval('foo')",
+			typ:  expectErrorType,
+		},
+		{
+			name: "random_plus_timestamp",
+			expr: "(100*random())::int + current_timestmap()::int",
+			typ:  expectErrorType,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := parser.ParseExpr(tc.expr)
+			require.NoError(t, err)
+
+			semaCtx := tree.MakeSemaContext()
+			semaCtx.Properties.Require("isImportSafe", tree.RejectVolatileFunctions)
+			_, err = tree.TypeCheck(ctx, expr, &semaCtx, tc.typ)
+			if tc.typ == expectErrorType {
+				require.Error(t, err)
+				require.True(t, testutils.IsError(err, "volatile functions are not allowed in isImportSafe"), err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+
 	}
 }
