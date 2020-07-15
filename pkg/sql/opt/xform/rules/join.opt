@@ -10,7 +10,7 @@
 #
 # Citations: [8]
 [ReorderJoins, Explore]
-(InnerJoin
+(InnerJoin | SemiJoin | AntiJoin | LeftJoin | FullJoin
     *
     *
     *

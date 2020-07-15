@@ -253,27 +253,27 @@ ALTER TABLE authors INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-tree                      field         description        columns                                   ordering
-·                         distribution  full               ·                                         ·
-·                         vectorized    true               ·                                         ·
-distinct                  ·             ·                  (name)                                    ·
- │                        distinct on   name               ·                                         ·
- └── render               ·             ·                  (name)                                    ·
-      │                   render 0      name               ·                                         ·
-      └── lookup-join     ·             ·                  (title, shelf, name, book, title, shelf)  ·
-           │              table         books2@primary     ·                                         ·
-           │              type          inner              ·                                         ·
-           │              equality      (title) = (title)  ·                                         ·
-           │              pred          shelf != shelf     ·                                         ·
-           └── hash-join  ·             ·                  (title, shelf, name, book)                ·
-                │         type          inner              ·                                         ·
-                │         equality      (title) = (book)   ·                                         ·
-                ├── scan  ·             ·                  (title, shelf)                            ·
-                │         table         books@primary      ·                                         ·
-                │         spans         FULL SCAN          ·                                         ·
-                └── scan  ·             ·                  (name, book)                              ·
-·                         table         authors@primary    ·                                         ·
-·                         spans         FULL SCAN          ·                                         ·
+tree                      field         description       columns                                   ordering
+·                         distribution  full              ·                                         ·
+·                         vectorized    true              ·                                         ·
+distinct                  ·             ·                 (name)                                    ·
+ │                        distinct on   name              ·                                         ·
+ └── render               ·             ·                 (name)                                    ·
+      │                   render 0      name              ·                                         ·
+      └── lookup-join     ·             ·                 (title, shelf, name, book, title, shelf)  ·
+           │              table         books2@primary    ·                                         ·
+           │              type          inner             ·                                         ·
+           │              equality      (book) = (title)  ·                                         ·
+           │              pred          shelf != shelf    ·                                         ·
+           └── hash-join  ·             ·                 (title, shelf, name, book)                ·
+                │         type          inner             ·                                         ·
+                │         equality      (title) = (book)  ·                                         ·
+                ├── scan  ·             ·                 (title, shelf)                            ·
+                │         table         books@primary     ·                                         ·
+                │         spans         FULL SCAN         ·                                         ·
+                └── scan  ·             ·                 (name, book)                              ·
+·                         table         authors@primary   ·                                         ·
+·                         spans         FULL SCAN         ·                                         ·
 
 # Verify data placement.
 query TTTI colnames
@@ -285,7 +285,7 @@ NULL       NULL     {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2j4QwN__n8L_e0okF3ACnRSpUlBhKhMLHSBtUsVDQq6QNdiZ7UibEN99spOuDWrSsbecfb_zz3fxEdSPHAJYTefT2zUpZU4-LhefycP02_18PIuIM5mt1qsvc5fUKSaeRbdrEpd6L6Tq8fiAFZQI8aTIeEUSRqvAs5FHn5PJ17vpckocJ2E9nekcyQ1JvOrTJeNoQpznsoY3u3WiW28nrKf2mD-S_y1pv90NUOAixSg-oILgARhQGMGGQiHFFpUS0iwfbdIs_QnBgELGi1Kb5Q2FrZAIwRHsURBAJK5E0R8BhRR1nOU27URBlPoFUjreIQTXJ_qqMOsuvI6THJcYpyj7g0Z5KGR2iOWv0DYOKKyKmKuAXAGFRakDEjIa-tBmwf7Vgr1tUY-hxcNr9fBaPV6OL7mQKUpMz_v7fsobl7mL1f6TyDjKvte8S46P2gmZeyOz3V47oec27kBDn4bD1pv4l3TUCNQN9TvGagTnQjyVBfkuMk4ENy7GKiKhZ_7p8MMfx_ZhDy9Rm2RKZ3yr-8OmWMha648a9d95K0tUheAK_-qxDMwEMd1h9UcoUcot3kuxtcdU4cJydiFFpavd6yqY8WrLCL6GWSfsN2B2DnsXwN457HfCw27tYSc86oZHnfDgDN6c_vsdAAD__90i6Ug=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyck9Fv2j4Qx99_f4V_95RILuAkdFKkSkaFqUwsdIC0SRUPCblC1mBntiNtQvzvkxO6NqhJx958vvvcfe_OPoD-kUMIy8lscrsipcrJx8X8M3mYfLufjaYRccbT5Wr5ZeaSU4i1p9HtisSl2UmleyLeYw0lUj5pMlqShNHa8CrLo8_B5OvdZDEhjpOwnslMjuSGJF59dMkoGhPnOa3lrfcU6J7cCevpHeaP5P-KrM7uGigImWIU71FD-AAMKAxhTaFQcoNaS2WvD1XQNP0J4YBCJorS2Os1hY1UCOEBqlIQQiSvZNEfAoUUTZzlVdiRgizNC6RNvEUIr4_0VWLWnXgVJzkuME5R9QeN9FCobB-rX7waHFBYFrHQIbkCCvPShIQzyn1oU8H-VQV7W8VpDS06vFYdXquOl_KlkCpFhen5fN8PeaOZu1jvPslMoOp7zV5yfDQOZ-6NyrY743DPbfRAuU950NqJf8lErYDTQP2OtVqBMymfyoJ8l5kgUoSEB1ZVRLhn3zT_8Edj-7KDS6SNM20ysTH9oCmMs9b8w0b-d_7KAnUhhca_-iwDu0FMt1i_CC1LtcF7JTdVmdqcV1x1kaI2tfe6NqaidlmBr2HWCfsNmJ3D3gWwdw77nXDQLTvohIfd8LATHpzB6-N_vwMAAP__5F3pSw==
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -1429,56 +1429,61 @@ GROUP BY s_name
 ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
-·                                                       distribution           full
-·                                                       vectorized             true
-limit                                                   ·                      ·
- │                                                      count                  100
- └── sort                                               ·                      ·
-      │                                                 order                  -numwait,+s_name
-      └── group                                         ·                      ·
-           │                                            aggregate 0            s_name
-           │                                            aggregate 1            count_rows()
-           │                                            group by               s_name
-           └── render                                   ·                      ·
-                └── lookup-join                         ·                      ·
-                     │                                  table                  orders@primary
-                     │                                  type                   inner
-                     │                                  equality               (l_orderkey) = (o_orderkey)
-                     │                                  equality cols are key  ·
-                     │                                  parallel               ·
-                     │                                  pred                   o_orderstatus = 'F'
-                     └── lookup-join                    ·                      ·
-                          │                             table                  nation@primary
-                          │                             type                   inner
-                          │                             equality               (s_nationkey) = (n_nationkey)
-                          │                             equality cols are key  ·
-                          │                             parallel               ·
-                          │                             pred                   n_name = 'SAUDI ARABIA'
-                          └── lookup-join               ·                      ·
-                               │                        table                  supplier@primary
-                               │                        type                   inner
-                               │                        equality               (l_suppkey) = (s_suppkey)
-                               │                        equality cols are key  ·
-                               │                        parallel               ·
-                               └── lookup-join          ·                      ·
-                                    │                   table                  lineitem@primary
-                                    │                   type                   semi
-                                    │                   equality               (l_orderkey) = (l_orderkey)
-                                    │                   pred                   l_suppkey != l_suppkey
-                                    └── merge-join      ·                      ·
-                                         │              type                   anti
-                                         │              equality               (l_orderkey) = (l_orderkey)
-                                         │              mergeJoinOrder         +"(l_orderkey=l_orderkey)"
-                                         ├── filter     ·                      ·
-                                         │    │         filter                 l_receiptdate > l_commitdate
-                                         │    └── scan  ·                      ·
-                                         │              table                  lineitem@primary
-                                         │              spans                  FULL SCAN
-                                         └── filter     ·                      ·
-                                              │         filter                 l_receiptdate > l_commitdate
-                                              └── scan  ·                      ·
-·                                                       table                  lineitem@primary
-·                                                       spans                  FULL SCAN
+·                                                                      distribution           full
+·                                                                      vectorized             true
+limit                                                                  ·                      ·
+ │                                                                     count                  100
+ └── sort                                                              ·                      ·
+      │                                                                order                  -numwait,+s_name
+      └── group                                                        ·                      ·
+           │                                                           aggregate 0            s_name
+           │                                                           aggregate 1            count_rows()
+           │                                                           group by               s_name
+           └── render                                                  ·                      ·
+                └── lookup-join                                        ·                      ·
+                     │                                                 table                  lineitem@primary
+                     │                                                 type                   semi
+                     │                                                 equality               (l_orderkey) = (l_orderkey)
+                     │                                                 pred                   l_suppkey != l_suppkey
+                     └── lookup-join                                   ·                      ·
+                          │                                            table                  orders@primary
+                          │                                            type                   inner
+                          │                                            equality               (l_orderkey) = (o_orderkey)
+                          │                                            equality cols are key  ·
+                          │                                            parallel               ·
+                          │                                            pred                   o_orderstatus = 'F'
+                          └── lookup-join                              ·                      ·
+                               │                                       table                  lineitem@primary
+                               │                                       type                   anti
+                               │                                       equality               (l_orderkey) = (l_orderkey)
+                               │                                       pred                   l_receiptdate > l_commitdate
+                               └── render                              ·                      ·
+                                    └── lookup-join                    ·                      ·
+                                         │                             table                  lineitem@primary
+                                         │                             type                   inner
+                                         │                             equality               (l_orderkey, l_linenumber) = (l_orderkey, l_linenumber)
+                                         │                             equality cols are key  ·
+                                         │                             parallel               ·
+                                         │                             pred                   l_receiptdate > l_commitdate
+                                         └── lookup-join               ·                      ·
+                                              │                        table                  lineitem@l_sk
+                                              │                        type                   inner
+                                              │                        equality               (s_suppkey) = (l_suppkey)
+                                              └── lookup-join          ·                      ·
+                                                   │                   table                  supplier@primary
+                                                   │                   type                   inner
+                                                   │                   equality               (s_suppkey) = (s_suppkey)
+                                                   │                   equality cols are key  ·
+                                                   │                   parallel               ·
+                                                   └── lookup-join     ·                      ·
+                                                        │              table                  supplier@s_nk
+                                                        │              type                   inner
+                                                        │              equality               (n_nationkey) = (s_nationkey)
+                                                        └── filter     ·                      ·
+                                                             │         filter                 n_name = 'SAUDI ARABIA'
+                                                             └── scan  ·                      ·
+·                                                                      table                  nation@primary
+·                                                                      spans                  FULL SCAN
 
 # Regression test for #50964.
 statement ok
