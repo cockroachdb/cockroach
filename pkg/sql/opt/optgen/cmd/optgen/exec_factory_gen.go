@@ -39,12 +39,13 @@ func (g *execFactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sqlbase\"\n")
 	g.w.unnest(")\n\n")
 
-	g.genExecFactory()
-	g.genStubFactory()
+	g.genExecFactoryInternal()
+	g.genStubFactoryInternal()
 }
 
-func (g *execFactoryGen) genExecFactory() {
-	g.w.write("// Factory defines the interface for building an execution plan, which consists\n")
+func (g *execFactoryGen) genExecFactoryInternal() {
+	g.w.write("// FactoryInternal is used to construct the Factory interface which defines the\n")
+	g.w.write("// the interface for building an execution plan, which consists\n")
 	g.w.write("// of a tree of execution nodes (currently a sql.planNode tree).\n")
 	g.w.write("//\n")
 	g.w.write("// The tree is always built bottom-up. The Construct methods either construct\n")
@@ -53,7 +54,7 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.write("//\n")
 	g.w.write("// The TypedExprs passed to these functions refer to columns of the input node\n")
 	g.w.write("// via IndexedVars.\n")
-	g.w.nest("type Factory interface {\n")
+	g.w.nest("type FactoryInternal interface {\n")
 	g.w.writeIndent("// ConstructPlan creates a plan enclosing the given plan and (optionally)\n")
 	g.w.writeIndent("// subqueries, cascades, and checks.\n")
 	g.w.writeIndent("//\n")
@@ -88,13 +89,13 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.unnest("}\n\n")
 }
 
-func (g *execFactoryGen) genStubFactory() {
-	g.w.write("// StubFactory is a do-nothing implementation of Factory, used for testing.\n")
-	g.w.write("type StubFactory struct{}\n")
+func (g *execFactoryGen) genStubFactoryInternal() {
+	g.w.write("// StubFactoryInternal is a do-nothing implementation of all FactoryInternal methods.\n")
+	g.w.write("// It helps construct StubFactory which is used for testing.\n")
+	g.w.write("type StubFactoryInternal struct{}\n")
 	g.w.write("\n")
-	g.w.write("var _ Factory = StubFactory{}\n")
 	g.w.write("\n")
-	g.w.nestIndent("func (StubFactory) ConstructPlan(\n")
+	g.w.nestIndent("func (StubFactoryInternal) ConstructPlan(\n")
 	g.w.writeIndent("root Node, subqueries []Subquery, cascades []Cascade, checks []Node,\n")
 	g.w.unnest(") (Plan, error) {\n")
 	g.w.nestIndent("return struct{}{}, nil\n")
@@ -102,7 +103,7 @@ func (g *execFactoryGen) genStubFactory() {
 
 	for _, define := range g.compiled.Defines {
 		g.w.write("\n")
-		g.w.nest("func (StubFactory) Construct%s(\n", define.Name)
+		g.w.nest("func (StubFactoryInternal) Construct%s(\n", define.Name)
 		for _, field := range define.Fields {
 			// Remove "exec." from types.
 			typ := strings.Replace(string(field.Type), "exec.", "", 1)

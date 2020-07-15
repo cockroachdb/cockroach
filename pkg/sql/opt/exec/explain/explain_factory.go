@@ -152,3 +152,11 @@ func (f *Factory) ConstructPlan(
 	}
 	return p, nil
 }
+
+func (f *Factory) ContainsFullTableScan() bool {
+	return f.wrappedFactory.ContainsFullTableScan()
+}
+
+func (f *Factory) ContainsFullIndexScan() bool {
+	return f.wrappedFactory.ContainsFullTableScan()
+}

@@ -40,7 +40,9 @@ import (
 )
 
 type execFactory struct {
-	planner *planner
+	planner               *planner
+	containsFullTableScan bool
+	containsFullIndexScan bool
 }
 
 var _ exec.Factory = &execFactory{}
@@ -112,6 +114,14 @@ func (ef *execFactory) ConstructScan(
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
 		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.ID),
 	)
+	// Save if the query contains an unconstrained scan on the factory so that
+	// the planner can be made aware later.
+	if scan.isFull && tabDesc.PrimaryIndex.ID == indexDesc.ID {
+		ef.containsFullTableScan = true
+	} else if scan.isFull {
+		ef.containsFullIndexScan = true
+	}
+
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
 	}
@@ -1867,6 +1877,16 @@ func (ef *execFactory) ConstructExplainPlan(
 		n.columns = sqlbase.ExplainPlanColumns
 	}
 	return n, nil
+}
+
+// ContainsFullTableScan is part of the exec.Factory interface.
+func (ef *execFactory) ContainsFullTableScan() bool {
+	return ef.containsFullTableScan
+}
+
+// ContainsFullIndexScan is part of the exec.Factory interface.
+func (ef *execFactory) ContainsFullIndexScan() bool {
+	return ef.containsFullIndexScan
 }
 
 // renderBuilder encapsulates the code to build a renderNode.
