@@ -216,9 +216,11 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
+				// We need to close all of the closers of this input before we
+				// notify the wait groups.
+				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
-				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
 			}()
 			sendErr := func(err error) {
 				ctxCanceled := strings.Contains(err.Error(), context.Canceled.Error())
