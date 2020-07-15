@@ -1239,6 +1239,11 @@ func (t *TeeEngineIter) Stats() IteratorStats {
 	return t.iter1.Stats()
 }
 
+// SupportsPrev implements the Iterator interface.
+func (t *TeeEngineIter) SupportsPrev() bool {
+	return t.iter1.SupportsPrev() && t.iter2.SupportsPrev()
+}
+
 // MVCCOpsSpecialized implements the MVCCIterator interface.
 func (t *TeeEngineIter) MVCCOpsSpecialized() bool {
 	return true
