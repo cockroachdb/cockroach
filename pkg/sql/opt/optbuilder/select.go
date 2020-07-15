@@ -463,8 +463,8 @@ func (b *Builder) buildScan(
 	if ordinals == nil {
 		// If no ordinals are requested, then add in all of the table columns
 		// (including mutation columns if scanMutationCols is true).
-		outScope.cols = make([]scopeColumn, 0, tab.AllColumnCount())
-		for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+		outScope.cols = make([]scopeColumn, 0, tab.ColumnCount())
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			if scanMutationCols || !cat.IsMutationColumn(tab, i) {
 				addCol(i)
 			}
@@ -579,7 +579,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// Find the non-nullable table columns. Mutation columns can be NULL during
 	// backfill, so they should be excluded.
 	var notNullCols opt.ColSet
-	for i := 0; i < tab.AllColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		if !tab.Column(i).IsNullable() && !cat.IsMutationColumn(tab, i) {
 			notNullCols.Add(tabMeta.MetaID.ColumnID(i))
 		}
@@ -628,7 +628,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	var tableScope *scope
 	tab := tabMeta.Table
-	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		tabCol := tab.Column(i)
 		if !tabCol.IsComputed() {
 			continue

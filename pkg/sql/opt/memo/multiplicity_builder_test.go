@@ -329,7 +329,7 @@ func (ob *testOpBuilder) makeScan(tableName tree.Name) (scan RelExpr, vars []*Va
 	tab := ob.cat.Table(tn)
 	tabID := ob.mem.Metadata().AddTable(tab, tn)
 	var cols opt.ColSet
-	for i := 0; i < tab.AllColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		col := tabID.ColumnID(i)
 		cols.Add(col)
 		newVar := ob.mem.MemoizeVariable(col)

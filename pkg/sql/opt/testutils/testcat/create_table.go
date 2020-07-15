@@ -94,7 +94,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	if !hasPrimaryIndex {
 		rowid := &Column{
-			Ordinal:     tab.AllColumnCount(),
+			Ordinal:     tab.ColumnCount(),
 			Name:        "rowid",
 			Type:        types.Int,
 			Hidden:      true,
@@ -254,7 +254,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []*Column) *Table 
 	tab := &Table{TabID: tc.nextStableID(), TabName: name, Catalog: tc, Columns: columns}
 
 	rowid := &Column{
-		Ordinal:     tab.AllColumnCount(),
+		Ordinal:     tab.ColumnCount(),
 		Name:        "rowid",
 		Type:        types.Int,
 		Hidden:      true,
@@ -380,7 +380,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
 	col := &Column{
-		Ordinal:  tt.AllColumnCount(),
+		Ordinal:  tt.ColumnCount(),
 		Name:     string(def.Name),
 		Type:     tree.MustBeStaticallyKnownType(def.Type),
 		Nullable: nullable,
@@ -480,7 +480,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			pkOrdinals.Add(c.Ordinal)
 		}
 		// Add the rest of the columns in the table.
-		for i, n := 0, tt.AllColumnCount(); i < n; i++ {
+		for i, n := 0, tt.ColumnCount(); i < n; i++ {
 			if !pkOrdinals.Contains(i) {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
