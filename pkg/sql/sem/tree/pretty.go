@@ -2068,13 +2068,15 @@ func (node *Export) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN")
+	showMode := node.Mode != ExplainPlan
 	// ANALYZE is a special case because it is a statement implemented as an
 	// option to EXPLAIN.
 	if node.Flags[ExplainFlagAnalyze] {
 		d = pretty.ConcatSpace(d, pretty.Keyword("ANALYZE"))
+		showMode = true
 	}
 	var opts []pretty.Doc
-	if node.Mode != ExplainPlan {
+	if showMode {
 		opts = append(opts, pretty.Keyword(node.Mode.String()))
 	}
 	for f := ExplainFlag(1); f <= numExplainFlags; f++ {
