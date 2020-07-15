@@ -58,6 +58,40 @@ func TestCentroid(t *testing.T) {
 	}
 }
 
+func TestConvexHull(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{
+			"GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))",
+			"POLYGON((10 10,10 40,20 45,40 40,45 30,40 10,10 10))",
+		},
+		{
+			"SRID=4326;GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))",
+			"SRID=4326;POLYGON((10 10,10 40,20 45,40 40,45 30,40 10,10 10))",
+		},
+		{
+			"MULTILINESTRING((100 190,10 8),(150 10, 20 30))",
+			"POLYGON((10 8,20 30,100 190,150 10,10 8))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := ConvexHull(g)
+			require.NoError(t, err)
+
+			expected, err := geo.ParseGeometry(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, expected, ret)
+		})
+	}
+}
+
 func TestPointOnSurface(t *testing.T) {
 	testCases := []struct {
 		wkt      string
