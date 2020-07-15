@@ -490,9 +490,6 @@ func (n *NodeDescriptor) CheckedTenantAddress() *util.UnresolvedAddr {
 	return &n.TenantAddress
 }
 
-// Silence unused warning.
-var _ = (*NodeDescriptor).CheckedTenantAddress
-
 // String returns a string representation of the Tier.
 func (t Tier) String() string {
 	return fmt.Sprintf("%s=%s", t.Key, t.Value)
