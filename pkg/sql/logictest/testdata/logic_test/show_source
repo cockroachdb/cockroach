@@ -42,6 +42,7 @@ distsql                                        off
 enable_experimental_alter_column_type_general  off
 enable_implicit_select_for_update              on
 enable_insert_fast_path                        on
+enable_interleaved_joins                       on
 enable_zigzag_join                             on
 experimental_distsql_planning                  off
 experimental_enable_enums                      off

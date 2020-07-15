@@ -701,6 +701,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_interleaved_joins`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_interleaved_joins`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("enable_interleaved_joins", s)
+			if err != nil {
+				return err
+			}
+			m.SetInterleavedJoins(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.InterleavedJoins)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(planInterleavedJoins.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`serial_normalization`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.SerialNormalizationModeFromString(s)

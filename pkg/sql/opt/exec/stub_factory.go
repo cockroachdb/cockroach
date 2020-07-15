@@ -33,18 +33,7 @@ func (StubFactory) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (StubFactory) ConstructScan(
-	table cat.Table,
-	index cat.Index,
-	needed TableColumnOrdinalSet,
-	indexConstraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
-	hardLimit int64,
-	softLimit int64,
-	reverse bool,
-	parallelize bool,
-	reqOrdering OutputOrdering,
-	rowCount float64,
-	locking *tree.LockingItem,
+	table cat.Table, index cat.Index, params ScanParams, reqOrdering OutputOrdering,
 ) (Node, error) {
 	return struct{}{}, nil
 }
@@ -107,6 +96,24 @@ func (StubFactory) ConstructMergeJoin(
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	reqOrdering OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
+) (Node, error) {
+	return struct{}{}, nil
+}
+
+// ConstructInterleavedJoin is part of the exec.Factory interface.
+func (StubFactory) ConstructInterleavedJoin(
+	joinType sqlbase.JoinType,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	leftParams ScanParams,
+	leftFilter tree.TypedExpr,
+	rightTable cat.Table,
+	rightIndex cat.Index,
+	rightParams ScanParams,
+	rightFilter tree.TypedExpr,
+	leftIsAncestor bool,
+	onCond tree.TypedExpr,
+	reqOrdering OutputOrdering,
 ) (Node, error) {
 	return struct{}{}, nil
 }

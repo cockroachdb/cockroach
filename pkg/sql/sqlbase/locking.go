@@ -14,7 +14,26 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
+
+// PrettyString returns the locking strength as a user-readable string.
+func (s ScanLockingStrength) PrettyString() string {
+	switch s {
+	case ScanLockingStrength_FOR_NONE:
+		return "for none"
+	case ScanLockingStrength_FOR_KEY_SHARE:
+		return "for key share"
+	case ScanLockingStrength_FOR_SHARE:
+		return "for share"
+	case ScanLockingStrength_FOR_NO_KEY_UPDATE:
+		return "for no key update"
+	case ScanLockingStrength_FOR_UPDATE:
+		return "for update"
+	default:
+		panic(errors.AssertionFailedf("unexpected strength"))
+	}
+}
 
 // ToScanLockingStrength converts a tree.LockingStrength to its corresponding
 // ScanLockingStrength.
@@ -32,6 +51,20 @@ func ToScanLockingStrength(s tree.LockingStrength) ScanLockingStrength {
 		return ScanLockingStrength_FOR_UPDATE
 	default:
 		panic(fmt.Sprintf("unknown locking strength %s", s))
+	}
+}
+
+// PrettyString returns the locking strength as a user-readable string.
+func (wp ScanLockingWaitPolicy) PrettyString() string {
+	switch wp {
+	case ScanLockingWaitPolicy_BLOCK:
+		return "block"
+	case ScanLockingWaitPolicy_SKIP:
+		return "skip locked"
+	case ScanLockingWaitPolicy_ERROR:
+		return "nowait"
+	default:
+		panic(errors.AssertionFailedf("unexpected wait policy"))
 	}
 }
 
