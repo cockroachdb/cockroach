@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -35,8 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/jackc/pgx"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPostProcess(t *testing.T) {
@@ -482,6 +487,30 @@ func TestProcessorBaseContext(t *testing.T) {
 	})
 }
 
+func getPGXConnAndCleanupFunc(t *testing.T, servingSQLAddr string) (*pgx.Conn, func()) {
+	t.Helper()
+	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(security.RootUser))
+	pgURL.Path = "test"
+	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	require.NoError(t, err)
+	defaultConn, err := pgx.Connect(pgxConfig)
+	require.NoError(t, err)
+	_, err = defaultConn.Exec("set distsql='always'; set vectorize_row_count_threshold=0")
+	require.NoError(t, err)
+	return defaultConn, cleanup
+}
+
+func populateRangeCacheAndDisableBuffering(t *testing.T, db *gosql.DB, tableName string) {
+	t.Helper()
+	_, err := db.Exec("SELECT count(1) FROM " + tableName)
+	require.NoError(t, err)
+	// Disable results buffering - we want to ensure that the server doesn't do
+	// any automatic retries, and also we use the client to know when to unblock
+	// the read.
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
+	require.NoError(t, err)
+}
+
 // Test that processors swallow ReadWithinUncertaintyIntervalErrors once they
 // started draining. The code that this test is checking is in ProcessorBase.
 // The test is written using high-level interfaces since what's truly
@@ -577,32 +606,9 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure that the range cache is populated.
-	if _, err = origDB0.Exec(`SELECT count(1) FROM t`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Disable results buffering - we want to ensure that the server doesn't do
-	// any automatic retries, and also we use the client to know when to unblock
-	// the read.
-	if _, err := origDB0.Exec(
-		`SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	pgURL, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	populateRangeCacheAndDisableBuffering(t, origDB0, "t")
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
-	pgURL.Path = `test`
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, err := pgx.Connect(pgxConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	atomic.StoreInt64(&trapRead, 1)
 
@@ -619,7 +625,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			blockedRead.Unlock()
 			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
 			// to convince it to distribute a query that uses an index.
-			if _, err := conn.Exec("set distsql='always'"); err != nil {
+			if _, err := defaultConn.Exec("set distsql='always'"); err != nil {
 				t.Fatal(err)
 			}
 			vectorizeMode := "off"
@@ -627,7 +633,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				vectorizeMode = "on"
 			}
 
-			if _, err := conn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
+			if _, err := defaultConn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -638,7 +644,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			query := fmt.Sprintf(
 				"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
 				limit)
-			rows, err := conn.Query(query)
+			rows, err := defaultConn.Query(query)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -676,5 +682,245 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				}
 			}
 		})
+	})
+}
+
+// TestUncertaintyErrorIsReturned was added because the vectorized engine would
+// previously buffer errors and return them once the flow started draining.
+// This was fine for the majority of errors apart from
+// ReadWithinUncertaintyIntervalError, which is swallowed if the error is not
+// returned immediately during execution.
+// This test aims to check that the error is returned using queries that use
+// the set of components that handle/forward metadata.
+// This test is a more generalized version of
+// TestDrainingProcessorSwallowsUncertaintyError and specifically tests the case
+// in which an UncertaintyError is expected.
+func TestUncertaintyErrorIsReturned(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	var (
+		// trapRead is set atomically to return an error.
+		trapRead        int64
+		testClusterArgs = base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+		}
+		rng, _ = randutil.NewPseudoRand()
+	)
+
+	filters := make([]struct {
+		syncutil.Mutex
+		enabled          bool
+		tableIDsToFilter []int
+	}, numNodes)
+
+	var allNodeIdxs []int
+
+	testClusterArgs.ServerArgsPerNode = make(map[int]base.TestServerArgs)
+	for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
+		allNodeIdxs = append(allNodeIdxs, nodeIdx)
+		func(node int) {
+			testClusterArgs.ServerArgsPerNode[node] = base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+							if atomic.LoadInt64(&trapRead) == 0 {
+								return nil
+							}
+							filters[node].Lock()
+							enabled := filters[node].enabled
+							tableIDsToFilter := filters[node].tableIDsToFilter
+							filters[node].Unlock()
+							if !enabled {
+								return nil
+							}
+
+							if req, ok := ba.GetArg(roachpb.Scan); !ok {
+								return nil
+							} else if tableIDsToFilter != nil {
+								shouldReturnUncertaintyError := false
+								for _, tableID := range tableIDsToFilter {
+									if strings.Contains(req.(*roachpb.ScanRequest).Key.String(), fmt.Sprintf("/Table/%d", tableID)) {
+										shouldReturnUncertaintyError = true
+										break
+									}
+								}
+								if !shouldReturnUncertaintyError {
+									return nil
+								}
+							}
+
+							return roachpb.NewError(
+								roachpb.NewReadWithinUncertaintyIntervalError(
+									ba.Timestamp,
+									ba.Timestamp.Add(1, 0),
+									ba.Txn,
+								),
+							)
+						},
+					},
+				},
+				UseDatabase: "test",
+			}
+		}(nodeIdx)
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes, testClusterArgs)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
+	dbConn := tc.ServerConn(0)
+	sqlutils.CreateTable(t, dbConn, "t", "x INT, y INT, INDEX (y)", 30, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn))
+	// onerow is a table created to test #51458. The value of the only row in this
+	// table is explicitly set to 2 so that it is routed by hash to a desired
+	// destination.
+	// TODO(asubiotto): The vectorized execution engine probably has the same
+	//  problem and might need a separate table since the hash functions are
+	//  different.
+	sqlutils.CreateTable(t, dbConn, "onerow", "x INT", 1, sqlutils.ToRowFn(func(_ int) tree.Datum { return tree.NewDInt(tree.DInt(2)) }))
+	_, err := dbConn.Exec(fmt.Sprintf(`
+	ALTER TABLE t SPLIT AT VALUES (10), (20);
+	ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[%[1]d], 0), (ARRAY[%[2]d], 10), (ARRAY[%[3]d], 20);
+	`,
+		tc.Server(0).GetFirstStoreID(),
+		tc.Server(1).GetFirstStoreID(),
+		tc.Server(2).GetFirstStoreID(),
+	))
+	require.NoError(t, err)
+	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
+	defer cleanup()
+
+	// errorOriginSpec is a way for test cases to enable a request filter on the
+	// node index provided for the given tableNames.
+	type errorOriginSpec struct {
+		nodeIdx    int
+		tableNames []string
+	}
+
+	testCases := []struct {
+		query           string
+		expectedPlanURL string
+		// overrideErrorOrigin if non-nil, defines special request filtering
+		// behavior.
+		// The default behavior is to enable uncertainty errors for a single random
+		// node and for all scan requests.
+		overrideErrorOrigin []errorOriginSpec
+		// if non-empty, this test will be skipped.
+		skip string
+	}{
+		{
+			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
+			expectedPlanURL: "https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFFv2jAUhd_3K6z71E6miR1KS6RKqbZOo2LQER4mVXlIiQeR0jizHYkK8d-nJEgsCGyyiLxhfL_rc3xuvAH5JwEX_Kfx05c5ykWCvs2mP9Dr06-X8eNogq6-jvy5_3N8jXYln6sChR59pAh6no4muwVF0wlS5GaNHpCiN-sAMKQ8YpPwnUlwX4EABgoYHAgwZIIvmJRcFFubsnAUrcG1McRplqvi7wDDggsG7gZUrBIGLszDt4TNWBgxYdmAIWIqjJOyfSbi91B8eAow-FmYShf1LFIUTXPlIo9gj0KwxcBztTtg3_ftA61Cuap39AgE2wCDVOGSgUu2-P-EOh0LpSeF7vvkKRcREyyqdQoK0lRyxO33UK6eeZwyYQ3q0hL2W1155PpBxMtV-avmE3sO9voHbvdOnBZOjsic8B7PrOGh5aNH92tHk_PTJsa0LWL3LHqxyWygtd-9VnpSawfDeXe54aTn3zo13zq1e5cajwZCbzsWSk8K7WA27rt5uI6ImDGZ8VSys94lu7DBoiWrrkXyXCzYi-CL8phqOS258uuKmFTVLq0Wo7TaKgSeDw_awEM9TBrIps3gQRt4qIfpIWz_Czt6z44WJnaNtg_pfpug9bAhaD1sCPq2TdB62BC0HjYEPWgT9F2bqPSwISo9bIjqvk1UetgQlR42RDVsFFWw_fQ3AAD__1bfO7Y=",
+		},
+		{
+			query:           "SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.x = t2.y",
+			expectedPlanURL: "https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFGLm0AQgN_7K5Z5asvm4q6aS4SCR5uCV6tpTKFwyGHjcth6rt1dISHkvxc1cDFNNjYHedyd-TJfdmbcgPyTgwPR1J9-XKBK5OjzPPyKHqY_Zv6dF6C3n7xoEX3z36Fdyvs2QaG7CCmCvCCYzpEfhl--z9B96AW7CEVhgBS5WaEPSNGbdQwYCp6yIHlmEpwHIICBAgYTYgyl4EsmJRd1aNMkeukKHANDVpSVqq9jDEsuGDgbUJnKGTiwSH7mbM6SlImhARhSppIsb36-FNlzItauAgxRmRTSQYMhqZPCSjnIJdilEG8x8Eq9FJAqeWLgkC3uL3HPs2LnYHYd1OP6MUtXjYPP-e-qRL94ViBe1AIdFexa2LVPCtELhUanH-UfIetAyMaueVLIPCn04lEVXKRMsLQjEW-PKAd8wMvh5CDxeGmrU5r0nxBydkKGxBgM6UVDcsZjryfWdYakv9DtdYaE9u8UPd8pagwuadMZib1Xsa_Tpv5C4-vv8hGhOZMlLyTrtapGvessfWLth0HySizZTPBlU6Y9hg3XXKRMqjZK2oNXtKFacB8mWpjqYaqFzQ5MDmFTr23oS1ta2tbDthYe6eHRa_70rRYe6yuPtfBED0_-SzvevvkbAAD__wwZ0nw=",
+		},
+		{
+			// This test reproduces 51458 and should be enabled once that issue is
+			// fixed.
+			query:           "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
+			expectedPlanURL: "https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFFvmzAUhd_3K6z71E5OwQ5tJqRKTFumUWXQJXmYVPFAw12CRDGzjZYqyn-vgEgpEYVEKHmL4_tdn3Mu9gbUvwRsmI0n429zksuE_Jj6v8jT-M_j5Kvrkavv7mw--z25JruSz1WBJg--6xGRohT_ie8RfbMm97v1zToACqmI0AtfUIH9BAwocKAwhIBCJsUClRKy2NqUhW60BtukEKdZrou_AwoLIRHsDehYJwg2zMPnBKcYRigNEyhEqMM4KdtnMn4J5aujgcIsC1Nlk4HBiiI_1zZxGHU4BFsKIte7A_Z9n1_JKlSrekeHQbANKCgdLhFstqUfCN33yVMhI5QY1ToFBdlV0uD2Z6hWDyJOURpWXVqCf_WVw67vZbxclb9qPqkzPLC6tzHsYaNBoycGIjNGh34bj7ZqR7PjR806R20wc2Dws02bXXbat2eaNj8-ct4dOTcH58r7BKHDZqHVM_TuLdhL7aWTf6jzAt_F3QVegQYFU1SZSBUedcnNwgNGS6wyUSKXC3yUYlEeUy39kiuvVYRKV7u7hZtWW4XA42GrDzxqh9khbL6HeTvMW-EvNdg8hId9AmuHOwJrhzsCs_oEdtvHczvc4bkd7vB8d4Jsfhps9YFH7fDopFEF209vAQAA__-V0lQA",
+			overrideErrorOrigin: []errorOriginSpec{
+				{
+					nodeIdx:    0,
+					tableNames: []string{"t"},
+				},
+			},
+			skip: "https://github.com/cockroachdb/cockroach/issues/51458",
+		},
+	}
+
+	// runQueryAndExhaust is a helper function to get an error that happens during
+	// the execution of a query.
+	runQueryAndExhaust := func(tx *pgx.Tx, query string) error {
+		res, err := tx.Query(query)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+		for res.Next() {
+		}
+		return res.Err()
+	}
+
+	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
+		vectorizeOpt := "off"
+		if vectorize {
+			vectorizeOpt = "on"
+		}
+		for _, testCase := range testCases {
+			t.Run(testCase.query, func(t *testing.T) {
+				if testCase.skip != "" {
+					t.Skip(testCase.skip)
+				}
+				if vectorize {
+					// TODO(asubiotto): figure out why this race occurs.
+					t.Skip("vectorize option is temporarily skipped because there appears to be " +
+						"a race between the expected error and the context cancellation error")
+				}
+				func() {
+					_, err := defaultConn.Exec(fmt.Sprintf("set vectorize=%s", vectorizeOpt))
+					require.NoError(t, err)
+					func() {
+						// Check distsql plan.
+						rows, err := defaultConn.Query(fmt.Sprintf("SELECT url FROM [EXPLAIN (DISTSQL) %s]", testCase.query))
+						require.NoError(t, err)
+						defer rows.Close()
+						rows.Next()
+						var actualPlanURL string
+						require.NoError(t, rows.Scan(&actualPlanURL))
+						require.Equal(t, testCase.expectedPlanURL, actualPlanURL)
+					}()
+
+					errorOrigin := []errorOriginSpec{{nodeIdx: allNodeIdxs[rng.Intn(len(allNodeIdxs))]}}
+					if testCase.overrideErrorOrigin != nil {
+						errorOrigin = testCase.overrideErrorOrigin
+					}
+					for _, errorOriginSpec := range errorOrigin {
+						nodeIdx := errorOriginSpec.nodeIdx
+						filters[nodeIdx].Lock()
+						filters[nodeIdx].enabled = true
+						for _, tableName := range errorOriginSpec.tableNames {
+							filters[nodeIdx].tableIDsToFilter = append(
+								filters[nodeIdx].tableIDsToFilter,
+								int(sqlbase.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).ID),
+							)
+						}
+						filters[nodeIdx].Unlock()
+					}
+					// Reset all filters for the next test case.
+					defer func() {
+						for i := range filters {
+							filters[i].Lock()
+							filters[i].enabled = false
+							filters[i].tableIDsToFilter = nil
+							filters[i].Unlock()
+						}
+					}()
+					// Begin a transaction to issue multiple statements. The first dummy
+					// statement is issued so that some results are returned and auto
+					// retries are therefore disabled for the rest of the transaction.
+					tx, err := defaultConn.Begin()
+					defer func() {
+						require.Error(t, tx.Commit())
+					}()
+					require.NoError(t, err)
+					require.NoError(t, runQueryAndExhaust(tx, "SELECT count(*) FROM t"))
+
+					// Trap all reads.
+					atomic.StoreInt64(&trapRead, 1)
+					defer atomic.StoreInt64(&trapRead, 0)
+
+					err = runQueryAndExhaust(tx, testCase.query)
+					require.True(t, testutils.IsError(err, "ReadWithinUncertaintyIntervalError"), "unexpected error: %v running query %s", err, testCase.query)
+				}()
+			})
+		}
 	})
 }
