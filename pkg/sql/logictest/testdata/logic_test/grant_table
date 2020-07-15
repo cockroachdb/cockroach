@@ -1082,3 +1082,8 @@ b              public       t           millie   ALL
 b              public       t           root     ALL
 b              public       t2          admin    ALL
 b              public       t2          root     ALL
+
+# Usage privilege should not be grantable on tables.
+
+statement error pq: invalid privilege type USAGE for table
+GRANT USAGE ON t TO testuser

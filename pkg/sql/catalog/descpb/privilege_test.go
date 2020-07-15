@@ -28,24 +28,28 @@ func TestPrivilege(t *testing.T) {
 		grantee       string // User to grant/revoke privileges on.
 		grant, revoke privilege.List
 		show          []UserPrivilegeString
+		objectType    privilege.ObjectType
 	}{
 		{"", nil, nil,
 			[]UserPrivilegeString{
 				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{security.RootUser, privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
 				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
 				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
@@ -53,6 +57,7 @@ func TestPrivilege(t *testing.T) {
 				{"foo", []string{"DROP", "INSERT"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
 			[]UserPrivilegeString{
@@ -60,6 +65,7 @@ func TestPrivilege(t *testing.T) {
 				{"foo", []string{"DROP", "INSERT"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
@@ -67,6 +73,7 @@ func TestPrivilege(t *testing.T) {
 				{"foo", []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
 			[]UserPrivilegeString{
@@ -74,18 +81,50 @@ func TestPrivilege(t *testing.T) {
 				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
 				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
+			privilege.Table,
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUser, nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
 				{security.AdminRole, []string{"ALL"}},
 			},
+			privilege.Table,
+		},
+		// Ensure revoking USAGE from a user with ALL privilege on a type
+		// leaves the user with only GRANT privilege.
+		{"foo", privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
+			[]UserPrivilegeString{
+				{security.AdminRole, []string{"ALL"}},
+				{"foo", []string{"GRANT"}},
+			},
+			privilege.Type,
+		},
+		// Ensure revoking USAGE, GRANT from a user with ALL privilege on a type
+		// leaves the user with no privileges.
+		{"foo",
+			privilege.List{privilege.ALL}, privilege.List{privilege.USAGE, privilege.GRANT},
+			[]UserPrivilegeString{
+				{security.AdminRole, []string{"ALL"}},
+			},
+			privilege.Type,
+		},
+		// Ensure revoking CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// from a user with ALL privilege on a table leaves the user with no privileges.
+		{"foo",
+			privilege.List{privilege.ALL}, privilege.List{privilege.CREATE, privilege.DROP,
+				privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE,
+				privilege.ZONECONFIG},
+			[]UserPrivilegeString{
+				{security.AdminRole, []string{"ALL"}},
+			},
+			privilege.Table,
 		},
 	}
 
@@ -95,10 +134,10 @@ func TestPrivilege(t *testing.T) {
 				descriptor.Grant(tc.grantee, tc.grant)
 			}
 			if tc.revoke != nil {
-				descriptor.Revoke(tc.grantee, tc.revoke)
+				descriptor.Revoke(tc.grantee, tc.revoke, tc.objectType)
 			}
 		}
-		show := descriptor.Show()
+		show := descriptor.Show(tc.objectType)
 		if len(show) != len(tc.show) {
 			t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
 				tcNum, descriptor, show, tc.show)
@@ -206,7 +245,8 @@ func TestPrivilegeValidate(t *testing.T) {
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Revoke(security.RootUser, privilege.List{privilege.SELECT})
+	descriptor.Revoke(
+		security.RootUser, privilege.List{privilege.SELECT}, privilege.Table)
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
@@ -216,7 +256,7 @@ func TestPrivilegeValidate(t *testing.T) {
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
-	descriptor.Revoke(security.RootUser, privilege.List{privilege.ALL})
+	descriptor.Revoke(security.RootUser, privilege.List{privilege.ALL}, privilege.Table)
 	if err := descriptor.Validate(id); err == nil {
 		t.Fatal("unexpected success")
 	}
@@ -280,7 +320,8 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		}
 
 		// Valid: foo can have privileges revoked, including privileges it doesn't currently have.
-		descriptor.Revoke("foo", privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL})
+		descriptor.Revoke(
+			"foo", privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL}, privilege.Table)
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
 		}
@@ -302,14 +343,14 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 		// Invalid: root's invalid privileges are revoked and replaced with allowable privileges,
 		// but admin is still wrong.
-		descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE})
+		descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE}, privilege.Table)
 		descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT, privilege.GRANT})
 		if err := descriptor.Validate(id); !testutils.IsError(err, adminWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", adminWrongPrivilegesErr, err)
 		}
 
 		// Valid: admin's invalid privileges are revoked and replaced with allowable privileges.
-		descriptor.Revoke(security.AdminRole, privilege.List{privilege.UPDATE})
+		descriptor.Revoke(security.AdminRole, privilege.List{privilege.UPDATE}, privilege.Table)
 		descriptor.Grant(security.AdminRole, privilege.List{privilege.SELECT, privilege.GRANT})
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
@@ -463,7 +504,7 @@ func TestFixPrivileges(t *testing.T) {
 			if !ok {
 				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges), p; a.ToBitField() != e.ToBitField() {
+			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
 			}
 		}

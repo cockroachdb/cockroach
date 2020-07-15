@@ -58,7 +58,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	}
 
 	// If the user is not the db owner, they must have admin privilege and have
-	//  drop privilege on the db.
+	// drop privilege on the db.
 	if !hasOwnership {
 		if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... RENAME"); err != nil {
 			return nil, err

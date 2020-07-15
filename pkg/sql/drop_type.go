@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -86,7 +87,9 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 func (p *planner) canDropTypeDesc(
 	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, behavior tree.DropBehavior,
 ) error {
-	// TODO (rohany): Add privilege checks here when we have them.
+	if err := p.canModifyType(ctx, desc); err != nil {
+		return err
+	}
 	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
 		var dependentNames []string
 		for _, id := range desc.ReferencingDescriptorIDs {
@@ -141,6 +144,14 @@ func (p *planner) addTypeBackReference(
 	if err != nil {
 		return err
 	}
+
+	// Check if this user has USAGE privilege on the type. This function if an
+	// object has a dependency on a type, the user must have USAGE privilege on
+	// the type to create a dependency.
+	if err := p.CheckPrivilege(ctx, mutDesc, privilege.USAGE); err != nil {
+		return err
+	}
+
 	mutDesc.AddReferencingDescriptorID(ref)
 	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
 }

@@ -214,6 +214,9 @@ var validationMap = []struct {
 			"Alias":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"State":                    {status: thisFieldReferencesNoObjects},
 			"ReferencingDescriptorIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "TODO(richardjcai): Will add privilege validation in a separate " +
+					"PR to avoid making this PR too big #52716."},
 		},
 	},
 }
