@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -4538,5 +4539,137 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 					}
 				})
 		}
+	}
+}
+
+type importSafeVisitor struct {
+	ctx    *tree.EvalContext
+	isSafe bool
+}
+
+func (v *importSafeVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	return v.isSafe, expr
+}
+
+var importSafeFunctions = map[string]struct{}{
+	"current_timestamp": {},
+	"now":               {},
+	"localtimestamp":    {},
+}
+
+func (v *importSafeVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
+	if fn, ok := expr.(*tree.FuncExpr); ok {
+		_, v.isSafe = importSafeFunctions[fn.Func.String()]
+	}
+	return expr
+}
+
+func SanitizeExpressionForImport(
+	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
+) (tree.Expr, error) {
+	semaCtx := tree.MakeSemaContext()
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx, expr, targetType, "isImportSafe", &semaCtx, tree.VolatilityImmutable)
+	if err == nil {
+		return typedExpr, nil
+	}
+
+	v := &importSafeVisitor{ctx: evalCtx, isSafe: true}
+	tree.WalkExprConst(v, expr)
+	if !v.isSafe {
+		return nil, errors.Newf("default expression %q not safe for import", tree.AsString(expr))
+	}
+
+	return expr, nil
+}
+
+var _ tree.Visitor = &importSafeVisitor{}
+
+func TestFunWithVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	expectErrorType := types.Any
+
+	testCases := []struct {
+		name string
+		expr string
+		typ  *types.T
+	}{
+		{
+			name: "current_timestamp",
+			expr: "current_timestamp()",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "current_timestamp_as_int",
+			expr: "current_timestamp()::int",
+			typ:  types.Int,
+		},
+		{
+			name: "add_timestamps",
+			expr: "current_timestamp()::int + 1 + current_timestamp()::int",
+			typ:  types.Int,
+		},
+		{
+			name: "localtimestamp",
+			expr: "localtimestamp()",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "localtimestamp_with_precision",
+			expr: "localtimestamp(5)",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "localtimestamp_with_precision_expression",
+			expr: "localtimestamp(1 + 2 + 3)",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "now",
+			expr: "now()",
+			typ:  types.Date,
+		},
+		{
+			name: "now_with_cast",
+			expr: "now()::TIMESTAMPTZ",
+			typ:  types.TimestampTZ,
+		},
+		{
+			name: "random",
+			expr: "random()",
+			typ:  expectErrorType,
+		},
+		{
+			name: "nextval",
+			expr: "nextval('foo')",
+			typ:  expectErrorType,
+		},
+		{
+			name: "random_plus_timestamp",
+			expr: "(100*random())::int + current_timestmap()::int",
+			typ:  expectErrorType,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := parser.ParseExpr(tc.expr)
+			require.NoError(t, err)
+
+			sanitized, err := SanitizeExpressionForImport(ctx, &evalCtx, expr, tc.typ)
+			if tc.typ == expectErrorType {
+				require.Error(t, err)
+				require.True(t, testutils.IsError(err, "not safe for import"), err)
+			} else {
+				require.NoError(t, err)
+				log.Infof(ctx, "sanitized: %q", tree.AsString(sanitized))
+			}
+		})
+
 	}
 }
