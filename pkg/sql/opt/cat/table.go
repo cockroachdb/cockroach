@@ -41,21 +41,9 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// ColumnCount returns the number of public columns in the table. Public
-	// columns are not currently being added or dropped from the table. This
-	// method should be used when mutation columns can be ignored (the common
-	// case).
-	ColumnCount() int
-
-	// WritableColumnCount returns the number of public and write-only columns in
-	// the table. Although write-only columns are not visible, any inserts and
-	// updates must still set them. WritableColumnCount is always >= ColumnCount.
-	WritableColumnCount() int
-
-	// DeletableColumnCount returns the number of public, write-only, and
-	// delete- only columns in the table. DeletableColumnCount is always >=
-	// WritableColumnCount.
-	DeletableColumnCount() int
+	// AllColumnCount returns the number of columns in the table. This includes
+	// public columns, write-only columns, etc.
+	AllColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
 	// position within the table, where i < ColumnCount. Note that the Columns
@@ -69,6 +57,12 @@ type Table interface {
 	// Writable columns are always situated after public columns, and are followed
 	// by deletable columns.
 	Column(i int) Column
+
+	// ColumnKind returns the column kind.
+	// Note: this is not a method in Column for the efficiency of the
+	// Column implementation (which can't access this information without using
+	// extra objects).
+	ColumnKind(i int) ColumnKind
 
 	// IndexCount returns the number of public indexes defined on this table.
 	// Public indexes are not currently being added or dropped from the table.
