@@ -24,6 +24,15 @@ func Centroid(g *geo.Geometry) (*geo.Geometry, error) {
 	return geo.ParseGeometryFromEWKB(centroidEWKB)
 }
 
+// ConvexHull returns the convex hull of a given Geometry.
+func ConvexHull(g *geo.Geometry) (*geo.Geometry, error) {
+	convexHullEWKB, err := geos.ConvexHull(g.EWKB())
+	if err != nil {
+		return nil, err
+	}
+	return geo.ParseGeometryFromEWKB(convexHullEWKB)
+}
+
 // PointOnSurface returns the PointOnSurface of a given Geometry.
 func PointOnSurface(g *geo.Geometry) (*geo.Geometry, error) {
 	pointOnSurfaceEWKB, err := geos.PointOnSurface(g.EWKB())
