@@ -310,6 +310,7 @@ func (is *infoStore) registerCallback(
 			if targetCB == cb {
 				numCBs := len(is.callbacks)
 				is.callbacks[i] = is.callbacks[numCBs-1]
+				is.callbacks[numCBs-1] = nil // for GC
 				is.callbacks = is.callbacks[:numCBs-1]
 				break
 			}

@@ -620,6 +620,12 @@ var logicTestConfigs = []testClusterConfig{
 	},
 }
 
+// An index in the above slice.
+type logicTestConfigIdx int
+
+// A collection of configurations.
+type configSet []logicTestConfigIdx
+
 var logicTestConfigIdxToName = make(map[logicTestConfigIdx]string)
 
 func init() {
@@ -628,8 +634,8 @@ func init() {
 	}
 }
 
-func parseTestConfig(names []string) []logicTestConfigIdx {
-	ret := make([]logicTestConfigIdx, len(names))
+func parseTestConfig(names []string) configSet {
+	ret := make(configSet, len(names))
 	for i, name := range names {
 		idx, ok := findLogicTestConfig(name)
 		if !ok {
@@ -655,7 +661,6 @@ var (
 		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
-		"3node-tenant",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
@@ -670,9 +675,6 @@ var (
 	defaultConfig         = parseTestConfig(defaultConfigNames)
 	fiveNodeDefaultConfig = parseTestConfig(fiveNodeDefaultConfigNames)
 )
-
-// An index in the above slice.
-type logicTestConfigIdx int
 
 func findLogicTestConfig(name string) (logicTestConfigIdx, bool) {
 	for i, cfg := range logicTestConfigs {
@@ -1454,22 +1456,20 @@ CREATE DATABASE test;
 	t.unsupported = 0
 }
 
-// applyBlocklistToConfigIdxs applies the given blocklist to config idxs,
-// returning the result.
-func applyBlocklistToConfigIdxs(
-	configIdxs []logicTestConfigIdx, blocklist map[string]int,
-) []logicTestConfigIdx {
+// applyBlocklistToConfigs applies the given blocklist to configs, returning the
+// result.
+func applyBlocklistToConfigs(configs configSet, blocklist map[string]int) configSet {
 	if len(blocklist) == 0 {
-		return configIdxs
+		return configs
 	}
-	var newConfigIdxs []logicTestConfigIdx
-	for _, idx := range configIdxs {
+	var newConfigs configSet
+	for _, idx := range configs {
 		if _, ok := blocklist[logicTestConfigIdxToName[idx]]; ok {
 			continue
 		}
-		newConfigIdxs = append(newConfigIdxs, idx)
+		newConfigs = append(newConfigs, idx)
 	}
-	return newConfigIdxs
+	return newConfigs
 }
 
 // getBlocklistIssueNo takes a blocklist directive with an optional issue number
@@ -1491,7 +1491,7 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 
 // processConfigs, given a list of configNames, returns the list of
 // corresponding logicTestConfigIdxs.
-func processConfigs(t *testing.T, path string, configNames []string) []logicTestConfigIdx {
+func processConfigs(t *testing.T, path string, defaults configSet, configNames []string) configSet {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -1510,10 +1510,10 @@ func processConfigs(t *testing.T, path string, configNames []string) []logicTest
 		blocklist[blockedConfig] = issueNo
 	}
 
-	var configs []logicTestConfigIdx
+	var configs configSet
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
-		// No configs specified, this blocklist applies to the default config.
-		return applyBlocklistToConfigIdxs(defaultConfig, blocklist)
+		// No configs specified, this blocklist applies to the default configs.
+		return applyBlocklistToConfigs(defaults, blocklist)
 	}
 
 	for _, configName := range configNames {
@@ -1528,9 +1528,9 @@ func processConfigs(t *testing.T, path string, configNames []string) []logicTest
 		if !ok {
 			switch configName {
 			case defaultConfigName:
-				configs = append(configs, applyBlocklistToConfigIdxs(defaultConfig, blocklist)...)
+				configs = append(configs, applyBlocklistToConfigs(defaults, blocklist)...)
 			case fiveNodeDefaultConfigName:
-				configs = append(configs, applyBlocklistToConfigIdxs(fiveNodeDefaultConfig, blocklist)...)
+				configs = append(configs, applyBlocklistToConfigs(fiveNodeDefaultConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -1551,7 +1551,7 @@ func processConfigs(t *testing.T, path string, configNames []string) []logicTest
 //   # LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
-func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
+func readTestFileConfigs(t *testing.T, path string, defaults configSet) configSet {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1575,11 +1575,11 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			return processConfigs(t, path, fields[2:])
+			return processConfigs(t, path, defaults, fields[2:])
 		}
 	}
 	// No directive found, return the default config.
-	return defaultConfig
+	return defaults
 }
 
 type subtestDetails struct {
@@ -2660,6 +2660,16 @@ type TestServerArgs struct {
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
 func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
+	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, globs...)
+}
+
+// RunLogicTestWithDefaultConfig is the main entry point for the logic test.
+// The globs parameter specifies the default sets of files to run. The config
+// override parameter, if not empty, specifies the set of configurations to run
+// those files in. If empty, the default set of configurations is used.
+func RunLogicTestWithDefaultConfig(
+	t *testing.T, serverArgs TestServerArgs, configOverride string, globs ...string,
+) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
@@ -2707,16 +2717,32 @@ func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
-	var configs []logicTestConfigIdx
-	if *overrideConfig != "" {
-		configs = parseTestConfig(strings.Split(*overrideConfig, ","))
-	}
-
-	for _, path := range paths {
-		if *overrideConfig == "" {
-			configs = readTestFileConfigs(t, path)
+	configDefaults := defaultConfig
+	var configFilter map[string]struct{}
+	if configOverride != "" {
+		// If a config override is provided, we use it to replace the default
+		// config set. This ensures that the overrides are used for files where:
+		// 1. no config directive is present
+		// 2. a config directive containing only a blocklist is present
+		// 3. a config directive containing "default-configs" is present
+		//
+		// We also create a filter to restrict configs to only those in the
+		// override list.
+		names := strings.Split(configOverride, ",")
+		configDefaults = parseTestConfig(names)
+		configFilter = make(map[string]struct{})
+		for _, name := range names {
+			configFilter[name] = struct{}{}
 		}
+	}
+	for _, path := range paths {
+		configs := readTestFileConfigs(t, path, configDefaults)
 		for _, idx := range configs {
+			configName := logicTestConfigs[idx].name
+			if _, ok := configFilter[configName]; configFilter != nil && !ok {
+				// Config filter present but not containing test.
+				continue
+			}
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}

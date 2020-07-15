@@ -14,7 +14,7 @@ option go_package = "util";
 
 import "gogoproto/gogo.proto";
 
-// / UnresolvedAddr is an unresolved version of net.Addr.
+// UnresolvedAddr is an unresolved version of net.Addr.
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
 
