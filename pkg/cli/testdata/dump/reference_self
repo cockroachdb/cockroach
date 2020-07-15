@@ -68,7 +68,7 @@ ALTER TABLE t VALIDATE CONSTRAINT fk_next_id_ref_t;
 
 sql
 ALTER TABLE d.t RENAME COLUMN next_id TO "'";
-ALTER TABLE d.t RENAME TO d."table";
+ALTER TABLE d.t RENAME TO "table";
 ----
 RENAME TABLE
 
