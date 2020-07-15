@@ -33,18 +33,7 @@ func (StubFactory) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (StubFactory) ConstructScan(
-	table cat.Table,
-	index cat.Index,
-	needed TableColumnOrdinalSet,
-	indexConstraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
-	hardLimit int64,
-	softLimit int64,
-	reverse bool,
-	parallelize bool,
-	reqOrdering OutputOrdering,
-	rowCount float64,
-	locking *tree.LockingItem,
+	table cat.Table, index cat.Index, params ScanParams, reqOrdering OutputOrdering,
 ) (Node, error) {
 	return struct{}{}, nil
 }

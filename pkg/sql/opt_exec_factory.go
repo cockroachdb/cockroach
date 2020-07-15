@@ -71,31 +71,17 @@ func (ef *execFactory) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScan(
-	table cat.Table,
-	index cat.Index,
-	needed exec.TableColumnOrdinalSet,
-	indexConstraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
-	hardLimit int64,
-	softLimit int64,
-	reverse bool,
-	parallelize bool,
-	reqOrdering exec.OutputOrdering,
-	rowCount float64,
-	locking *tree.LockingItem,
+	table cat.Table, index cat.Index, params exec.ScanParams, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return ef.constructVirtualScan(
-			table, index, needed, indexConstraint, hardLimit, softLimit, reverse,
-			reqOrdering, rowCount, locking,
-		)
+		return ef.constructVirtualScan(table, index, params, reqOrdering)
 	}
 
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	colCfg := makeScanColumnsConfig(table, needed)
+	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
@@ -110,21 +96,21 @@ func (ef *execFactory) ConstructScan(
 		return nil, err
 	}
 
-	if indexConstraint != nil && indexConstraint.IsContradiction() {
+	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
 		return newZeroNode(scan.resultColumns), nil
 	}
 
 	scan.index = indexDesc
-	scan.hardLimit = hardLimit
-	scan.softLimit = softLimit
+	scan.hardLimit = params.HardLimit
+	scan.softLimit = params.SoftLimit
 
-	scan.reverse = reverse
-	scan.parallelize = parallelize
+	scan.reverse = params.Reverse
+	scan.parallelize = params.Parallelize
 	var err error
-	if invertedConstraint != nil {
-		scan.spans, err = GenerateInvertedSpans(invertedConstraint, sb)
+	if params.InvertedConstraint != nil {
+		scan.spans, err = GenerateInvertedSpans(params.InvertedConstraint, sb)
 	} else {
-		scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+		scan.spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 	}
 	if err != nil {
 		return nil, err
@@ -137,29 +123,19 @@ func (ef *execFactory) ConstructScan(
 		return nil, err
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
-	scan.estimatedRowCount = uint64(rowCount)
-	if locking != nil {
-		scan.lockingStrength = sqlbase.ToScanLockingStrength(locking.Strength)
-		scan.lockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
+	if params.Locking != nil {
+		scan.lockingStrength = sqlbase.ToScanLockingStrength(params.Locking.Strength)
+		scan.lockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	return scan, nil
 }
 
 func (ef *execFactory) constructVirtualScan(
-	table cat.Table,
-	index cat.Index,
-	needed exec.TableColumnOrdinalSet,
-	indexConstraint *constraint.Constraint,
-	hardLimit int64,
-	softLimit int64,
-	reverse bool,
-	reqOrdering exec.OutputOrdering,
-	rowCount float64,
-	locking *tree.LockingItem,
+	table cat.Table, index cat.Index, params exec.ScanParams, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return constructVirtualScan(
-		ef, ef.planner, table, index, needed, indexConstraint, hardLimit,
-		softLimit, reverse, reqOrdering, rowCount, locking,
+		ef, ef.planner, table, index, params, reqOrdering,
 		func(d *delayedNode) (exec.Node, error) { return d, nil },
 	)
 }

@@ -512,20 +512,24 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
+	params := exec.ScanParams{
+		NeededCols:         needed,
+		IndexConstraint:    scan.Constraint,
+		InvertedConstraint: scan.InvertedConstraint,
+		HardLimit:          hardLimit,
+		SoftLimit:          softLimit,
+		// HardLimit.Reverse() is taken into account by ScanIsReverse.
+		Reverse:           ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
+		Parallelize:       parallelize,
+		Locking:           locking,
+		EstimatedRowCount: rowCount,
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
-		needed,
-		scan.Constraint,
-		scan.InvertedConstraint,
-		hardLimit,
-		softLimit,
-		// HardLimit.Reverse() is taken into account by ScanIsReverse.
-		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
-		parallelize,
+		params,
 		res.reqOrdering(scan),
-		rowCount,
-		locking,
 	)
 	if err != nil {
 		return execPlan{}, err
