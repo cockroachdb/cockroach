@@ -29,6 +29,8 @@ type MutableDescriptor interface {
 	// descriptor should increment the version on the mutable copy from the
 	// outset.
 	MaybeIncrementVersion()
+	// SetDrainingNames sets the draining names for the descriptor.
+	SetDrainingNames([]sqlbase.NameInfo)
 	// Immutable returns an immutable copy of this descriptor.
 	Immutable() Descriptor
 }

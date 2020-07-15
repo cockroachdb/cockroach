@@ -106,6 +106,11 @@ func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
+// SetDrainingNames implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) SetDrainingNames(names []NameInfo) {
+	desc.DrainingNames = names
+}
+
 // GetParentID implements the BaseDescriptorInterface interface.
 func (desc *ImmutableDatabaseDescriptor) GetParentID() ID {
 	return keys.RootNamespaceID
