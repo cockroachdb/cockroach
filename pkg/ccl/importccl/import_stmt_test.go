@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/linkedin/goavro/v2"
@@ -4538,5 +4540,271 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 					}
 				})
 		}
+	}
+}
+
+func makeBuiltinOverride(
+	builtin *tree.FunctionDefinition, overloads ...tree.Overload,
+) *tree.FunctionDefinition {
+	props := builtin.FunctionProperties
+	return tree.NewFunctionDefinition(
+		"import."+builtin.Name, &props, overloads)
+}
+
+var importSafeFunctionOverrides = map[string]*tree.FunctionDefinition{
+	// Time related functions operate on tree.EvalContext transaction
+	// timestamp.  Since we set those timestamp manually, we can use
+	// these functions as they are.
+	"current_timestamp": nil,
+	"localtimestamp":    nil,
+	"now":               nil,
+
+	// Demo: Override random()
+	"random": makeBuiltinOverride(
+		tree.FunDefs["random"],
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(0.42)), nil
+			},
+			Info:       "Returns XKCD random float between 0 and 1.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+}
+
+// importSafeVisitor is a visitor which verifies if the expression is safe
+// to use in default expression during import.
+// NB: This visitor must be invoked only on tree.TypedExpr expressions.
+type importSafeVisitor struct {
+	ctx     context.Context
+	semaCtx *tree.SemaContext
+	err     error
+}
+
+var _ tree.Visitor = &importSafeVisitor{}
+
+func (v *importSafeVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	return v.err == nil, expr
+}
+
+func findImportOverload(
+	ctx context.Context, semaCtx *tree.SemaContext, fn *tree.FuncExpr,
+) (tree.TypedExpr, error) {
+	resolvedFnName := fn.Func.FunctionReference.(*tree.FunctionDefinition).Name
+	override, isSafe := importSafeFunctionOverrides[resolvedFnName]
+
+	if !isSafe {
+		return nil, errors.Newf("function %q is not safe for import", resolvedFnName)
+	}
+
+	if override == nil {
+		// fn is safe to use as is
+		return fn, nil
+	}
+
+	// We have import specific override.  We must ensure
+	// that the override has appropriate overloads for this function call.
+	funExpr := &tree.FuncExpr{
+		Func:  tree.ResolvableFunctionReference{FunctionReference: override},
+		Type:  fn.Type,
+		Exprs: fn.Exprs,
+	}
+
+	// Our override must have appropriate overload defined.
+	typedOverload, err := funExpr.TypeCheck(ctx, semaCtx, fn.ResolvedType())
+	if err == nil {
+		return typedOverload, nil
+	}
+
+	return nil, errors.Wrapf(err, "could not find overload for %q", resolvedFnName)
+}
+
+func (v *importSafeVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	if v.err != nil {
+		return expr
+	}
+
+	// Since we require that the expression we begin with is a tree.TypedExpr,
+	// we no longer have to have these checks here.  We can safely cast
+	// expressions to their typed variants.
+	if fn, ok := expr.(*tree.FuncExpr); ok {
+		if fn.ResolvedOverload().Volatility > tree.VolatilityImmutable {
+			safeExpr, err := findImportOverload(v.ctx, v.semaCtx, fn)
+			if err == nil {
+				return safeExpr
+			}
+			v.err = err
+		}
+	}
+	return expr
+}
+
+func unsafeExpressionError(err error, msg string, expr tree.Expr) error {
+	return errors.Wrapf(err,
+		"default expression %q not safe for import: %s", tree.AsString(expr), msg)
+}
+
+func SanitizeExpressionForImport(
+	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
+) (tree.Datum, error) {
+	semaCtx := tree.MakeSemaContext()
+
+	// Immutable expressions are fine.
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx, expr, targetType, "isImportSafe", &semaCtx, tree.VolatilityImmutable)
+	if err == nil {
+		return typedExpr.Eval(evalCtx)
+	}
+
+	// We know we're dealing with tree.VolatilityStable or more volatile.
+	// Still, the result of this expression must be correct type.
+	typedExpr, err = expr.TypeCheck(ctx, &semaCtx, targetType)
+	if err != nil {
+		return nil, unsafeExpressionError(err, "type check", expr)
+	}
+
+	// Now that we have typed expression, walk it.
+	v := &importSafeVisitor{ctx: ctx, semaCtx: &semaCtx}
+	expr, _ = tree.WalkExpr(v, typedExpr)
+	if v.err != nil {
+		return nil, unsafeExpressionError(v.err, "walk error", expr)
+	}
+
+	// Evaluate (or do it later)
+	val, err := expr.(tree.TypedExpr).Eval(evalCtx)
+	if err != nil {
+		return nil, unsafeExpressionError(err, "failed to evaluate", expr)
+	}
+	return val, nil
+}
+
+func TestFunWithVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	currentTime := timeutil.Now()
+	currentTS := currentTime.Unix()
+
+	currentDDate, err := tree.NewDDateFromTime(currentTime)
+	require.NoError(t, err)
+
+	makeTimestampTZ := func(precision time.Duration) tree.Datum {
+		ts, err := tree.MakeDTimestampTZ(currentTime, precision)
+		require.NoError(t, err)
+		return ts
+	}
+
+	evalCtx.TxnTimestamp = currentTime
+
+	expectErrorType := types.Any
+
+	testCases := []struct {
+		name string
+		expr string
+		typ  *types.T
+		val  tree.Datum
+	}{
+		{
+			name: "current_timestamp",
+			expr: "current_timestamp()",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "current_timestamp_as_int",
+			expr: "current_timestamp()::int",
+			typ:  types.Int,
+			val:  tree.NewDInt(tree.DInt(currentTS)),
+		},
+		{
+			name: "add_timestamps",
+			expr: "current_timestamp()::int + 1 + current_timestamp()::int",
+			typ:  types.Int,
+			val:  tree.NewDInt(tree.DInt(2*currentTS + 1)),
+		},
+		{
+			name: "localtimestamp",
+			expr: "localtimestamp()",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "localtimestamp_with_precision",
+			expr: "localtimestamp(5)",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(100000 * time.Nanosecond),
+		},
+		{
+			name: "localtimestamp_with_precision_expression",
+			expr: "localtimestamp(1 + 2 + 3)",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "now",
+			expr: "now()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "now-case-insensitive",
+			expr: "NoW()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "pg_catalog.now",
+			expr: "pg_catalog.now()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "now_with_cast",
+			expr: "now()::TIMESTAMPTZ",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "random",
+			expr: "random()",
+			// NOTE: THIS IS REALLY TO DEMONSTRATE HOW TO WORK WITH VOLATILE FUNCTIONS
+			// DO NOT IMPLEMENT random() like this.
+			typ: types.Float,
+			val: tree.NewDFloat(tree.DFloat(0.42)),
+		},
+		{
+			name: "nextval",
+			expr: "nextval('foo')",
+			typ:  expectErrorType,
+		},
+		{
+			name: "random_plus_timestamp",
+			expr: "(100*random())::int + current_timestmap()::int",
+			typ:  expectErrorType,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := parser.ParseExpr(tc.expr)
+			require.NoError(t, err)
+
+			sanitized, err := SanitizeExpressionForImport(ctx, &evalCtx, expr, tc.typ)
+			if tc.typ == expectErrorType {
+				require.Error(t, err)
+				require.True(t, testutils.IsError(err, "not safe for import"), err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, 0, tc.val.Compare(&evalCtx, sanitized),
+					"expected %s (%T), found %s (%T)", tc.val, tc.val, sanitized, sanitized)
+				log.Infof(ctx, "sanitized: %q", tree.AsString(sanitized))
+			}
+		})
+
 	}
 }
