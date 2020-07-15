@@ -182,12 +182,31 @@ spec:
         env:
         - name: COCKROACH_CHANNEL
           value: kubernetes-secure
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+              divisor: "1"
+        - name: MEMORY_LIMIT_MIB
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "1Mi"
         command:
           - "/bin/bash"
           - "-ecx"
           # The use of qualified `hostname -f` is crucial:
           # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+          - exec
+            /cockroach/cockroach
+            start
+            --logtostderr
+            --certs-dir /cockroach/cockroach-certs
+            --advertise-host $(hostname -f)
+            --http-addr 0.0.0.0
+            --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
+            --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
+            --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
