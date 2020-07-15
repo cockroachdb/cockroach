@@ -112,6 +112,7 @@ func (ef *execFactory) ConstructScan(
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
 		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.ID),
 	)
+
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
 	}
