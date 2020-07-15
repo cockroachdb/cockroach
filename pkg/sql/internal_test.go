@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInternalExecutor(t *testing.T) {
@@ -104,6 +105,53 @@ func TestInternalExecutor(t *testing.T) {
 	if cnt != 2 {
 		t.Fatalf("expected 2 iterations, got: %d", cnt)
 	}
+}
+
+func TestInternalFullTableScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := db.Exec("CREATE DATABASE db; SET DATABASE = db;")
+	require.NoError(t, err)
+
+	_, err = db.Exec("CREATE TABLE t(a INT)")
+	require.NoError(t, err)
+
+	_, err = db.Exec("INSERT INTO t VALUES (1), (2), (3)")
+	require.NoError(t, err)
+
+	_, err = db.Exec("SET disallow_full_table_scans = true")
+	require.NoError(t, err)
+
+	_, err = db.Exec("SELECT * FROM t")
+	require.Error(t, err)
+	require.Equal(t,
+		"pq: query `SELECT * FROM t` contains a full table/index scan which is explicitly disallowed",
+		err.Error())
+
+	ie := sql.MakeInternalExecutor(
+		ctx,
+		s.(*server.TestServer).Server.PGServer().SQLServer,
+		sql.MemoryMetrics{},
+		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+	)
+	ie.SetSessionData(
+		&sessiondata.SessionData{
+			Database:               "db",
+			SequenceState:          &sessiondata.SequenceState{},
+			User:                   security.RootUser,
+			DisallowFullTableScans: true,
+		})
+
+	// Internal queries that perform full table scans shouldn't fail because of
+	// the setting above.
+	_, err = ie.Query(ctx, "full-table-scan-select", nil, "SELECT * FROM db.t")
+	require.NoError(t, err)
 }
 
 func TestQueryIsAdminWithNoTxn(t *testing.T) {

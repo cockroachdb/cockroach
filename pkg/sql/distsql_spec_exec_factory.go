@@ -215,7 +215,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return nil, err
 	}
 
-	isFullTableScan := len(spans) == 1 && spans[0].EqualValue(
+	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
 		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
@@ -223,7 +223,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	// Check if we are doing a full scan.
-	if isFullTableScan {
+	if isFullTableOrIndexScan {
 		recommendation = recommendation.compose(shouldDistribute)
 	}
 
