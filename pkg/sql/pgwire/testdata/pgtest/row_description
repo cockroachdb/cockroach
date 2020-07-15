@@ -181,7 +181,7 @@ ReadyForQuery
 
 # 80 = ASCII 'P' for Portal
 send
-Parse {"Name": "s", "Query": "SELECT b FROM tab3"}
+Parse {"Name": "s", "Query": "SELECT b, 1 FROM tab3"}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
 Describe {"ObjectType": 80, "Name": "p"}
 Execute {"Portal": "p"}
@@ -194,23 +194,21 @@ BindComplete
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 
-# The following discrepancy is another bug.
-# See: https://github.com/cockroachdb/cockroach/issues/49215
 until noncrdb_only ignore_table_oids
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
 
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 
 
 until
 DataRow
 ----
-{"Type":"DataRow","Values":[{"text":"hello   "}]}
+{"Type":"DataRow","Values":[{"text":"hello   "},{"text":"1"}]}
 
 until
 ReadyForQuery
