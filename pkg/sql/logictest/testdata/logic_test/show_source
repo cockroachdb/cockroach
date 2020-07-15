@@ -38,6 +38,7 @@ default_transaction_isolation                  serializable
 default_transaction_priority                   normal
 default_transaction_read_only                  off
 disable_partially_distributed_plans            off
+disallow_full_table_scans                      off
 distsql                                        off
 enable_experimental_alter_column_type_general  off
 enable_implicit_select_for_update              on
