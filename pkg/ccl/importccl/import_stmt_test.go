@@ -2512,276 +2512,6 @@ func TestImportIntoCSV(t *testing.T) {
 		}
 	})
 
-	// Test that IMPORT INTO works when columns with default expressions are present.
-	// The default expressions supported by IMPORT INTO are constant expressions,
-	// which are literals and functions that always return the same value given the
-	// same arguments (examples of non-constant expressions are given in the last two
-	// subtests below). The default expression of a column is used when this column is not
-	// targeted; otherwise, data from source file (like CSV) is used. It also checks
-	// that IMPORT TABLE works when there are default columns.
-	t.Run("import-into-default", func(t *testing.T) {
-		var data string
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-		t.Run("is-not-target", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t (b INT DEFAULT 42, a INT)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"42", "1"}, {"42", "2"}})
-		})
-		t.Run("is-not-target-not-null", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42 NOT NULL)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "42"}, {"2", "42"}})
-		})
-		t.Run("is-target", func(t *testing.T) {
-			data = "1,36\n2,37"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "36"}, {"2", "37"}})
-		})
-		t.Run("is-target-with-null-data", func(t *testing.T) {
-			data = ",36\n2,"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s") WITH nullif = ''`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"NULL", "36"}, {"2", "NULL"}})
-		})
-		t.Run("mixed-target-and-non-target", func(t *testing.T) {
-			data = "35,test string\n72,another test string"
-			sqlDB.Exec(t, `CREATE TABLE t (b STRING, a INT DEFAULT 53, c INT DEFAULT 42)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"test string", "35", "42"}, {"another test string", "72", "42"}})
-		})
-		t.Run("with-import-table", func(t *testing.T) {
-			data = "35,string1,65\n72,string2,17"
-			sqlDB.Exec(t, fmt.Sprintf(
-				`IMPORT TABLE t (a INT, b STRING, c INT DEFAULT 33)
-			CSV DATA ("%s")`,
-				srv.URL,
-			))
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			data = "11,string3\n29,string4"
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
-				{"35", "string1", "65"},
-				{"72", "string2", "17"},
-				{"11", "string3", "33"},
-				{"29", "string4", "33"}})
-		})
-		t.Run("null-as-default", func(t *testing.T) {
-			data = "1\n2\n3"
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (a INT DEFAULT NULL, b INT)`))
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"NULL", "1"}, {"NULL", "2"}, {"NULL", "3"}})
-		})
-		t.Run("default-value-change", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 7)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			data = "3\n4"
-			sqlDB.Exec(t, `ALTER TABLE t ALTER COLUMN b SET DEFAULT 8`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "7"}, {"2", "7"}, {"3", "8"}, {"4", "8"}})
-		})
-		t.Run("math-constant", func(t *testing.T) {
-			data = "35\n67"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b FLOAT DEFAULT round(pi()))`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
-				{"35", "3"},
-				{"67", "3"}})
-		})
-		t.Run("string-function", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING DEFAULT repeat('dog', 2))`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
-				{"1", "dogdog"},
-				{"2", "dogdog"}})
-		})
-		t.Run("arithmetic", func(t *testing.T) {
-			data = "35\n67"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 34 * 3)`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
-				{"35", "102"},
-				{"67", "102"}})
-		})
-		t.Run("unsupported-functions", func(t *testing.T) {
-			data = "1\n2"
-			testCases := []struct {
-				name        string
-				defaultExpr string
-				colType     string
-				seqName     string
-			}{
-				{
-					name:        "nextval",
-					defaultExpr: "nextval('testseq')",
-					colType:     "INT",
-					seqName:     "testseq",
-				},
-				{
-					name:        "random",
-					defaultExpr: "random()",
-					colType:     "FLOAT",
-				},
-				{
-					name:        "random_plus_timestamp",
-					defaultExpr: "(100*random())::int + current_timestamp()::int",
-					colType:     "INT",
-				},
-				{
-					name:        "deep_nesting",
-					defaultExpr: "(1 + 2 + (100 * round(3 + random())::int)) * 5 + 3",
-					colType:     "INT",
-				},
-			}
-			for _, test := range testCases {
-				if test.seqName != "" {
-					defer sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.seqName))
-				}
-				t.Run(test.name, func(t *testing.T) {
-					defer sqlDB.Exec(t, `DROP TABLE t`)
-					if test.seqName != "" {
-						sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.seqName))
-					}
-					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s)`, test.colType, test.defaultExpr))
-					sqlDB.ExpectErr(t,
-						fmt.Sprintf(`unsafe for import`),
-						fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-				})
-			}
-		})
-		t.Run("current-timestamp", func(t *testing.T) {
-			data = "1\n2\n3\n4\n5\n6"
-			testCases := []struct {
-				name        string
-				defaultExpr string
-				colType     string
-				truncate    time.Duration
-			}{
-				{
-					name:        "current_date",
-					defaultExpr: "current_date()",
-					colType:     "DATE",
-					truncate:    24 * time.Hour,
-				},
-				{
-					name:        "current_timestamp",
-					defaultExpr: "current_timestamp()",
-					colType:     "TIMESTAMP",
-				},
-				{
-					name:        "current_timestamp_with_precision",
-					defaultExpr: "current_timestamp(3)",
-					colType:     "TIMESTAMP",
-					truncate:    time.Millisecond,
-				},
-				{
-					name:        "current_timestamp_as_int",
-					defaultExpr: "current_timestamp()::int",
-					colType:     "INT",
-				},
-				{
-					name:        "localtimestamp",
-					defaultExpr: "localtimestamp()::TIMESTAMPTZ",
-					colType:     "TIMESTAMPTZ",
-				},
-				{
-					name:        "localtimestamp_with_precision",
-					defaultExpr: "localtimestamp(3)",
-					colType:     "TIMESTAMP",
-					truncate:    time.Millisecond,
-				},
-				{
-					name:        "localtimestamp_with_expr_precision",
-					defaultExpr: "localtimestamp(1+2+3)",
-					colType:     "TIMESTAMP",
-				},
-				{
-					name:        "now",
-					defaultExpr: "now()",
-					colType:     "TIMESTAMP",
-				},
-				{
-					name:        "now-case-insensitive",
-					defaultExpr: "NoW()",
-					colType:     "DATE",
-				},
-				{
-					name:        "pg_catalog.now",
-					defaultExpr: "pg_catalog.now()",
-					colType:     "DATE",
-				},
-				{
-					name:        "statement_timestamp",
-					defaultExpr: "statement_timestamp()",
-					colType:     "TIMESTAMP",
-				},
-				{
-					name:        "transaction_timestamp",
-					defaultExpr: "transaction_timestamp()",
-					colType:     "TIMESTAMP",
-				},
-			}
-
-			for _, test := range testCases {
-				t.Run(test.name, func(t *testing.T) {
-					defer sqlDB.Exec(t, `DROP TABLE t`)
-					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s)`, test.colType, test.defaultExpr))
-					minTs := timeutil.Now()
-					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
-					maxTs := timeutil.Now()
-					if test.truncate != 0 {
-						minTs = minTs.Truncate(test.truncate)
-						maxTs = maxTs.Truncate(test.truncate)
-					}
-
-					var numBadRows int
-					if test.colType == "INT" {
-						minTsInt := minTs.Unix()
-						maxTsInt := maxTs.Unix()
-						sqlDB.QueryRow(t,
-							`SELECT count(*) FROM t WHERE  b !=(SELECT b FROM t WHERE a=1) OR b IS NULL or b < $1 or b > $2`,
-							minTsInt,
-							maxTsInt,
-						).Scan(&numBadRows)
-					} else {
-						sqlDB.QueryRow(t,
-							`SELECT count(*) FROM t WHERE  b !=(SELECT b FROM t WHERE a=1) OR b IS NULL or b < $1 or b > $2`,
-							minTs,
-							maxTs,
-						).Scan(&numBadRows)
-					}
-					require.Equal(t, 0, numBadRows)
-				})
-			}
-		})
-		t.Run("pgdump", func(t *testing.T) {
-			data = "INSERT INTO t VALUES (1, 2), (3, 4)"
-			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42, c INT)`)
-			sqlDB.Exec(t, "IMPORT INTO t (c, a) PGDUMP DATA ($1)", srv.URL)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
-		})
-	})
-
 	t.Run("import-not-targeted-not-null", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT NOT NULL)`)
 		const data = "1\n2\n3"
@@ -3217,6 +2947,291 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	require.NoError(b, runParallelImport(ctx, importCtx, &importFileContext{}, producer, consumer))
 	close(kvCh)
 	b.ReportAllocs()
+}
+
+// Test that IMPORT INTO works when columns with default expressions are present.
+// The default expressions supported by IMPORT INTO are constant expressions,
+// which are literals and functions that always return the same value given the
+// same arguments (examples of non-constant expressions are given in the last two
+// subtests below). The default expression of a column is used when this column is not
+// targeted; otherwise, data from source file (like CSV) is used. It also checks
+// that IMPORT TABLE works when there are default columns.
+func TestImportDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const nodes = 3
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	tests := []struct {
+		name            string
+		data            string
+		create          string
+		targetCols      string
+		expectedResults [][]string
+		expectedError   string
+		format          string
+		sequence        string
+	}{
+		// CSV formats.
+		{
+			name:            "is-not-target",
+			data:            "1\n2",
+			create:          "b INT DEFAULT 42, a INT",
+			targetCols:      "a",
+			expectedResults: [][]string{{"42", "1"}, {"42", "2"}},
+			format:          "CSV",
+		},
+		{
+			name:            "is-not-target-not-null",
+			data:            "1\n2",
+			create:          "a INT, b INT DEFAULT 42 NOT NULL",
+			targetCols:      "a",
+			expectedResults: [][]string{{"1", "42"}, {"2", "42"}},
+			format:          "CSV",
+		},
+		{
+			name:            "is-target",
+			data:            "1,36\n2,37",
+			create:          "a INT, b INT DEFAULT 42",
+			targetCols:      "a, b",
+			expectedResults: [][]string{{"1", "36"}, {"2", "37"}},
+			format:          "CSV",
+		},
+		{
+			name:            "mixed-target-and-non-target",
+			data:            "35,test string\n72,another test string",
+			create:          "b STRING, a INT DEFAULT 53, c INT DEFAULT 42",
+			targetCols:      "a, b",
+			expectedResults: [][]string{{"test string", "35", "42"}, {"another test string", "72", "42"}},
+			format:          "CSV",
+		},
+		{
+			name:            "null-as-default",
+			data:            "1\n2\n3",
+			create:          "a INT DEFAULT NULL, b INT",
+			targetCols:      "b",
+			expectedResults: [][]string{{"NULL", "1"}, {"NULL", "2"}, {"NULL", "3"}},
+			format:          "CSV",
+		},
+		{
+			name:            "is-target-with-null-data",
+			data:            ",36\n2,",
+			create:          "a INT, b INT DEFAULT 42",
+			targetCols:      "a, b",
+			expectedResults: [][]string{{"NULL", "36"}, {"2", "NULL"}},
+			format:          "CSV",
+		},
+		{
+			name:            "math-constant",
+			data:            "35\n67",
+			create:          "a INT, b FLOAT DEFAULT round(pi())",
+			targetCols:      "a",
+			expectedResults: [][]string{{"35", "3"}, {"67", "3"}},
+			format:          "CSV",
+		},
+		{
+			name:            "string-function",
+			data:            "1\n2",
+			create:          `a INT, b STRING DEFAULT repeat('dog', 2)`,
+			targetCols:      "a",
+			expectedResults: [][]string{{"1", "dogdog"}, {"2", "dogdog"}},
+			format:          "CSV",
+		},
+		{
+			name:            "arithmetic",
+			data:            "1\n2",
+			create:          `a INT, b INT DEFAULT 34 * 3`,
+			targetCols:      "a",
+			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
+			format:          "CSV",
+		},
+		{
+			name:          "random",
+			data:          "1\n2",
+			create:        `a INT, b FLOAT DEFAULT random()`,
+			targetCols:    "a",
+			expectedError: "unsafe for import",
+			format:        "CSV",
+		},
+		{
+			name:          "nextval",
+			sequence:      "testseq",
+			data:          "1\n2",
+			create:        "a INT, b INT DEFAULT nextval('testseq')",
+			targetCols:    "a",
+			expectedError: "unsafe for import",
+			format:        "CSV",
+		},
+		{
+			name:          "random_plus_timestamp",
+			data:          "1\n2",
+			create:        "a INT, b INT DEFAULT (100*random())::int + current_timestamp()::int",
+			targetCols:    "a",
+			expectedError: "unsafe for import",
+			format:        "CSV",
+		},
+		{
+			name:          "deep_nesting_with_random",
+			data:          "1\n2",
+			create:        "a INT, b INT DEFAULT (1 + 2 + (100 * round(3 + random())::int)) * 5 + 3",
+			targetCols:    "a",
+			expectedError: "unsafe for import",
+			format:        "CSV",
+		},
+		// Non CSV formats.
+		// TODO (anzoteh96): currently, DEFAULT expressions don't work well for
+		// MySQL and AVRO. Fix these and add tests here.
+		{
+			name:            "pgdump",
+			data:            "INSERT INTO t VALUES (1, 2), (3, 4)",
+			create:          `a INT, b INT DEFAULT 42, c INT`,
+			targetCols:      "c, a",
+			expectedResults: [][]string{{"2", "42", "1"}, {"4", "42", "3"}},
+			format:          "PGDUMP",
+		},
+	}
+	for _, test := range tests {
+		if test.sequence != "" {
+			defer sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.sequence))
+		}
+		t.Run(test.name, func(t *testing.T) {
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			if test.sequence != "" {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.sequence))
+			}
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+			data = test.data
+			importStmt := fmt.Sprintf(`IMPORT INTO t (%s) %s DATA ("%s")`, test.targetCols, test.format, srv.URL)
+			if test.format == "CSV" {
+				importStmt = importStmt + ` WITH nullif = ''`
+			}
+			if test.expectedError != "" {
+				sqlDB.ExpectErr(t, test.expectedError, importStmt)
+			} else {
+				sqlDB.Exec(t, importStmt)
+				sqlDB.CheckQueryResults(t, `SELECT * FROM t`, test.expectedResults)
+			}
+		})
+	}
+	t.Run("current-timestamp", func(t *testing.T) {
+		data = "1\n2\n3\n4\n5\n6"
+		testCases := []struct {
+			name        string
+			defaultExpr string
+			colType     string
+			truncate    time.Duration
+		}{
+			{
+				name:        "current_date",
+				defaultExpr: "current_date()",
+				colType:     "DATE",
+				truncate:    24 * time.Hour,
+			},
+			{
+				name:        "current_timestamp",
+				defaultExpr: "current_timestamp()",
+				colType:     "TIMESTAMP",
+			},
+			{
+				name:        "current_timestamp_with_precision",
+				defaultExpr: "current_timestamp(3)",
+				colType:     "TIMESTAMP",
+				truncate:    time.Millisecond,
+			},
+			{
+				name:        "current_timestamp_as_int",
+				defaultExpr: "current_timestamp()::int",
+				colType:     "INT",
+			},
+			{
+				name:        "localtimestamp",
+				defaultExpr: "localtimestamp()::TIMESTAMPTZ",
+				colType:     "TIMESTAMPTZ",
+			},
+			{
+				name:        "localtimestamp_with_precision",
+				defaultExpr: "localtimestamp(3)",
+				colType:     "TIMESTAMP",
+				truncate:    time.Millisecond,
+			},
+			{
+				name:        "localtimestamp_with_expr_precision",
+				defaultExpr: "localtimestamp(1+2+3)",
+				colType:     "TIMESTAMP",
+			},
+			{
+				name:        "now",
+				defaultExpr: "now()",
+				colType:     "TIMESTAMP",
+			},
+			{
+				name:        "now-case-insensitive",
+				defaultExpr: "NoW()",
+				colType:     "DATE",
+			},
+			{
+				name:        "pg_catalog.now",
+				defaultExpr: "pg_catalog.now()",
+				colType:     "DATE",
+			},
+			{
+				name:        "statement_timestamp",
+				defaultExpr: "statement_timestamp()",
+				colType:     "TIMESTAMP",
+			},
+			{
+				name:        "transaction_timestamp",
+				defaultExpr: "transaction_timestamp()",
+				colType:     "TIMESTAMP",
+			},
+		}
+
+		for _, test := range testCases {
+			t.Run(test.name, func(t *testing.T) {
+				defer sqlDB.Exec(t, `DROP TABLE t`)
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s)`, test.colType, test.defaultExpr))
+				minTs := timeutil.Now()
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+				maxTs := timeutil.Now()
+				if test.truncate != 0 {
+					minTs = minTs.Truncate(test.truncate)
+					maxTs = maxTs.Truncate(test.truncate)
+				}
+
+				var numBadRows int
+				if test.colType == "INT" {
+					minTsInt := minTs.Unix()
+					maxTsInt := maxTs.Unix()
+					sqlDB.QueryRow(t,
+						`SELECT count(*) FROM t WHERE  b !=(SELECT b FROM t WHERE a=1) OR b IS NULL or b < $1 or b > $2`,
+						minTsInt,
+						maxTsInt,
+					).Scan(&numBadRows)
+				} else {
+					sqlDB.QueryRow(t,
+						`SELECT count(*) FROM t WHERE  b !=(SELECT b FROM t WHERE a=1) OR b IS NULL or b < $1 or b > $2`,
+						minTs,
+						maxTs,
+					).Scan(&numBadRows)
+				}
+				require.Equal(t, 0, numBadRows)
+			})
+		}
+	})
 }
 
 // goos: darwin
