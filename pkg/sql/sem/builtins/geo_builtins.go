@@ -2386,6 +2386,24 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			),
 		)...,
 	),
+	"st_convexhull": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				convexHull, err := geomfn.ConvexHull(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(convexHull), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns a geometry that represents the Convex Hull of the given geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_pointonsurface": makeBuiltin(
 		defProps(),
 		geometryOverload1(

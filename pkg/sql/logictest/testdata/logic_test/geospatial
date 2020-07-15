@@ -867,25 +867,26 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))
 Square overlapping left and right square  Square overlapping left and right square  POLYGON ((1 0, -0.1 0, -0.1 1, 1 1, 1 0))
 
-query TTT
+query TTTT
 SELECT
   a.dsc,
   ST_AsEWKT(ST_Centroid(a.geom)),
-  ST_AsEWKT(ST_PointOnSurface(a.geom))
+  ST_AsEWKT(ST_PointOnSurface(a.geom)),
+  ST_AsEWKT(ST_ConvexHull(a.geom))
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  POINT EMPTY       POINT EMPTY
-Empty LineString                          POINT EMPTY       POINT EMPTY
-Empty Point                               POINT EMPTY       POINT EMPTY
-Faraway point                             POINT (5 5)       POINT (5 5)
-Line going through left and right square  POINT (0 0.5)     POINT (-0.5 0.5)
-NULL                                      NULL              NULL
-Point middle of Left Square               POINT (-0.5 0.5)  POINT (-0.5 0.5)
-Point middle of Right Square              POINT (0.5 0.5)   POINT (0.5 0.5)
-Square (left)                             POINT (-0.5 0.5)  POINT (-0.5 0.5)
-Square (right)                            POINT (0.5 0.5)   POINT (0.5 0.5)
-Square overlapping left and right square  POINT (0.45 0.5)  POINT (0.45 0.5)
+Empty GeometryCollection                  POINT EMPTY       POINT EMPTY       GEOMETRYCOLLECTION EMPTY
+Empty LineString                          POINT EMPTY       POINT EMPTY       GEOMETRYCOLLECTION EMPTY
+Empty Point                               POINT EMPTY       POINT EMPTY       GEOMETRYCOLLECTION EMPTY
+Faraway point                             POINT (5 5)       POINT (5 5)       POINT (5 5)
+Line going through left and right square  POINT (0 0.5)     POINT (-0.5 0.5)  LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL              NULL              NULL
+Point middle of Left Square               POINT (-0.5 0.5)  POINT (-0.5 0.5)  POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)   POINT (0.5 0.5)   POINT (0.5 0.5)
+Square (left)                             POINT (-0.5 0.5)  POINT (-0.5 0.5)  POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (right)                            POINT (0.5 0.5)   POINT (0.5 0.5)   POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+Square overlapping left and right square  POINT (0.45 0.5)  POINT (0.45 0.5)  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 
 # Functions which take in strings as input as well.
 query TT
