@@ -1009,12 +1009,10 @@ func runMVCCGarbageCollect(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		batch := eng.NewWriteOnlyBatch()
-		distinct := batch.Distinct()
-		if err := MVCCGarbageCollect(ctx, distinct, nil /* ms */, gcKeys, now); err != nil {
+		batch := eng.NewBatch()
+		if err := MVCCGarbageCollect(ctx, batch, nil /* ms */, gcKeys, now); err != nil {
 			b.Fatal(err)
 		}
-		distinct.Close()
 		batch.Close()
 	}
 }
