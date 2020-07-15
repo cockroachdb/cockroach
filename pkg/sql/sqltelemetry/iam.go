@@ -30,6 +30,8 @@ const (
 	OnDatabase = "on_database"
 	// OnTable is used when a GRANT/REVOKE is happening on a table.
 	OnTable = "on_table"
+	// OnType is used when a GRANT/REVOKE is happening on a type.
+	OnType = "on_type"
 
 	iamRoles = "iam.roles"
 )
