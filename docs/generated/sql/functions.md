@@ -1007,6 +1007,13 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_distance"></a><code>st_distance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between the given geometries.</p>
 </span></td></tr>
+<tr><td><a name="st_distancesphere"></a><code>st_distancesphere(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a sphere.</p>
+<p>This function utilizes the S2 library for spherical calculations.</p>
+</span></td></tr>
+<tr><td><a name="st_distancespheroid"></a><code>st_distancespheroid(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a spheroid.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<p>This function utilizes the S2 library for spherical calculations.</p>
+<p>This function utilizes the GeographicLib library for spheroid calculations.</p>
+</span></td></tr>
 <tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>

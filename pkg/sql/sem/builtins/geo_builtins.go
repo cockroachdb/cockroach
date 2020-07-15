@@ -1979,6 +1979,66 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_distancesphere": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				aGeog, err := a.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				bGeog, err := b.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geogfn.Distance(aGeog, bGeog, geogfn.UseSphere)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the distance in meters between geometry_a and geometry_b assuming the coordinates " +
+					"represent lng/lat points on a sphere.",
+				libraryUsage: usesS2,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_distancespheroid": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				aGeog, err := a.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				bGeog, err := b.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geogfn.Distance(aGeog, bGeog, geogfn.UseSpheroid)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the distance in meters between geometry_a and geometry_b assuming the coordinates " +
+					"represent lng/lat points on a spheroid." + spheroidDistanceMessage,
+				libraryUsage: usesGeographicLib | usesS2,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_maxdistance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
