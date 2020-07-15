@@ -22,7 +22,10 @@ import (
 
 func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, c.All())
+
+	// Don't bind to external interfaces when running locally.
+	tenantAddr := ifLocal("127.0.0.1", "0.0.0.0") + ":0"
+	c.Start(ctx, t, c.All(), startArgs("--args=--tenant-addr="+tenantAddr))
 
 	_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant(123)`)
 	require.NoError(t, err)
