@@ -109,6 +109,15 @@ func (jb *joinerBase) init(
 	); err != nil {
 		return err
 	}
+
+	// If we didn't pass all of the input types into ProcessorBase.Init() we could
+	// be missing out on hydrating some of the input types. So hydrate the rest here.
+	if len(outputTypes) < len(condTypes) {
+		if err := execinfrapb.HydrateTypeSlice(jb.ProcessorBase.EvalCtx, condTypes[len(outputTypes):]); err != nil {
+			return err
+		}
+	}
+
 	return jb.onCond.Init(onExpr, condTypes, jb.EvalCtx)
 }
 
