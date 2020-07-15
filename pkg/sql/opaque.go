@@ -103,6 +103,8 @@ func buildOpaque(
 		plan, err = p.Grant(ctx, n)
 	case *tree.GrantRole:
 		plan, err = p.GrantRole(ctx, n)
+	case *tree.GrantOnType:
+		plan, err = p.GrantOnType(ctx, n)
 	case *tree.RenameColumn:
 		plan, err = p.RenameColumn(ctx, n)
 	case *tree.RenameDatabase:
@@ -115,6 +117,8 @@ func buildOpaque(
 		plan, err = p.Revoke(ctx, n)
 	case *tree.RevokeRole:
 		plan, err = p.RevokeRole(ctx, n)
+	case *tree.RevokeOnType:
+		plan, err = p.RevokeOnType(ctx, n)
 	case *tree.Scatter:
 		plan, err = p.Scatter(ctx, n)
 	case *tree.Scrub:
@@ -194,12 +198,14 @@ func init() {
 		&tree.DropSequence{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.GrantOnType{},
 		&tree.RenameColumn{},
 		&tree.RenameDatabase{},
 		&tree.RenameIndex{},
 		&tree.RenameTable{},
 		&tree.Revoke{},
 		&tree.RevokeRole{},
+		&tree.RevokeOnType{},
 		&tree.Scatter{},
 		&tree.Scrub{},
 		&tree.SetClusterSetting{},

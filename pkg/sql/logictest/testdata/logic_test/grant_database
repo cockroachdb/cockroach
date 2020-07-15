@@ -373,3 +373,11 @@ a              public       t           admin      ALL
 a              public       t           readwrite  ALL
 a              public       t           root       ALL
 a              public       t           test-user  ALL
+
+# Alter and Usage privileges should not be grantable on databases.
+
+statement error pq: invalid privilege type ALTER for database
+GRANT ALTER ON DATABASE a TO testuser
+
+statement error pq: invalid privilege type USAGE for database
+GRANT USAGE ON DATABASE a TO testuser

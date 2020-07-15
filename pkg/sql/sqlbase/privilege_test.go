@@ -455,7 +455,7 @@ func TestFixPrivileges(t *testing.T) {
 			if !ok {
 				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
 			}
-			if a, e := privilege.ListFromBitField(outputUser.Privileges), p; a.ToBitField() != e.ToBitField() {
+			if a, e := privilege.ListFromBitField(outputUser.Privileges, ""), p; a.ToBitField() != e.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
 			}
 		}

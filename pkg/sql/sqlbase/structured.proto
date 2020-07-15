@@ -1072,6 +1072,9 @@ message TypeDescriptor {
   }
   optional State state = 13 [(gogoproto.nullable) = false];
 
+  // privileges contains the privileges for the type.
+  optional PrivilegeDescriptor privileges = 14;
+
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
     // Represents a user defined enum type.
@@ -1103,7 +1106,6 @@ message TypeDescriptor {
 
   // alias is the types.T that this descriptor is an alias for.
   optional sql.sem.types.T alias = 7;
-
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured

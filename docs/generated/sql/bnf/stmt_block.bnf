@@ -72,6 +72,7 @@ grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' name_list
 	| 'GRANT' privilege_list 'TO' name_list
 	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
+	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' name_list
 
 prepare_stmt ::=
 	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt
@@ -80,6 +81,7 @@ revoke_stmt ::=
 	'REVOKE' privileges 'ON' targets 'FROM' name_list
 	| 'REVOKE' privilege_list 'FROM' name_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
+	| 'REVOKE' privileges 'ON' 'TYPE' target_types 'FROM' name_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
@@ -272,6 +274,9 @@ name_list ::=
 
 privilege_list ::=
 	( privilege ) ( ( ',' privilege ) )*
+
+target_types ::=
+	type_name_list
 
 prep_type_clause ::=
 	'(' type_list ')'
@@ -804,6 +809,7 @@ unreserved_keyword ::=
 	| 'PREPARE'
 	| 'PRESERVE'
 	| 'PRIORITY'
+	| 'PRIVILEGES'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -978,6 +984,9 @@ privilege ::=
 	| 'CREATE'
 	| 'GRANT'
 	| 'SELECT'
+
+type_name_list ::=
+	( type_name ) ( ( ',' type_name ) )*
 
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
@@ -1350,6 +1359,9 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
+type_name ::=
+	db_object_name
+
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
@@ -1430,9 +1442,6 @@ alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
-
-type_name ::=
-	db_object_name
 
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
@@ -1585,9 +1594,6 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
-
-type_name_list ::=
-	( type_name ) ( ( ',' type_name ) )*
 
 non_reserved_word ::=
 	'identifier'

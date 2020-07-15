@@ -1,0 +1,66 @@
+# LogicTest: local
+
+statement ok
+SET experimental_enable_enums=true;
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser;
+
+statement ok
+CREATE TYPE test AS ENUM ();
+
+statement ok
+CREATE TABLE for_view(x int);
+
+statement ok
+GRANT SELECT ON for_view to testuser;
+
+statement ok
+REVOKE USAGE ON TYPE test FROM public;
+
+user testuser
+
+statement error permission denied for type test
+CREATE TABLE t(x test);
+
+# User must have USAGE permission on the type to use it in a view.
+statement error permission denied for type test
+CREATE VIEW vx AS SELECT x FROM for_view;
+
+statement error pq: testuser does not have alter privilege on type test
+ALTER TYPE test RENAME TO not_test
+
+user root
+statement ok
+GRANT USAGE ON TYPE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE t(x test);
+
+statement error pq: testuser does not have alter privilege on type test
+ALTER TYPE test RENAME TO not_test
+
+user root
+
+statement ok
+GRANT ALTER ON TYPE test TO testuser
+
+user testuser
+
+statement ok
+ALTER TYPE test RENAME TO not_test
+
+# Privilege tests
+user root
+
+statement ok
+CREATE DATABASE d;
+
+statement error
+GRANT USAGE ON DATABASE d TO testuser;
+
+statement error
+GRANT ALTER ON DATABASE d TO testuser;
+

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -274,15 +275,18 @@ func backupShowerDefault(
 func showPrivileges(descriptor sqlbase.Descriptor) string {
 	var privStringBuilder strings.Builder
 	var privDesc *sqlbase.PrivilegeDescriptor
+	var objectType privilege.ObjectType
 	if db := descriptor.GetDatabase(); db != nil {
 		privDesc = db.GetPrivileges()
+		objectType = privilege.Database
 	} else if table := descriptor.Table(hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
+		objectType = privilege.Table
 	}
 	if privDesc == nil {
 		return ""
 	}
-	for _, userPriv := range privDesc.Show() {
+	for _, userPriv := range privDesc.Show(objectType) {
 		user := userPriv.User
 		privs := userPriv.Privileges
 		privStringBuilder.WriteString("GRANT ")

@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -32,10 +32,17 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
 	} else {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidateDBSchemaTablePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
@@ -58,10 +65,17 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
-		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
 	} else {
-		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidateDBSchemaTablePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
@@ -119,6 +133,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// we update them in KV below.
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
+		fmt.Println()
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return err
 		}

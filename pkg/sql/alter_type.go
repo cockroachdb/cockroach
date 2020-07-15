@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -52,6 +53,13 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 }
 
 func (n *alterTypeNode) startExec(params runParams) error {
+
+	if !n.desc.Privileges.CheckPrivilege(params.p.User(), privilege.ALTER) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"%s does not have alter privilege on type %s",
+			params.p.User(), n.desc.Name)
+	}
+
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:

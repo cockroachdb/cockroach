@@ -265,6 +265,26 @@ func getDescriptorsFromTargetList(
 		return descs, nil
 	}
 
+	if targets.Types != nil {
+		if len(targets.Types) == 0 {
+			return nil, errNoType
+		}
+		descs := make([]sqlbase.DescriptorInterface, 0, len(targets.Types))
+		for _, typ := range targets.Types {
+			descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, true /* required */)
+			if err != nil {
+				return nil, err
+			}
+
+			descs = append(descs, descriptor)
+		}
+
+		if len(descs) == 0 {
+			return nil, errNoMatch
+		}
+		return descs, nil
+	}
+
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	}
