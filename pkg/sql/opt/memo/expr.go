@@ -640,7 +640,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 // AddEquivTableCols adds an FD to the given set that declares an equivalence
 // between each table column and its corresponding input column.
 func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
-	for i, n := 0, md.Table(m.Table).DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, md.Table(m.Table).AllColumnCount(); i < n; i++ {
 		t := m.Table.ColumnID(i)
 		id := m.MapToInputID(t)
 		if id != 0 {

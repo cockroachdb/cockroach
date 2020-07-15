@@ -635,3 +635,38 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv pri
 	// cached and later checked for freshness.
 	b.factory.Metadata().AddDependency(name, ds, priv)
 }
+
+// resolveNumericColumnRefs converts a list of tree.ColumnIDs from a
+// tree.TableRef to a list of ordinal positions within the given table. Mutation
+// columns are not visible. See tree.Table for more information on column
+// ordinals.
+func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals []int) {
+	ordinals = make([]int, len(columns))
+	for i, c := range columns {
+		ord := 0
+		cnt := tab.AllColumnCount()
+		for ord < cnt {
+			if tab.Column(ord).ColID() == cat.StableID(c) && !cat.IsMutationColumn(tab, ord) {
+				break
+			}
+			ord++
+		}
+		if ord >= cnt {
+			panic(pgerror.Newf(pgcode.UndefinedColumn, "column [%d] does not exist", c))
+		}
+		ordinals[i] = ord
+	}
+	return ordinals
+}
+
+// findPublicTableColumnByName returns the ordinal of the non-mutation column
+// having the given name, if one exists in the given table. Otherwise, it
+// returns -1.
+func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
+	for ord, n := 0, tab.AllColumnCount(); ord < n; ord++ {
+		if tab.Column(ord).ColName() == name && !cat.IsMutationColumn(tab, ord) {
+			return ord
+		}
+	}
+	return -1
+}

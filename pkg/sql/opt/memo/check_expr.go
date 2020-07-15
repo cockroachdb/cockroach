@@ -14,6 +14,7 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -172,14 +173,14 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		m.checkColListLen(t.InsertCols, tab.DeletableColumnCount(), "InsertCols")
+		m.checkColListLen(t.InsertCols, tab.AllColumnCount(), "InsertCols")
 		m.checkColListLen(t.FetchCols, 0, "FetchCols")
 		m.checkColListLen(t.UpdateCols, 0, "UpdateCols")
 
 		// Ensure that insert columns include all columns except for delete-only
 		// mutation columns (which do not need to be part of INSERT).
-		for i, n := 0, tab.WritableColumnCount(); i < n; i++ {
-			if t.InsertCols[i] == 0 {
+		for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+			if tab.ColumnKind(i) != cat.DeleteOnly && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
 		}
@@ -189,8 +190,8 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	case *UpdateExpr:
 		tab := m.Metadata().Table(t.Table)
 		m.checkColListLen(t.InsertCols, 0, "InsertCols")
-		m.checkColListLen(t.FetchCols, tab.DeletableColumnCount(), "FetchCols")
-		m.checkColListLen(t.UpdateCols, tab.DeletableColumnCount(), "UpdateCols")
+		m.checkColListLen(t.FetchCols, tab.AllColumnCount(), "FetchCols")
+		m.checkColListLen(t.UpdateCols, tab.AllColumnCount(), "UpdateCols")
 		m.checkMutationExpr(t, &t.MutationPrivate)
 
 	case *ZigzagJoinExpr:
@@ -249,8 +250,10 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 	// Output columns should never include mutation columns.
 	tab := m.Metadata().Table(private.Table)
 	var mutCols opt.ColSet
-	for i, n := tab.ColumnCount(), tab.DeletableColumnCount(); i < n; i++ {
-		mutCols.Add(private.Table.ColumnID(i))
+	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+		if cat.IsMutationColumn(tab, i) {
+			mutCols.Add(private.Table.ColumnID(i))
+		}
 	}
 	if rel.Relational().OutputCols.Intersects(mutCols) {
 		panic(errors.AssertionFailedf("output columns cannot include mutation columns"))

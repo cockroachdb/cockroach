@@ -596,24 +596,28 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
-// ColumnCount is part of the cat.Table interface.
-func (tt *Table) ColumnCount() int {
-	return len(tt.Columns) - tt.writeOnlyColCount - tt.deleteOnlyColCount
-}
-
-// WritableColumnCount is part of the cat.Table interface.
-func (tt *Table) WritableColumnCount() int {
-	return len(tt.Columns) - tt.deleteOnlyColCount
-}
-
-// DeletableColumnCount is part of the cat.Table interface.
-func (tt *Table) DeletableColumnCount() int {
+// AllColumnCount is part of the cat.Table interface.
+func (tt *Table) AllColumnCount() int {
 	return len(tt.Columns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
 	return tt.Columns[i]
+}
+
+// ColumnKind is part of the cat.Table interface.
+func (tt *Table) ColumnKind(i int) cat.ColumnKind {
+	writeOnlyEnd := len(tt.Columns) - tt.deleteOnlyColCount
+	standardEnd := writeOnlyEnd - tt.writeOnlyColCount
+	switch {
+	case i < standardEnd:
+		return cat.Ordinary
+	case i < writeOnlyEnd:
+		return cat.WriteOnly
+	default:
+		return cat.DeleteOnly
+	}
 }
 
 // IndexCount is part of the cat.Table interface.

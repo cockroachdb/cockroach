@@ -393,7 +393,7 @@ func (b *Builder) buildScanFromTableRef(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"an explicit list of column IDs must include at least one column"))
 		}
-		ordinals = cat.ConvertColumnIDsToOrdinals(tab, ref.Columns)
+		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	}
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
@@ -442,29 +442,9 @@ func (b *Builder) buildScan(
 		tabMeta.IgnoreForeignKeys = true
 	}
 
-	colCount := len(ordinals)
-	if colCount == 0 {
-		// If scanning mutation columns, then include writable and deletable
-		// columns in the output, in addition to public columns.
-		if scanMutationCols {
-			colCount = tab.DeletableColumnCount()
-		} else {
-			colCount = tab.ColumnCount()
-		}
-	}
-
-	getOrdinal := func(i int) int {
-		if ordinals == nil {
-			return i
-		}
-		return ordinals[i]
-	}
-
-	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, 0, colCount)
-	for i := 0; i < colCount; i++ {
-		ord := getOrdinal(i)
+	var tabColIDs opt.ColSet
+	addCol := func(ord int) {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(colID)
@@ -478,6 +458,23 @@ func (b *Builder) buildScan(
 			hidden:   col.IsHidden() || isMutation,
 			mutation: isMutation,
 		})
+	}
+
+	if ordinals == nil {
+		// If no ordinals are requested, then add in all of the table columns
+		// (including mutation columns if scanMutationCols is true).
+		outScope.cols = make([]scopeColumn, 0, tab.AllColumnCount())
+		for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+			if scanMutationCols || !cat.IsMutationColumn(tab, i) {
+				addCol(i)
+			}
+		}
+	} else {
+		// Otherwise, just add the ordinals.
+		outScope.cols = make([]scopeColumn, 0, len(ordinals))
+		for _, ord := range ordinals {
+			addCol(ord)
+		}
 	}
 
 	if tab.IsVirtualTable() {
@@ -536,7 +533,11 @@ func (b *Builder) buildScan(
 			// We will track the ColumnID to Ord mapping so Ords can be added
 			// when a column is referenced.
 			for i, col := range outScope.cols {
-				dep.ColumnIDToOrd[col.id] = getOrdinal(i)
+				if ordinals == nil {
+					dep.ColumnIDToOrd[col.id] = i
+				} else {
+					dep.ColumnIDToOrd[col.id] = ordinals[i]
+				}
 			}
 			if private.Flags.ForceIndex {
 				dep.SpecificIndex = true
@@ -575,10 +576,11 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	tableScope := b.allocScope()
 	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
 
-	// Find the non-nullable table columns.
+	// Find the non-nullable table columns. Mutation columns can be NULL during
+	// backfill, so they should be excluded.
 	var notNullCols opt.ColSet
-	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
+	for i := 0; i < tab.AllColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() && !cat.IsMutationColumn(tab, i) {
 			notNullCols.Add(tabMeta.MetaID.ColumnID(i))
 		}
 	}
@@ -626,9 +628,14 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	var tableScope *scope
 	tab := tabMeta.Table
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
 		tabCol := tab.Column(i)
 		if !tabCol.IsComputed() {
+			continue
+		}
+		if cat.IsMutationColumn(tab, i) {
+			// Mutation columns can be NULL during backfill, so they won't equal the
+			// computed column expression value (in general).
 			continue
 		}
 		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
