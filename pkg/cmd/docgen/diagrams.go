@@ -780,8 +780,10 @@ var specs = []stmtSpec{
 	{
 		name: "grant_roles",
 		stmt: "grant_stmt",
-		replace: map[string]string{
-			"'GRANT' privileges 'ON' targets 'TO' name_list":                "",
+		exclude: []*regexp.Regexp{
+			// Ignore other grant statements that are granting privileges.
+			regexp.MustCompile("'GRANT' privileges"),
+		}, replace: map[string]string{
 			"'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'": "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )* 'WITH' 'ADMIN' 'OPTION'",
 			"| 'GRANT' privilege_list 'TO' name_list":                       "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*",
 		},
@@ -990,6 +992,10 @@ var specs = []stmtSpec{
 	{
 		name: "revoke_roles",
 		stmt: "revoke_stmt",
+		exclude: []*regexp.Regexp{
+			// Ignore other grant statements that are granting privileges.
+			regexp.MustCompile("'REVOKE' privileges"),
+		},
 		replace: map[string]string{
 			"'REVOKE' privileges 'ON' targets 'FROM' name_list":               "",
 			"'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list": "'REVOKE' 'ADMIN' 'OPTION' 'FOR' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",

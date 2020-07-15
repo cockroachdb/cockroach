@@ -147,6 +147,8 @@ func IsOwner(desc sqlbase.Descriptor, role string) bool {
 
 // HasOwnership returns if the role or any role the role is a member of
 // has ownership privilege of the desc.
+// TODO(richardjcai): SUPERUSER has implicit ownership.
+// We do not have SUPERUSER privilege yet but should we consider root a superuser?
 func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descriptor) (bool, error) {
 	user := p.SessionData().User
 
@@ -464,10 +466,8 @@ const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
 // create a circular dependency.
 const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
 
-func (p *planner) canCreateOnSchema(
-	ctx context.Context, dbID descpb.ID, schemaID descpb.ID, user string,
-) error {
-	resolvedSchema, err := resolver.ResolveSchemaByID(ctx, p.Txn(), p.ExecCfg().Codec, dbID, schemaID)
+func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, user string) error {
+	resolvedSchema, err := resolver.ResolveSchemaByID(ctx, p.Txn(), p.ExecCfg().Codec, schemaID)
 	if err != nil {
 		return err
 	}
