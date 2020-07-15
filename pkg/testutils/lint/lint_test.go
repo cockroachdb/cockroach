@@ -1079,6 +1079,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`.*\.lock`),
 			stream.GrepNot(`^storage\/rocksdb_error_dict\.go$`),
+			stream.GrepNot(`^workload/geospatial/geospatial.go$`),
 			stream.GrepNot(`^workload/tpcds/tpcds.go$`),
 			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
