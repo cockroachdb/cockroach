@@ -751,8 +751,8 @@ group-by
  │         │    │    │    └── ordering: +50
  │         │    │    └── filters (true)
  │         │    └── filters
- │         │         ├── c_custkey:36 = o_custkey:27 [outer=(27,36), constraints=(/27: (/NULL - ]; /36: (/NULL - ]), fd=(27)==(36), (36)==(27)]
- │         │         └── ((n1.n_name:46 = 'FRANCE') AND (n2.n_name:51 = 'GERMANY')) OR ((n1.n_name:46 = 'GERMANY') AND (n2.n_name:51 = 'FRANCE')) [outer=(46,51), constraints=(/46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /51: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+ │         │         ├── ((n1.n_name:46 = 'FRANCE') AND (n2.n_name:51 = 'GERMANY')) OR ((n1.n_name:46 = 'GERMANY') AND (n2.n_name:51 = 'FRANCE')) [outer=(46,51), constraints=(/46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /51: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+ │         │         └── c_custkey:36 = o_custkey:27 [outer=(27,36), constraints=(/27: (/NULL - ]; /36: (/NULL - ]), fd=(27)==(36), (36)==(27)]
  │         └── projections
  │              ├── extract('year', l_shipdate:19) [as=l_year:55, outer=(19), immutable]
  │              └── l_extendedprice:14 * (1.0 - l_discount:15) [as=volume:56, outer=(14,15), immutable]
@@ -2109,87 +2109,87 @@ sort
  └── project
       ├── columns: s_name:2!null s_address:3!null
       ├── immutable
-      └── inner-join (lookup nation)
+      └── project
            ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null n_nationkey:9!null n_name:10!null
-           ├── key columns: [4] = [9]
-           ├── lookup columns are key
            ├── immutable
            ├── key: (1)
            ├── fd: ()-->(10), (1)-->(2-4), (4)==(9), (9)==(4)
-           ├── project
-           │    ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null
-           │    ├── immutable
-           │    ├── key: (1)
-           │    ├── fd: (1)-->(2-4)
-           │    └── inner-join (lookup supplier)
-           │         ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null ps_suppkey:15!null
-           │         ├── key columns: [15] = [1]
-           │         ├── lookup columns are key
-           │         ├── immutable
-           │         ├── key: (15)
-           │         ├── fd: (1)-->(2-4), (1)==(15), (15)==(1)
-           │         ├── distinct-on
-           │         │    ├── columns: ps_suppkey:15!null
-           │         │    ├── grouping columns: ps_suppkey:15!null
-           │         │    ├── immutable
-           │         │    ├── key: (15)
-           │         │    └── semi-join (hash)
-           │         │         ├── columns: ps_partkey:14!null ps_suppkey:15!null
-           │         │         ├── immutable
-           │         │         ├── key: (14,15)
-           │         │         ├── project
-           │         │         │    ├── columns: ps_partkey:14!null ps_suppkey:15!null
-           │         │         │    ├── immutable
-           │         │         │    ├── key: (14,15)
-           │         │         │    └── select
-           │         │         │         ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null sum:47
-           │         │         │         ├── immutable
-           │         │         │         ├── key: (14,15)
-           │         │         │         ├── fd: (14,15)-->(16,47)
-           │         │         │         ├── group-by
-           │         │         │         │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null sum:47
-           │         │         │         │    ├── grouping columns: ps_partkey:14!null ps_suppkey:15!null
-           │         │         │         │    ├── key: (14,15)
-           │         │         │         │    ├── fd: (14,15)-->(16,47)
-           │         │         │         │    ├── left-join (hash)
-           │         │         │         │    │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null l_partkey:31 l_suppkey:32 l_quantity:34 l_shipdate:40
-           │         │         │         │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
-           │         │         │         │    │    ├── fd: (14,15)-->(16)
-           │         │         │         │    │    ├── scan partsupp
-           │         │         │         │    │    │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null
-           │         │         │         │    │    │    ├── key: (14,15)
-           │         │         │         │    │    │    └── fd: (14,15)-->(16)
-           │         │         │         │    │    ├── select
-           │         │         │         │    │    │    ├── columns: l_partkey:31!null l_suppkey:32!null l_quantity:34!null l_shipdate:40!null
-           │         │         │         │    │    │    ├── scan lineitem
-           │         │         │         │    │    │    │    └── columns: l_partkey:31!null l_suppkey:32!null l_quantity:34!null l_shipdate:40!null
-           │         │         │         │    │    │    └── filters
-           │         │         │         │    │    │         └── (l_shipdate:40 >= '1994-01-01') AND (l_shipdate:40 < '1995-01-01') [outer=(40), constraints=(/40: [/'1994-01-01' - /'1994-12-31']; tight)]
-           │         │         │         │    │    └── filters
-           │         │         │         │    │         ├── l_partkey:31 = ps_partkey:14 [outer=(14,31), constraints=(/14: (/NULL - ]; /31: (/NULL - ]), fd=(14)==(31), (31)==(14)]
-           │         │         │         │    │         └── l_suppkey:32 = ps_suppkey:15 [outer=(15,32), constraints=(/15: (/NULL - ]; /32: (/NULL - ]), fd=(15)==(32), (32)==(15)]
-           │         │         │         │    └── aggregations
-           │         │         │         │         ├── sum [as=sum:47, outer=(34)]
-           │         │         │         │         │    └── l_quantity:34
-           │         │         │         │         └── const-agg [as=ps_availqty:16, outer=(16)]
-           │         │         │         │              └── ps_availqty:16
-           │         │         │         └── filters
-           │         │         │              └── ps_availqty:16 > (sum:47 * 0.5) [outer=(16,47), immutable, constraints=(/16: (/NULL - ])]
-           │         │         ├── select
-           │         │         │    ├── columns: p_partkey:20!null p_name:21!null
-           │         │         │    ├── key: (20)
-           │         │         │    ├── fd: (20)-->(21)
-           │         │         │    ├── scan part
-           │         │         │    │    ├── columns: p_partkey:20!null p_name:21!null
-           │         │         │    │    ├── key: (20)
-           │         │         │    │    └── fd: (20)-->(21)
-           │         │         │    └── filters
-           │         │         │         └── p_name:21 LIKE 'forest%' [outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
-           │         │         └── filters
-           │         │              └── ps_partkey:14 = p_partkey:20 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ]), fd=(14)==(20), (20)==(14)]
-           │         └── filters (true)
-           └── filters
-                └── n_name:10 = 'CANADA' [outer=(10), constraints=(/10: [/'CANADA' - /'CANADA']; tight), fd=()-->(10)]
+           └── inner-join (lookup nation)
+                ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null n_nationkey:9!null n_name:10!null ps_suppkey:15!null
+                ├── key columns: [4] = [9]
+                ├── lookup columns are key
+                ├── immutable
+                ├── key: (15)
+                ├── fd: ()-->(10), (1)-->(2-4), (4)==(9), (9)==(4), (1)==(15), (15)==(1)
+                ├── inner-join (lookup supplier)
+                │    ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null ps_suppkey:15!null
+                │    ├── key columns: [15] = [1]
+                │    ├── lookup columns are key
+                │    ├── immutable
+                │    ├── key: (15)
+                │    ├── fd: (1)-->(2-4), (1)==(15), (15)==(1)
+                │    ├── distinct-on
+                │    │    ├── columns: ps_suppkey:15!null
+                │    │    ├── grouping columns: ps_suppkey:15!null
+                │    │    ├── immutable
+                │    │    ├── key: (15)
+                │    │    └── semi-join (hash)
+                │    │         ├── columns: ps_partkey:14!null ps_suppkey:15!null
+                │    │         ├── immutable
+                │    │         ├── key: (14,15)
+                │    │         ├── project
+                │    │         │    ├── columns: ps_partkey:14!null ps_suppkey:15!null
+                │    │         │    ├── immutable
+                │    │         │    ├── key: (14,15)
+                │    │         │    └── select
+                │    │         │         ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null sum:47
+                │    │         │         ├── immutable
+                │    │         │         ├── key: (14,15)
+                │    │         │         ├── fd: (14,15)-->(16,47)
+                │    │         │         ├── group-by
+                │    │         │         │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null sum:47
+                │    │         │         │    ├── grouping columns: ps_partkey:14!null ps_suppkey:15!null
+                │    │         │         │    ├── key: (14,15)
+                │    │         │         │    ├── fd: (14,15)-->(16,47)
+                │    │         │         │    ├── left-join (hash)
+                │    │         │         │    │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null l_partkey:31 l_suppkey:32 l_quantity:34 l_shipdate:40
+                │    │         │         │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
+                │    │         │         │    │    ├── fd: (14,15)-->(16)
+                │    │         │         │    │    ├── scan partsupp
+                │    │         │         │    │    │    ├── columns: ps_partkey:14!null ps_suppkey:15!null ps_availqty:16!null
+                │    │         │         │    │    │    ├── key: (14,15)
+                │    │         │         │    │    │    └── fd: (14,15)-->(16)
+                │    │         │         │    │    ├── select
+                │    │         │         │    │    │    ├── columns: l_partkey:31!null l_suppkey:32!null l_quantity:34!null l_shipdate:40!null
+                │    │         │         │    │    │    ├── scan lineitem
+                │    │         │         │    │    │    │    └── columns: l_partkey:31!null l_suppkey:32!null l_quantity:34!null l_shipdate:40!null
+                │    │         │         │    │    │    └── filters
+                │    │         │         │    │    │         └── (l_shipdate:40 >= '1994-01-01') AND (l_shipdate:40 < '1995-01-01') [outer=(40), constraints=(/40: [/'1994-01-01' - /'1994-12-31']; tight)]
+                │    │         │         │    │    └── filters
+                │    │         │         │    │         ├── l_partkey:31 = ps_partkey:14 [outer=(14,31), constraints=(/14: (/NULL - ]; /31: (/NULL - ]), fd=(14)==(31), (31)==(14)]
+                │    │         │         │    │         └── l_suppkey:32 = ps_suppkey:15 [outer=(15,32), constraints=(/15: (/NULL - ]; /32: (/NULL - ]), fd=(15)==(32), (32)==(15)]
+                │    │         │         │    └── aggregations
+                │    │         │         │         ├── sum [as=sum:47, outer=(34)]
+                │    │         │         │         │    └── l_quantity:34
+                │    │         │         │         └── const-agg [as=ps_availqty:16, outer=(16)]
+                │    │         │         │              └── ps_availqty:16
+                │    │         │         └── filters
+                │    │         │              └── ps_availqty:16 > (sum:47 * 0.5) [outer=(16,47), immutable, constraints=(/16: (/NULL - ])]
+                │    │         ├── select
+                │    │         │    ├── columns: p_partkey:20!null p_name:21!null
+                │    │         │    ├── key: (20)
+                │    │         │    ├── fd: (20)-->(21)
+                │    │         │    ├── scan part
+                │    │         │    │    ├── columns: p_partkey:20!null p_name:21!null
+                │    │         │    │    ├── key: (20)
+                │    │         │    │    └── fd: (20)-->(21)
+                │    │         │    └── filters
+                │    │         │         └── p_name:21 LIKE 'forest%' [outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
+                │    │         └── filters
+                │    │              └── ps_partkey:14 = p_partkey:20 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ]), fd=(14)==(20), (20)==(14)]
+                │    └── filters (true)
+                └── filters
+                     └── n_name:10 = 'CANADA' [outer=(10), constraints=(/10: [/'CANADA' - /'CANADA']; tight), fd=()-->(10)]
 
 # --------------------------------------------------
 # Q21
@@ -2271,42 +2271,37 @@ limit
  │         │    │    ├── key columns: [11] = [1]
  │         │    │    ├── lookup columns are key
  │         │    │    ├── fd: ()-->(28), (1)-->(2,4), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
- │         │    │    ├── inner-join (lookup orders)
+ │         │    │    ├── anti-join (lookup lineitem)
  │         │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null
- │         │    │    │    ├── key columns: [9] = [26]
- │         │    │    │    ├── lookup columns are key
+ │         │    │    │    ├── key columns: [9] = [58]
  │         │    │    │    ├── fd: ()-->(28), (9)==(26), (26)==(9)
  │         │    │    │    ├── semi-join (hash)
- │         │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null
- │         │    │    │    │    ├── anti-join (merge)
- │         │    │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null
- │         │    │    │    │    │    ├── left ordering: +9
- │         │    │    │    │    │    ├── right ordering: +58
+ │         │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null
+ │         │    │    │    │    ├── fd: ()-->(28), (9)==(26), (26)==(9)
+ │         │    │    │    │    ├── inner-join (lookup lineitem)
+ │         │    │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null
+ │         │    │    │    │    │    ├── key columns: [26] = [9]
+ │         │    │    │    │    │    ├── fd: ()-->(28), (9)==(26), (26)==(9)
  │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null
- │         │    │    │    │    │    │    ├── ordering: +9
- │         │    │    │    │    │    │    ├── scan l1
- │         │    │    │    │    │    │    │    ├── columns: l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null
- │         │    │    │    │    │    │    │    └── ordering: +9
+ │         │    │    │    │    │    │    ├── columns: o_orderkey:26!null o_orderstatus:28!null
+ │         │    │    │    │    │    │    ├── key: (26)
+ │         │    │    │    │    │    │    ├── fd: ()-->(28)
+ │         │    │    │    │    │    │    ├── scan orders
+ │         │    │    │    │    │    │    │    ├── columns: o_orderkey:26!null o_orderstatus:28!null
+ │         │    │    │    │    │    │    │    ├── key: (26)
+ │         │    │    │    │    │    │    │    └── fd: (26)-->(28)
  │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── l1.l_receiptdate:21 > l1.l_commitdate:20 [outer=(20,21), constraints=(/20: (/NULL - ]; /21: (/NULL - ])]
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: l3.l_orderkey:58!null l3.l_suppkey:60!null l3.l_commitdate:69!null l3.l_receiptdate:70!null
- │         │    │    │    │    │    │    ├── ordering: +58
- │         │    │    │    │    │    │    ├── scan l3
- │         │    │    │    │    │    │    │    ├── columns: l3.l_orderkey:58!null l3.l_suppkey:60!null l3.l_commitdate:69!null l3.l_receiptdate:70!null
- │         │    │    │    │    │    │    │    └── ordering: +58
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
+ │         │    │    │    │    │    │         └── o_orderstatus:28 = 'F' [outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
  │         │    │    │    │    │    └── filters
- │         │    │    │    │    │         └── l3.l_suppkey:60 != l1.l_suppkey:11 [outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
+ │         │    │    │    │    │         └── l1.l_receiptdate:21 > l1.l_commitdate:20 [outer=(20,21), constraints=(/20: (/NULL - ]; /21: (/NULL - ])]
  │         │    │    │    │    ├── scan l2@l_sk
  │         │    │    │    │    │    └── columns: l2.l_orderkey:41!null l2.l_suppkey:43!null
  │         │    │    │    │    └── filters
  │         │    │    │    │         ├── l2.l_orderkey:41 = l1.l_orderkey:9 [outer=(9,41), constraints=(/9: (/NULL - ]; /41: (/NULL - ]), fd=(9)==(41), (41)==(9)]
  │         │    │    │    │         └── l2.l_suppkey:43 != l1.l_suppkey:11 [outer=(11,43), constraints=(/11: (/NULL - ]; /43: (/NULL - ])]
  │         │    │    │    └── filters
- │         │    │    │         └── o_orderstatus:28 = 'F' [outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
+ │         │    │    │         ├── l3.l_suppkey:60 != l1.l_suppkey:11 [outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
+ │         │    │    │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
  │         │    │    └── filters (true)
  │         │    └── filters
  │         │         └── n_name:37 = 'SAUDI ARABIA' [outer=(37), constraints=(/37: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight), fd=()-->(37)]
