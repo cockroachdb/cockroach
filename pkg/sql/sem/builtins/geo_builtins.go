@@ -2613,6 +2613,34 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_translate": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"deltaX", types.Float},
+				{"deltaY", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				deltaX := float64(*args[1].(*tree.DFloat))
+				deltaY := float64(*args[2].(*tree.DFloat))
+
+				ret, err := geomfn.Translate(g.Geometry, []float64{deltaX, deltaY})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info:         `Returns a modified Geometry translated by the given deltas`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_segmentize": makeBuiltin(
 		defProps(),
 		tree.Overload{

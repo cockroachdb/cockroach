@@ -1338,6 +1338,9 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <tr><td><a name="st_transform"></a><code>st_transform(geometry: geometry, to_proj_text: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate reference system referenced by the projection text by projecting its coordinates.</p>
 <p>This function utilizes the PROJ library for coordinate projections.</p>
 </span></td></tr>
+<tr><td><a name="st_translate"></a><code>st_translate(g: geometry, deltaX: <a href="float.html">float</a>, deltaY: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry translated by the given deltas</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_union"></a><code>st_union(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the union of the given geometries as a single Geometry object.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
