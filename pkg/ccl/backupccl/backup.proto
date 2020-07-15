@@ -159,3 +159,8 @@ message EncryptionInfo {
 message StatsTable {
   repeated sql.stats.TableStatisticProto statistics = 1;
 }
+
+message RestoreProgress {
+  RowCount summary = 1 [(gogoproto.nullable) = false];
+  int64 progressIdx = 2;
+}

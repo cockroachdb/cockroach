@@ -161,6 +161,17 @@ message BackupDataSpec {
 message RestoreSpanEntry {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
   repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
+  optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
+}
+
+message RestoreDataSpec {
+  optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
+  optional roachpb.FileEncryptionOptions encryption = 2;
+  repeated roachpb.ImportRequest.TableRekey rekeys = 3 [(gogoproto.nullable) = false];
+
+  // PKIDs is used to convert result from an ExportRequest into row count
+  // information passed back to track progress in the backup job.
+  map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
 }
 
 message SplitAndScatterSpec {
