@@ -97,6 +97,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// All columns from the update table will be projected.
 	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
+	// Add partial index del boolean columns to the input.
+	mb.addPartialIndexDelCols()
+
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
 
@@ -326,6 +329,9 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.disambiguateColumns()
 
 	mb.addCheckConstraintCols()
+
+	// Add partial index put boolean columns to the input.
+	mb.addPartialIndexPutCols()
 
 	mb.buildFKChecksForUpdate()
 

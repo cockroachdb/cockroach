@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,6 +207,9 @@ type ImmutableTableDescriptor struct {
 
 	allChecks []TableDescriptor_CheckConstraint
 
+	// partialIndexOrds contains the ordinal of each partial index.
+	partialIndexOrds util.FastIntSet
+
 	// ReadableColumns is a list of columns (including those undergoing a schema change)
 	// which can be scanned. Columns in the process of a schema change
 	// are all set to nullable while column backfilling is still in
@@ -343,6 +347,13 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	desc.allChecks = make([]TableDescriptor_CheckConstraint, len(tbl.Checks))
 	for i, c := range tbl.Checks {
 		desc.allChecks[i] = *c
+	}
+
+	// Track partial index ordinals.
+	for i := range publicAndNonPublicIndexes {
+		if publicAndNonPublicIndexes[i].IsPartial() {
+			desc.partialIndexOrds.Add(i)
+		}
 	}
 
 	// Remember what columns have user defined types.
@@ -4400,6 +4411,12 @@ func (desc *ImmutableTableDescriptor) DeletableIndexes() []IndexDescriptor {
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
 func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes[len(desc.Indexes)+desc.writeOnlyIndexCount:]
+}
+
+// PartialIndexOrds returns a set containing the ordinal of each partial index
+// defined on the table.
+func (desc *ImmutableTableDescriptor) PartialIndexOrds() util.FastIntSet {
+	return desc.partialIndexOrds
 }
 
 // DatabaseDesc implements the ObjectDescriptor interface.

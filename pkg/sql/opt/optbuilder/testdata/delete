@@ -449,7 +449,9 @@ CREATE TABLE partial_indexes (
     c STRING,
     INDEX (b),
     INDEX (b) WHERE c = 'foo',
-    INDEX (c) WHERE a > b AND c = 'bar'
+    INDEX (c) WHERE a > b AND c = 'bar',
+    INDEX "b:delete-only" (b) WHERE c = 'delete-only',
+    INDEX "b:write-only" (b) WHERE c = 'write-only'
 )
 ----
 
@@ -459,8 +461,9 @@ DELETE FROM partial_indexes
 delete partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:4 b:5 c:6
+ ├── partial index del columns: partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10
  └── project
-      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── columns: partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10 a:4!null b:5 c:6
       ├── scan partial_indexes
       │    ├── columns: a:4!null b:5 c:6
       │    └── partial index predicates
@@ -471,4 +474,6 @@ delete partial_indexes
       │              └── c:6 = 'bar'
       └── projections
            ├── c:6 = 'foo' [as=partial_index_del1:7]
-           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
+           ├── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
+           ├── c:6 = 'delete-only' [as=partial_index_del3:9]
+           └── c:6 = 'write-only' [as=partial_index_del4:10]
