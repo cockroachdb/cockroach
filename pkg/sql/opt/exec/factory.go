@@ -55,33 +55,11 @@ type Factory interface {
 
 	// ConstructScan returns a node that represents a scan of the given index on
 	// the given table.
-	//   - Only the given set of needed columns are part of the result.
-	//   - If indexConstraint or invertedConstraint are not nil, the scan is
-	//     restricted to the spans in in the constraint. Only one of the two may
-	//     be non-nil.
-	//   - If hardLimit > 0, then the scan returns only up to hardLimit rows.
-	//   - If softLimit > 0, then the scan may be required to return up to all
-	//     of its rows (or up to the hardLimit if it is set), but can be optimized
-	//     under the assumption that only softLimit rows will be needed.
-	//   - If parallelize is true, the scan will scan all spans in parallel. It
-	//     should only be set to true if there is a known upper bound on the
-	//     number of rows that will be scanned. It should not be set if there is
-	//     a hard or soft limit.
-	//   - If locking is provided, the scan should use the specified row-level
-	//     locking mode.
 	ConstructScan(
 		table cat.Table,
 		index cat.Index,
-		needed TableColumnOrdinalSet,
-		indexConstraint *constraint.Constraint,
-		invertedConstraint invertedexpr.InvertedSpans,
-		hardLimit int64,
-		softLimit int64,
-		reverse bool,
-		parallelize bool,
+		params ScanParams,
 		reqOrdering OutputOrdering,
-		rowCount float64,
-		locking *tree.LockingItem,
 	) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
@@ -161,6 +139,35 @@ type Factory interface {
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 		reqOrdering OutputOrdering,
 		leftEqColsAreKey, rightEqColsAreKey bool,
+	) (Node, error)
+
+	// ConstructInterleavedJoin returns a node that runs a join between two
+	// interleaved tables. One table is the ancestor of the other in the
+	// interleaving hierarchy (as per leftIsAncestor).
+	//
+	// Semantically, the join is identical to a merge-join between these two
+	// tables, where the equality columns are all the index column of the ancestor
+	// index.
+	//
+	// The two scans are guaranteed to have the same direction, and to not have
+	// any hard limits.
+	//
+	// Since the interleaved joiner does a single scan for both tables, only the
+	// Locking clause for the ancestor is used.
+	//
+	ConstructInterleavedJoin(
+		joinType sqlbase.JoinType,
+		leftTable cat.Table,
+		leftIndex cat.Index,
+		leftParams ScanParams,
+		leftFilter tree.TypedExpr,
+		rightTable cat.Table,
+		rightIndex cat.Index,
+		rightParams ScanParams,
+		rightFilter tree.TypedExpr,
+		leftIsAncestor bool,
+		onCond tree.TypedExpr,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
@@ -584,6 +591,36 @@ type Factory interface {
 		fileFormat string,
 		options []KVOption,
 	) (Node, error)
+}
+
+// ScanParams contains all the parameters for a table scan.
+type ScanParams struct {
+	// Only columns in this set are scanned and produced.
+	NeededCols TableColumnOrdinalSet
+
+	// At most one of IndexConstraint or InvertedConstraint is non-nil, depending
+	// on the index type.
+	IndexConstraint    *constraint.Constraint
+	InvertedConstraint invertedexpr.InvertedSpans
+
+	// If non-zero, the scan returns this many rows.
+	HardLimit int64
+
+	// If non-zero, the scan may still be required to return up to all its rows
+	// (or up to the HardLimit if it is set, but can be optimized under the
+	// assumption that only SoftLimit rows will be needed.
+	SoftLimit int64
+
+	Reverse bool
+
+	// If true, the scan will scan all spans in parallel. It should only be set to
+	// true if there is a known upper bound on the number of rows that will be
+	// scanned. It should not be set if there is a hard or soft limit.
+	Parallelize bool
+
+	Locking *tree.LockingItem
+
+	EstimatedRowCount float64
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

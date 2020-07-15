@@ -137,7 +137,6 @@ type Memo struct {
 	useMultiColStats  bool
 	safeUpdates       bool
 	saveTablesPrefix  string
-	insertFastPath    bool
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -170,7 +169,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.useMultiColStats = evalCtx.SessionData.OptimizerUseMultiColStats
 	m.safeUpdates = evalCtx.SessionData.SafeUpdates
 	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
-	m.insertFastPath = evalCtx.SessionData.InsertFastPath
 
 	m.curID = 0
 	m.curWithID = 0
@@ -276,8 +274,7 @@ func (m *Memo) IsStale(
 		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
-		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
-		m.insertFastPath != evalCtx.SessionData.InsertFastPath {
+		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix {
 		return true, nil
 	}
 

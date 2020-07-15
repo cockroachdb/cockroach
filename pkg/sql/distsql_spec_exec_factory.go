@@ -156,23 +156,11 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 // performs scanNode creation of execFactory.ConstructScan and physical
 // planning of table readers of DistSQLPlanner.createTableReaders.
 func (e *distSQLSpecExecFactory) ConstructScan(
-	table cat.Table,
-	index cat.Index,
-	needed exec.TableColumnOrdinalSet,
-	indexConstraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
-	hardLimit int64,
-	softLimit int64,
-	reverse bool,
-	parallelize bool,
-	reqOrdering exec.OutputOrdering,
-	rowCount float64,
-	locking *tree.LockingItem,
+	table cat.Table, index cat.Index, params exec.ScanParams, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return constructVirtualScan(
-			e, e.planner, table, index, needed, indexConstraint, hardLimit,
-			softLimit, reverse, reqOrdering, rowCount, locking,
+			e, e.planner, table, index, params, reqOrdering,
 			func(d *delayedNode) (exec.Node, error) {
 				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d)
 				if err != nil {
@@ -200,7 +188,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
-	colCfg := makeScanColumnsConfig(table, needed)
+	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
@@ -211,7 +199,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 	p.ResultColumns = sqlbase.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
 
-	if indexConstraint != nil && indexConstraint.IsContradiction() {
+	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
 		// Note that empty rows argument is handled by ConstructValues first -
 		// it will always create an appropriate values processor spec, so there
 		// will be no planNodes created (which is what we want in this case).
@@ -219,10 +207,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	var spans roachpb.Spans
-	if invertedConstraint != nil {
-		spans, err = GenerateInvertedSpans(invertedConstraint, sb)
+	if params.InvertedConstraint != nil {
+		spans, err = GenerateInvertedSpans(params.InvertedConstraint, sb)
 	} else {
-		spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+		spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 	}
 	if err != nil {
 		return nil, err
@@ -246,7 +234,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
 		Table:      *tabDesc.TableDesc(),
-		Reverse:    reverse,
+		Reverse:    params.Reverse,
 		IsCheck:    false,
 		Visibility: colCfg.visibility,
 		// Retain the capacity of the spans slice.
@@ -256,9 +244,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
-	if locking != nil {
-		trSpec.LockingStrength = sqlbase.ToScanLockingStrength(locking.Strength)
-		trSpec.LockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	if params.Locking != nil {
+		trSpec.LockingStrength = sqlbase.ToScanLockingStrength(params.Locking.Strength)
+		trSpec.LockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 		if trSpec.LockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
 			// Scans that are performing row-level locking cannot currently be
 			// distributed because their locks would not be propagated back to
@@ -272,10 +260,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// don't know yet whether we will have it. ConstructFilter is responsible
 	// for pushing the filter down into the post-processing stage of this scan.
 	post := execinfrapb.PostProcessSpec{}
-	if hardLimit != 0 {
-		post.Limit = uint64(hardLimit)
-	} else if softLimit != 0 {
-		trSpec.LimitHint = softLimit
+	if params.HardLimit != 0 {
+		post.Limit = uint64(params.HardLimit)
+	} else if params.SoftLimit != 0 {
+		trSpec.LimitHint = params.SoftLimit
 	}
 
 	err = e.dsp.planTableReaders(
@@ -286,10 +274,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			post:                   post,
 			desc:                   tabDesc,
 			spans:                  spans,
-			reverse:                reverse,
+			reverse:                params.Reverse,
 			scanVisibility:         colCfg.visibility,
-			parallelize:            parallelize,
-			estimatedRowCount:      uint64(rowCount),
+			parallelize:            params.Parallelize,
+			estimatedRowCount:      uint64(params.EstimatedRowCount),
 			reqOrdering:            ReqOrdering(reqOrdering),
 			cols:                   cols,
 			colsToTableOrdrinalMap: colsToTableOrdinalMap,
@@ -408,9 +396,6 @@ func (e *distSQLSpecExecFactory) ConstructApplyJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: apply join")
 }
 
-// TODO(yuzefovich): move the decision whether to use an interleaved join from
-// the physical planner into the execbuilder.
-
 func (e *distSQLSpecExecFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType,
 	left, right exec.Node,
@@ -441,6 +426,24 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 		joinType, left, right, onCond, leftEqCols, rightEqCols,
 		leftEqColsAreKey, rightEqColsAreKey, mergeJoinOrdering, reqOrdering,
 	)
+}
+
+// ConstructInterleavedJoin is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructInterleavedJoin(
+	joinType sqlbase.JoinType,
+	leftTable cat.Table,
+	leftIndex cat.Index,
+	leftParams exec.ScanParams,
+	leftFilter tree.TypedExpr,
+	rightTable cat.Table,
+	rightIndex cat.Index,
+	rightParams exec.ScanParams,
+	rightFilter tree.TypedExpr,
+	leftIsAncestor bool,
+	onCond tree.TypedExpr,
+	reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: interleaved join")
 }
 
 func populateAggFuncSpec(

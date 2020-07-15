@@ -49,6 +49,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *joinNode:
 		return n.columns
+	case *interleavedJoinNode:
+		return n.columns
 	case *ordinalityNode:
 		return n.columns
 	case *renderNode:

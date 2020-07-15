@@ -130,6 +130,8 @@ type SessionData struct {
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool
+	// InterleavedJoins is true if interleaved joins may be used.
+	InterleavedJoins bool
 	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
 	// session.
 	NoticeDisplaySeverity pgnotice.DisplaySeverity
