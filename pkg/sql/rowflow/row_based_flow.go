@@ -268,6 +268,15 @@ func (f *rowBasedFlow) setupInputSyncs(
 				return nil, errors.Errorf("unsupported input sync type %s", is.Type)
 			}
 
+			// Before we can safely use types we received over the wire in the
+			// operators, we need to make sure they are hydrated. All operators other
+			// than operators that scan over tables get their inputs from here, so
+			// this is a convenient place to do the hydration. Operators that scan
+			// over tables will have their hydration performed in ProcessorBase.Init.
+			if err := execinfrapb.HydrateTypeSlice(f.EvalCtx, is.ColumnTypes); err != nil {
+				return nil, err
+			}
+
 			if is.Type == execinfrapb.InputSyncSpec_UNORDERED {
 				if opt == flowinfra.FuseNormally || len(is.Streams) == 1 {
 					// Unordered synchronizer: create a RowChannel for each input.
