@@ -87,6 +87,7 @@ typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_ConvexHull_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                    CR_GEOS_Geometry);
@@ -162,6 +163,7 @@ struct CR_GEOS {
   CR_GEOS_Length_r GEOSLength_r;
 
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
+  CR_GEOS_ConvexHull_r GEOSConvexHull_r;
   CR_GEOS_Union_r GEOSUnion_r;
   CR_GEOS_PointOnSurface_r GEOSPointOnSurface_r;
   CR_GEOS_Intersection_r GEOSIntersection_r;
@@ -232,6 +234,7 @@ struct CR_GEOS {
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
     INIT(GEOSGetCentroid_r);
+    INIT(GEOSConvexHull_r);
     INIT(GEOSUnion_r);
     INIT(GEOSPointOnSurface_r);
     INIT(GEOSIntersection_r);
@@ -528,6 +531,24 @@ CR_GEOS_Status CR_GEOS_Centroid(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* c
       auto srid = lib->GEOSGetSRID_r(handle, geom);
       CR_GEOS_writeGeomToEWKB(lib, handle, centroidGeom, centroidEWKB, srid);
       lib->GEOSGeom_destroy_r(handle, centroidGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_ConvexHull(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* convexHullEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *convexHullEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto convexHullGeom = lib->GEOSConvexHull_r(handle, geom);
+    if (convexHullGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, convexHullGeom, convexHullEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, convexHullGeom);
     }
     lib->GEOSGeom_destroy_r(handle, geom);
   }
