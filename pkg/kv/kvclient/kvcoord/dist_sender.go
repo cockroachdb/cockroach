@@ -1751,16 +1751,7 @@ func (ds *DistSender) sendToReplicas(
 	if err != nil {
 		return nil, err
 	}
-	if transport.IsExhausted() {
-		return nil, newSendError(
-			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
-	}
 
-	curReplica := transport.NextReplica()
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", desc.RangeID, ba.Summary(), curReplica)
-	}
-	br, err := transport.SendNext(ctx, ba)
 	// inTransferRetry is used to slow down retries in cases where an ongoing
 	// lease transfer is suspected.
 	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
@@ -1769,8 +1760,40 @@ func (ds *DistSender) sendToReplicas(
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
 	var ambiguousError error
+	var br *roachpb.BatchResponse
+	for first := true; ; first = false {
+		if !first {
+			ds.metrics.NextReplicaErrCount.Inc(1)
+		}
 
-	for {
+		// Advance through the transport's replicas until we find one that's still
+		// part of routing.entry.Desc. The transport starts up initialized with
+		// routing's replica info, but routing can be updated as we go through the
+		// replicas, whereas transport isn't.
+		//
+		// TODO(andrei): The structure around here is no good; we're potentially
+		// updating routing with replicas that are not part of transport, and so
+		// those replicas will never be tried. Instead, we'll exhaust the transport
+		// and bubble up a SendError, which will cause a cache eviction and a new
+		// descriptor lookup potentially unnecessarily.
+		lastErr := err
+		if lastErr == nil && br != nil {
+			lastErr = br.Error.GoError()
+		}
+		err = skipStaleReplicas(transport, routing, ambiguousError, lastErr)
+		if err != nil {
+			return nil, err
+		}
+		curReplica := transport.NextReplica()
+		if first {
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "r%d: sending batch %s to %s", desc.RangeID, ba.Summary(), curReplica)
+			}
+		} else {
+			log.VEventf(ctx, 2, "trying next peer %s", curReplica.String())
+		}
+		br, err = transport.SendNext(ctx, ba)
+
 		if err != nil {
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
@@ -1944,47 +1967,37 @@ func (ds *DistSender) sendToReplicas(
 			// sender changed its mind or the request timed out.
 			return nil, errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
 		}
+	}
+}
 
-		// Advance through the transport's replicas until we find one that's still
-		// part of routing.entry.Desc. The transport starts up initialized with
-		// routing's replica info, but routing can be updated as we go through the
-		// replicas, whereas transport isn't.
-		//
-		// TODO(andrei): The structure around here is no good; we're potentially
-		// updating routing with replicas that are not part of transport, and so
-		// those replicas will never be tried. Instead, we'll exhaust the transport
-		// and bubble up a SendError, which will cause a cache eviction and a new
-		// descriptor lookup potentially unnecessarily.
-		ds.metrics.NextReplicaErrCount.Inc(1)
-		lastErr := err
-		if err == nil {
-			lastErr = br.Error.GoError()
+// skipStaleReplicas advances the transport until it's positioned on a replica
+// that's part of routing. The routing might be updated as the DistSender tries
+// replicas one by one, and so the transport can get out of date.
+//
+// Returns an error if the transport is exhausted.
+func skipStaleReplicas(
+	transport Transport, routing EvictionToken, ambiguousError error, lastErr error,
+) error {
+	// Check whether the range cache told us that the routing info we had is
+	// very out-of-date. If so, there's not much point in trying the other
+	// replicas in the transport; they'll likely all return
+	// RangeKeyMismatchError if there's even a replica. We'll bubble up an
+	// error and try with a new descriptor.
+	if routing.Empty() {
+		return noMoreReplicasErr(
+			ambiguousError,
+			errors.Newf("routing information detected to be stale; lastErr: %s", lastErr))
+	}
+
+	for {
+		if transport.IsExhausted() {
+			return noMoreReplicasErr(ambiguousError, lastErr)
 		}
-		for {
-			if transport.IsExhausted() {
-				return nil, noMoreReplicasErr(ambiguousError, lastErr)
-			}
 
-			// Check whether the range cache told us that the routing info we had is
-			// very out-of-date. If so, there's not much point in trying the other
-			// replicas in the transport; they'll likely all return
-			// RangeKeyMismatchError if there's even a replica. We'll bubble up an
-			// error and try with a new descriptor.
-			if routing.Empty() {
-				return nil, noMoreReplicasErr(
-					ambiguousError,
-					errors.Newf("routing information detected to be stale; lastErr: %s", lastErr))
-			}
-
-			curReplica = transport.NextReplica()
-			if _, ok := routing.entry.Desc.GetReplicaDescriptorByID(curReplica.ReplicaID); ok {
-				break
-			} else {
-				transport.SkipReplica()
-			}
+		if _, ok := routing.entry.Desc.GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
+			return nil
 		}
-		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica.String())
-		br, err = transport.SendNext(ctx, ba)
+		transport.SkipReplica()
 	}
 }
 

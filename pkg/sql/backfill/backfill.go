@@ -280,8 +280,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 				oldValues[j] = tree.DNull
 			}
 		}
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not add entries to or delete entries from.
+		var ignoreIndexes util.FastIntSet
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, traceKV,
+			ctx, b, oldValues, updateValues, ignoreIndexes, ignoreIndexes, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

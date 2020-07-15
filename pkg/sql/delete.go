@@ -179,27 +179,27 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// the predicate and therefore do not exist in the partial index. This
 	// set is passed as a argument to tableDeleter.row below.
 	var ignoreIndexes util.FastIntSet
-	partialIndexDelVals := sourceVals[d.run.partialIndexDelValsOffset:]
-	colIdx := 0
-	indexes := d.run.td.tableDesc().Indexes
-	for i := range indexes {
-		index := indexes[i]
-		if index.IsPartial() {
-			val, err := tree.GetBool(partialIndexDelVals[colIdx])
-			if err != nil {
-				return err
-			}
+	partialIndexOrds := d.run.td.tableDesc().PartialIndexOrds()
+	if !partialIndexOrds.Empty() {
+		partialIndexDelVals := sourceVals[d.run.partialIndexDelValsOffset:]
+		colIdx := 0
+		indexes := d.run.td.tableDesc().Indexes
+		for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
+			index := &indexes[i]
+			if index.IsPartial() {
+				val, err := tree.GetBool(partialIndexDelVals[colIdx])
+				if err != nil {
+					return err
+				}
 
-			if !val {
-				// If the value of the column for the index predicate expression
-				// is false, the row should not be removed from the partial
-				// index.
-				ignoreIndexes.Add(int(index.ID))
-			}
+				if !val {
+					// If the value of the column for the index predicate expression
+					// is false, the row should not be removed from the partial
+					// index because it does not exist.
+					ignoreIndexes.Add(int(index.ID))
+				}
 
-			colIdx++
-			if colIdx >= len(partialIndexDelVals) {
-				break
+				colIdx++
 			}
 		}
 	}

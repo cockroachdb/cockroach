@@ -1733,6 +1733,10 @@ message RangeStatsResponse {
 
   // QueriesPerSecond is the rate of request/s or QPS for the range.
   double queries_per_second = 3;
+
+  // range_info contains descriptor and lease information. Added in 20.2.
+  // TODO(andrei): Make non-nullable in 21.1.
+  RangeInfo range_info = 4;
 }
 
 // A RequestUnion contains exactly one of the requests.

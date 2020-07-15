@@ -742,7 +742,7 @@ func (mb *mutationBuilder) addPartialIndexCols(aliasPrefix string, ords []scopeO
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 
 		ord := 0
-		for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
+		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
 			index := mb.tab.Index(i)
 			predicate, ok := index.Predicate()
 			if !ok {
