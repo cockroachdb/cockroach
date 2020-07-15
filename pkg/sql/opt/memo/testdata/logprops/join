@@ -126,7 +126,7 @@ project
 
 # Inner-join-apply nested in inner-join-apply with outer column references to
 # each parent.
-opt
+opt disable=TryDecorrelateMax1Row
 SELECT * FROM xysd WHERE (SELECT v FROM uv WHERE (SELECT n FROM mn WHERE n=v)=x)=x
 ----
 project
@@ -134,64 +134,54 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
- └── select
+ ├── interesting orderings: (+1) (-3,+4,+1)
+ └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:7(int!null)
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
       ├── prune: (2-4)
-      ├── ensure-distinct-on
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:7(int)
-      │    ├── grouping columns: x:1(int!null)
-      │    ├── error: "more than one row returned by a subquery used as an expression"
+      ├── interesting orderings: (+1) (-3,+4,+1)
+      ├── scan xysd
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4,7), (3,4)~~>(1,2)
-      │    ├── prune: (2-4,7)
-      │    ├── left-join (hash)
-      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:7(int) n:11(int)
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)==(11), (11)==(7)
-      │    │    ├── prune: (2-4)
-      │    │    ├── reject-nulls: (7,11)
-      │    │    ├── interesting orderings: (+1) (-3,+4,+1) (+11)
-      │    │    ├── scan xysd
-      │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    │    │    ├── prune: (1-4)
-      │    │    │    ├── interesting orderings: (+1) (-3,+4,+1)
-      │    │    │    └── unfiltered-cols: (1-5)
-      │    │    ├── inner-join (hash)
-      │    │    │    ├── columns: v:7(int!null) n:11(int!null)
-      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │    ├── fd: (7)==(11), (11)==(7)
-      │    │    │    ├── interesting orderings: (+11)
-      │    │    │    ├── scan uv
-      │    │    │    │    ├── columns: v:7(int!null)
-      │    │    │    │    ├── prune: (7)
-      │    │    │    │    └── unfiltered-cols: (6-9)
-      │    │    │    ├── scan mn
-      │    │    │    │    ├── columns: n:11(int)
-      │    │    │    │    ├── lax-key: (11)
-      │    │    │    │    ├── prune: (11)
-      │    │    │    │    ├── interesting orderings: (+11)
-      │    │    │    │    └── unfiltered-cols: (10-12)
-      │    │    │    └── filters
-      │    │    │         └── eq [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
-      │    │    │              ├── variable: n:11 [type=int]
-      │    │    │              └── variable: v:7 [type=int]
-      │    │    └── filters
-      │    │         └── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
-      │    │              ├── variable: x:1 [type=int]
-      │    │              └── variable: n:11 [type=int]
-      │    └── aggregations
-      │         ├── const-agg [as=y:2, type=int, outer=(2)]
-      │         │    └── variable: y:2 [type=int]
-      │         ├── const-agg [as=s:3, type=string, outer=(3)]
-      │         │    └── variable: s:3 [type=string]
-      │         ├── const-agg [as=d:4, type=decimal, outer=(4)]
-      │         │    └── variable: d:4 [type=decimal]
-      │         └── const-agg [as=v:7, type=int, outer=(7)]
-      │              └── variable: v:7 [type=int]
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
+      ├── max1-row
+      │    ├── columns: v:7(int!null)
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    └── project
+      │         ├── columns: v:7(int!null)
+      │         ├── outer: (1)
+      │         ├── fd: ()-->(7)
+      │         ├── prune: (7)
+      │         └── inner-join (hash)
+      │              ├── columns: v:7(int!null) n:11(int!null)
+      │              ├── outer: (1)
+      │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │              ├── fd: ()-->(7,11)
+      │              ├── interesting orderings: (+11)
+      │              ├── scan uv
+      │              │    ├── columns: v:7(int!null)
+      │              │    ├── prune: (7)
+      │              │    └── unfiltered-cols: (6-9)
+      │              ├── scan mn
+      │              │    ├── columns: n:11(int)
+      │              │    ├── lax-key: (11)
+      │              │    ├── prune: (11)
+      │              │    ├── interesting orderings: (+11)
+      │              │    └── unfiltered-cols: (10-12)
+      │              └── filters
+      │                   ├── eq [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
+      │                   │    ├── variable: n:11 [type=int]
+      │                   │    └── variable: v:7 [type=int]
+      │                   └── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+      │                        ├── variable: x:1 [type=int]
+      │                        └── variable: n:11 [type=int]
       └── filters
            └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
                 ├── variable: x:1 [type=int]
@@ -225,6 +215,7 @@ project
       │    │    ├── prune: (3,4,7)
       │    │    ├── reject-nulls: (7,10)
       │    │    ├── interesting orderings: (+1) (-3,+4,+1) (+10)
+      │    │    ├── join-size: 2
       │    │    ├── inner-join (cross)
       │    │    │    ├── columns: v:7(int!null) m:10(int!null)
       │    │    │    ├── prune: (7,10)
@@ -2009,6 +2000,7 @@ inner-join (hash)
  ├── prune: (1,2,4,7-9,11)
  ├── reject-nulls: (6-9,11)
  ├── interesting orderings: (+1) (+6) (-8,+9,+6)
+ ├── join-size: 2
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)

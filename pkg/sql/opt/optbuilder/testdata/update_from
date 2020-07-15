@@ -225,7 +225,7 @@ update abc
       │    │    └── filters
       │    │         └── abc.a:5 = ac.a:13
       │    └── filters
-      │         └── abc.a:5 = ab.a:9
+      │         └── ab.a:9 = ac.a:13
       └── aggregations
            ├── first-agg [as=abc.b:6]
            │    └── abc.b:6
@@ -332,7 +332,7 @@ update abc
       │    │    └── filters
       │    │         └── abc.a:5 = ac.a:13
       │    └── filters
-      │         └── abc.a:5 = ab.a:9
+      │         └── ab.a:9 = ac.a:13
       └── aggregations
            ├── first-agg [as=abc.b:6]
            │    └── abc.b:6
