@@ -3104,6 +3104,36 @@ SRID=4326;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            
 SRID=4326;POINT (1 1)                                                           false  false
 SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   false  false
 
+subtest translate_test
+
+statement ok
+CREATE TABLE translate_test(geom geometry); INSERT INTO translate_test VALUES
+  ('POINT(0 0)'::geometry),
+  ('LINESTRING(1 1, 2 2)'::geometry),
+  ('POLYGON((0 0, 1 0, 0 1, 0 0))'::geometry),
+  ('MULTIPOINT((0 0), (1 1))'::geometry),
+  ('MULTILINESTRING((1 1, 2 2), (3 3, 4 4))'::geometry),
+  ('GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20))'::geometry)
+
+query TT
+SELECT
+  ST_AsText(a.geom) d,
+  ST_AsText(ST_Translate(a.geom, 1, 1))
+FROM translate_test a
+ORDER BY d ASC
+----
+GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20))  GEOMETRYCOLLECTION (POINT (41 11), LINESTRING (11 11, 21 21))
+LINESTRING (1 1, 2 2)                                          LINESTRING (2 2, 3 3)
+MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))                       MULTILINESTRING ((2 2, 3 3), (4 4, 5 5))
+MULTIPOINT (0 0, 1 1)                                          MULTIPOINT (1 1, 2 2)
+POINT (0 0)                                                    POINT (1 1)
+POLYGON ((0 0, 1 0, 0 1, 0 0))                                 POLYGON ((1 1, 2 1, 1 2, 1 1))
+
+query T
+SELECT ST_Summary('POINT(0 0)'::geometry)
+----
+Point[B]
+
 subtest st_summary
 
 query T
