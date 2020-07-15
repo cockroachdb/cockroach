@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/linkedin/goavro/v2"
@@ -4538,5 +4540,214 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 					}
 				})
 		}
+	}
+}
+
+var importSafeFunctions = map[string]struct{}{
+	"current_timestamp": {},
+	"now":               {},
+	"localtimestamp":    {},
+}
+
+// importSafeEvalVisitor is a visitor which verifies if
+// the expression is safe to be used in default expression during import.
+// The returned expression from tree.WalkExpr() is an evaluated
+// expression of appropriate type.
+// NB: This visitor must be invoked only on tree.TypedExpr expressions.
+type importSafeEvalVisitor struct {
+	ctx *tree.EvalContext
+	err error
+}
+
+var _ tree.Visitor = &importSafeEvalVisitor{}
+
+func (v *importSafeEvalVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	return v.err == nil, expr
+}
+
+func (v *importSafeEvalVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	// Since we require that the expression we begin with is a tree.TypedExpr,
+	// we no longer have to have these checks here.  We can safely cast
+	// expressions to their typed variants.
+	if fn, ok := expr.(*tree.FuncExpr); ok {
+		resolvedFnName := fn.Func.FunctionReference.(*tree.FunctionDefinition).Name
+		if _, ok := importSafeFunctions[resolvedFnName]; !ok {
+			v.err = errors.Newf("function %q not safe for import", tree.AsString(fn))
+		}
+	}
+
+	if v.err != nil {
+		return expr
+	}
+
+	value, err := expr.(tree.TypedExpr).Eval(v.ctx)
+	if err != nil {
+		v.err = err
+		return expr
+	}
+	return value
+}
+
+func unsafeExpressionError(err error, expr tree.Expr) error {
+	return errors.Wrapf(err,
+		"default expression %q not safe for import", tree.AsString(expr))
+}
+
+func SanitizeExpressionForImport(
+	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
+) (tree.Expr, error) {
+	semaCtx := tree.MakeSemaContext()
+
+	// Immutable expressions are fine.
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx, expr, targetType, "isImportSafe", &semaCtx, tree.VolatilityImmutable)
+	if err == nil {
+		return typedExpr.Eval(evalCtx)
+	}
+
+	// We know we're dealing with tree.VolatilityStable or more volatile.
+	// Still, the result of this expression must be correct type.
+	typedExpr, err = expr.TypeCheck(ctx, &semaCtx, targetType)
+	if err != nil {
+		return nil, unsafeExpressionError(err, expr)
+	}
+
+	// Now that we have typed expression, walk it.
+	v := &importSafeEvalVisitor{ctx: evalCtx}
+	newExpr, _ := tree.WalkExpr(v, typedExpr)
+	if v.err != nil {
+		return nil, unsafeExpressionError(v.err, expr)
+	}
+
+	// Evaluate result expression.
+	typedExpr, err = newExpr.TypeCheck(ctx, &semaCtx, targetType)
+	if err != nil {
+		return nil, unsafeExpressionError(err, expr)
+	}
+	return typedExpr.Eval(evalCtx)
+}
+
+func TestFunWithVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	currentTime := timeutil.Now()
+	currentTS := currentTime.Unix()
+
+	currentDDate, err := tree.NewDDateFromTime(currentTime)
+	require.NoError(t, err)
+
+	makeTimestampTZ := func(precision time.Duration) tree.Datum {
+		ts, err := tree.MakeDTimestampTZ(currentTime, precision)
+		require.NoError(t, err)
+		return ts
+	}
+
+	evalCtx.TxnTimestamp = currentTime
+
+	expectErrorType := types.Any
+
+	testCases := []struct {
+		name string
+		expr string
+		typ  *types.T
+		val  tree.Datum
+	}{
+		{
+			name: "current_timestamp",
+			expr: "current_timestamp()",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "current_timestamp_as_int",
+			expr: "current_timestamp()::int",
+			typ:  types.Int,
+			val:  tree.NewDInt(tree.DInt(currentTS)),
+		},
+		{
+			name: "add_timestamps",
+			expr: "current_timestamp()::int + 1 + current_timestamp()::int",
+			typ:  types.Int,
+			val:  tree.NewDInt(tree.DInt(2*currentTS + 1)),
+		},
+		{
+			name: "localtimestamp",
+			expr: "localtimestamp()",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "localtimestamp_with_precision",
+			expr: "localtimestamp(5)",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(100000 * time.Nanosecond),
+		},
+		{
+			name: "localtimestamp_with_precision_expression",
+			expr: "localtimestamp(1 + 2 + 3)",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "now",
+			expr: "now()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "now-case-insensitive",
+			expr: "NoW()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "pg_catalog.now",
+			expr: "pg_catalog.now()",
+			typ:  types.Date,
+			val:  currentDDate,
+		},
+		{
+			name: "now_with_cast",
+			expr: "now()::TIMESTAMPTZ",
+			typ:  types.TimestampTZ,
+			val:  makeTimestampTZ(time.Microsecond),
+		},
+		{
+			name: "random",
+			expr: "random()",
+			typ:  expectErrorType,
+		},
+		{
+			name: "nextval",
+			expr: "nextval('foo')",
+			typ:  expectErrorType,
+		},
+		{
+			name: "random_plus_timestamp",
+			expr: "(100*random())::int + current_timestmap()::int",
+			typ:  expectErrorType,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := parser.ParseExpr(tc.expr)
+			require.NoError(t, err)
+
+			sanitized, err := SanitizeExpressionForImport(ctx, &evalCtx, expr, tc.typ)
+			if tc.typ == expectErrorType {
+				require.Error(t, err)
+				require.True(t, testutils.IsError(err, "not safe for import"), err)
+			} else {
+				require.NoError(t, err)
+				require.EqualValues(t, tc.val, sanitized)
+				log.Infof(ctx, "sanitized: %q", tree.AsString(sanitized))
+			}
+		})
+
 	}
 }
