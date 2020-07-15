@@ -65,6 +65,7 @@ type RangeDescriptorDB interface {
 
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all meta1 entries.
+	// TODO(nvanbenschoten): pull this detail in DistSender.
 	FirstRange() (*roachpb.RangeDescriptor, error)
 }
 

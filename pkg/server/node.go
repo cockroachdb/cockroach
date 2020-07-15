@@ -35,13 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -947,12 +947,41 @@ func (n *Node) setupSpanForIncomingRPC(
 	return ctx, finishSpan
 }
 
+// RangeLookup implements the roachpb.InternalServer interface.
+func (n *Node) RangeLookup(
+	ctx context.Context, req *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	ctx = n.storeCfg.AmbientCtx.AnnotateCtx(ctx)
+
+	// Proxy the RangeLookup through the local DB. Note that this does not use
+	// the local RangeDescriptorCache itself (for the direct range descriptor).
+	// To be able to do so, we'd have to let tenant's evict descriptors from our
+	// cache in order to avoid serving the same stale descriptor over and over
+	// again. Because of that, using our own cache doesn't seem worth it, at
+	// least for now.
+	sender := n.storeCfg.DB.NonTransactionalSender()
+	rs, preRs, err := kv.RangeLookup(
+		ctx,
+		sender,
+		req.Key.AsRawKey(),
+		req.ReadConsistency,
+		req.PrefetchNum,
+		req.PrefetchReverse,
+	)
+	resp := new(roachpb.RangeLookupResponse)
+	if err != nil {
+		resp.Error = roachpb.NewError(err)
+	} else {
+		resp.Descriptors = rs
+		resp.PrefetchedDescriptors = preRs
+	}
+	return resp, nil
+}
+
 // RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
-	growstack.Grow()
-
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -962,4 +991,82 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// GossipSubscription implements the roachpb.InternalServer interface.
+func (n *Node) GossipSubscription(
+	args *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer,
+) error {
+	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
+	ctxDone := ctx.Done()
+
+	// Register a callback for each of the requested patterns. We don't want to
+	// block the gossip callback goroutine on a slow consumer, so we instead
+	// handle all communication asynchronously. We could pick a channel size and
+	// say that if the channel ever blocks, terminate the subscription. Doing so
+	// feels fragile, though, especially during the initial information dump.
+	// Instead, we say that if the channel ever blocks for more than some
+	// duration, terminate the subscription.
+	entC := make(chan *roachpb.GossipSubscriptionEvent, 256)
+	entCClosed := false
+	var callbackMu syncutil.Mutex
+	const maxBlockDur = 1 * time.Millisecond
+	for _, pattern := range args.Patterns {
+		pattern := pattern
+		// TODO(nvanbenschoten): add some form of access control here. Tenants
+		// should only be able to subscribe to certain patterns, such as:
+		// - "node:.*"
+		// - "system-db:zones/1/tenants"
+		//
+		// Note that the SystemConfig pattern here doesn't refer to a real key.
+		// Instead, it's keying into the single SystemConfig gossip key. That's
+		// necessary to avoid leaking privileged information to callers, but it
+		// means that we have a little more work to do in order to destructure
+		// and filter system config updates. Luckily, SystemConfigDeltaFilter
+		// supports a "keyPrefix" that should help here. We'll also want to use
+		// RegisterSystemConfigChannel for any SystemConfig patterns.
+
+		callback := func(key string, content roachpb.Value) {
+			callbackMu.Lock()
+			defer callbackMu.Unlock()
+			if entCClosed {
+				return
+			}
+			event := &roachpb.GossipSubscriptionEvent{
+				Key: key, Content: content, PatternMatched: pattern,
+			}
+			select {
+			case entC <- event:
+			default:
+				select {
+				case entC <- event:
+				case <-time.After(maxBlockDur):
+					// entC blocking for too long. The consumer must not be
+					// keeping up. Terminate the subscription.
+					close(entC)
+					entCClosed = true
+				}
+			}
+		}
+		unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
+		defer unregister()
+	}
+
+	for {
+		select {
+		case e, ok := <-entC:
+			if !ok {
+				// The consumer was not keeping up with gossip updates, so its
+				// subscription was terminated to avoid blocking gossip.
+				err := roachpb.NewErrorf("subscription terminated due to slow consumption")
+				log.Warningf(ctx, "%v", err)
+				e = &roachpb.GossipSubscriptionEvent{Error: err}
+			}
+			if err := stream.Send(e); err != nil {
+				return err
+			}
+		case <-ctxDone:
+			return ctx.Err()
+		}
+	}
 }

@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package followerreadsccl
+package kvfollowerreadsccl
 
 import (
 	"context"
