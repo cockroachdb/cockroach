@@ -139,6 +139,11 @@ type planner struct {
 
 	preparedStatements preparedStatementsAccessor
 
+	// TODO(arul): Should this be on the planner? Or should this be on curPlan?
+	// containsFullTableScan is set to true if the physical plan contains a full
+	// table scan.
+	containsFullTableScan bool
+
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to read descriptors

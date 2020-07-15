@@ -584,6 +584,14 @@ type Factory interface {
 		fileFormat string,
 		options []KVOption,
 	) (Node, error)
+
+	// ContainsFullTableScan returns true if the factory performs an unconstrained
+	// scan over (the primary key of) a table.
+	ContainsFullTableScan() bool
+
+	// ContainsFullIndexScan returns true if the factory performs an unconstrained
+	// scan over a secondary index of a table.
+	ContainsFullIndexScan() bool
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

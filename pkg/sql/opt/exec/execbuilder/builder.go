@@ -160,6 +160,18 @@ func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
 }
 
+// ContainsFullTableScan returns true if the factory planned an unconstrained
+// scan on (the primary key of) a table.
+func (b *Builder) ContainsFullTableScan() bool {
+	return b.factory.ContainsFullTableScan()
+}
+
+// ContainsFullIndexScan returns true if the factory plan an unconstrained
+// secondary index scan on a table.
+func (b *Builder) ContainsFullIndexScan() bool {
+	return b.factory.ContainsFullIndexScan()
+}
+
 // builtWithExpr is metadata regarding a With expression which has already been
 // added to the set of subqueries for the query.
 type builtWithExpr struct {

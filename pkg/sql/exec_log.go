@@ -52,7 +52,7 @@ import (
 //   - generally useful and actually a requirement for auditing.
 // - a counter for the logging entry, monotonically increasing
 //   from the point the process started.
-//   - this is a requiredement for auditing too.
+//   - this is a requirement for auditing too.
 //
 //  .-----------------------------------------------------------------------------------------------------------------------------.../
 //  |
@@ -71,7 +71,7 @@ import (
 //      without revealing PII". We don't know how to separate those two things
 //      yet so the audit log contains the full SQL of the query even though
 //      this may yield PII. This may need to be addressed later.
-//  - the placeholder values. Useful for queries using placehodlers.
+//  - the placeholder values. Useful for queries using placeholders.
 //    - "{}" when there are no placeholders.
 //  - the query execution time in milliseconds. For troubleshooting.
 //  - the number of rows that were produced. For troubleshooting.
@@ -93,6 +93,13 @@ var slowQueryLogThreshold = settings.RegisterPublicDurationSetting(
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
 	0,
+)
+
+var slowQueryLogFullTableScans = settings.RegisterPublicBoolSetting(
+	"sql.log.slow_query.full_table_scans.enabled",
+	"when set to true, statements that perform a full table/index scan"+
+		"will be logged to a secondary logger on each node",
+	false,
 )
 
 type executorType int
@@ -134,7 +141,8 @@ func (p *planner) maybeLogStatementInternal(
 	logV := log.V(2)
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
 	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
-	slowQueryLogEnabled := slowLogThreshold != 0
+	slowLogFullTableScans := slowQueryLogFullTableScans.Get(&p.execCfg.Settings.SV)
+	slowQueryLogEnabled := slowLogFullTableScans || slowLogThreshold != 0
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
@@ -188,10 +196,13 @@ func (p *planner) maybeLogStatementInternal(
 		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
-	if slowQueryLogEnabled && queryDuration > slowLogThreshold {
-		logger := p.execCfg.SlowQueryLogger
-		logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
-			age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
+	if slowQueryLogEnabled {
+		logReason := p.slowQueryLogReason(queryDuration, slowLogThreshold)
+		if logReason != "{}" {
+			logger := p.execCfg.SlowQueryLogger
+			logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d %s",
+				age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries, logReason)
+		}
 	}
 	if logExecuteEnabled {
 		logger := p.execCfg.ExecLogger
@@ -228,6 +239,25 @@ func (p *planner) maybeAudit(desc sqlbase.DescriptorInterface, priv privilege.Ki
 	default:
 		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: false})
 	}
+}
+
+func (p *planner) slowQueryLogReason(
+	queryDuration time.Duration, slowLogThreshold time.Duration,
+) string {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	sep := " "
+	if slowLogThreshold != 0 && queryDuration > slowLogThreshold {
+		fmt.Fprintf(&buf, "%sLATENCY_THRESHOLD")
+	}
+	if p.curPlan.flags.IsSet(planFlagContainsFullTableScan) {
+		fmt.Fprintf(&buf, "%sFULL_TABLE_SCAN", sep)
+	}
+	if p.curPlan.flags.IsSet(planFlagContainsFullIndexScan) {
+		fmt.Fprintf(&buf, "%sFULL_SECONDARY_INDEX_SCAN", sep)
+	}
+	buf.WriteByte('}')
+	return buf.String()
 }
 
 // auditEvent represents an audit event for a single table.

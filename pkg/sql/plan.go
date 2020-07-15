@@ -547,6 +547,14 @@ const (
 	// planFlagVectorized is set if the plan is executed via the vectorized
 	// engine.
 	planFlagVectorized
+
+	// planFlagContainsFullTableScan is set if the plan involves an unconstrained
+	// scan on (the primary key of) a table.
+	planFlagContainsFullTableScan
+
+	// planFlagContainsFullIndexScan is set if the plan involves an unconstrained
+	// secondary index scan.
+	planFlagContainsFullIndexScan
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

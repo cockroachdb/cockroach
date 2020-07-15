@@ -240,6 +240,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	if bld.IsDDL {
 		result.flags.Set(planFlagIsDDL)
 	}
+	if bld.ContainsFullTableScan() {
+		result.flags.Set(planFlagContainsFullTableScan)
+	}
+	if bld.ContainsFullIndexScan() {
+		result.flags.Set(planFlagContainsFullIndexScan)
+	}
 
 	cols := result.main.planColumns()
 	if stmt.ExpectedTypes != nil {

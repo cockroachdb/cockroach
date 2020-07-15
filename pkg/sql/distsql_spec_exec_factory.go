@@ -42,9 +42,11 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant  bool
-	planningMode  distSQLPlanningMode
-	gatewayNodeID roachpb.NodeID
+	containsFullTableScan bool
+	containsFullIndexScan bool
+	singleTenant          bool
+	planningMode          distSQLPlanningMode
+	gatewayNodeID         roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
@@ -228,7 +230,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return nil, err
 	}
 
-	isFullTableScan := len(spans) == 1 && spans[0].EqualValue(
+	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
 		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
@@ -236,7 +238,14 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	// Check if we are doing a full scan.
-	if isFullTableScan {
+	if isFullTableOrIndexScan {
+		// Save the information about a full table/index scan on the factory so that
+		// the planner can be informed later.
+		if indexDesc.ID == tabDesc.PrimaryIndex.ID {
+			e.containsFullTableScan = true
+		} else {
+			e.containsFullIndexScan = true
+		}
 		recommendation = recommendation.compose(shouldDistribute)
 	}
 
@@ -916,6 +925,16 @@ func (e *distSQLSpecExecFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: export")
+}
+
+// ContainsFullTableScan is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ContainsFullTableScan() bool {
+	return e.containsFullTableScan
+}
+
+// ContainsFullIndexScan is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ContainsFullIndexScan() bool {
+	return e.containsFullIndexScan
 }
 
 func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {

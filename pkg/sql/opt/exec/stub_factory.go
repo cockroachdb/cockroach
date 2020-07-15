@@ -445,3 +445,13 @@ func (StubFactory) ConstructExport(
 ) (Node, error) {
 	return struct{}{}, nil
 }
+
+// ContainsFullTableScan is part of the exec.Factory interface.
+func (StubFactory) ContainsFullTableScan() bool {
+	return false
+}
+
+// ContainsFullIndexScan is part of the exec.Factory interface.
+func (StubFactory) ContainsFullIndexScan() bool {
+	return false
+}
