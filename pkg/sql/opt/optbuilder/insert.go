@@ -366,7 +366,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// TODO(andyk): This is not true in the case of composite key encodings. See
 	// issue #34518.
 	keyOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
-	for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		if keyOrds.Contains(i) {
 			// #1: Don't consider key columns.
 			continue
@@ -512,7 +512,7 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	// Only consider non-mutation columns, since mutation columns are hidden from
 	// the SQL user.
 	numCols := 0
-	for i, n := 0, mb.tab.AllColumnCount(); i < n && numCols < maxCols; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		// Skip mutation or hidden columns.
 		if cat.IsMutationColumn(mb.tab, i) || mb.tab.Column(i).IsHidden() {
 			continue
@@ -559,8 +559,8 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
 		}
 	} else {
-		desiredTypes = make([]*types.T, 0, mb.tab.AllColumnCount())
-		for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			if !cat.IsMutationColumn(mb.tab, i) {
 				tabCol := mb.tab.Column(i)
 				if !tabCol.IsHidden() {
@@ -759,7 +759,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			conflictCols, mb.outScope, true /* nullsAreDistinct */, "" /* errorOnDup */)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.AllColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
 }
 
@@ -873,7 +873,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.b.buildWhere(where, mb.outScope)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.AllColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
 }
 
@@ -912,7 +912,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	}
 
 	// Never update mutation columns.
-	for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		if cat.IsMutationColumn(mb.tab, i) {
 			mb.updateOrds[i] = -1
 		}
@@ -971,7 +971,7 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	// Add a new column for each target table column that needs to be upserted.
 	// This can include mutation columns.
-	for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		insertScopeOrd := mb.insertOrds[i]
 		updateScopeOrd := mb.updateOrds[i]
 		if updateScopeOrd == -1 {
@@ -1058,7 +1058,7 @@ func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) u
 	var ords util.FastIntSet
 	for _, name := range names {
 		found := false
-		for i, n := 0, mb.tab.AllColumnCount(); i < n; i++ {
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
 			if tabCol.ColName() == name && !cat.IsMutationColumn(mb.tab, i) {
 				ords.Add(i)
