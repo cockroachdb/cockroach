@@ -67,6 +67,51 @@ CREATE TABLE zz_redundant (
 )
 ----
 
+exec-ddl
+CREATE TABLE large (m INT, n INT)
+----
+
+exec-ddl
+CREATE TABLE medium (m INT, n INT)
+----
+
+exec-ddl
+CREATE TABLE small (m INT, n INT)
+----
+
+exec-ddl
+ALTER TABLE large INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000000000,
+    "distinct_count": 100000000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE medium INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 6
+  }
+]'
+----
+
 # --------------------------------------------------
 # ReorderJoins
 # --------------------------------------------------
@@ -111,7 +156,7 @@ SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 s:6!null t:7!null u:8!null x:10!null y:11 z:12
  ├── left ordering: +6
- ├── right ordering: +1
+ ├── right ordering: +10
  ├── fd: (6)==(1,10), (10)==(1,6), (1)==(6,10)
  ├── scan stu
  │    ├── columns: s:6!null t:7!null u:8!null
@@ -136,9 +181,9 @@ memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
 memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12])
- ├── G1: (inner-join G2 G3 G4) (inner-join G5 G6 G4) (inner-join G7 G8 G9) (inner-join G3 G2 G4) (merge-join G2 G3 G10 inner-join,+1,+6) (inner-join G6 G5 G4) (merge-join G5 G6 G10 inner-join,+6,+1) (inner-join G8 G7 G9) (merge-join G7 G8 G10 inner-join,+6,+10) (lookup-join G7 G10 xyz@xy,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G3 G2 G10 inner-join,+6,+1) (lookup-join G3 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G6 G5 G10 inner-join,+1,+6) (lookup-join G6 G10 stu,keyCols=[1],outCols=(1-3,6-8,10-12)) (merge-join G8 G7 G10 inner-join,+10,+6)
+ ├── G1: (inner-join G2 G3 G4) (inner-join G5 G6 G7) (inner-join G8 G9 G7) (inner-join G3 G2 G4) (merge-join G2 G3 G10 inner-join,+1,+6) (inner-join G6 G5 G7) (merge-join G5 G6 G10 inner-join,+6,+10) (inner-join G9 G8 G7) (merge-join G8 G9 G10 inner-join,+6,+10) (lookup-join G8 G10 xyz@xy,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G3 G2 G10 inner-join,+6,+1) (lookup-join G3 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G6 G5 G10 inner-join,+10,+6) (lookup-join G6 G10 stu,keyCols=[10],outCols=(1-3,6-8,10-12)) (merge-join G9 G8 G10 inner-join,+10,+6)
  │    └── [presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12]
- │         ├── best: (merge-join G5="[ordering: +6]" G6="[ordering: +(1|10)]" G10 inner-join,+6,+1)
+ │         ├── best: (merge-join G5="[ordering: +6]" G6="[ordering: +(1|10)]" G10 inner-join,+6,+10)
  │         └── cost: 12980.08
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
@@ -147,12 +192,12 @@ memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:1
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
  │         └── cost: 1070.02
- ├── G3: (inner-join G5 G8 G9) (inner-join G8 G5 G9) (merge-join G5 G8 G10 inner-join,+6,+10) (lookup-join G5 G10 xyz@xy,keyCols=[6],outCols=(6-8,10-12)) (merge-join G8 G5 G10 inner-join,+10,+6) (lookup-join G8 G10 stu,keyCols=[10],outCols=(6-8,10-12))
+ ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G10 inner-join,+6,+10) (lookup-join G5 G10 xyz@xy,keyCols=[6],outCols=(6-8,10-12)) (merge-join G9 G5 G10 inner-join,+10,+6) (lookup-join G9 G10 stu,keyCols=[10],outCols=(6-8,10-12))
  │    ├── [ordering: +(6|10)]
- │    │    ├── best: (merge-join G5="[ordering: +6]" G8="[ordering: +10]" G10 inner-join,+6,+10)
+ │    │    ├── best: (merge-join G5="[ordering: +6]" G9="[ordering: +10]" G10 inner-join,+6,+10)
  │    │    └── cost: 11880.05
  │    └── []
- │         ├── best: (merge-join G5="[ordering: +6]" G8="[ordering: +10]" G10 inner-join,+6,+10)
+ │         ├── best: (merge-join G5="[ordering: +6]" G9="[ordering: +10]" G10 inner-join,+6,+10)
  │         └── cost: 11880.05
  ├── G4: (filters G11)
  ├── G5: (scan stu,cols=(6-8)) (scan stu@uts,cols=(6-8))
@@ -162,28 +207,28 @@ memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:1
  │    └── []
  │         ├── best: (scan stu,cols=(6-8))
  │         └── cost: 10600.02
- ├── G6: (inner-join G2 G8 G12) (inner-join G8 G2 G12) (merge-join G2 G8 G10 inner-join,+1,+10) (lookup-join G2 G10 xyz@xy,keyCols=[1],outCols=(1-3,10-12)) (merge-join G8 G2 G10 inner-join,+10,+1) (lookup-join G8 G10 abc@ab,keyCols=[10],outCols=(1-3,10-12))
+ ├── G6: (inner-join G2 G9 G12) (inner-join G9 G2 G12) (merge-join G2 G9 G10 inner-join,+1,+10) (lookup-join G2 G10 xyz@xy,keyCols=[1],outCols=(1-3,10-12)) (merge-join G9 G2 G10 inner-join,+10,+1) (lookup-join G9 G10 abc@ab,keyCols=[10],outCols=(1-3,10-12))
  │    ├── [ordering: +(1|10)]
- │    │    ├── best: (merge-join G2="[ordering: +1]" G8="[ordering: +10]" G10 inner-join,+1,+10)
+ │    │    ├── best: (merge-join G2="[ordering: +1]" G9="[ordering: +10]" G10 inner-join,+1,+10)
  │    │    └── cost: 2170.05
  │    └── []
- │         ├── best: (merge-join G2="[ordering: +1]" G8="[ordering: +10]" G10 inner-join,+1,+10)
+ │         ├── best: (merge-join G2="[ordering: +1]" G9="[ordering: +10]" G10 inner-join,+1,+10)
  │         └── cost: 2170.05
- ├── G7: (inner-join G2 G5 G4) (inner-join G5 G2 G4) (merge-join G2 G5 G10 inner-join,+1,+6) (lookup-join G2 G10 stu,keyCols=[1],outCols=(1-3,6-8)) (merge-join G5 G2 G10 inner-join,+6,+1) (lookup-join G5 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8))
+ ├── G7: (filters G13)
+ ├── G8: (inner-join G2 G5 G4) (inner-join G5 G2 G4) (merge-join G2 G5 G10 inner-join,+1,+6) (lookup-join G2 G10 stu,keyCols=[1],outCols=(1-3,6-8)) (merge-join G5 G2 G10 inner-join,+6,+1) (lookup-join G5 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8))
  │    ├── [ordering: +(1|6)]
  │    │    ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +6]" G10 inner-join,+1,+6)
  │    │    └── cost: 11880.05
  │    └── []
  │         ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +6]" G10 inner-join,+1,+6)
  │         └── cost: 11880.05
- ├── G8: (scan xyz,cols=(10-12)) (scan xyz@xy,cols=(10-12)) (scan xyz@yz,cols=(10-12))
+ ├── G9: (scan xyz,cols=(10-12)) (scan xyz@xy,cols=(10-12)) (scan xyz@yz,cols=(10-12))
  │    ├── [ordering: +10]
  │    │    ├── best: (scan xyz@xy,cols=(10-12))
  │    │    └── cost: 1070.02
  │    └── []
  │         ├── best: (scan xyz,cols=(10-12))
  │         └── cost: 1070.02
- ├── G9: (filters G13)
  ├── G10: (filters)
  ├── G11: (eq G14 G15)
  ├── G12: (filters G16)
@@ -657,6 +702,188 @@ memo (optimized, ~27KB, required=[presentation: s:1,t:2,u:3,a:5,b:6,c:7,x:10,y:1
  ├── G13: (variable y)
  ├── G14: (variable s)
  └── G15: (variable a)
+
+# Left join under an inner join. Push the inner join into the left input of the
+# left join.
+opt expect=ReorderJoins
+SELECT *
+FROM
+(
+  SELECT *
+  FROM medium
+  LEFT JOIN large ON large.m = medium.m
+) medium
+INNER JOIN small ON medium.n = small.n
+----
+right-join (hash)
+ ├── columns: m:1 n:2!null m:5 n:6 m:9 n:10!null
+ ├── fd: (2)==(10), (10)==(2)
+ ├── scan large
+ │    └── columns: large.m:5 large.n:6
+ ├── inner-join (hash)
+ │    ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+ │    ├── fd: (2)==(10), (10)==(2)
+ │    ├── scan medium
+ │    │    └── columns: medium.m:1 medium.n:2
+ │    ├── scan small
+ │    │    └── columns: small.m:9 small.n:10
+ │    └── filters
+ │         └── medium.n:2 = small.n:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ └── filters
+      └── large.m:5 = medium.m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# Left join under an inner join. Push the inner join into the left input of the
+# left join, but leave the (small.m = medium.n OR medium.n IS NULL) filter on a
+# select above the join tree. It can't be pushed into the left join because it
+# originated from an inner join.
+opt expect=ReorderJoins
+SELECT *
+FROM
+(
+  SELECT medium.n, large.n
+  FROM medium
+  LEFT JOIN large ON large.m = medium.m
+) result(a, b)
+INNER JOIN small
+ON result.a = small.n AND (small.m = result.b OR result.b IS NULL)
+----
+project
+ ├── columns: a:2!null b:6 m:9 n:10!null
+ ├── fd: (2)==(10), (10)==(2)
+ └── select
+      ├── columns: medium.m:1 medium.n:2!null large.m:5 large.n:6 small.m:9 small.n:10!null
+      ├── fd: (2)==(10), (10)==(2)
+      ├── right-join (hash)
+      │    ├── columns: medium.m:1 medium.n:2!null large.m:5 large.n:6 small.m:9 small.n:10!null
+      │    ├── fd: (2)==(10), (10)==(2)
+      │    ├── scan large
+      │    │    └── columns: large.m:5 large.n:6
+      │    ├── inner-join (hash)
+      │    │    ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+      │    │    ├── fd: (2)==(10), (10)==(2)
+      │    │    ├── scan medium
+      │    │    │    └── columns: medium.m:1 medium.n:2
+      │    │    ├── scan small
+      │    │    │    └── columns: small.m:9 small.n:10
+      │    │    └── filters
+      │    │         └── medium.n:2 = small.n:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+      │    └── filters
+      │         └── large.m:5 = medium.m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── filters
+           └── (small.m:9 = large.n:6) OR (large.n:6 IS NULL) [outer=(6,9)]
+
+# Semi join under an inner join. Push the inner join into the left input of the
+# semi join.
+opt expect=ReorderJoins
+SELECT *
+FROM
+(
+  SELECT medium.n
+  FROM medium
+  WHERE EXISTS (SELECT * FROM large WHERE medium.m = large.m)
+) medium
+INNER JOIN small ON small.n = medium.n
+----
+project
+ ├── columns: n:2!null m:9 n:10!null
+ ├── fd: (2)==(10), (10)==(2)
+ └── semi-join (hash)
+      ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+      ├── fd: (2)==(10), (10)==(2)
+      ├── inner-join (hash)
+      │    ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+      │    ├── fd: (2)==(10), (10)==(2)
+      │    ├── scan medium
+      │    │    └── columns: medium.m:1 medium.n:2
+      │    ├── scan small
+      │    │    └── columns: small.m:9 small.n:10
+      │    └── filters
+      │         └── small.n:10 = medium.n:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+      ├── scan large
+      │    └── columns: large.m:5
+      └── filters
+           └── medium.m:1 = large.m:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# Anti join under an inner join. Push the inner join into the left input of the
+# anti join.
+opt expect=ReorderJoins
+SELECT *
+FROM
+(
+  SELECT medium.n
+  FROM medium
+  WHERE NOT EXISTS (SELECT * FROM large WHERE medium.m <> large.m)
+) medium
+INNER JOIN small ON small.n = medium.n
+----
+project
+ ├── columns: n:2!null m:9 n:10!null
+ ├── fd: (2)==(10), (10)==(2)
+ └── anti-join (cross)
+      ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+      ├── fd: (2)==(10), (10)==(2)
+      ├── inner-join (hash)
+      │    ├── columns: medium.m:1 medium.n:2!null small.m:9 small.n:10!null
+      │    ├── fd: (2)==(10), (10)==(2)
+      │    ├── scan medium
+      │    │    └── columns: medium.m:1 medium.n:2
+      │    ├── scan small
+      │    │    └── columns: small.m:9 small.n:10
+      │    └── filters
+      │         └── small.n:10 = medium.n:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+      ├── scan large
+      │    └── columns: large.m:5
+      └── filters
+           └── medium.m:1 != large.m:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+# Inner join in the right input of a left join; no reordering is valid apart
+# from commutation.
+memo expect=ReorderJoins
+SELECT *
+FROM small
+LEFT JOIN
+(
+  SELECT large.m
+  FROM large
+  INNER JOIN medium
+  ON large.n = medium.n
+) large
+ON small.m = large.m
+----
+memo (optimized, ~16KB, required=[presentation: m:1,n:2,m:5])
+ ├── G1: (project G2 G3 m n m)
+ │    └── [presentation: m:1,n:2,m:5]
+ │         ├── best: (project G2 G3 m n m)
+ │         └── cost: 106250127813.24
+ ├── G2: (left-join G4 G5 G6) (right-join G5 G4 G6)
+ │    └── []
+ │         ├── best: (right-join G5 G4 G6)
+ │         └── cost: 106250127813.13
+ ├── G3: (projections)
+ ├── G4: (scan small,cols=(1,2))
+ │    └── []
+ │         ├── best: (scan small,cols=(1,2))
+ │         └── cost: 10.52
+ ├── G5: (inner-join G7 G8 G9) (inner-join G8 G7 G9)
+ │    └── []
+ │         ├── best: (inner-join G7 G8 G9)
+ │         └── cost: 106250115551.06
+ ├── G6: (filters G10)
+ ├── G7: (scan large,cols=(5,6))
+ │    └── []
+ │         ├── best: (scan large,cols=(5,6))
+ │         └── cost: 105000000000.02
+ ├── G8: (scan medium,cols=(10))
+ │    └── []
+ │         ├── best: (scan medium,cols=(10))
+ │         └── cost: 104000.02
+ ├── G9: (filters G11)
+ ├── G10: (eq G12 G13)
+ ├── G11: (eq G14 G15)
+ ├── G12: (variable small.m)
+ ├── G13: (variable large.m)
+ ├── G14: (variable large.n)
+ └── G15: (variable medium.n)
 
 # --------------------------------------------------
 # CommuteJoin
@@ -1365,21 +1592,6 @@ CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
 
 exec-ddl
 CREATE TABLE abcde (a INT, b INT, c INT, d INT, e INT, INDEX (a,b,c))
-----
-
-exec-ddl
-CREATE TABLE small (m INT, n INT)
-----
-
-exec-ddl
-ALTER TABLE small INJECT STATISTICS '[
-  {
-    "columns": ["m"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
-  }
-]'
 ----
 
 # Covering case.

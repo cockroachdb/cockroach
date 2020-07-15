@@ -49,7 +49,12 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 	var treeNum = 1
 
 	o.JoinOrderBuilder().NotifyOnReorder(
-		func(join memo.RelExpr, vertexes []memo.RelExpr, edges memo.FiltersExpr) {
+		func(
+			join memo.RelExpr,
+			vertexes []memo.RelExpr,
+			edges []memo.FiltersExpr,
+			edgeOps []opt.Operator,
+		) {
 			if treeNum > 1 {
 				// This isn't the first Reorder call. Output the number of joins added to
 				// the memo by the last call to Reorder.
@@ -63,14 +68,14 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			ot.builder.WriteString(outputVertexes(vertexes, names, o))
 			ot.builder.WriteString(fmt.Sprintf("----Edges----\n"))
 			for i := range edges {
-				ot.builder.WriteString(o.FormatExpr(&edges[i], memo.ExprFmtHideAll))
+				ot.builder.WriteString(outputEdge(edges[i], edgeOps[i], o))
 			}
 			ot.builder.WriteString("\n")
 			treeNum++
 		})
 
 	var relsJoinedLast string
-	o.JoinOrderBuilder().NotifyOnAddJoin(func(left, right, all, refs []memo.RelExpr) {
+	o.JoinOrderBuilder().NotifyOnAddJoin(func(left, right, all, refs []memo.RelExpr, op opt.Operator) {
 		relsToJoin := outputRels(all, names)
 		if relsToJoin != relsJoinedLast {
 			ot.builder.WriteString(
@@ -83,16 +88,20 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 		}
 		ot.builder.WriteString(
 			fmt.Sprintf(
-				"%s %s    refs [%s]\n",
+				"%s %s    refs [%s] [%s]\n",
 				outputRels(left, names),
 				outputRels(right, names),
 				outputRels(refs, names),
+				outputOp(op),
 			),
 		)
 		joinsConsidered++
 	})
 
 	expr, err := ot.optimizeExpr(o)
+	if err != nil {
+		return "", err
+	}
 	ot.builder.WriteString(fmt.Sprintf("\nJoins Considered: %v\n", joinsConsidered))
 	ot.builder.WriteString(separator("-"))
 	ot.builder.WriteString("----Final Plan----\n")
@@ -127,6 +136,48 @@ func outputVertexes(
 		buf.WriteString("\n")
 	}
 	return buf.String()
+}
+
+// outputEdge returns a formatted string for the given FiltersItem along with
+// the type of join the edge came from, like so: "x = a left".
+func outputEdge(edge memo.FiltersExpr, op opt.Operator, o *xform.Optimizer) string {
+	buf := bytes.Buffer{}
+	if len(edge) == 0 {
+		buf.WriteString("cross")
+	} else if len(edge) == 1 {
+		buf.WriteString(strings.TrimSuffix(o.FormatExpr(&edge[0], memo.ExprFmtHideAll), "\n"))
+	} else {
+		for i := range edge {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(strings.TrimSuffix(o.FormatExpr(&edge[i], memo.ExprFmtHideAll), "\n"))
+		}
+	}
+	buf.WriteString(fmt.Sprintf(" [%s]\n", outputOp(op)))
+	return buf.String()
+}
+
+func outputOp(op opt.Operator) string {
+	switch op {
+	case opt.InnerJoinOp:
+		return "inner"
+
+	case opt.SemiJoinOp:
+		return "semi"
+
+	case opt.AntiJoinOp:
+		return "anti"
+
+	case opt.LeftJoinOp:
+		return "left"
+
+	case opt.FullJoinOp:
+		return "full"
+
+	default:
+		panic(errors.AssertionFailedf("unexpected operator: %v", op))
+	}
 }
 
 // outputRels returns a string with the aliases of the given base relations

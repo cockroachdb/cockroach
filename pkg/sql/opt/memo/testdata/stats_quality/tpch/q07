@@ -151,8 +151,8 @@ sort
       │    │    │    │         └── (l_shipdate:19 >= '1995-01-01') AND (l_shipdate:19 <= '1996-12-31') [type=bool, outer=(19), constraints=(/19: [/'1995-01-01' - /'1996-12-31']; tight)]
       │    │    │    └── filters (true)
       │    │    └── filters
-      │    │         ├── c_custkey:36 = o_custkey:27 [type=bool, outer=(27,36), constraints=(/27: (/NULL - ]; /36: (/NULL - ]), fd=(27)==(36), (36)==(27)]
-      │    │         └── c_nationkey:39 = n2.n_nationkey:50 [type=bool, outer=(39,50), constraints=(/39: (/NULL - ]; /50: (/NULL - ]), fd=(39)==(50), (50)==(39)]
+      │    │         ├── c_nationkey:39 = n2.n_nationkey:50 [type=bool, outer=(39,50), constraints=(/39: (/NULL - ]; /50: (/NULL - ]), fd=(39)==(50), (50)==(39)]
+      │    │         └── c_custkey:36 = o_custkey:27 [type=bool, outer=(27,36), constraints=(/27: (/NULL - ]; /36: (/NULL - ]), fd=(27)==(36), (36)==(27)]
       │    └── projections
       │         ├── extract('year', l_shipdate:19) [as=l_year:55, type=float, outer=(19), immutable]
       │         └── l_extendedprice:14 * (1.0 - l_discount:15) [as=volume:56, type=float, outer=(14,15), immutable]
