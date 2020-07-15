@@ -213,6 +213,7 @@ var validationMap = []struct {
 			"Alias":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"State":                    {status: thisFieldReferencesNoObjects},
 			"ReferencingDescriptorIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":               {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }

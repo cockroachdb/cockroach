@@ -135,6 +135,8 @@ func isOwner(desc sqlbase.Descriptor, role string) bool {
 
 // HasOwnership returns if the role or any role the role is a member of
 // has ownership privilege of the desc.
+// TODO(richardjcai): SUPERUSER has implicit ownership.
+// We do not have SUPERUSER privilege yet but should we consider root a superuser?
 func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descriptor) (bool, error) {
 	user := p.SessionData().User
 

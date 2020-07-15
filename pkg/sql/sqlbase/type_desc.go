@@ -195,13 +195,6 @@ func (desc *ImmutableTypeDescriptor) GetAuditMode() descpb.TableDescriptor_Audit
 	return descpb.TableDescriptor_DISABLED
 }
 
-// GetPrivileges implements the DescriptorProto interface.
-//
-// Types do not carry privileges.
-func (desc *ImmutableTypeDescriptor) GetPrivileges() *descpb.PrivilegeDescriptor {
-	return nil
-}
-
 // TypeName implements the DescriptorProto interface.
 func (desc *ImmutableTypeDescriptor) TypeName() string {
 	return "type"
@@ -412,6 +405,11 @@ func (desc *ImmutableTypeDescriptor) Validate(
 				return errors.AssertionFailedf("duplicate enum member %q", desc.EnumMembers[i].LogicalRepresentation)
 			}
 			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
+		}
+
+		// Validate the Privileges of the descriptor.
+		if err := desc.Privileges.Validate(desc.ID); err != nil {
+			return err
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.Alias == nil {

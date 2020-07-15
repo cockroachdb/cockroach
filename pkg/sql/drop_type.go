@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -59,6 +60,10 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 				"%q is an implicit array type and cannot be modified",
 				name,
 			)
+		}
+
+		if err := p.canModifyType(ctx, typeDesc); err != nil {
+			return nil, err
 		}
 
 		// Check if we can drop the type.
@@ -126,6 +131,15 @@ func (p *planner) addTypeBackReference(
 	if err != nil {
 		return err
 	}
+
+	// Check if this user has USAGE privilege on the type. This function if an
+	// object has a dependency on a type, the user must have USAGE privilege on
+	// the type to create a dependency.
+	err = p.CheckPrivilege(ctx, mutDesc, privilege.USAGE)
+	if err != nil {
+		return err
+	}
+
 	mutDesc.AddReferencingDescriptorID(ref)
 	return p.writeTypeSchemaChange(ctx, mutDesc, jobDesc)
 }

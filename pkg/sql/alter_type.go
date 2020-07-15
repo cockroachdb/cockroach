@@ -36,6 +36,11 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 	if err != nil {
 		return nil, err
 	}
+
+	if err := p.canModifyType(ctx, desc); err != nil {
+		return nil, err
+	}
+
 	// The implicit array types are not modifiable.
 	if desc.Kind == descpb.TypeDescriptor_ALIAS {
 		return nil, pgerror.Newf(
@@ -244,3 +249,17 @@ func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil
 func (n *alterTypeNode) Values() tree.Datums                 { return tree.Datums{} }
 func (n *alterTypeNode) Close(ctx context.Context)           {}
 func (n *alterTypeNode) ReadingOwnWrites()                   {}
+
+func (p *planner) canModifyType(ctx context.Context, desc *MutableTypeDescriptor) error {
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return err
+	}
+
+	if !hasOwnership {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of type %s", desc.GetName())
+	}
+
+	return nil
+}
