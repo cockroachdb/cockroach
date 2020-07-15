@@ -56,3 +56,30 @@ func (node *RevokeRole) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.Members)
 }
+
+// RevokeOnType represents a REVOKE <privileges...> on <type_names...> statement.
+type RevokeOnType struct {
+	Privileges privilege.List
+	Targets    TargetList
+	Grantees   NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RevokeOnType) Format(ctx *FmtCtx) {
+	ctx.WriteString("REVOKE ")
+	for i, priv := range node.Privileges {
+		if i != 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(priv.String())
+	}
+	ctx.WriteString(" ON TYPE ")
+	for i, typ := range node.Targets.Types {
+		if i != 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(typ.String())
+	}
+	ctx.WriteString(" FROM ")
+	ctx.FormatNode(&node.Grantees)
+}

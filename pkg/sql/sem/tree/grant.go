@@ -39,6 +39,7 @@ type TargetList struct {
 	Databases NameList
 	Tables    TablePatterns
 	Tenant    roachpb.TenantID
+	Types     []*UnresolvedObjectName
 
 	// ForRoles and Roles are used internally in the parser and not used
 	// in the AST. Therefore they do not participate in pretty-printing,
@@ -86,4 +87,31 @@ func (node *GrantRole) Format(ctx *FmtCtx) {
 	if node.AdminOption {
 		ctx.WriteString(" WITH ADMIN OPTION")
 	}
+}
+
+// GrantOnType represents a GRANT <privileges...> on <type_names...> statement.
+type GrantOnType struct {
+	Privileges privilege.List
+	Targets    TargetList
+	Grantees   NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (node *GrantOnType) Format(ctx *FmtCtx) {
+	ctx.WriteString("GRANT ")
+	for i, priv := range node.Privileges {
+		if i != 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(priv.String())
+	}
+	ctx.WriteString(" ON TYPE ")
+	for i, typ := range node.Targets.Types {
+		if i != 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(typ.String())
+	}
+	ctx.WriteString(" TO ")
+	ctx.FormatNode(&node.Grantees)
 }

@@ -1056,3 +1056,73 @@ query T
 SELECT to_json('hello'::greeting)
 ----
 "hello"
+
+# Types created in the public schema have usage provided to public.
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser;
+CREATE TYPE test AS ENUM ();
+
+user testuser
+
+statement ok
+CREATE TABLE t(x test);
+DROP TABLE t;
+
+user root
+
+statement ok
+REVOKE USAGE ON TYPE test FROM public
+
+user testuser
+
+statement error permission denied for type test
+CREATE TABLE t(x test)
+
+#TODO(richardjcai) add a test for views as well once type backrefs are added for views.
+
+statement error pq: testuser does not have alter privilege on type test
+ALTER TYPE test RENAME TO not_test
+
+# Granting usage on a type to a specific user should allow the user to
+# create objects that depend on the type.
+user root
+
+statement ok
+GRANT USAGE ON TYPE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE t(x test);
+
+statement error pq: testuser does not have alter privilege on type test
+ALTER TYPE test RENAME TO not_test
+
+# CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG privileges
+# should not be grantable on tables.
+
+statement error pq: invalid privilege type CREATE for type
+GRANT CREATE ON type TEST to testuser
+
+statement error pq: invalid privilege type DROP for type
+GRANT DROP ON type TEST to testuser
+
+statement error pq: invalid privilege type GRANT for type
+GRANT GRANT ON type TEST to testuser
+
+statement error pq: invalid privilege type SELECT for type
+GRANT SELECT ON type TEST to testuser
+
+statement error pq: invalid privilege type INSERT for type
+GRANT INSERT ON type TEST to testuser
+
+statement error pq: invalid privilege type DELETE for type
+GRANT DELETE ON type TEST to testuser
+
+statement error pq: invalid privilege type UPDATE for type
+GRANT UPDATE ON type TEST to testuser
+
+statement error pq: invalid privilege type ZONECONFIG for type
+GRANT ZONECONFIG ON type TEST to testuser

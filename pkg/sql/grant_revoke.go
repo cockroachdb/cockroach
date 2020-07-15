@@ -32,10 +32,17 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
 	} else {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidateDBSchemaTablePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
@@ -58,10 +65,17 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
-		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
 	} else {
-		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidateDBSchemaTablePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{

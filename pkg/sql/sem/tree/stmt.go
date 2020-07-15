@@ -503,6 +503,12 @@ func (*GrantRole) StatementTag() string { return "GRANT" }
 func (*GrantRole) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
+func (*GrantOnType) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*GrantOnType) StatementTag() string { return "GRANT" }
+
+// StatementType implements the Statement interface.
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -599,6 +605,12 @@ func (*RevokeRole) StatementType() StatementType { return DDL }
 func (*RevokeRole) StatementTag() string { return "REVOKE" }
 
 func (*RevokeRole) cclOnlyStatement() {}
+
+// StatementType implements the Statement interface.
+func (*RevokeOnType) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RevokeOnType) StatementTag() string { return "REVOKE" }
 
 // StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
@@ -980,6 +992,7 @@ func (n *ExplainAnalyzeDebug) String() string            { return AsString(n) }
 func (n *Export) String() string                         { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
+func (n *GrantOnType) String() string                    { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }
 func (n *Import) String() string                         { return AsString(n) }
 func (n *ParenSelect) String() string                    { return AsString(n) }
@@ -993,6 +1006,7 @@ func (n *RenameTable) String() string                    { return AsString(n) }
 func (n *Restore) String() string                        { return AsString(n) }
 func (n *Revoke) String() string                         { return AsString(n) }
 func (n *RevokeRole) String() string                     { return AsString(n) }
+func (n *RevokeOnType) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string            { return AsString(n) }
 func (n *RollbackTransaction) String() string            { return AsString(n) }
 func (n *Savepoint) String() string                      { return AsString(n) }

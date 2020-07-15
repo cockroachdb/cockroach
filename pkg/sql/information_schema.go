@@ -1011,7 +1011,7 @@ CREATE TABLE information_schema.schema_privileges (
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(scName string) error {
-					privs := db.Privileges.Show()
+					privs := db.Privileges.Show(privilege.Schema)
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(scName)
 					// TODO(knz): This should filter for the current user, see
@@ -1346,7 +1346,7 @@ func populateTablePrivileges(
 			tbNameStr := tree.NewDString(table.Name)
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
-			for _, u := range table.Privileges.Show() {
+			for _, u := range table.Privileges.Show(privilege.Table) {
 				for _, priv := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                     // grantor

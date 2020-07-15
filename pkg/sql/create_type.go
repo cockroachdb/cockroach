@@ -186,6 +186,7 @@ func (p *planner) createArrayType(
 		ParentSchemaID: keys.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ALIAS,
 		Alias:          types.MakeArray(elemTyp),
+		Privileges:     makeDefaultPrivilegeDescriptorForType(params.p.User(), keys.PublicSchemaID),
 	})
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
@@ -260,6 +261,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		ParentSchemaID: keys.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
 		EnumMembers:    members,
+		Privileges:     makeDefaultPrivilegeDescriptorForType(params.p.User(), keys.PublicSchemaID),
 	})
 
 	// Create the implicit array type for this type before finishing the type.
@@ -280,6 +282,21 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		params.EvalContext().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
 	)
+}
+
+// makeDefaultPrivilegeDescriptorForType creates a PrivilegeDescriptor with
+// default superuser privileges and ALL privilege for the user.
+func makeDefaultPrivilegeDescriptorForType(user string, schemaID int) *sqlbase.PrivilegeDescriptor {
+	privDesc := sqlbase.NewDefaultPrivilegeDescriptor()
+
+	privDesc.Grant(user, privilege.List{privilege.ALL})
+
+	// If the type is made in the public schema, it is available for "public" use.
+	if schemaID == keys.PublicSchemaID {
+		privDesc.Grant(sqlbase.PublicRole, privilege.List{privilege.USAGE})
+	}
+
+	return privDesc
 }
 
 func (n *createTypeNode) Next(params runParams) (bool, error) { return false, nil }

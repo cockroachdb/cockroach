@@ -1048,6 +1048,8 @@ message TypeDescriptor {
   optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
   repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
 
+  // privileges contains the privileges for the type.
+  optional PrivilegeDescriptor privileges = 14;
 
   // Fields that are shared among all kinds of user defined types.
 
@@ -1103,7 +1105,6 @@ message TypeDescriptor {
 
   // alias is the types.T that this descriptor is an alias for.
   optional sql.sem.types.T alias = 7;
-
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured

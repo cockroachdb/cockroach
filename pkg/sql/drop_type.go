@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -125,6 +126,13 @@ func (p *planner) addTypeBackReference(
 ) error {
 	// TODO (rohany): This should use the desc.Collection.
 	desc, err := sqlbase.GetTypeDescFromID(ctx, p.txn, p.ExecCfg().Codec, typeID)
+
+	// Check if this user has USAGE privilege on the type.
+	fmt.Println(desc.Privileges)
+	if !desc.Privileges.CheckPrivilege(p.User(), privilege.USAGE) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"permission denied for type %s", desc.Name)
+	}
 	if err != nil {
 		return err
 	}
