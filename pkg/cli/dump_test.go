@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDumpData uses the testdata/dump directory to execute SQL statements
@@ -489,5 +491,133 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
 
 	if dump1 != want1 {
 		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
+	}
+}
+
+// TestDumpTempTables tests how `cockroach dump` handles temporary tables, views
+// and sequences.
+// This could not be written as a datadriven test because temp objects do not
+// persist across RunWithCaptureArgs() invocations. Therefore, the datadriven
+// infra cannot test our handling of temp objects since they get deleted between
+// sql and dump runs anyways.
+func TestDumpTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testInput := []struct {
+		name     string
+		create   string
+		expected string
+		args     []string
+	}{
+		{
+			name: "dump_db_only_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM tmpbar;
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: ``,
+			args:     []string{"foo"},
+		},
+		{
+			name: "dump_db_mix_permanent_and_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE bar (id int primary key, text string not null);
+INSERT INTO bar VALUES (1, 'a');
+
+CREATE TEMP TABLE tmpbar (id int primary key);
+`,
+			expected: `CREATE TABLE bar (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+
+INSERT INTO bar (id, text) VALUES
+	(1, 'a');
+`,
+			args: []string{"foo"},
+		},
+		{
+			name: "dump_tmp_table_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+`,
+			expected: "ERROR: cannot dump temp table tmpbar\n",
+			args:     []string{"foo", "bar", "tmpbar"},
+		},
+		{
+			name: "dump_tmp_view_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM bar;
+`,
+			expected: "ERROR: cannot dump temp table tmpview\n",
+			args:     []string{"foo", "tmpview"},
+		},
+		{
+			name: "dump_tmp_sequence_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: "ERROR: cannot dump temp table tmpseq\n",
+			args:     []string{"foo", "tmpseq"},
+		},
+	}
+
+	for _, test := range testInput {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			pgURL, cleanupFunc := sqlutils.PGUrl(
+				t, c.ServingSQLAddr(), t.Name(),
+				url.User(security.RootUser),
+			)
+			defer cleanupFunc()
+			db, err := gosql.Open("postgres", pgURL.String())
+			require.NoError(t, err)
+
+			// Create the tables.
+			_, err = db.Exec(test.create)
+			require.NoError(t, err)
+
+			var args []string
+			args = append(args, "dump")
+			args = append(args, test.args...)
+			args = append(args, "--dump-mode=both")
+			dump, err := c.RunWithCaptureArgs(args)
+			require.NoError(t, err)
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+
+			require.NoError(t, db.Close())
+		})
 	}
 }
