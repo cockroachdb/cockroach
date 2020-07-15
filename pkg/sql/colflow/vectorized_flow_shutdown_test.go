@@ -208,7 +208,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID),
+						ctxLocal,
+						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory),
+						typs,
+						execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
@@ -288,7 +291,15 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount, testColumnFactory)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, []execinfrapb.MetadataSource{createMetadataSourceForID(streamID)})
+						runOutboxInbox(
+							ctxRemote,
+							cancelRemote,
+							&outboxMemAccount,
+							colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs),
+							inboxes[i],
+							streamID,
+							[]execinfrapb.MetadataSource{createMetadataSourceForID(streamID)},
+						)
 					}
 					streamID++
 				}
@@ -300,14 +311,24 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
+						ctxAnotherRemote,
 						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
-						typs, execinfrapb.StreamID(streamID),
+						typs,
+						execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxAnotherRemote)
-					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &outboxMemAccount, synchronizer, inbox, streamID, []execinfrapb.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)})
+					runOutboxInbox(
+						ctxAnotherRemote,
+						cancelAnotherRemote,
+						&outboxMemAccount,
+						synchronizer,
+						inbox,
+						streamID,
+						[]execinfrapb.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)},
+					)
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
