@@ -506,7 +506,7 @@ func makeSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	resolver := kvcoord.AddressResolver(tenantProxy, baseCfg.Locality)
+	resolver := kvtenant.AddressResolver(tenantProxy)
 	nodeDialer := nodedialer.New(rpcContext, resolver)
 
 	dsCfg := kvcoord.DistSenderConfig{
