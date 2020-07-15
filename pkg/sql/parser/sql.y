@@ -1102,7 +1102,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList> targets targets_roles changefeed_targets
+%type <tree.TargetList> targets targets_roles target_types changefeed_targets
 %type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
@@ -3099,6 +3099,12 @@ drop_type_stmt:
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
 
+target_types:
+  type_name_list
+  {
+    $$.val = tree.TargetList{Types: $1.unresolvedObjectNames()}
+  }
+
 type_name_list:
   type_name
   {
@@ -3428,7 +3434,7 @@ grant_stmt:
   GRANT privileges ON targets TO name_list
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
-  }
+	}
 | GRANT privilege_list TO name_list
   {
     $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: false}
@@ -3436,6 +3442,10 @@ grant_stmt:
 | GRANT privilege_list TO name_list WITH ADMIN OPTION
   {
     $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: true}
+  }
+| GRANT privileges ON TYPE target_types TO name_list
+  {
+    $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
 | GRANT error // SHOW HELP: GRANT
 
@@ -3468,6 +3478,10 @@ revoke_stmt:
   {
     $$.val = &tree.RevokeRole{Roles: $5.nameList(), Members: $7.nameList(), AdminOption: true }
   }
+| REVOKE privileges ON TYPE target_types FROM name_list
+  {
+    $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
+  }
 | REVOKE error // SHOW HELP: REVOKE
 
 // ALL is always by itself.
@@ -3476,7 +3490,7 @@ privileges:
   {
     $$.val = privilege.List{privilege.ALL}
   }
-  | privilege_list
+	| privilege_list
   {
      privList, err := privilege.ListFromStrings($1.nameList().ToStrings())
      if err != nil {

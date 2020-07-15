@@ -36,6 +36,20 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO(richardjcai): This check should be for ownership
+	// Update this after further investigation into adding object ownership
+
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasOwnership {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of type %s", desc.GetName())
+	}
+
 	// The implicit array types are not modifiable.
 	if desc.Kind == descpb.TypeDescriptor_ALIAS {
 		return nil, pgerror.Newf(

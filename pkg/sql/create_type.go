@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -194,6 +195,7 @@ func (p *planner) createArrayType(
 		Kind:           descpb.TypeDescriptor_ALIAS,
 		Alias:          types.MakeArray(elemTyp),
 		Version:        1,
+		Privileges:     typDesc.Privileges,
 	})
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
@@ -263,20 +265,30 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		return err
 	}
 
+	privs := createInheritedPrivilegesFromDBDesc(db, params.p.User())
+	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
+
+	// If the type is made in the public schema, it is available for "public" use.
+	if schemaID == keys.PublicSchemaID {
+		privs.Grant(security.PublicRole, privilege.List{privilege.USAGE})
+	}
+
 	// TODO (rohany): OID's are computed using an offset of
 	//  oidext.CockroachPredefinedOIDMax from the descriptor ID. Once we have
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
-		Name:           typeName.Type(),
-		ID:             id,
-		ParentID:       db.GetID(),
-		ParentSchemaID: schemaID,
-		Kind:           descpb.TypeDescriptor_ENUM,
-		EnumMembers:    members,
-		Version:        1,
-	})
+	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(
+		descpb.TypeDescriptor{
+			Name:           typeName.Type(),
+			ID:             id,
+			ParentID:       db.GetID(),
+			ParentSchemaID: schemaID,
+			Kind:           descpb.TypeDescriptor_ENUM,
+			EnumMembers:    members,
+			Version:        1,
+			Privileges:     privs,
+		})
 
 	// Create the implicit array type for this type before finishing the type.
 	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db, schemaID)
