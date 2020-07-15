@@ -151,7 +151,7 @@ message ImportDetails {
   // corresponding to this job. While the job ought to clean up the record
   // when it enters a terminal state, there may be cases where it cannot or
   // does not run the code to do so. To deal with this there is a background
-  // reconcilliation loop to ensure that protected timestamps are cleaned up.
+  // reconciliation loop to ensure that protected timestamps are cleaned up.
   bytes protected_timestamp_record = 22 [
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
@@ -171,6 +171,16 @@ message ImportProgress {
   // been flushed, we can advance the count here and then on resume skip over
   // that many rows without needing to convert/process them at all.
   repeated int64 resume_pos = 5; // Only set by direct import.
+}
+
+// TypeSchemaChangeDetails is the job detail information for a type schema change job.
+message TypeSchemaChangeDetails {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+}
+
+// TypeSchemaChangeProgress is the persisted progress for a type schema change job.
+message TypeSchemaChangeProgress {
+
 }
 
 message ResumeSpanList {
@@ -420,6 +430,7 @@ message Payload {
     ChangefeedDetails changefeed = 14;
     CreateStatsDetails createStats = 15;
     SchemaChangeGCDetails schemaChangeGC = 21;
+    TypeSchemaChangeDetails typeSchemaChange = 22;
   }
 }
 
@@ -439,6 +450,7 @@ message Progress {
     ChangefeedProgress changefeed = 14;
     CreateStatsProgress createStats = 15;
     SchemaChangeGCProgress schemaChangeGC = 16;
+    TypeSchemaChangeProgress typeSchemaChange = 17;
   }
 }
 
@@ -455,6 +467,9 @@ enum Type {
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
   SCHEMA_CHANGE_GC = 8 [(gogoproto.enumvalue_customname) = "TypeSchemaChangeGC"];
+  // We can't name this TYPE_SCHEMA_CHANGE due to how proto generates actual
+  // names for this enum, which cause a conflict with the SCHEMA_CHANGE entry.
+  TYPEDESC_SCHEMA_CHANGE = 9 [(gogoproto.enumvalue_customname) = "TypeTypeSchemaChange"];
 }
 
 message Job {

@@ -151,9 +151,6 @@ ALTER TYPE greeting ADD VALUE 'hola' AFTER 'hello'
 statement error pq: unimplemented: ALTER TYPE RENAME VALUE unsupported
 ALTER TYPE greeting RENAME VALUE 'hello' TO 'helloooooo'
 
-statement error pq: unimplemented: ALTER TYPE RENAME unsupported
-ALTER TYPE greeting RENAME TO greetings
-
 statement error pq: unimplemented: ALTER TYPE SET SCHEMA unsupported
 ALTER TYPE greeting SET SCHEMA newschema
 
