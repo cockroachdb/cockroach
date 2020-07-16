@@ -13,7 +13,6 @@ package roleoption
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -161,31 +160,15 @@ func (rol List) CheckRoleOptionConflicts() error {
 	return nil
 }
 
-// GetHashedPassword returns the value of the password after hashing it.
-// Returns error if no password option is found or if password is invalid.
-func (rol List) GetHashedPassword() ([]byte, error) {
-	var hashedPassword []byte
+// GetPassword returns the value of the password or whether the
+// password was set to NULL. Returns error if the string was invalid
+// or if no password option is found.
+func (rol List) GetPassword() (isNull bool, password string, err error) {
 	for _, ro := range rol {
 		if ro.Option == PASSWORD {
-			isNull, password, err := ro.Value()
-			if isNull {
-				// Use empty byte array for hashedPassword.
-				return hashedPassword, nil
-			}
-			if err != nil {
-				return hashedPassword, err
-			}
-			if password == "" {
-				return hashedPassword, security.ErrEmptyPassword
-			}
-			hashedPassword, err = security.HashPassword(password)
-			if err != nil {
-				return hashedPassword, err
-			}
-
-			return hashedPassword, nil
+			return ro.Value()
 		}
 	}
 	// Password option not found.
-	return hashedPassword, errors.New("password not found in role options")
+	return false, "", errors.New("password not found in role options")
 }

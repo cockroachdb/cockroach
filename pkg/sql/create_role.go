@@ -109,15 +109,18 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	// Reject the "public" role. It does not have an entry in the users table but is reserved.
+	if normalizedUsername == sqlbase.PublicRole {
+		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", sqlbase.PublicRole)
+	}
 
 	var hashedPassword []byte
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		hashedPassword, err = n.roleOptions.GetHashedPassword()
+		isNull, password, err := n.roleOptions.GetPassword()
 		if err != nil {
 			return err
 		}
-
-		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
 			// We disallow setting a non-empty password in insecure mode
 			// because insecure means an observer may have MITM'ed the change
 			// and learned the password.
@@ -128,18 +131,12 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			return pgerror.New(pgcode.InvalidPassword,
 				"setting or updating a password is not supported in insecure mode")
 		}
-	} else {
-		// v20.1 and below crash during authentication if they find a NULL value
-		// in system.users.hashedPassword. v20.2 and above handle this correctly,
-		// but we need to maintain mixed version compatibility for at least one
-		// release.
-		// TODO(nvanbenschoten): remove this for v21.1.
-		hashedPassword = []byte{}
-	}
 
-	// Reject the "public" role. It does not have an entry in the users table but is reserved.
-	if normalizedUsername == sqlbase.PublicRole {
-		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", sqlbase.PublicRole)
+		if !isNull {
+			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Check if the user/role exists.
@@ -298,4 +295,27 @@ func (ua *userNameInfo) resolveUsername() (string, error) {
 	}
 
 	return normalizedUsername, nil
+}
+
+func (p *planner) checkPasswordAndGetHash(
+	ctx context.Context, password string,
+) (hashedPassword []byte, err error) {
+	if password == "" {
+		return hashedPassword, security.ErrEmptyPassword
+	}
+	hashedPassword, err = security.HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	if hashedPassword == nil {
+		// v20.1 and below crash during authentication if they find a NULL value
+		// in system.users.hashedPassword. v20.2 and above handle this correctly,
+		// but we need to maintain mixed version compatibility for at least one
+		// release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		hashedPassword = []byte{}
+	}
+
+	return
 }
