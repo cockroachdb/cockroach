@@ -275,7 +275,7 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 	switch t := e.(type) {
 	case *memo.ScanExpr:
 		tab := m.Metadata().Table(t.Table)
-		if tab.AllColumnCount() != t.Cols.Len() {
+		if tab.ColumnCount() != t.Cols.Len() {
 			fmt.Fprintf(mf.buf, ",cols=%s", t.Cols)
 		}
 		if t.Constraint != nil {

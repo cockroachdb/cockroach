@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1439,6 +1440,66 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSupportPrev tests that SupportsPrev works as expected.
+func TestSupportsPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	opts := IterOptions{LowerBound: keys.MinKey, UpperBound: keys.MaxKey}
+	type engineTest struct {
+		engineIterSupportsPrev   bool
+		batchIterSupportsPrev    bool
+		snapshotIterSupportsPrev bool
+	}
+	runTest := func(t *testing.T, eng Engine, et engineTest) {
+		t.Run("engine", func(t *testing.T) {
+			it := eng.NewIterator(opts)
+			defer it.Close()
+			require.Equal(t, et.engineIterSupportsPrev, it.SupportsPrev())
+		})
+		t.Run("batch", func(t *testing.T) {
+			batch := eng.NewBatch()
+			defer batch.Close()
+			batchIt := batch.NewIterator(opts)
+			defer batchIt.Close()
+			require.Equal(t, et.batchIterSupportsPrev, batchIt.SupportsPrev())
+		})
+		t.Run("snapshot", func(t *testing.T) {
+			snap := eng.NewSnapshot()
+			defer snap.Close()
+			snapIt := snap.NewIterator(opts)
+			defer snapIt.Close()
+			require.Equal(t, et.snapshotIterSupportsPrev, snapIt.SupportsPrev())
+		})
+	}
+	t.Run("pebble", func(t *testing.T) {
+		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    true,
+			snapshotIterSupportsPrev: true,
+		})
+	})
+	t.Run("rocksdb", func(t *testing.T) {
+		eng := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    false,
+			snapshotIterSupportsPrev: true,
+		})
+	})
+	t.Run("tee", func(t *testing.T) {
+		eng := newTeeInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    false,
+			snapshotIterSupportsPrev: true,
+		})
+	})
 }
 
 func TestFS(t *testing.T) {

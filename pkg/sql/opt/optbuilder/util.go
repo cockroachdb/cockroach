@@ -644,7 +644,7 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 	ordinals = make([]int, len(columns))
 	for i, c := range columns {
 		ord := 0
-		cnt := tab.AllColumnCount()
+		cnt := tab.ColumnCount()
 		for ord < cnt {
 			if tab.Column(ord).ColID() == cat.StableID(c) && !cat.IsMutationColumn(tab, ord) {
 				break
@@ -663,7 +663,7 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 // having the given name, if one exists in the given table. Otherwise, it
 // returns -1.
 func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
-	for ord, n := 0, tab.AllColumnCount(); ord < n; ord++ {
+	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
 		if tab.Column(ord).ColName() == name && !cat.IsMutationColumn(tab, ord) {
 			return ord
 		}

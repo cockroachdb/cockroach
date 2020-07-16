@@ -427,6 +427,11 @@ func (p *pebbleIterator) Stats() IteratorStats {
 	}
 }
 
+// SupportsPrev implements the Iterator interface.
+func (p *pebbleIterator) SupportsPrev() bool {
+	return true
+}
+
 // CheckForKeyCollisions indicates if the provided SST data collides with this
 // iterator in the specified range.
 func (p *pebbleIterator) CheckForKeyCollisions(

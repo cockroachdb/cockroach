@@ -596,8 +596,8 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
-// AllColumnCount is part of the cat.Table interface.
-func (tt *Table) AllColumnCount() int {
+// ColumnCount is part of the cat.Table interface.
+func (tt *Table) ColumnCount() int {
 	return len(tt.Columns)
 }
 

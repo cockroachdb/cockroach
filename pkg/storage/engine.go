@@ -122,6 +122,9 @@ type Iterator interface {
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
+	// SupportsPrev returns true if Iterator implementation supports reverse
+	// iteration with Prev() or SeekLT().
+	SupportsPrev() bool
 }
 
 // MVCCIterator is an interface that extends Iterator and provides concrete

@@ -227,9 +227,9 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 func (s *scope) appendColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
 	tab := tabMeta.Table
 	if s.cols == nil {
-		s.cols = make([]scopeColumn, 0, tab.AllColumnCount())
+		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
 	}
-	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		if cat.IsMutationColumn(tab, i) {
 			continue
 		}

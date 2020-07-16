@@ -99,7 +99,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		t.Helper()
 
 		var cols opt.ColSet
-		for i := 0; i < tab.AllColumnCount(); i++ {
+		for i := 0; i < tab.ColumnCount(); i++ {
 			cols.Add(tabID.ColumnID(i))
 		}
 
