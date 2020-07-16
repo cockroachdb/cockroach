@@ -70,6 +70,14 @@ func Crosses(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	return geos.Crosses(a.EWKB(), b.EWKB())
 }
 
+// Disjoint returns whether geometry A is disjoint from geometry B.
+func Disjoint(a *geo.Geometry, b *geo.Geometry) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return geos.Disjoint(a.EWKB(), b.EWKB())
+}
+
 // Equals returns whether geometry A equals geometry B.
 func Equals(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {

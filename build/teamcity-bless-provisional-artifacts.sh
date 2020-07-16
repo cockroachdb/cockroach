@@ -30,7 +30,7 @@ if [[ "$release_version" != *-* && -z "$FORCE_PUSH_TO_COCKROACH_UNSTABLE" ]]; th
   image=docker.io/cockroachdb/cockroach
 fi
 
-cp cockroach build/deploy/cockroach
+cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 docker build --no-cache --tag=$image:{latest,"$release_version"} build/deploy
 
 # Only push the "latest" tag for our most recent release branch.
