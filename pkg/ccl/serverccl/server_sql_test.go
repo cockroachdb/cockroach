@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,7 +43,11 @@ func TestSQLServer(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	db := serverutils.StartTenant(
+		t,
+		tc.Server(0),
+		base.TestTenantArgs{TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])},
+	)
 	defer db.Close()
 	r := sqlutils.MakeSQLRunner(db)
 	r.QueryStr(t, `SELECT 1`)

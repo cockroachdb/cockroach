@@ -92,7 +92,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		defer cleanup()
 	} else {
 		certsDir = security.EmbeddedCertsDir
-		tenant = fmt.Sprint(security.EmbeddedTenantID)
+		tenant = fmt.Sprint(security.EmbeddedTenantIDs()[0])
 	}
 
 	// Now set up the config a server would use. The client will trust it based on
