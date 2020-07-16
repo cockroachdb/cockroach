@@ -406,15 +406,21 @@ func (rb *routerBase) updateStreamState(
 }
 
 // fwdMetadata forwards a metadata record to the first stream that's still
-// accepting data.
+// accepting data. Note that if the metadata record contains an error, it is
+// propagated to all non-closed streams.
 func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 	if meta == nil {
 		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
 	}
 
-	rb.semaphore <- struct{}{}
+	metaErr := meta.Err
+	forwarded, holdingSema := false, false
 
 	for i := range rb.outputs {
+		if !holdingSema {
+			rb.semaphore <- struct{}{}
+			holdingSema = true
+		}
 		ro := &rb.outputs[i]
 		ro.mu.Lock()
 		if ro.mu.streamStatus != execinfra.ConsumerClosed {
@@ -422,12 +428,27 @@ func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 			ro.mu.Unlock()
 			ro.mu.cond.Signal()
 			<-rb.semaphore
-			return
+			holdingSema = false
+			forwarded = true
+			if metaErr != nil {
+				// We've just forwarded the metadata with error to one of the
+				// streams, and we need to create a new metadata record because
+				// it might get forwarded to another stream.
+				meta = &execinfrapb.ProducerMetadata{Err: metaErr}
+			} else {
+				break
+			}
+		} else {
+			ro.mu.Unlock()
 		}
-		ro.mu.Unlock()
 	}
 
-	<-rb.semaphore
+	if holdingSema {
+		<-rb.semaphore
+	}
+	if forwarded {
+		return
+	}
 	// If we got here it means that we couldn't even forward metadata anywhere;
 	// all streams are closed.
 	atomic.StoreUint32(&rb.aggregatedStatus, uint32(execinfra.ConsumerClosed))
@@ -491,7 +512,8 @@ func (mr *mirrorRouter) Push(
 	aggStatus := mr.aggStatus()
 	if meta != nil {
 		mr.fwdMetadata(meta)
-		return aggStatus
+		// fwdMetadata can change the status, re-read it.
+		return mr.aggStatus()
 	}
 	if aggStatus != execinfra.NeedMoreRows {
 		return aggStatus

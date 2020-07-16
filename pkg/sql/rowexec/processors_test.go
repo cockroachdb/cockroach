@@ -779,9 +779,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	// onerow is a table created to test #51458. The value of the only row in this
 	// table is explicitly set to 2 so that it is routed by hash to a desired
 	// destination.
-	// TODO(asubiotto): The vectorized execution engine probably has the same
-	//  problem and might need a separate table since the hash functions are
-	//  different.
 	sqlutils.CreateTable(t, dbConn, "onerow", "x INT", 1, sqlutils.ToRowFn(func(_ int) tree.Datum { return tree.NewDInt(tree.DInt(2)) }))
 	_, err := dbConn.Exec(fmt.Sprintf(`
 	ALTER TABLE t SPLIT AT VALUES (10), (20);
@@ -833,7 +830,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					tableNames: []string{"t"},
 				},
 			},
-			skip: "https://github.com/cockroachdb/cockroach/issues/51458",
 		},
 	}
 
