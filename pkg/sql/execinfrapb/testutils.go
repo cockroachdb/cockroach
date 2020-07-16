@@ -43,6 +43,7 @@ func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []ProducerMetadat
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	return rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Config:     &base.Config{Insecure: true},
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),

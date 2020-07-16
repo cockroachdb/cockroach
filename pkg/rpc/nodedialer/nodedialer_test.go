@@ -286,6 +286,7 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg.Insecure = true
 	cfg.RPCHeartbeatInterval = 10 * time.Millisecond
 	rctx := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Config:     cfg,
 		Clock:      clock,
