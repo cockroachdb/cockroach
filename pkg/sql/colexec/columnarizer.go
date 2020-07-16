@@ -101,8 +101,12 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	for ; nRows < coldata.BatchSize(); nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
-			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			nRows--
+			if meta.Err != nil {
+				// If an error occurs, return it immediately.
+				colexecerror.ExpectedError(meta.Err)
+			}
+			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			continue
 		}
 		if row == nil {

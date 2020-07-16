@@ -415,7 +415,7 @@ type remoteComponentCreator interface {
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexec.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -431,9 +431,9 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(allocator, typs, streamID)
+	return colrpc.NewInbox(ctx, allocator, typs, streamID)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -731,8 +731,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, nil, err
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
-				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
-				input.ColumnTypes, inputStream.StreamID,
+				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID,
 			)
 			if err != nil {
 				return nil, nil, nil, err

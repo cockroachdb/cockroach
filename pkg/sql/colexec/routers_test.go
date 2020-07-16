@@ -239,7 +239,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// CancelUnblocksReader verifies that calling cancel on an output unblocks
 			// a reader.
 			unblockEvent: func(_ colexecbase.Operator, o *routerOutputOp) {
-				o.cancel(ctx)
+				o.cancel(ctx, nil /* err */)
 			},
 			expected: tuples{},
 			name:     "CancelUnblocksReader",
@@ -517,7 +517,7 @@ func TestRouterOutputRandom(t *testing.T) {
 						}
 
 						if rng.Float64() < 0.1 {
-							o.cancel(ctx)
+							o.cancel(ctx, nil /* err */)
 							canceled = true
 							errCh <- nil
 							return
@@ -578,15 +578,16 @@ func TestRouterOutputRandom(t *testing.T) {
 
 type callbackRouterOutput struct {
 	colexecbase.ZeroInputNode
-	addBatchCb func(coldata.Batch, []int) bool
-	cancelCb   func()
+	addBatchCb   func(coldata.Batch, []int) bool
+	cancelCb     func()
+	forwardedErr error
 }
 
-var _ routerOutput = callbackRouterOutput{}
+var _ routerOutput = &callbackRouterOutput{}
 
-func (o callbackRouterOutput) initWithHashRouter(*HashRouter) {}
+func (o *callbackRouterOutput) initWithHashRouter(*HashRouter) {}
 
-func (o callbackRouterOutput) addBatch(
+func (o *callbackRouterOutput) addBatch(
 	_ context.Context, batch coldata.Batch, selection []int,
 ) bool {
 	if o.addBatchCb != nil {
@@ -595,10 +596,18 @@ func (o callbackRouterOutput) addBatch(
 	return false
 }
 
-func (o callbackRouterOutput) cancel(context.Context) {
+func (o *callbackRouterOutput) cancel(context.Context, error) {
 	if o.cancelCb != nil {
 		o.cancelCb()
 	}
+}
+
+func (o *callbackRouterOutput) forwardErr(err error) {
+	o.forwardedErr = err
+}
+
+func (o *callbackRouterOutput) resetForTests(context.Context) {
+	o.forwardedErr = nil
 }
 
 func TestHashRouterComputesDestination(t *testing.T) {
@@ -640,7 +649,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	for i := range outputs {
 		// Capture the index.
 		outputIdx := i
-		outputs[i] = callbackRouterOutput{
+		outputs[i] = &callbackRouterOutput{
 			addBatchCb: func(batch coldata.Batch, sel []int) bool {
 				for _, j := range sel {
 					key := batch.ColVec(0).Int64()[j]
@@ -679,18 +688,19 @@ func TestHashRouterCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	outputs := make([]routerOutput, 4)
+	outputs := make([]*callbackRouterOutput, 4)
+	routerOutputs := make([]routerOutput, 4)
 	numCancels := int64(0)
 	numAddBatches := int64(0)
 	for i := range outputs {
-		// We'll just be checking canceled.
-		outputs[i] = callbackRouterOutput{
+		outputs[i] = &callbackRouterOutput{
 			addBatchCb: func(_ coldata.Batch, _ []int) bool {
 				atomic.AddInt64(&numAddBatches, 1)
 				return false
 			},
 			cancelCb: func() { atomic.AddInt64(&numCancels, 1) },
 		}
+		routerOutputs[i] = outputs[i]
 	}
 
 	typs := []*types.T{types.Int}
@@ -700,23 +710,11 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, typs, []uint32{0}, unbufferedCh, outputs, nil /* toDrain */, nil /* toClose */)
-	drainMeta := func(t *testing.T) []execinfrapb.ProducerMetadata {
-		var metadata []execinfrapb.ProducerMetadata
-		for range outputs {
-			if routerMeta := r.drainMeta(); routerMeta != nil {
-				if metadata != nil {
-					t.Fatal("HashRouter returned metadata more than once, only the last output to call drainMeta should have received metadata")
-				}
-				metadata = routerMeta
-			}
-		}
-		return metadata
-	}
+	r := newHashRouterWithOutputs(in, typs, []uint32{0}, unbufferedCh, routerOutputs, nil /* toDrain */, nil /* toClose */)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		r.resetForBenchmarks(ctx)
+		r.resetForTests(ctx)
 		cancel()
 		r.Run(ctx)
 
@@ -727,10 +725,6 @@ func TestHashRouterCancellation(t *testing.T) {
 		if numAddBatches != 0 {
 			t.Fatalf("detected %d addBatch calls but expected 0", numAddBatches)
 		}
-
-		meta := drainMeta(t)
-		require.Equal(t, 1, len(meta))
-		require.True(t, testutils.IsError(meta[0].Err, "context canceled"), meta[0].Err)
 	})
 
 	testCases := []struct {
@@ -753,7 +747,7 @@ func TestHashRouterCancellation(t *testing.T) {
 			numAddBatches = 0
 
 			ctx, cancel := context.WithCancel(context.Background())
-			r.resetForBenchmarks(ctx)
+			r.resetForTests(ctx)
 
 			if tc.blocked {
 				r.numBlockedOutputs = len(outputs)
@@ -782,9 +776,6 @@ func TestHashRouterCancellation(t *testing.T) {
 			}
 			cancel()
 			<-doneCh
-			meta := drainMeta(t)
-			require.Equal(t, 1, len(meta), "expected one metadata message but got: %v", meta)
-			require.True(t, testutils.IsError(meta[0].Err, "canceled"), meta[0].Err)
 
 			if numCancels != int64(len(outputs)) {
 				t.Fatalf("expected %d canceled outputs, actual %d", len(outputs), numCancels)
@@ -927,13 +918,13 @@ func TestHashRouterRandom(t *testing.T) {
 	)
 
 	testName := fmt.Sprintf(
-		"numOutputs=%d/blockedThreshold=%d/outputSize=%d/totalInputSize=%d/hashCols=%v/terminationScenario=%d",
+		"terminationScenario=%d/numOutputs=%d/blockedThreshold=%d/outputSize=%d/totalInputSize=%d/hashCols=%v",
+		terminationScenario,
 		numOutputs,
 		blockedThreshold,
 		outputSize,
 		len(data),
 		hashCols,
-		terminationScenario,
 	)
 
 	queueCfg, cleanup, memoryTestCases := getDiskQueueCfgAndMemoryTestCases(t, rng)
@@ -1084,7 +1075,7 @@ func TestHashRouterRandom(t *testing.T) {
 				metadata := metadataMu.metadata
 				checkMetadata := func(t *testing.T, expectedErrMsgs []string) {
 					t.Helper()
-					require.Equal(t, 1, len(metadataMu.metadata), "one output (the last to exit) should return metadata")
+					require.Equal(t, 1, len(metadata), "one output (the last to exit) should return metadata")
 
 					require.Equal(t, len(expectedErrMsgs), len(metadata[0]), "unexpected number of metadata messages")
 					var actualErrMsgs []string
@@ -1104,6 +1095,31 @@ func TestHashRouterRandom(t *testing.T) {
 					t.Helper()
 					for i := range resultsByOp {
 						require.NoError(t, resultsByOp[i].err)
+					}
+				}
+				requireOneError := func(t *testing.T, err error) {
+					t.Helper()
+					if err == nil {
+						t.Fatal("use requireNoErrors instead")
+					}
+					for i := range resultsByOp {
+						if err == nil {
+							// A match was already found. Since we only expect one error, this
+							// error must be nil.
+							require.Nil(t, resultsByOp[i].err, "expected error to be nil")
+							continue
+						}
+						if resultsByOp[i].err == nil {
+							// This result has no error but we have not yet found the expected
+							// error, continue to another result.
+							continue
+						}
+						require.True(t, testutils.IsError(resultsByOp[i].err, err.Error()), "unexpected error %v", resultsByOp[i].err)
+						err = nil
+					}
+					if err != nil {
+						// err is set to nil when a match is found.
+						t.Fatal("no matching error found")
 					}
 				}
 
@@ -1140,13 +1156,11 @@ func TestHashRouterRandom(t *testing.T) {
 						}
 					}
 				case hashRouterContextCanceled:
-					// Outputs won't observe an error in this case, the cancellation error
-					// is propagated when/if the outputs are drained.
-					requireNoErrors(t)
-					checkMetadata(t, []string{hashRouterMetadataMsg, context.Canceled.Error()})
+					requireOneError(t, context.Canceled)
+					checkMetadata(t, []string{hashRouterMetadataMsg})
 				case hashRouterOutputErrorOnAddBatch:
-					requireNoErrors(t)
-					checkMetadata(t, []string{hashRouterMetadataMsg, addBatchErrMsg})
+					requireOneError(t, errors.New(addBatchErrMsg))
+					checkMetadata(t, []string{hashRouterMetadataMsg})
 				case hashRouterOutputErrorOnNext:
 					// If an error is encountered in Next, it is returned to the caller,
 					// not as metadata by the HashRouter.
@@ -1236,7 +1250,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					input.ResetBatchesToReturn(numInputBatches)
-					r.resetForBenchmarks(ctx)
+					r.resetForTests(ctx)
 					wg.Add(len(outputs))
 					for j := range outputs {
 						go func(j int) {
