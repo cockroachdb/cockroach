@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -61,6 +62,7 @@ func TestClientSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 			rpcContext := NewContext(ContextOptions{
+				TenantID: roachpb.SystemTenantID,
 				Clock:    hlc.NewClock(hlc.UnixNano, 1),
 				Stopper:  stopper,
 				Settings: cluster.MakeTestingClusterSettings(),
@@ -117,6 +119,7 @@ func TestServerSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 			rpcContext := NewContext(ContextOptions{
+				TenantID: roachpb.SystemTenantID,
 				Clock:    hlc.NewClock(hlc.UnixNano, 1),
 				Stopper:  stopper,
 				Settings: cluster.MakeTestingClusterSettings(),

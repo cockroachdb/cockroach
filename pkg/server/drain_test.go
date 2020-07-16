@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -236,6 +237,7 @@ func getAdminClientForServer(
 	cfg := tc.Server(0).RPCContext().Config
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: execCfg.Settings.Tracer},
 		Config:     cfg,
 		Clock:      execCfg.Clock,

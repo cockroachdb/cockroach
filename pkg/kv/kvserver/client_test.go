@@ -129,6 +129,7 @@ func createTestStoreWithOpts(
 	storeCfg.AmbientCtx = ac
 
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: ac,
 		Config:     &base.Config{Insecure: true},
 		Clock:      storeCfg.Clock,
@@ -373,6 +374,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(rpc.ContextOptions{
+			TenantID:   roachpb.SystemTenantID,
 			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 			Config:     &base.Config{Insecure: true},
 			Clock:      m.clock(),

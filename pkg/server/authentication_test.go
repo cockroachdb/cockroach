@@ -91,6 +91,7 @@ func TestSSLEnforcement(t *testing.T) {
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
 			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, 1),
 			Stopper:  s.Stopper(),

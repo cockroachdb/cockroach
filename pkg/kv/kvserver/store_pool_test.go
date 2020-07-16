@@ -101,6 +101,7 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
