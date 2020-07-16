@@ -1,6 +1,6 @@
 zip
 ----
-debug zip /dev/null
+debug zip --cpu-profile-duration=0 /dev/null
 establishing RPC connection to ...
 retrieving the node status to get the SQL address...
 using SQL address: ...
@@ -190,3 +190,4 @@ requesting table details for system.ui... writing: debug/schema/system/ui.json
 requesting table details for system.users... writing: debug/schema/system/users.json
 requesting table details for system.web_sessions... writing: debug/schema/system/web_sessions.json
 requesting table details for system.zones... writing: debug/schema/system/zones.json
+writing: debug/pprof-summary.sh
