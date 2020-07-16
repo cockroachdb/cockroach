@@ -13,6 +13,7 @@ package rpc
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -716,13 +717,15 @@ func (ctx *Context) grpcDialOptions(
 	if ctx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
-		// TODO(tbg): complete this logic to use tenant client certs if ctx.tenID is
-		// not the system tenant.
-		const tenant = false
 		var err error
 		var tlsConfig *tls.Config
-		if !tenant {
+		// TODO(tbg): remove this override when the KV layer can authenticate tenant
+		// client certs.
+		const override = true
+		if override || ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
+		} else {
+			tlsConfig, err = ctx.GetTenantClientTLSConfig()
 		}
 
 		if err != nil {
