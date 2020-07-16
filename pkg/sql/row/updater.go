@@ -59,7 +59,7 @@ const (
 	// about a row, including secondary indexes.
 	UpdaterDefault rowUpdaterType = 0
 	// UpdaterOnlyColumns indicates that an Updater should only update the
-	// columns of a row.
+	// columns of a row and not the secondary indexes.
 	UpdaterOnlyColumns rowUpdaterType = 1
 )
 
@@ -102,14 +102,23 @@ func MakeUpdater(
 		}
 	}
 
-	// Secondary indexes needing updating.
+	// needsUpdate returns true if the given index may need to be updated for
+	// the current UPDATE mutation.
 	needsUpdate := func(index sqlbase.IndexDescriptor) bool {
+		// If the UPDATE is set to only update columns and not secondary
+		// indexes, return false.
 		if updateType == UpdaterOnlyColumns {
-			// Only update columns.
 			return false
 		}
-		// If the primary key changed, we need to update all of them.
+		// If the primary key changed, we need to update all secondary indexes.
 		if primaryKeyColChange {
+			return true
+		}
+		// If the index is a partial index, an update may be required even if
+		// the indexed columns aren't changing. For example, an index entry must
+		// be added when an update to a non-indexed column causes a row to
+		// satisfy the partial index predicate when it did not before.
+		if index.IsPartial() {
 			return true
 		}
 		return index.RunOverAllColumns(func(id sqlbase.ColumnID) error {
