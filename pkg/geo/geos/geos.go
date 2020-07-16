@@ -494,6 +494,19 @@ func Crosses(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	return ret == 1, nil
 }
 
+// Disjoint returns whether the EWKB provided by A is disjoint from the EWKB provided by B.
+func Disjoint(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Disjoint(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
 // Equals returns whether the EWKB provided by A equals the EWKB provided by B.
 func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	g, err := ensureInitInternal()
