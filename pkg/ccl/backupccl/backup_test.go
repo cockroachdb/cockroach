@@ -1553,6 +1553,39 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `INSERT INTO d6.tb1 VALUES (ARRAY['v1']::d6._typ1)`)
 		}
 	})
+
+	t.Run("incremental", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE d.t (x d.greeting);
+INSERT INTO d.t VALUES ('hello'), ('howdy');
+`)
+		{
+			// Start out with backing up t.
+			sqlDB.Exec(t, `BACKUP TABLE d.t TO 'nodelocal://0/test/'`)
+			// Alter d.greeting.
+			sqlDB.Exec(t, `ALTER TYPE d.greeting RENAME TO newname`)
+			// Now backup on top of the original back containing d.greeting.
+			sqlDB.Exec(t, `BACKUP TABLE d.t TO 'nodelocal://0/test/'`)
+			// We should be able to restore this backup, and see that the type's
+			// name change is present.
+			sqlDB.Exec(t, `CREATE DATABASE d2`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d2.newname`, [][]string{{"hello"}})
+
+			// Now explicitly use the `INCREMENTAL` backup statement.
+			sqlDB.Exec(t, `ALTER TYPE d.newname RENAME TO greeting`)
+			sqlDB.Exec(t, `BACKUP TABLE d.t TO 'nodelocal://0/test2/' INCREMENTAL FROM 'nodelocal://0/test/'`)
+			// Restore the database now.
+			sqlDB.Exec(t, `CREATE DATABASE d3`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/', 'nodelocal://0/test2/' WITH into_db = 'd3'`)
+			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d3.greeting`, [][]string{{"hello"}})
+		}
+	})
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
