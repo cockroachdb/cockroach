@@ -2121,6 +2121,16 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			},
 		),
 	),
+	"st_disjoint": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			geomfn.Disjoint,
+			infoBuilder{
+				info:         "Returns true if geometry_a does not overlap, touch or is within geometry_b.",
+				libraryUsage: usesGEOS,
+			},
+		),
+	),
 	"st_dfullywithin": makeBuiltin(
 		defProps(),
 		tree.Overload{

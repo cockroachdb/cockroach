@@ -100,6 +100,7 @@ typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geome
 typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Contains_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Crosses_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Disjoint_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Equals_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Intersects_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Overlaps_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -174,6 +175,7 @@ struct CR_GEOS {
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
   CR_GEOS_Contains_r GEOSContains_r;
   CR_GEOS_Crosses_r GEOSCrosses_r;
+  CR_GEOS_Disjoint_r GEOSDisjoint_r;
   CR_GEOS_Equals_r GEOSEquals_r;
   CR_GEOS_Intersects_r GEOSIntersects_r;
   CR_GEOS_Overlaps_r GEOSOverlaps_r;
@@ -241,6 +243,7 @@ struct CR_GEOS {
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
     INIT(GEOSCrosses_r);
+    INIT(GEOSDisjoint_r);
     INIT(GEOSEquals_r);
     INIT(GEOSIntersects_r);
     INIT(GEOSOverlaps_r);
@@ -689,6 +692,10 @@ CR_GEOS_Status CR_GEOS_Contains(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, 
 
 CR_GEOS_Status CR_GEOS_Crosses(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSCrosses_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Disjoint(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSDisjoint_r, a, b, ret);
 }
 
 CR_GEOS_Status CR_GEOS_Equals(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
