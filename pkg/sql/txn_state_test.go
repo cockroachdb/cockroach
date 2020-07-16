@@ -170,9 +170,9 @@ type expKVTxn struct {
 	userPriority *roachpb.UserPriority
 	// For the timestamps we just check the physical part. The logical part is
 	// incremented every time the clock is read and so it's unpredictable.
-	tsNanos     *int64
-	origTSNanos *int64
-	maxTSNanos  *int64
+	writeTSNanos *int64
+	readTSNanos  *int64
+	maxTSNanos   *int64
 }
 
 func checkTxn(txn *kv.Txn, exp expKVTxn) error {
@@ -188,14 +188,14 @@ func checkTxn(txn *kv.Txn, exp expKVTxn) error {
 			*exp.userPriority, txn.UserPriority())
 	}
 	proto := txn.TestingCloneTxn()
-	if exp.tsNanos != nil && *exp.tsNanos != proto.WriteTimestamp.WallTime {
+	if exp.writeTSNanos != nil && *exp.writeTSNanos != proto.WriteTimestamp.WallTime {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
-			*exp.tsNanos, proto.WriteTimestamp)
+			*exp.writeTSNanos, proto.WriteTimestamp)
 	}
-	if origTimestamp := txn.ReadTimestamp(); exp.origTSNanos != nil &&
-		*exp.origTSNanos != origTimestamp.WallTime {
-		return errors.Errorf("expected DeprecatedOrigTimestamp: %d, but got: %s",
-			*exp.origTSNanos, origTimestamp)
+	if readTimestamp := txn.ReadTimestamp(); exp.readTSNanos != nil &&
+		*exp.readTSNanos != readTimestamp.WallTime {
+		return errors.Errorf("expected ReadTimestamp: %d, but got: %s",
+			*exp.readTSNanos, readTimestamp)
 	}
 	if exp.maxTSNanos != nil && *exp.maxTSNanos != proto.MaxTimestamp.WallTime {
 		return errors.Errorf("expected MaxTimestamp: %d, but got: %s",
@@ -280,8 +280,8 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -303,8 +303,8 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -588,8 +588,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expTxn: &expKVTxn{
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -609,7 +609,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{
-				tsNanos: proto.Int64(now.WallTime),
+				writeTSNanos: proto.Int64(now.WallTime),
 			},
 		},
 		//

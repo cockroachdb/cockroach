@@ -932,10 +932,9 @@ func (e *evalCtx) newTxn(
 			WriteTimestamp: ts,
 			Sequence:       0,
 		},
-		Name:                    txnName,
-		DeprecatedOrigTimestamp: ts,
-		ReadTimestamp:           ts,
-		Status:                  roachpb.PENDING,
+		Name:          txnName,
+		ReadTimestamp: ts,
+		Status:        roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn

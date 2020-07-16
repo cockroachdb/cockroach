@@ -155,55 +155,60 @@ scan  ·             ·
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p1@primary
-·     spans         -/3/3/#
-·     filter        b <= 3
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b <= 3
+ └── scan  ·             ·
+·          table         p1@primary
+·          spans         -/3/3/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p1@primary
-·     spans         -/3/3/#
-·     filter        b < 4
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b < 4
+ └── scan  ·             ·
+·          table         p1@primary
+·          spans         -/3/3/#
 
 # Mixed bounds.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p1@primary
-·     spans         /2-
-·     filter        b <= 3
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b <= 3
+ └── scan  ·             ·
+·          table         p1@primary
+·          spans         /2-
 
 # Edge cases.
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p1@primary
-·     spans         -/0/0/#
-·     filter        b <= 0
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b <= 0
+ └── scan  ·             ·
+·          table         p1@primary
+·          spans         -/0/0/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p1@primary
-·     spans         -/-1/-1/#
-·     filter        b <= -1
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b <= -1
+ └── scan  ·             ·
+·          table         p1@primary
+·          spans         -/-1/-1/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
@@ -240,12 +245,13 @@ scan  ·             ·
 query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         c1@primary
-·     spans         -/3/3/#/54/1/#
-·     filter        b <= 3
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b <= 3
+ └── scan  ·             ·
+·          table         c1@primary
+·          spans         -/3/3/#/54/1/#
 
 # Table p2 with interleaved index.
 
@@ -280,48 +286,52 @@ scan  ·             ·
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p2@p2_id
-·     spans         /1/#/55/2/2-
-·     filter        d >= 2
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        d >= 2
+ └── scan  ·             ·
+·          table         p2@p2_id
+·          spans         /1/#/55/2/2-
 
 # Upper bound (i <= 6 AND d <= 5)
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p2@p2_id
-·     spans         -/6/#/55/2/6
-·     filter        d <= 5
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        d <= 5
+ └── scan  ·             ·
+·          table         p2@p2_id
+·          spans         -/6/#/55/2/6
 
 # IS NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p2@p2_id
-·     spans         /1/#/55/2/NULL-
-·     filter        d IS NULL
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        d IS NULL
+ └── scan  ·             ·
+·          table         p2@p2_id
+·          spans         /1/#/55/2/NULL-
 
 # IS NOT NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         p2@p2_id
-·     spans         /1/#/55/2/!NULL-
-·     filter        d IS NOT NULL
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        d IS NOT NULL
+ └── scan  ·             ·
+·          table         p2@p2_id
+·          spans         /1/#/55/2/!NULL-
 
 # String table
 

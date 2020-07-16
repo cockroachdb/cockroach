@@ -152,14 +152,6 @@ func asDataSource(n exec.Node) planDataSource {
 func (ef *execFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// Push the filter into the scanNode. We cannot do this if the scanNode has a
-	// limit (it would make the limit apply AFTER the filter).
-	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
-		s.filter = s.filterVars.Rebind(filter)
-		// Note: if the filter statically evaluates to true, s.filter stays nil.
-		s.reqOrdering = ReqOrdering(reqOrdering)
-		return s, nil
-	}
 	// Create a filterNode.
 	src := asDataSource(n)
 	f := &filterNode{

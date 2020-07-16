@@ -9,56 +9,61 @@ CREATE TABLE t (x INT[])
 query TTT
 EXPLAIN SELECT x FROM t WHERE x = ARRAY[1,4,6]
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         t@primary
-·     spans         FULL SCAN
-·     filter        x = ARRAY[1,4,6]
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        x = ARRAY[1,4,6]
+ └── scan  ·             ·
+·          table         t@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         t@primary
-·     spans         FULL SCAN
-·     filter        x < ARRAY[1,4,3]
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        x < ARRAY[1,4,3]
+ └── scan  ·             ·
+·          table         t@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         t@primary
-·     spans         FULL SCAN
-·     filter        x > ARRAY[1,NULL]
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        x > ARRAY[1,NULL]
+ └── scan  ·             ·
+·          table         t@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         +x
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
-·          filter        (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+·               distribution  local
+·               vectorized    true
+sort            ·             ·
+ │              order         +x
+ └── filter     ·             ·
+      │         filter        (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+      └── scan  ·             ·
+·               table         t@primary
+·               spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x DESC
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         -x
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
-·          filter        (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+·               distribution  local
+·               vectorized    true
+sort            ·             ·
+ │              order         -x
+ └── filter     ·             ·
+      │         filter        (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
+      └── scan  ·             ·
+·               table         t@primary
+·               spans         FULL SCAN
 
 statement ok
 DROP TABLE t
@@ -70,14 +75,15 @@ CREATE TABLE t (x INT, y INT[], z INT)
 query TTT
 EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         +y
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
-·          filter        (x = 2) AND (y < ARRAY[10])
+·               distribution  local
+·               vectorized    true
+sort            ·             ·
+ │              order         +y
+ └── filter     ·             ·
+      │         filter        (x = 2) AND (y < ARRAY[10])
+      └── scan  ·             ·
+·               table         t@primary
+·               spans         FULL SCAN
 
 # Test span generation on interleaved tables.
 # Add x to parent PRIMARY KEY (x, y) once #50659 is fixed.
@@ -90,31 +96,34 @@ CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x), FAMILY (x, y, z)) 
 query TTT
 EXPLAIN SELECT x, y FROM parent WHERE x > 1 AND y > ARRAY[1, NULL]
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         parent@primary
-·     spans         /2-
-·     filter        y > ARRAY[1,NULL]
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        y > ARRAY[1,NULL]
+ └── scan  ·             ·
+·          table         parent@primary
+·          spans         /2-
 
 query TTT
 EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distribution  local
-·          vectorized    true
-render     ·             ·
- └── scan  ·             ·
-·          table         parent@primary
-·          spans         /1-/1/#
-·          filter        y = ARRAY[NULL,NULL]
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ └── filter     ·             ·
+      │         filter        y = ARRAY[NULL,NULL]
+      └── scan  ·             ·
+·               table         parent@primary
+·               spans         /1-/1/#
 
 query TTT
 EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
-·          distribution  local
-·          vectorized    true
-render     ·             ·
- └── scan  ·             ·
-·          table         child@primary
-·          spans         /1/#/56/1-/1/#/56/1/#
-·          filter        y = ARRAY[NULL,NULL]
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ └── filter     ·             ·
+      │         filter        y = ARRAY[NULL,NULL]
+      └── scan  ·             ·
+·               table         child@primary
+·               spans         /1/#/56/1-/1/#/56/1/#

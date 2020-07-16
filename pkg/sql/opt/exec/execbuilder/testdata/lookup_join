@@ -163,24 +163,25 @@ SELECT *
 FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
-·                 distribution           full                         ·                         ·
-·                 vectorized             true                         ·                         ·
-render            ·                      ·                            (a, b, c, d)              ·
- │                render 0               a                            ·                         ·
- │                render 1               b                            ·                         ·
- │                render 2               c                            ·                         ·
- │                render 3               d                            ·                         ·
- └── lookup-join  ·                      ·                            (a, b, c, d, a, b, c, d)  ·
-      │           table                  data@primary                 ·                         ·
-      │           type                   inner                        ·                         ·
-      │           equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
-      │           equality cols are key  ·                            ·                         ·
-      │           parallel               ·                            ·                         ·
-      │           pred                   c > 0                        ·                         ·
-      └── scan    ·                      ·                            (a, b, c, d)              ·
-·                 table                  data@primary                 ·                         ·
-·                 spans                  FULL SCAN                    ·                         ·
-·                 filter                 c = 1                        ·                         ·
+·                    distribution           full                         ·                         ·
+·                    vectorized             true                         ·                         ·
+render               ·                      ·                            (a, b, c, d)              ·
+ │                   render 0               a                            ·                         ·
+ │                   render 1               b                            ·                         ·
+ │                   render 2               c                            ·                         ·
+ │                   render 3               d                            ·                         ·
+ └── lookup-join     ·                      ·                            (a, b, c, d, a, b, c, d)  ·
+      │              table                  data@primary                 ·                         ·
+      │              type                   inner                        ·                         ·
+      │              equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
+      │              equality cols are key  ·                            ·                         ·
+      │              parallel               ·                            ·                         ·
+      │              pred                   c > 0                        ·                         ·
+      └── filter     ·                      ·                            (a, b, c, d)              ·
+           │         filter                 c = 1                        ·                         ·
+           └── scan  ·                      ·                            (a, b, c, d)              ·
+·                    table                  data@primary                 ·                         ·
+·                    spans                  FULL SCAN                    ·                         ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
@@ -518,21 +519,22 @@ render            ·             ·              (c, c)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
-·               distribution  full           ·          ·
-·               vectorized    true           ·          ·
-render          ·             ·              (c, d)     ·
- │              render 0      c              ·          ·
- │              render 1      d              ·          ·
- └── hash-join  ·             ·              (b, d, c)  ·
-      │         type          right outer    ·          ·
-      │         equality      (b) = (c)      ·          ·
-      ├── scan  ·             ·              (b, d)     ·
-      │         table         large@primary  ·          ·
-      │         spans         FULL SCAN      ·          ·
-      │         filter        d < 30         ·          ·
-      └── scan  ·             ·              (c)        ·
-·               table         small@primary  ·          ·
-·               spans         FULL SCAN      ·          ·
+·                    distribution  full           ·          ·
+·                    vectorized    true           ·          ·
+render               ·             ·              (c, d)     ·
+ │                   render 0      c              ·          ·
+ │                   render 1      d              ·          ·
+ └── hash-join       ·             ·              (b, d, c)  ·
+      │              type          right outer    ·          ·
+      │              equality      (b) = (c)      ·          ·
+      ├── filter     ·             ·              (b, d)     ·
+      │    │         filter        d < 30         ·          ·
+      │    └── scan  ·             ·              (b, d)     ·
+      │              table         large@primary  ·          ·
+      │              spans         FULL SCAN      ·          ·
+      └── scan       ·             ·              (c)        ·
+·                    table         small@primary  ·          ·
+·                    spans         FULL SCAN      ·          ·
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -551,18 +553,19 @@ CREATE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                 distribution  full             ·                ·
-·                 vectorized    true             ·                ·
-render            ·             ·                (a)              ·
- │                render 0      a                ·                ·
- └── lookup-join  ·             ·                (a, d, e, a, d)  ·
-      │           table         u@idx            ·                ·
-      │           type          inner            ·                ·
-      │           equality      (d, a) = (d, a)  ·                ·
-      └── scan    ·             ·                (a, d, e)        ·
-·                 table         t@primary        ·                ·
-·                 spans         FULL SCAN        ·                ·
-·                 filter        e = 5            ·                ·
+·                    distribution  full             ·                ·
+·                    vectorized    true             ·                ·
+render               ·             ·                (a)              ·
+ │                   render 0      a                ·                ·
+ └── lookup-join     ·             ·                (a, d, e, a, d)  ·
+      │              table         u@idx            ·                ·
+      │              type          inner            ·                ·
+      │              equality      (d, a) = (d, a)  ·                ·
+      └── filter     ·             ·                (a, d, e)        ·
+           │         filter        e = 5            ·                ·
+           └── scan  ·             ·                (a, d, e)        ·
+·                    table         t@primary        ·                ·
+·                    spans         FULL SCAN        ·                ·
 
 # Test unique version of same index. (Lookup join should not use column a.)
 statement ok
@@ -574,21 +577,22 @@ CREATE UNIQUE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                 distribution           full       ·                ·
-·                 vectorized             true       ·                ·
-render            ·                      ·          (a)              ·
- │                render 0               a          ·                ·
- └── lookup-join  ·                      ·          (a, d, e, a, d)  ·
-      │           table                  u@idx      ·                ·
-      │           type                   inner      ·                ·
-      │           equality               (d) = (d)  ·                ·
-      │           equality cols are key  ·          ·                ·
-      │           parallel               ·          ·                ·
-      │           pred                   a = a      ·                ·
-      └── scan    ·                      ·          (a, d, e)        ·
-·                 table                  t@primary  ·                ·
-·                 spans                  FULL SCAN  ·                ·
-·                 filter                 e = 5      ·                ·
+·                    distribution           full       ·                ·
+·                    vectorized             true       ·                ·
+render               ·                      ·          (a)              ·
+ │                   render 0               a          ·                ·
+ └── lookup-join     ·                      ·          (a, d, e, a, d)  ·
+      │              table                  u@idx      ·                ·
+      │              type                   inner      ·                ·
+      │              equality               (d) = (d)  ·                ·
+      │              equality cols are key  ·          ·                ·
+      │              parallel               ·          ·                ·
+      │              pred                   a = a      ·                ·
+      └── filter     ·                      ·          (a, d, e)        ·
+           │         filter                 e = 5      ·                ·
+           └── scan  ·                      ·          (a, d, e)        ·
+·                    table                  t@primary  ·                ·
+·                    spans                  FULL SCAN  ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
@@ -600,18 +604,19 @@ CREATE INDEX idx ON u (d, a)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                 distribution  full                   ·                      ·
-·                 vectorized    true                   ·                      ·
-render            ·             ·                      (a)                    ·
- │                render 0      a                      ·                      ·
- └── lookup-join  ·             ·                      (a, b, d, e, a, b, d)  ·
-      │           table         u@idx                  ·                      ·
-      │           type          inner                  ·                      ·
-      │           equality      (d, a, b) = (d, a, b)  ·                      ·
-      └── scan    ·             ·                      (a, b, d, e)           ·
-·                 table         t@primary              ·                      ·
-·                 spans         FULL SCAN              ·                      ·
-·                 filter        e = 5                  ·                      ·
+·                    distribution  full                   ·                      ·
+·                    vectorized    true                   ·                      ·
+render               ·             ·                      (a)                    ·
+ │                   render 0      a                      ·                      ·
+ └── lookup-join     ·             ·                      (a, b, d, e, a, b, d)  ·
+      │              table         u@idx                  ·                      ·
+      │              type          inner                  ·                      ·
+      │              equality      (d, a, b) = (d, a, b)  ·                      ·
+      └── filter     ·             ·                      (a, b, d, e)           ·
+           │         filter        e = 5                  ·                      ·
+           └── scan  ·             ·                      (a, b, d, e)           ·
+·                    table         t@primary              ·                      ·
+·                    spans         FULL SCAN              ·                      ·
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -623,18 +628,19 @@ CREATE INDEX idx ON u (d, b)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                 distribution  full                   ·                      ·
-·                 vectorized    true                   ·                      ·
-render            ·             ·                      (a)                    ·
- │                render 0      a                      ·                      ·
- └── lookup-join  ·             ·                      (a, b, d, e, a, b, d)  ·
-      │           table         u@idx                  ·                      ·
-      │           type          inner                  ·                      ·
-      │           equality      (d, b, a) = (d, b, a)  ·                      ·
-      └── scan    ·             ·                      (a, b, d, e)           ·
-·                 table         t@primary              ·                      ·
-·                 spans         FULL SCAN              ·                      ·
-·                 filter        e = 5                  ·                      ·
+·                    distribution  full                   ·                      ·
+·                    vectorized    true                   ·                      ·
+render               ·             ·                      (a)                    ·
+ │                   render 0      a                      ·                      ·
+ └── lookup-join     ·             ·                      (a, b, d, e, a, b, d)  ·
+      │              table         u@idx                  ·                      ·
+      │              type          inner                  ·                      ·
+      │              equality      (d, b, a) = (d, b, a)  ·                      ·
+      └── filter     ·             ·                      (a, b, d, e)           ·
+           │         filter        e = 5                  ·                      ·
+           └── scan  ·             ·                      (a, b, d, e)           ·
+·                    table         t@primary              ·                      ·
+·                    spans         FULL SCAN              ·                      ·
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok
@@ -646,19 +652,20 @@ CREATE INDEX idx ON u (d, c)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
-·                 distribution  full       ·                ·
-·                 vectorized    true       ·                ·
-render            ·             ·          (a)              ·
- │                render 0      a          ·                ·
- └── lookup-join  ·             ·          (a, d, e, a, d)  ·
-      │           table         u@idx      ·                ·
-      │           type          inner      ·                ·
-      │           equality      (d) = (d)  ·                ·
-      │           pred          a = a      ·                ·
-      └── scan    ·             ·          (a, d, e)        ·
-·                 table         t@primary  ·                ·
-·                 spans         FULL SCAN  ·                ·
-·                 filter        e = 5      ·                ·
+·                    distribution  full       ·                ·
+·                    vectorized    true       ·                ·
+render               ·             ·          (a)              ·
+ │                   render 0      a          ·                ·
+ └── lookup-join     ·             ·          (a, d, e, a, d)  ·
+      │              table         u@idx      ·                ·
+      │              type          inner      ·                ·
+      │              equality      (d) = (d)  ·                ·
+      │              pred          a = a      ·                ·
+      └── filter     ·             ·          (a, d, e)        ·
+           │         filter        e = 5      ·                ·
+           └── scan  ·             ·          (a, d, e)        ·
+·                    table         t@primary  ·                ·
+·                    spans         FULL SCAN  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
@@ -1422,54 +1429,56 @@ GROUP BY s_name
 ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
-·                                                   distribution           full
-·                                                   vectorized             true
-limit                                               ·                      ·
- │                                                  count                  100
- └── sort                                           ·                      ·
-      │                                             order                  -numwait,+s_name
-      └── group                                     ·                      ·
-           │                                        aggregate 0            s_name
-           │                                        aggregate 1            count_rows()
-           │                                        group by               s_name
-           └── render                               ·                      ·
-                └── lookup-join                     ·                      ·
-                     │                              table                  orders@primary
-                     │                              type                   inner
-                     │                              equality               (l_orderkey) = (o_orderkey)
-                     │                              equality cols are key  ·
-                     │                              parallel               ·
-                     │                              pred                   o_orderstatus = 'F'
-                     └── lookup-join                ·                      ·
-                          │                         table                  nation@primary
-                          │                         type                   inner
-                          │                         equality               (s_nationkey) = (n_nationkey)
-                          │                         equality cols are key  ·
-                          │                         parallel               ·
-                          │                         pred                   n_name = 'SAUDI ARABIA'
-                          └── lookup-join           ·                      ·
-                               │                    table                  supplier@primary
-                               │                    type                   inner
-                               │                    equality               (l_suppkey) = (s_suppkey)
-                               │                    equality cols are key  ·
-                               │                    parallel               ·
-                               └── lookup-join      ·                      ·
-                                    │               table                  lineitem@primary
-                                    │               type                   semi
-                                    │               equality               (l_orderkey) = (l_orderkey)
-                                    │               pred                   l_suppkey != l_suppkey
-                                    └── merge-join  ·                      ·
-                                         │          type                   anti
-                                         │          equality               (l_orderkey) = (l_orderkey)
-                                         │          mergeJoinOrder         +"(l_orderkey=l_orderkey)"
-                                         ├── scan   ·                      ·
-                                         │          table                  lineitem@primary
-                                         │          spans                  FULL SCAN
-                                         │          filter                 l_receiptdate > l_commitdate
-                                         └── scan   ·                      ·
-·                                                   table                  lineitem@primary
-·                                                   spans                  FULL SCAN
-·                                                   filter                 l_receiptdate > l_commitdate
+·                                                       distribution           full
+·                                                       vectorized             true
+limit                                                   ·                      ·
+ │                                                      count                  100
+ └── sort                                               ·                      ·
+      │                                                 order                  -numwait,+s_name
+      └── group                                         ·                      ·
+           │                                            aggregate 0            s_name
+           │                                            aggregate 1            count_rows()
+           │                                            group by               s_name
+           └── render                                   ·                      ·
+                └── lookup-join                         ·                      ·
+                     │                                  table                  orders@primary
+                     │                                  type                   inner
+                     │                                  equality               (l_orderkey) = (o_orderkey)
+                     │                                  equality cols are key  ·
+                     │                                  parallel               ·
+                     │                                  pred                   o_orderstatus = 'F'
+                     └── lookup-join                    ·                      ·
+                          │                             table                  nation@primary
+                          │                             type                   inner
+                          │                             equality               (s_nationkey) = (n_nationkey)
+                          │                             equality cols are key  ·
+                          │                             parallel               ·
+                          │                             pred                   n_name = 'SAUDI ARABIA'
+                          └── lookup-join               ·                      ·
+                               │                        table                  supplier@primary
+                               │                        type                   inner
+                               │                        equality               (l_suppkey) = (s_suppkey)
+                               │                        equality cols are key  ·
+                               │                        parallel               ·
+                               └── lookup-join          ·                      ·
+                                    │                   table                  lineitem@primary
+                                    │                   type                   semi
+                                    │                   equality               (l_orderkey) = (l_orderkey)
+                                    │                   pred                   l_suppkey != l_suppkey
+                                    └── merge-join      ·                      ·
+                                         │              type                   anti
+                                         │              equality               (l_orderkey) = (l_orderkey)
+                                         │              mergeJoinOrder         +"(l_orderkey=l_orderkey)"
+                                         ├── filter     ·                      ·
+                                         │    │         filter                 l_receiptdate > l_commitdate
+                                         │    └── scan  ·                      ·
+                                         │              table                  lineitem@primary
+                                         │              spans                  FULL SCAN
+                                         └── filter     ·                      ·
+                                              │         filter                 l_receiptdate > l_commitdate
+                                              └── scan  ·                      ·
+·                                                       table                  lineitem@primary
+·                                                       spans                  FULL SCAN
 
 # Regression test for #50964.
 statement ok

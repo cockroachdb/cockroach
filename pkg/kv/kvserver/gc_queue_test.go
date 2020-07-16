@@ -494,7 +494,6 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
 				txn.MinTimestamp = datum.ts
-				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -512,7 +511,6 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
 				txn.MinTimestamp = datum.ts
-				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{

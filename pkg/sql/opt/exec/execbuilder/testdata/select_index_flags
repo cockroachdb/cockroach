@@ -174,24 +174,26 @@ filter           ·             ·
 query TTT
 EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@bcd
-·     spans         FULL SCAN
-·     filter        (a >= 20) AND (a <= 30)
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        (a >= 20) AND (a <= 30)
+ └── scan  ·             ·
+·          table         abcd@bcd
+·          spans         FULL SCAN
 
 # Force index b (covering)
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-·          distribution  local
-·          vectorized    true
-render     ·             ·
- └── scan  ·             ·
-·          table         abcd@b
-·          spans         FULL SCAN
-·          filter        (a >= 20) AND (a <= 30)
+·               distribution  local
+·               vectorized    true
+render          ·             ·
+ └── filter     ·             ·
+      │         filter        (a >= 20) AND (a <= 30)
+      └── scan  ·             ·
+·               table         abcd@b
+·               spans         FULL SCAN
 
 # Force index b (non-covering due to WHERE clause)
 query TTT
@@ -223,12 +225,13 @@ scan  ·             ·
 query TTT
 EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@primary
-·     spans         FULL SCAN
-·     filter        (c >= 20) AND (c < 40)
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        (c >= 20) AND (c < 40)
+ └── scan  ·             ·
+·          table         abcd@primary
+·          spans         FULL SCAN
 
 # Force index b
 query TTT
@@ -274,29 +277,32 @@ index-join  ·             ·
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@primary
-·     spans         FULL SCAN
-·     filter        c = 10
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        c = 10
+ └── scan  ·             ·
+·          table         abcd@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@bcd
-·     spans         FULL SCAN
-·     filter        c = 10
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        c = 10
+ └── scan  ·             ·
+·          table         abcd@bcd
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary} WHERE c = 10
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@primary
-·     spans         FULL SCAN
-·     filter        c = 10
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        c = 10
+ └── scan  ·             ·
+·          table         abcd@primary
+·          spans         FULL SCAN

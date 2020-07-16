@@ -11,12 +11,13 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query TTT
 EXECUTE change_index
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         ab@primary
-·     spans         FULL SCAN
-·     filter        b = 10
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b = 10
+ └── scan  ·             ·
+·          table         ab@primary
+·          spans         FULL SCAN
 
 statement ok
 CREATE INDEX bindex ON ab (b)
@@ -36,12 +37,13 @@ DROP INDEX bindex
 query TTT
 EXECUTE change_index
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         ab@primary
-·     spans         FULL SCAN
-·     filter        b = 10
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b = 10
+ └── scan  ·             ·
+·          table         ab@primary
+·          spans         FULL SCAN
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
 statement ok

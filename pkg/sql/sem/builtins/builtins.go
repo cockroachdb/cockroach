@@ -3966,6 +3966,53 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"num_nulls": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryComparison,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.VariadicType{
+				VarType: types.Any,
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var numNulls int
+				for _, arg := range args {
+					if arg == tree.DNull {
+						numNulls++
+					}
+				}
+				return tree.NewDInt(tree.DInt(numNulls)), nil
+			},
+			Info:       "Returns the number of null arguments.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"num_nonnulls": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryComparison,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.VariadicType{
+				VarType: types.Any,
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var numNonNulls int
+				for _, arg := range args {
+					if arg != tree.DNull {
+						numNonNulls++
+					}
+				}
+				return tree.NewDInt(tree.DInt(numNonNulls)), nil
+			},
+			Info:       "Returns the number of nonnull arguments.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
