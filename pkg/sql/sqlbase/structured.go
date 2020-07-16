@@ -1746,7 +1746,33 @@ func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec ke
 	if desc.Dropped() {
 		return nil
 	}
+	err = desc.validateSequenceCrossReferences(ctx, txn, codec)
+	if err != nil {
+		return err
+	}
 	return desc.validateCrossReferences(ctx, txn, codec)
+}
+
+func (desc *TableDescriptor) validateSequenceCrossReferences(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) error {
+	if !desc.IsSequence() {
+		return nil
+	}
+	// Ensure the sequence owner table exists.
+	if desc.SequenceOpts.HasOwner() {
+		tableID := desc.SequenceOpts.SequenceOwner.OwnerTableID
+		res, err := GetTableDescFromID(ctx, txn, codec, tableID)
+		if err != nil {
+			return errors.Wrapf(err,
+				"sequence owner table with ID %d does not exist", errors.Safe(tableID))
+		}
+		if !res.IsTable() {
+			return errors.AssertionFailedf(
+				"sequence owner table with ID %d does not refer to an actual table", errors.Safe(tableID))
+		}
+	}
+	return nil
 }
 
 // validateCrossReferences validates that each reference to another table is
@@ -1831,6 +1857,45 @@ func (desc *TableDescriptor) validateCrossReferences(
 		if !found {
 			return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 				backref.Name, desc.Name, originTable.Name)
+		}
+	}
+
+	// sequencesWithOwnersMap stores all sequences that are known to have an
+	// owner so that we can check for cases where two or more columns think they
+	// own a sequence. As a sequence owner can be any column of any table, this
+	// is more of an optimistic validation as it only catches cases where two
+	// columns of the same table think they own a sequence.
+	sequencesWithOwnersMap := make(map[ID]ColumnID)
+	for _, col := range desc.AllNonDropColumns() {
+		// Check that all sequences owned by the column exist.
+		for _, seqID := range col.OwnsSequenceIds {
+			res, err := GetTableDescFromID(ctx, txn, codec, seqID)
+			if err != nil {
+				return errors.Wrapf(err,
+					"owned sequence with ID %d does not exist", errors.Safe(seqID))
+			}
+			if !res.IsSequence() {
+				return errors.AssertionFailedf(
+					"owned sequence with ID %d is not a sequence", errors.Safe(seqID))
+			}
+			if colID, found := sequencesWithOwnersMap[seqID]; found {
+				return errors.AssertionFailedf(
+					"sequence with ID %d is already owned by column with ID %d",
+					errors.Safe(seqID), errors.Safe(colID))
+			}
+			sequencesWithOwnersMap[seqID] = col.ID
+		}
+		// Check that all sequences owned by the column exist.
+		for _, seqID := range col.UsesSequenceIds {
+			res, err := GetTableDescFromID(ctx, txn, codec, seqID)
+			if err != nil {
+				return errors.Wrapf(err,
+					"used sequence with ID %d does not exist", errors.Safe(seqID))
+			}
+			if !res.IsSequence() {
+				return errors.AssertionFailedf(
+					"used sequence with ID %d is not a sequence", errors.Safe(seqID))
+			}
 		}
 	}
 

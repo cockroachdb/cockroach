@@ -911,6 +911,97 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
+		{
+			err: `owned sequence with ID 500 does not exist: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{
+						ID:              1,
+						OwnsSequenceIds: []ID{500},
+					},
+				},
+			},
+		},
+		{
+			err: `sequence with ID 52 is already owned by column with ID 1`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{
+						ID:              1,
+						OwnsSequenceIds: []ID{52},
+					},
+					{
+						ID:              1,
+						OwnsSequenceIds: []ID{52},
+					},
+				},
+			},
+			otherDescs: []TableDescriptor{{
+				ID:   52,
+				Name: "bar_seq",
+				SequenceOpts: &TableDescriptor_SequenceOpts{
+					SequenceOwner: TableDescriptor_SequenceOpts_SequenceOwner{
+						OwnerTableID:  51,
+						OwnerColumnID: 1,
+					},
+				},
+			}},
+		},
+		{
+			err: `owned sequence with ID 52 is not a sequence`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{
+						ID:              1,
+						OwnsSequenceIds: []ID{52},
+					},
+					{
+						ID:              1,
+						OwnsSequenceIds: []ID{52},
+					},
+				},
+			},
+			otherDescs: []TableDescriptor{{
+				ID:   52,
+				Name: "bar_table",
+			}},
+		},
+		{
+			err: `used sequence with ID 500 does not exist: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{
+						ID:              1,
+						UsesSequenceIds: []ID{500},
+					},
+				},
+			},
+		},
+		{
+			err: `used sequence with ID 52 is not a sequence`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Columns: []ColumnDescriptor{
+					{
+						ID:              1,
+						UsesSequenceIds: []ID{52},
+					},
+				},
+			},
+			otherDescs: []TableDescriptor{{
+				ID:   52,
+				Name: "bar_table",
+			}},
+		},
 	}
 
 	{
@@ -940,6 +1031,92 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		if err := test.desc.validateCrossReferences(ctx, txn, keys.SystemSQLCodec); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
+			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
+		}
+		for _, otherDesc := range test.otherDescs {
+			if err := kvDB.Del(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestValidateSequenceCrossReferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tests := []struct {
+		err        string
+		desc       TableDescriptor
+		otherDescs []TableDescriptor
+	}{
+		{
+			err: `sequence owner table with ID 500 does not exist: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo_seq",
+				SequenceOpts: &TableDescriptor_SequenceOpts{
+					SequenceOwner: TableDescriptor_SequenceOpts_SequenceOwner{
+						OwnerTableID:  500,
+						OwnerColumnID: 1,
+					},
+				},
+			},
+		},
+		{
+			err: `sequence owner table with ID 52 does not refer to an actual table`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo_seq",
+				SequenceOpts: &TableDescriptor_SequenceOpts{
+					SequenceOwner: TableDescriptor_SequenceOpts_SequenceOwner{
+						OwnerTableID:  52,
+						OwnerColumnID: 1,
+					},
+				},
+			},
+			otherDescs: []TableDescriptor{
+				{
+					ID:   52,
+					Name: "bar_seq",
+					SequenceOpts: &TableDescriptor_SequenceOpts{
+						Increment: 2,
+					},
+				},
+			},
+		},
+		// Table descriptors which aren't sequence descriptors should not error out.
+		{
+			err: ``,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo_not_seq",
+			},
+		},
+	}
+
+	for i, test := range tests {
+		for _, otherDesc := range test.otherDescs {
+			otherDesc.Privileges = NewDefaultPrivilegeDescriptor()
+			var v roachpb.Value
+			desc := &Descriptor{Union: &Descriptor_Table{Table: &otherDesc}}
+			if err := v.SetProto(desc); err != nil {
+				t.Fatal(err)
+			}
+			if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID), &v); err != nil {
+				t.Fatal(err)
+			}
+		}
+		txn := kv.NewTxn(ctx, kvDB, s.NodeID())
+		err := test.desc.validateSequenceCrossReferences(ctx, txn, keys.SystemSQLCodec)
+		if err == nil && test.err != "" {
+			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
+		} else if test.err != "" &&
+			test.err != err.Error() &&
+			"internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
 		for _, otherDesc := range test.otherDescs {
