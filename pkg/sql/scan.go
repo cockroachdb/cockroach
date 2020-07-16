@@ -69,18 +69,12 @@ type scanNode struct {
 
 	reqOrdering ReqOrdering
 
-	// filter that can be evaluated using only this table/index; it contains
-	// tree.IndexedVar leaves generated using filterVars.
-	filter     tree.TypedExpr
-	filterVars tree.IndexedVarHelper
-
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
-	// this many rows (after applying any filter). It is a "hard" guarantee that
-	// Next will only be called this many times.
+	// this many rows.
 	hardLimit int64
-	// if non-zero, softLimit is an estimation that only this many rows (after
-	// applying any filter) might be needed. It is a (potentially optimistic)
-	// "hint". If hardLimit is set (non-zero), softLimit must be unset (zero).
+	// if non-zero, softLimit is an estimation that only this many rows might be
+	// needed. It is a (potentially optimistic) "hint". If hardLimit is set
+	// (non-zero), softLimit must be unset (zero).
 	softLimit int64
 
 	disableBatchLimits bool
@@ -181,17 +175,8 @@ func (n *scanNode) limitHint() int64 {
 	var limitHint int64
 	if n.hardLimit != 0 {
 		limitHint = n.hardLimit
-		if !isFilterTrue(n.filter) {
-			// The limit is hard, but it applies after the filter; read a multiple of
-			// the limit to avoid needing a second batch. The multiple should be an
-			// estimate for the selectivity of the filter, but we have no way of
-			// calculating that right now.
-			limitHint *= 2
-		}
 	} else {
-		// Like above, read a multiple of the limit when the limit is "soft".
-		// TODO(yuzefovich): shouldn't soft limit already account for the
-		// selectivity of any filter and whatnot?
+		// Read a multiple of the limit when the limit is "soft" to avoid needing a second batch.
 		limitHint = n.softLimit * 2
 	}
 	return limitHint
@@ -324,6 +309,5 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
 }

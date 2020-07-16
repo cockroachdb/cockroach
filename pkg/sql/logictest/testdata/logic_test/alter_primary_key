@@ -122,10 +122,11 @@ SELECT * FROM parent
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
 ----
-scan  ·            ·
-·     table        child@primary
-·     spans        /1/2/#/57/2-/4/6/#/57/3
-·     filter       (y >= 2) AND (y <= 6)
+filter     ·       ·
+ │         filter  (y >= 2) AND (y <= 6)
+ └── scan  ·       ·
+·          table   child@primary
+·          spans   /1/2/#/57/2-/4/6/#/57/3
 
 query III rowsort
 SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
