@@ -11,11 +11,12 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"runtime"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/errors"
@@ -146,21 +147,32 @@ func (l *TestLogScope) Close(t tShim) {
 		// Never initialized.
 		return
 	}
-	defer func() {
-		// Check whether there is something to remove.
-		emptyDir, err := isDirEmpty(l.logDir)
+
+	if panicErr := recover(); panicErr != nil {
+		t.Errorf("panic during test: %v", panicErr)
+		stderrLog.printPanicToFile(context.Background(), 1, panicErr)
+	}
+
+	matches, err := filepath.Glob(filepath.Join(l.logDir, "*-stderr.log"))
+	if err != nil {
+		t.Error(err)
+	}
+	for _, stderrFileName := range matches {
+		stderrOutput, err := ioutil.ReadFile(stderrFileName)
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
-		inPanic := calledDuringPanic()
-		if (t.Failed() && !emptyDir) || inPanic {
-			// If the test failed or there was a panic, we keep the log
-			// files for further investigation.
-			if inPanic {
-				fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-					"Details cannot be printed yet because we are still unwinding.\n"+
-					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
-			}
+		t.Logf("stderr output from %s:\n%s", stderrFileName, stderrOutput)
+	}
+
+	// Check whether there is something to remove.
+	emptyDir, err := isDirEmpty(l.logDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if t.Failed() && !emptyDir {
 			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
 		} else {
 			// Clean up.
@@ -175,24 +187,6 @@ func (l *TestLogScope) Close(t tShim) {
 	if err := dirTestOverride(l.logDir, ""); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// calledDuringPanic returns true if panic() is one of its callers.
-func calledDuringPanic() bool {
-	var pcs [40]uintptr
-	runtime.Callers(2, pcs[:])
-	frames := runtime.CallersFrames(pcs[:])
-
-	for {
-		f, more := frames.Next()
-		if f.Function == "runtime.gopanic" {
-			return true
-		}
-		if !more {
-			break
-		}
-	}
-	return false
 }
 
 // dirTestOverride sets the default value for the logging output directory
