@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -123,21 +122,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		hashedPassword, err := n.roleOptions.GetHashedPassword()
+		isNull, password, err := n.roleOptions.GetPassword()
 		if err != nil {
 			return err
 		}
-
-		// TODO(knz): Remove in 20.2.
-		if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
-			!params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionRootPassword) {
-			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				`setting a root password requires all nodes to be upgraded to %s`,
-				clusterversion.VersionByKey(clusterversion.VersionRootPassword),
-			)
-		}
-
-		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
 			// We disallow setting a non-empty password in insecure mode
 			// because insecure means an observer may have MITM'ed the change
 			// and learned the password.
@@ -149,13 +138,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 				"setting or updating a password is not supported in insecure mode")
 		}
 
-		if hashedPassword == nil {
-			// v20.1 and below crash during authentication if they find a NULL value
-			// in system.users.hashedPassword. v20.2 and above handle this correctly,
-			// but we need to maintain mixed version compatibility for at least one
-			// release.
-			// TODO(nvanbenschoten): remove this for v21.1.
-			hashedPassword = []byte{}
+		var hashedPassword []byte
+		if !isNull {
+			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+				return err
+			}
 		}
 
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
