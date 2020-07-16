@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -99,7 +100,7 @@ func TestRotateCerts(t *testing.T) {
 	// Test client with the same certs.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	firstSCtx := rpc.MakeSecurityContext(clientContext)
+	firstSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	firstClient, err := firstSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -131,7 +132,7 @@ func TestRotateCerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 
-	secondSCtx := rpc.MakeSecurityContext(clientContext)
+	secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	secondClient, err := secondSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -200,7 +201,7 @@ func TestRotateCerts(t *testing.T) {
 	// This is HTTP and succeeds because we do not ask for or verify client certificates.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	thirdSCtx := rpc.MakeSecurityContext(clientContext)
+	thirdSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	thirdClient, err := thirdSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)

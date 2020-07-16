@@ -438,7 +438,7 @@ func NewContext(opts ContextOptions) *Context {
 
 	ctx := &Context{
 		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config),
+		SecurityContext: MakeSecurityContext(opts.Config, opts.TenantID),
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
@@ -716,7 +716,15 @@ func (ctx *Context) grpcDialOptions(
 	if ctx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
-		tlsConfig, err := ctx.GetClientTLSConfig()
+		// TODO(tbg): complete this logic to use tenant client certs if ctx.tenID is
+		// not the system tenant.
+		const tenant = false
+		var err error
+		var tlsConfig *tls.Config
+		if !tenant {
+			tlsConfig, err = ctx.GetClientTLSConfig()
+		}
+
 		if err != nil {
 			return nil, err
 		}
