@@ -91,7 +91,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		certsDir, cleanup = makeTenantCerts(t, tenant)
 		defer cleanup()
 	} else {
-		certsDir = security.EmbeddedTenantCertsDir
+		certsDir = security.EmbeddedCertsDir
 		tenant = fmt.Sprint(security.EmbeddedTenantID)
 	}
 

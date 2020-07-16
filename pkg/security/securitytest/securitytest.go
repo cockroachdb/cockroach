@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs test_certs/mt
+//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 //go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
 
