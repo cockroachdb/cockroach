@@ -159,3 +159,26 @@ user4     NOLOGIN     NULL
 
 statement ok
 DROP USER user4
+
+subtest min_password_length
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.user_login.min_password_length = 12
+
+statement error password too short
+CREATE USER baduser WITH PASSWORD 'abc'
+
+statement error password too short
+ALTER USER testuser WITH PASSWORD 'abc'
+
+statement ok
+CREATE USER userlongpassword WITH PASSWORD '012345678901'
+
+statement ok
+ALTER USER userlongpassword WITH PASSWORD '987654321021'
+
+statement ok
+DROP USER userlongpassword
+
