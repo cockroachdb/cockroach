@@ -31,7 +31,7 @@ var psycopgBlocklists = blocklistsForVersion{
 // in the test log.
 var psycopgBlockList20_2 = blocklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
-	"tests.test_async.AsyncTests.test_error":                                                                 "44706",
+	"tests.test_async.AsyncTests.test_error":                                                                 "44803",
 	"tests.test_async.AsyncTests.test_flush_on_write":                                                        "44709",
 	"tests.test_async.AsyncTests.test_non_block_after_notification":                                          "17511",
 	"tests.test_async.AsyncTests.test_notices":                                                               "44711",
@@ -238,7 +238,7 @@ var psycopgBlockList20_2 = blocklist{
 
 var psycopgBlockList20_1 = blocklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
-	"tests.test_async.AsyncTests.test_error":                                                                 "44706",
+	"tests.test_async.AsyncTests.test_error":                                                                 "44803",
 	"tests.test_async.AsyncTests.test_flush_on_write":                                                        "44709",
 	"tests.test_async.AsyncTests.test_non_block_after_notification":                                          "17511",
 	"tests.test_async.AsyncTests.test_notices":                                                               "44711",
