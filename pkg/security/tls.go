@@ -35,7 +35,6 @@ const (
 	EmbeddedTestUserKey  = "client.testuser.key"
 
 	EmbeddedTenantID           = 123456789
-	EmbeddedTenantCertsDir     = "test_certs/mt"
 	EmbeddedTenantServerCACert = "ca-server-tenant.crt"        // CA for tenant server (KV server)
 	EmbeddedTenantServerCert   = "server-tenant.crt"           // tenant server (KV server) cert
 	EmbeddedTenantServerKey    = "server-tenant.key"           // tenant server (KV server) key
