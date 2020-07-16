@@ -102,10 +102,15 @@ func showComments(table *sqlbase.TableDescriptor, tc *tableComments, buf *bytes.
 	if tc == nil {
 		return nil
 	}
-
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	tn := tree.MakeUnqualifiedTableName(tree.Name(table.Name))
+	un := tn.ToUnresolvedObjectName()
 	if tc.comment != nil {
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", table.Name, *tc.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnTable{
+			Table:   un,
+			Comment: tc.comment,
+		})
 	}
 
 	for _, columnComment := range tc.columns {
@@ -114,8 +119,14 @@ func showComments(table *sqlbase.TableDescriptor, tc *tableComments, buf *bytes.
 			return err
 		}
 
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'", table.Name, col.Name, columnComment.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnColumn{
+			ColumnItem: &tree.ColumnItem{
+				TableName:  tn.ToUnresolvedObjectName(),
+				ColumnName: tree.Name(col.Name),
+			},
+			Comment: &columnComment.comment,
+		})
 	}
 
 	for _, indexComment := range tc.indexes {
@@ -124,10 +135,17 @@ func showComments(table *sqlbase.TableDescriptor, tc *tableComments, buf *bytes.
 			return err
 		}
 
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON INDEX %s IS '%s'", idx.Name, indexComment.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnIndex{
+			Index: tree.TableIndexName{
+				Table: tn,
+				Index: tree.UnrestrictedName(idx.Name),
+			},
+			Comment: &indexComment.comment,
+		})
 	}
 
+	buf.WriteString(f.CloseAndGetString())
 	return nil
 }
 
