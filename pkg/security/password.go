@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/ssh/terminal"
@@ -30,6 +31,10 @@ var BcryptCost = bcrypt.DefaultCost
 
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
+
+// ErrPasswordTooShort indicates that a client provided a password
+// that was too short according to policy.
+var ErrPasswordTooShort = errors.New("password too short")
 
 var sha256NewSum = sha256.New().Sum(nil)
 
@@ -73,3 +78,12 @@ func PromptForPassword() (string, error) {
 
 	return string(password), nil
 }
+
+// MinPasswordLength is the cluster setting that configures the
+// minimum SQL password length.
+var MinPasswordLength = settings.RegisterIntSetting(
+	"server.user_login.min_password_length",
+	"the minimum length accepted for passwords set in cleartext via SQL. "+
+		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
+	1,
+)
