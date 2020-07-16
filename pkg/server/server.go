@@ -332,7 +332,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): pass a different rpcContext here.
 	var tenantGRPC *grpcServer
 	if cfg.SplitListenTenant {
-		tenantGRPC = newGRPCServer(rpcContext)
+		tenantGRPC = newGRPCServer(rpcContext, rpc.ForTenant)
 	}
 
 	g := gossip.New(

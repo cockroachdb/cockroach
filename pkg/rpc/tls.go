@@ -124,6 +124,27 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
+// GetTenantServerTLSConfig returns the tenant server TLS config, initializing
+// it if needed. If Insecure is true, return a nil config, otherwise asks the
+// certificate manager for the tenant server TLS config.
+func (ctx *SecurityContext) GetTenantServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if ctx.config.Insecure {
+		return nil, nil
+	}
+
+	cm, err := ctx.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetTenantServerTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
