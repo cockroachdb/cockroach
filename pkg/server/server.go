@@ -276,26 +276,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
-	var rpcContext *rpc.Context
+	rpcCtxOpts := rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: cfg.AmbientCtx,
+		Config:     cfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   cfg.Settings,
+	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
-		rpcContext = rpc.NewContext(rpc.ContextOptions{
-			AmbientCtx: cfg.AmbientCtx,
-			Config:     cfg.Config,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cfg.Settings,
-			Knobs:      serverKnobs.ContextTestingKnobs,
-		})
-	} else {
-		rpcContext = rpc.NewContext(rpc.ContextOptions{
-			AmbientCtx: cfg.AmbientCtx,
-			Config:     cfg.Config,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cfg.Settings,
-		})
+		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
 	}
+	rpcContext := rpc.NewContext(rpcCtxOpts)
+
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatalf(ctx, "%v", err)
