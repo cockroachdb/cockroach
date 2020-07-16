@@ -504,7 +504,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 		errString string
 	}{
 		{"CREATE USER user1", ""},
-		{"CREATE USER user2 WITH PASSWORD ''", "empty passwords are not permitted"},
+		{"CREATE USER user2 WITH PASSWORD ''", errFail},
 		{"CREATE USER user2 WITH PASSWORD 'cockroach'", errFail},
 		{"CREATE USER user3 WITH PASSWORD NULL", ""},
 		{"ALTER USER user1 WITH PASSWORD 'somepass'", errFail},

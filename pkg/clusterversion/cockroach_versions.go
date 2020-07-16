@@ -72,6 +72,7 @@ const (
 	VersionClientRangeInfosOnBatchResponse
 	VersionNodeMembershipStatus
 	VersionRangeStatsRespHasDesc
+	VersionMinPasswordLength
 
 	// Add new versions here (step one of two).
 )
@@ -544,6 +545,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionRangeStatsRespHasDesc adds the RangeStatsResponse.RangeInfo field.
 		Key:     VersionRangeStatsRespHasDesc,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
+	},
+	{
+		// VersionMinPasswordLength adds the server.user_login.min_password_length setting.
+		Key:     VersionMinPasswordLength,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
 	},
 
 	// Add new versions here (step two of two).
