@@ -638,19 +638,20 @@ render                    ·             ·                (v int, count int)   
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE v > 10
 ----
-·               distribution  local           ·             ·
-·               vectorized    true            ·             ·
-group           ·             ·               (v, count)    ·
- │              aggregate 0   v               ·             ·
- │              aggregate 1   count(column5)  ·             ·
- │              group by      v               ·             ·
- └── render     ·             ·               (column5, v)  ·
-      │         render 0      NULL            ·             ·
-      │         render 1      v               ·             ·
-      └── scan  ·             ·               (v)           ·
-·               table         kv@primary      ·             ·
-·               spans         FULL SCAN       ·             ·
-·               filter        v > 10          ·             ·
+·                    distribution  local           ·             ·
+·                    vectorized    true            ·             ·
+group                ·             ·               (v, count)    ·
+ │                   aggregate 0   v               ·             ·
+ │                   aggregate 1   count(column5)  ·             ·
+ │                   group by      v               ·             ·
+ └── render          ·             ·               (column5, v)  ·
+      │              render 0      NULL            ·             ·
+      │              render 1      v               ·             ·
+      └── filter     ·             ·               (v)           ·
+           │         filter        v > 10          ·             ·
+           └── scan  ·             ·               (v)           ·
+·                    table         kv@primary      ·             ·
+·                    spans         FULL SCAN       ·             ·
 
 # Verify that FILTER works.
 
@@ -759,19 +760,20 @@ group      ·             ·                (min int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
-·                    distribution  local                         ·               ·
-·                    vectorized    true                          ·               ·
-group                ·             ·                             (min int)       ·
- │                   aggregate 0   any_not_null(v)               ·               ·
- │                   scalar        ·                             ·               ·
- └── render          ·             ·                             (v int)         ·
-      │              render 0      (v)[int]                      ·               ·
-      └── limit      ·             ·                             (k int, v int)  +v
-           │         count         (1)[int]                      ·               ·
-           └── scan  ·             ·                             (k int, v int)  +v
-·                    table         opt_test@v                    ·               ·
-·                    spans         /!NULL-                       ·               ·
-·                    filter        ((k)[int] != (4)[int])[bool]  ·               ·
+·                         distribution  local                         ·               ·
+·                         vectorized    true                          ·               ·
+group                     ·             ·                             (min int)       ·
+ │                        aggregate 0   any_not_null(v)               ·               ·
+ │                        scalar        ·                             ·               ·
+ └── render               ·             ·                             (v int)         ·
+      │                   render 0      (v)[int]                      ·               ·
+      └── limit           ·             ·                             (k int, v int)  +v
+           │              count         (1)[int]                      ·               ·
+           └── filter     ·             ·                             (k int, v int)  +v
+                │         filter        ((k)[int] != (4)[int])[bool]  ·               ·
+                └── scan  ·             ·                             (k int, v int)  +v
+·                         table         opt_test@v                    ·               ·
+·                         spans         /!NULL-                       ·               ·
 
 # Check that the optimization doesn't work when the argument is non-trivial (we
 # can't in general guarantee an ordering on a synthesized column).

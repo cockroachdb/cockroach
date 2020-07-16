@@ -45,56 +45,60 @@ root            ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
-·                            distribution  local                                                                        ·               ·
-·                            vectorized    true                                                                         ·               ·
-root                         ·             ·                                                                            (a, b, c)       ·
- ├── scan                    ·             ·                                                                            (a, b, c)       ·
- │                           table         abc@primary                                                                  ·               ·
- │                           spans         FULL SCAN                                                                    ·               ·
- │                           filter        a = @S2                                                                      ·               ·
- ├── subquery                ·             ·                                                                            ·               ·
- │    │                      id            @S1                                                                          ·               ·
- │    │                      original sql  EXISTS (SELECT * FROM abc WHERE c = (a + 3))                                 ·               ·
- │    │                      exec mode     exists                                                                       ·               ·
- │    └── limit              ·             ·                                                                            (a, b, c)       ·
- │         │                 count         1                                                                            ·               ·
- │         └── scan          ·             ·                                                                            (a, b, c)       ·
- │                           table         abc@primary                                                                  ·               ·
- │                           spans         FULL SCAN                                                                    ·               ·
- │                           filter        c = (a + 3)                                                                  ·               ·
- └── subquery                ·             ·                                                                            ·               ·
-      │                      id            @S2                                                                          ·               ·
-      │                      original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·               ·
-      │                      exec mode     one row                                                                      ·               ·
-      └── group              ·             ·                                                                            (any_not_null)  ·
-           │                 aggregate 0   any_not_null(a)                                                              ·               ·
-           │                 scalar        ·                                                                            ·               ·
-           └── limit         ·             ·                                                                            (a)             -a
-                │            count         1                                                                            ·               ·
-                └── revscan  ·             ·                                                                            (a)             -a
-·                            table         abc@primary                                                                  ·               ·
-·                            spans         FULL SCAN                                                                    ·               ·
-·                            filter        @S1                                                                          ·               ·
+·                                 distribution  local                                                                        ·               ·
+·                                 vectorized    true                                                                         ·               ·
+root                              ·             ·                                                                            (a, b, c)       ·
+ ├── filter                       ·             ·                                                                            (a, b, c)       ·
+ │    │                           filter        a = @S2                                                                      ·               ·
+ │    └── scan                    ·             ·                                                                            (a, b, c)       ·
+ │                                table         abc@primary                                                                  ·               ·
+ │                                spans         FULL SCAN                                                                    ·               ·
+ ├── subquery                     ·             ·                                                                            ·               ·
+ │    │                           id            @S1                                                                          ·               ·
+ │    │                           original sql  EXISTS (SELECT * FROM abc WHERE c = (a + 3))                                 ·               ·
+ │    │                           exec mode     exists                                                                       ·               ·
+ │    └── limit                   ·             ·                                                                            (a, b, c)       ·
+ │         │                      count         1                                                                            ·               ·
+ │         └── filter             ·             ·                                                                            (a, b, c)       ·
+ │              │                 filter        c = (a + 3)                                                                  ·               ·
+ │              └── scan          ·             ·                                                                            (a, b, c)       ·
+ │                                table         abc@primary                                                                  ·               ·
+ │                                spans         FULL SCAN                                                                    ·               ·
+ └── subquery                     ·             ·                                                                            ·               ·
+      │                           id            @S2                                                                          ·               ·
+      │                           original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·               ·
+      │                           exec mode     one row                                                                      ·               ·
+      └── group                   ·             ·                                                                            (any_not_null)  ·
+           │                      aggregate 0   any_not_null(a)                                                              ·               ·
+           │                      scalar        ·                                                                            ·               ·
+           └── limit              ·             ·                                                                            (a)             -a
+                │                 count         1                                                                            ·               ·
+                └── filter        ·             ·                                                                            (a)             -a
+                     │            filter        @S1                                                                          ·               ·
+                     └── revscan  ·             ·                                                                            (a)             -a
+·                                 table         abc@primary                                                                  ·               ·
+·                                 spans         FULL SCAN                                                                    ·               ·
 
 # IN expression transformed into semi-join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE b < 0)
 ----
-·           distribution        local        ·       ·
-·           vectorized          true         ·       ·
-merge-join  ·                   ·            (a)     ·
- │          type                semi         ·       ·
- │          equality            (a) = (a)    ·       ·
- │          left cols are key   ·            ·       ·
- │          right cols are key  ·            ·       ·
- │          mergeJoinOrder      +"(a=a)"     ·       ·
- ├── scan   ·                   ·            (a)     +a
- │          table               abc@primary  ·       ·
- │          spans               FULL SCAN    ·       ·
- └── scan   ·                   ·            (a, b)  +a
-·           table               abc@primary  ·       ·
-·           spans               FULL SCAN    ·       ·
-·           filter              b < 0        ·       ·
+·               distribution        local        ·       ·
+·               vectorized          true         ·       ·
+merge-join      ·                   ·            (a)     ·
+ │              type                semi         ·       ·
+ │              equality            (a) = (a)    ·       ·
+ │              left cols are key   ·            ·       ·
+ │              right cols are key  ·            ·       ·
+ │              mergeJoinOrder      +"(a=a)"     ·       ·
+ ├── scan       ·                   ·            (a)     +a
+ │              table               abc@primary  ·       ·
+ │              spans               FULL SCAN    ·       ·
+ └── filter     ·                   ·            (a, b)  +a
+      │         filter              b < 0        ·       ·
+      └── scan  ·                   ·            (a, b)  +a
+·               table               abc@primary  ·       ·
+·               spans               FULL SCAN    ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -140,17 +144,18 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-·                distribution  local            ·                                  ·
-·                vectorized    true             ·                                  ·
-render           ·             ·                (col0)                             ·
- │               render 0      col0             ·                                  ·
- └── index-join  ·             ·                (col0, col3, col4, rowid[hidden])  ·
-      │          table         tab4@primary     ·                                  ·
-      │          key columns   rowid            ·                                  ·
-      └── scan   ·             ·                (col0, col4, rowid[hidden])        ·
-·                table         tab4@idx_tab4_0  ·                                  ·
-·                spans         /!NULL-/5.38/1   ·                                  ·
-·                filter        col0 <= 0        ·                                  ·
+·                    distribution  local            ·                                  ·
+·                    vectorized    true             ·                                  ·
+render               ·             ·                (col0)                             ·
+ │                   render 0      col0             ·                                  ·
+ └── index-join      ·             ·                (col0, col3, col4, rowid[hidden])  ·
+      │              table         tab4@primary     ·                                  ·
+      │              key columns   rowid            ·                                  ·
+      └── filter     ·             ·                (col0, col4, rowid[hidden])        ·
+           │         filter        col0 <= 0        ·                                  ·
+           └── scan  ·             ·                (col0, col4, rowid[hidden])        ·
+·                    table         tab4@idx_tab4_0  ·                                  ·
+·                    spans         /!NULL-/5.38/1   ·                                  ·
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.

@@ -283,12 +283,13 @@ scan  ·             ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (x, y)  ·
-·     table         a@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
-·     filter        y > 10     ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (x, y)  ·
+ │         filter        y > 10     ·       ·
+ └── scan  ·             ·          (x, y)  ·
+·          table         a@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
@@ -302,12 +303,13 @@ scan  ·             ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (x, y)  ·
-·     table         a@primary  ·       ·
-·     spans         /2-        ·       ·
-·     filter        y < 30     ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (x, y)  ·
+ │         filter        y < 30     ·       ·
+ └── scan  ·             ·          (x, y)  ·
+·          table         a@primary  ·       ·
+·          spans         /2-        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x + 1 AS r FROM a
@@ -366,15 +368,16 @@ render     ·             ·          (x, x, y, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x + 1 AS a, x + y AS b FROM a WHERE x + y > 20
 ----
-·          distribution  local         ·       ·
-·          vectorized    true          ·       ·
-render     ·             ·             (a, b)  ·
- │         render 0      x + 1         ·       ·
- │         render 1      x + y         ·       ·
- └── scan  ·             ·             (x, y)  ·
-·          table         a@primary     ·       ·
-·          spans         FULL SCAN     ·       ·
-·          filter        (x + y) > 20  ·       ·
+·               distribution  local         ·       ·
+·               vectorized    true          ·       ·
+render          ·             ·             (a, b)  ·
+ │              render 0      x + 1         ·       ·
+ │              render 1      x + y         ·       ·
+ └── filter     ·             ·             (x, y)  ·
+      │         filter        (x + y) > 20  ·       ·
+      └── scan  ·             ·             (x, y)  ·
+·               table         a@primary     ·       ·
+·               spans         FULL SCAN     ·       ·
 
 statement ok
 DROP TABLE a
@@ -829,12 +832,13 @@ scan  ·             ·                (d decimal)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ----
-·     distribution  local                        ·            ·
-·     vectorized    true                         ·            ·
-scan  ·             ·                            (d decimal)  ·
-·     table         dec2@primary                 ·            ·
-·     spans         FULL SCAN                    ·            ·
-·     filter        (isnan((d)[decimal]))[bool]  ·            ·
+·          distribution  local                        ·            ·
+·          vectorized    true                         ·            ·
+filter     ·             ·                            (d decimal)  ·
+ │         filter        (isnan((d)[decimal]))[bool]  ·            ·
+ └── scan  ·             ·                            (d decimal)  ·
+·          table         dec2@primary                 ·            ·
+·          spans         FULL SCAN                    ·            ·
 
 statement ok
 DROP TABLE dec2
@@ -869,12 +873,13 @@ scan  ·             ·                    (f float)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ----
-·     distribution  local                      ·          ·
-·     vectorized    true                       ·          ·
-scan  ·             ·                          (f float)  ·
-·     table         flt@primary                ·          ·
-·     spans         FULL SCAN                  ·          ·
-·     filter        (isnan((f)[float]))[bool]  ·          ·
+·          distribution  local                      ·          ·
+·          vectorized    true                       ·          ·
+filter     ·             ·                          (f float)  ·
+ │         filter        (isnan((f)[float]))[bool]  ·          ·
+ └── scan  ·             ·                          (f float)  ·
+·          table         flt@primary                ·          ·
+·          spans         FULL SCAN                  ·          ·
 
 statement ok
 DROP TABLE flt
@@ -1171,24 +1176,26 @@ render        ·             ·                  ("?column?")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a
 ----
-·     distribution  local         ·             ·
-·     vectorized    true          ·             ·
-scan  ·             ·             (a, b, c, d)  +a
-·     table         abcd@primary  ·             ·
-·     spans         FULL SCAN     ·             ·
-·     filter        a > b         ·             ·
+·          distribution  local         ·             ·
+·          vectorized    true          ·             ·
+filter     ·             ·             (a, b, c, d)  +a
+ │         filter        a > b         ·             ·
+ └── scan  ·             ·             (a, b, c, d)  +a
+·          table         abcd@primary  ·             ·
+·          spans         FULL SCAN     ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 ----
-·          distribution  local         ·             ·
-·          vectorized    true          ·             ·
-sort       ·             ·             (a, b, c, d)  -a,-b
- │         order         -a,-b         ·             ·
- └── scan  ·             ·             (a, b, c, d)  ·
-·          table         abcd@primary  ·             ·
-·          spans         FULL SCAN     ·             ·
-·          filter        a > b         ·             ·
+·               distribution  local         ·             ·
+·               vectorized    true          ·             ·
+sort            ·             ·             (a, b, c, d)  -a,-b
+ │              order         -a,-b         ·             ·
+ └── filter     ·             ·             (a, b, c, d)  ·
+      │         filter        a > b         ·             ·
+      └── scan  ·             ·             (a, b, c, d)  ·
+·               table         abcd@primary  ·             ·
+·               spans         FULL SCAN     ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a

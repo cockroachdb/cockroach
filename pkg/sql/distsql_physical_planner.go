@@ -467,14 +467,6 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		// previous behavior we continue to ignore the soft limits for now.
 		// TODO(yuzefovich): pay attention to the soft limits.
 		rec := canDistribute
-		// We recommend running scans distributed if we have a filtering
-		// expression or if we have a full table scan.
-		if n.filter != nil {
-			if err := checkExpr(n.filter); err != nil {
-				return cannotDistribute, err
-			}
-			rec = rec.compose(shouldDistribute)
-		}
 		// Check if we are doing a full scan.
 		if n.isFull {
 			rec = rec.compose(shouldDistribute)
@@ -959,14 +951,7 @@ func initTableReaderSpec(
 		return s, execinfrapb.PostProcessSpec{}, nil
 	}
 
-	filter, err := physicalplan.MakeExpression(n.filter, planCtx, indexVarMap)
-	if err != nil {
-		return nil, execinfrapb.PostProcessSpec{}, err
-	}
-	post := execinfrapb.PostProcessSpec{
-		Filter: filter,
-	}
-
+	var post execinfrapb.PostProcessSpec
 	if n.hardLimit != 0 {
 		post.Limit = uint64(n.hardLimit)
 	} else if n.softLimit != 0 {
@@ -1932,13 +1917,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
 
-	filter, err := physicalplan.MakeExpression(
-		n.table.filter, planCtx, nil /* indexVarMap */)
-	if err != nil {
-		return nil, err
-	}
 	post := execinfrapb.PostProcessSpec{
-		Filter:     filter,
 		Projection: true,
 	}
 

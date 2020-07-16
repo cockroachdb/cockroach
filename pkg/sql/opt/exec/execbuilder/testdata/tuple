@@ -29,32 +29,35 @@ scan  ·             ·                  (u, v, w)  +u,+v,+w
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
 ----
-·     distribution  local                   ·          ·
-·     vectorized    true                    ·          ·
-scan  ·             ·                       (u, v, w)  +u,+v,+w
-·     table         uvw@uvw_u_v_w_idx       ·          ·
-·     spans         /!NULL-/2/3/2           ·          ·
-·     filter        (u, v, w) <= (2, 3, 1)  ·          ·
+·          distribution  local                   ·          ·
+·          vectorized    true                    ·          ·
+filter     ·             ·                       (u, v, w)  +u,+v,+w
+ │         filter        (u, v, w) <= (2, 3, 1)  ·          ·
+ └── scan  ·             ·                       (u, v, w)  +u,+v,+w
+·          table         uvw@uvw_u_v_w_idx       ·          ·
+·          spans         /!NULL-/2/3/2           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
 ----
-·     distribution  local                  ·          ·
-·     vectorized    true                   ·          ·
-scan  ·             ·                      (u, v, w)  +u,+v,+w
-·     table         uvw@uvw_u_v_w_idx      ·          ·
-·     spans         /!NULL-/2/2/2          ·          ·
-·     filter        (u, v, w) < (2, 2, 2)  ·          ·
+·          distribution  local                  ·          ·
+·          vectorized    true                   ·          ·
+filter     ·             ·                      (u, v, w)  +u,+v,+w
+ │         filter        (u, v, w) < (2, 2, 2)  ·          ·
+ └── scan  ·             ·                      (u, v, w)  +u,+v,+w
+·          table         uvw@uvw_u_v_w_idx      ·          ·
+·          spans         /!NULL-/2/2/2          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
-·     distribution  local                   ·          ·
-·     vectorized    true                    ·          ·
-scan  ·             ·                       (u, v, w)  +u,+v,+w
-·     table         uvw@uvw_u_v_w_idx       ·          ·
-·     spans         -/1/2/3 /1/2/4-         ·          ·
-·     filter        (u, v, w) != (1, 2, 3)  ·          ·
+·          distribution  local                   ·          ·
+·          vectorized    true                    ·          ·
+filter     ·             ·                       (u, v, w)  +u,+v,+w
+ │         filter        (u, v, w) != (1, 2, 3)  ·          ·
+ └── scan  ·             ·                       (u, v, w)  +u,+v,+w
+·          table         uvw@uvw_u_v_w_idx       ·          ·
+·          spans         -/1/2/3 /1/2/4-         ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
@@ -104,12 +107,13 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
 ----
-·     distribution  local                  ·          ·
-·     vectorized    true                   ·          ·
-scan  ·             ·                      (a, b, c)  ·
-·     table         abc@abc_a_b_c_idx      ·          ·
-·     spans         /1-                    ·          ·
-·     filter        (a, b, c) > (1, 2, 3)  ·          ·
+·          distribution  local                  ·          ·
+·          vectorized    true                   ·          ·
+filter     ·             ·                      (a, b, c)  ·
+ │         filter        (a, b, c) > (1, 2, 3)  ·          ·
+ └── scan  ·             ·                      (a, b, c)  ·
+·          table         abc@abc_a_b_c_idx      ·          ·
+·          spans         /1-                    ·          ·
 
 statement ok
 DROP TABLE abc

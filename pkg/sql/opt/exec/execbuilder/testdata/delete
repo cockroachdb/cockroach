@@ -70,39 +70,41 @@ delete range  ·             ·
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-·                         distribution  local
-·                         vectorized    false
-count                     ·             ·
- └── delete               ·             ·
-      │                   from          unindexed
-      │                   strategy      deleter
-      │                   auto commit   ·
-      └── render          ·             ·
-           └── limit      ·             ·
-                │         count         10
-                └── scan  ·             ·
-·                         table         unindexed@primary
-·                         spans         FULL SCAN
-·                         filter        v = 7
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── delete                    ·             ·
+      │                        from          unindexed
+      │                        strategy      deleter
+      │                        auto commit   ·
+      └── render               ·             ·
+           └── limit           ·             ·
+                │              count         10
+                └── filter     ·             ·
+                     │         filter        v = 7
+                     └── scan  ·             ·
+·                              table         unindexed@primary
+·                              spans         FULL SCAN
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-·                         distribution  local
-·                         vectorized    false
-count                     ·             ·
- └── delete               ·             ·
-      │                   from          unindexed
-      │                   strategy      deleter
-      │                   auto commit   ·
-      └── render          ·             ·
-           └── limit      ·             ·
-                │         count         10
-                └── scan  ·             ·
-·                         table         unindexed@primary
-·                         spans         FULL SCAN
-·                         filter        v = 5
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── delete                    ·             ·
+      │                        from          unindexed
+      │                        strategy      deleter
+      │                        auto commit   ·
+      └── render               ·             ·
+           └── limit           ·             ·
+                │              count         10
+                └── filter     ·             ·
+                     │         filter        v = 5
+                     └── scan  ·             ·
+·                              table         unindexed@primary
+·                              spans         FULL SCAN
 
 # Check fast DELETE.
 query TTT
@@ -273,17 +275,18 @@ delete range  ·             ·
 query TTT
 EXPLAIN DELETE FROM child WHERE id > 10
 ----
-·               distribution  local
-·               vectorized    false
-count           ·             ·
- └── delete     ·             ·
-      │         from          child
-      │         strategy      deleter
-      │         auto commit   ·
-      └── scan  ·             ·
-·               table         child@primary
-·               spans         FULL SCAN
-·               filter        id > 10
+·                    distribution  local
+·                    vectorized    false
+count                ·             ·
+ └── delete          ·             ·
+      │              from          child
+      │              strategy      deleter
+      │              auto commit   ·
+      └── filter     ·             ·
+           │         filter        id > 10
+           └── scan  ·             ·
+·                    table         child@primary
+·                    spans         FULL SCAN
 
 statement ok
 CREATE TABLE sibling (
