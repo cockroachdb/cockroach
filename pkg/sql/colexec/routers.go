@@ -634,10 +634,10 @@ func newHashRouterWithOutputs(
 	return r
 }
 
-// cancelOutputs cancels all outputs and forwards the given error to one output
-// if non-nil. The only case where the error is not forwarded if no output could
-// be canceled due to an error. In this case each output will forward the error
-// returned during cancellation.
+// cancelOutputs cancels all outputs and forwards the given error to all of
+// them if non-nil. The only case where the error is not forwarded is if no
+// output could be canceled due to an error. In this case each output will
+// forward the error returned during cancellation.
 func (r *HashRouter) cancelOutputs(ctx context.Context, errToForward error) {
 	for _, o := range r.outputs {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() {
@@ -646,10 +646,6 @@ func (r *HashRouter) cancelOutputs(ctx context.Context, errToForward error) {
 			// If there was an error canceling this output, this error can be
 			// forwarded to whoever is calling Next.
 			o.forwardErr(err)
-		} else {
-			// Successful cancellation, which means errToForward was also consumed.
-			// Set it to nil to not forward it to another output.
-			errToForward = nil
 		}
 	}
 }
