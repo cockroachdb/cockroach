@@ -114,6 +114,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
 	cfg.RPCContext = rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: ambient,
 		Config:     baseCtx,
 		Clock:      ltc.Clock,

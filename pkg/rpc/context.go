@@ -398,8 +398,9 @@ type connKey struct {
 }
 
 // ContextOptions are passed to NewContext to set up a new *Context.
-// All pointer fields are required.
+// All pointer fields and TenantID are required.
 type ContextOptions struct {
+	TenantID   roachpb.TenantID
 	AmbientCtx log.AmbientContext
 	Config     *base.Config
 	Clock      *hlc.Clock
@@ -409,6 +410,9 @@ type ContextOptions struct {
 }
 
 func (c ContextOptions) validate() error {
+	if c.TenantID == (roachpb.TenantID{}) {
+		return errors.New("must specify TenantID")
+	}
 	if c.Config == nil {
 		return errors.New("Config must be set")
 	}
