@@ -113,6 +113,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	// server (which will validate them using the tenant CA).
 	clientTLSConfig, err := cm.GetTenantClientTLSConfig()
 	require.NoError(t, err)
+	require.NotNil(t, clientTLSConfig)
 
 	// Set up a HTTPS server using server TLS config, set up a http client using the
 	// client TLS config, make a request.
