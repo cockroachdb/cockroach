@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -192,21 +191,17 @@ func TestKVLimitHint(t *testing.T) {
 	testCases := []struct {
 		hardLimit int64
 		softLimit int64
-		filter    tree.TypedExpr
 		expected  int64
 	}{
-		{hardLimit: 0, softLimit: 0, filter: nil, expected: 0},
-		{hardLimit: 0, softLimit: 1, filter: nil, expected: 2},
-		{hardLimit: 0, softLimit: 23, filter: nil, expected: 46},
-		{hardLimit: 0, softLimit: 1, filter: tree.DBoolFalse, expected: 2},
-		{hardLimit: 1, softLimit: 0, filter: nil, expected: 1},
-		{hardLimit: 1, softLimit: 23, filter: nil, expected: 1},
-		{hardLimit: 5, softLimit: 23, filter: nil, expected: 5},
-		{hardLimit: 1, softLimit: 23, filter: tree.DBoolTrue, expected: 1},
-		{hardLimit: 1, softLimit: 23, filter: tree.DBoolFalse, expected: 2},
+		{hardLimit: 0, softLimit: 0, expected: 0},
+		{hardLimit: 0, softLimit: 1, expected: 2},
+		{hardLimit: 0, softLimit: 23, expected: 46},
+		{hardLimit: 1, softLimit: 0, expected: 1},
+		{hardLimit: 1, softLimit: 23, expected: 1},
+		{hardLimit: 5, softLimit: 23, expected: 5},
 	}
 	for _, tc := range testCases {
-		sn := scanNode{hardLimit: tc.hardLimit, softLimit: tc.softLimit, filter: tc.filter}
+		sn := scanNode{hardLimit: tc.hardLimit, softLimit: tc.softLimit}
 		if limitHint := sn.limitHint(); limitHint != tc.expected {
 			t.Errorf("%+v: got %d", tc, limitHint)
 		}

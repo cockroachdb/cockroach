@@ -1062,3 +1062,14 @@ query T
 SELECT to_json('hello'::greeting)
 ----
 "hello"
+
+# Regression for #51474.
+statement ok
+CREATE TABLE t51474 (x greeting);
+INSERT INTO t51474 VALUES ('hello'), ('howdy')
+
+query T rowsort
+SELECT * FROM t51474 INTERSECT ALL SELECT * FROM t51474
+----
+hello
+howdy

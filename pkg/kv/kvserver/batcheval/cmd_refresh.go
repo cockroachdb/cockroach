@@ -33,7 +33,7 @@ func Refresh(
 	h := cArgs.Header
 
 	if h.Txn == nil {
-		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
+		return result.Result{}, errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 
 	// We're going to refresh up to the transaction's read timestamp.
@@ -47,8 +47,7 @@ func Refresh(
 
 	refreshFrom := args.RefreshFrom
 	if refreshFrom.IsEmpty() {
-		// Compatibility with 19.2 nodes, which didn't set the args.RefreshFrom field.
-		refreshFrom = h.Txn.DeprecatedOrigTimestamp
+		return result.Result{}, errors.AssertionFailedf("empty RefreshFrom: %s", args)
 	}
 
 	// Get the most recent committed value and return any intent by

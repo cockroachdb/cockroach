@@ -236,23 +236,25 @@ index-join  ·             ·                                                (a,
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (a, b)  ·
-·     table         d@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
-·     filter        b @> '[]'  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b @> '[]'  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (a, b)  ·
-·     table         d@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
-·     filter        b @> '{}'  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b @> '{}'  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 
 query TTTTT
@@ -302,32 +304,35 @@ index-join  ·             ·                            (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (a, b)  ·
-·     table         d@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
-·     filter        b IS NULL  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b IS NULL  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         d@primary
-·     spans         FULL SCAN
-·     filter        b @> '{"a": []}'
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        b @> '{"a": []}'
+ └── scan  ·             ·
+·          table         d@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         d@primary
-·     spans         FULL SCAN
-·     filter        b @> '{"a": {}}'
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        b @> '{"a": {}}'
+ └── scan  ·             ·
+·          table         d@primary
+·          spans         FULL SCAN
 
 # Multi-path contains queries. Should create zigzag joins.
 
@@ -477,12 +482,13 @@ filter           ·             ·                         (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
-·     distribution  local                      ·       ·
-·     vectorized    true                       ·       ·
-scan  ·             ·                          (a, b)  ·
-·     table         d@primary                  ·       ·
-·     spans         FULL SCAN                  ·       ·
-·     filter        b @> '{"a": {}, "b": {}}'  ·       ·
+·          distribution  local                      ·       ·
+·          vectorized    true                       ·       ·
+filter     ·             ·                          (a, b)  ·
+ │         filter        b @> '{"a": {}, "b": {}}'  ·       ·
+ └── scan  ·             ·                          (a, b)  ·
+·          table         d@primary                  ·       ·
+·          spans         FULL SCAN                  ·       ·
 
 subtest array
 
@@ -502,12 +508,13 @@ index-join  ·             ·          (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ----
-·     distribution  local         ·       ·
-·     vectorized    true          ·       ·
-scan  ·             ·             (a, b)  ·
-·     table         e@primary     ·       ·
-·     spans         FULL SCAN     ·       ·
-·     filter        b @> ARRAY[]  ·       ·
+·          distribution  local         ·       ·
+·          vectorized    true          ·       ·
+filter     ·             ·             (a, b)  ·
+ │         filter        b @> ARRAY[]  ·       ·
+ └── scan  ·             ·             (a, b)  ·
+·          table         e@primary     ·       ·
+·          spans         FULL SCAN     ·       ·
 
 # Test that searching for a NULL element using the inverted index.
 query TTTTT
@@ -530,12 +537,13 @@ norows  ·             ·      (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (a, b)  ·
-·     table         e@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
-·     filter        b IS NULL  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b IS NULL  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         e@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
@@ -657,11 +665,12 @@ lookup-join              ·                      ·                          (k,
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE _ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-·          distribution  local                                                               ·          ·
-·          vectorized    true                                                                ·          ·
-render     ·             ·                                                                   (k)        ·
- │         render 0      k                                                                   ·          ·
- └── scan  ·             ·                                                                   (k, geom)  ·
-·          table         geo_table@primary                                                   ·          ·
-·          spans         FULL SCAN                                                           ·          ·
-·          filter        _st_intersects('010100000000000000000008400000000000000840', geom)  ·          ·
+·               distribution  local                                                               ·          ·
+·               vectorized    true                                                                ·          ·
+render          ·             ·                                                                   (k)        ·
+ │              render 0      k                                                                   ·          ·
+ └── filter     ·             ·                                                                   (k, geom)  ·
+      │         filter        _st_intersects('010100000000000000000008400000000000000840', geom)  ·          ·
+      └── scan  ·             ·                                                                   (k, geom)  ·
+·               table         geo_table@primary                                                   ·          ·
+·               spans         FULL SCAN                                                           ·          ·

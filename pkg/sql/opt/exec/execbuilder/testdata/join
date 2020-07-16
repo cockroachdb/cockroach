@@ -42,18 +42,19 @@ hash-join  ·             ·
 query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-·                distribution  local
-·                vectorized    true
-render           ·             ·
- └── cross-join  ·             ·
-      │          type          cross
-      ├── scan   ·             ·
-      │          table         twocolumn@primary
-      │          spans         FULL SCAN
-      └── scan   ·             ·
-·                table         twocolumn@primary
-·                spans         FULL SCAN
-·                filter        x = 44
+·                    distribution  local
+·                    vectorized    true
+render               ·             ·
+ └── cross-join      ·             ·
+      │              type          cross
+      ├── scan       ·             ·
+      │              table         twocolumn@primary
+      │              spans         FULL SCAN
+      └── filter     ·             ·
+           │         filter        x = 44
+           └── scan  ·             ·
+·                    table         twocolumn@primary
+·                    spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
@@ -591,22 +592,24 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ]
 ----
-·               distribution  local
-·               vectorized    true
-filter          ·             ·
- │              filter        ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
- └── hash-join  ·             ·
-      │         type          left outer
-      │         equality      (b) = (sq)
-      │         pred          a > 1
-      ├── scan  ·             ·
-      │         table         pairs@primary
-      │         spans         FULL SCAN
-      │         filter        b > 1
-      └── scan  ·             ·
-·               table         square@primary
-·               spans         -/5/#
-·               filter        sq > 1
+·                    distribution  local
+·                    vectorized    true
+filter               ·             ·
+ │                   filter        ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+ └── hash-join       ·             ·
+      │              type          left outer
+      │              equality      (b) = (sq)
+      │              pred          a > 1
+      ├── filter     ·             ·
+      │    │         filter        b > 1
+      │    └── scan  ·             ·
+      │              table         pairs@primary
+      │              spans         FULL SCAN
+      └── filter     ·             ·
+           │         filter        sq > 1
+           └── scan  ·             ·
+·                    table         square@primary
+·                    spans         -/5/#
 
 query TTT
 SELECT tree, field, description FROM [
@@ -616,26 +619,27 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·                    distribution  local
-·                    vectorized    true
-render               ·             ·
- │                   render 0      a
- │                   render 1      b
- │                   render 2      n
- │                   render 3      sq
- └── filter          ·             ·
-      │              filter        ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
-      └── hash-join  ·             ·
-           │         type          left outer
-           │         equality      (sq) = (b)
-           │         pred          n < 6
-           ├── scan  ·             ·
-           │         table         square@primary
-           │         spans         /2-
-           └── scan  ·             ·
-·                    table         pairs@primary
-·                    spans         FULL SCAN
-·                    filter        a > 1
+·                         distribution  local
+·                         vectorized    true
+render                    ·             ·
+ │                        render 0      a
+ │                        render 1      b
+ │                        render 2      n
+ │                        render 3      sq
+ └── filter               ·             ·
+      │                   filter        ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      └── hash-join       ·             ·
+           │              type          left outer
+           │              equality      (sq) = (b)
+           │              pred          n < 6
+           ├── scan       ·             ·
+           │              table         square@primary
+           │              spans         /2-
+           └── filter     ·             ·
+                │         filter        a > 1
+                └── scan  ·             ·
+·                         table         pairs@primary
+·                         spans         FULL SCAN
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -646,19 +650,20 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·          distribution  local
-·          vectorized    true
-hash-join  ·             ·
- │         type          inner
- │         equality      (b) = (sq)
- ├── scan  ·             ·
- │         table         pairs@primary
- │         spans         FULL SCAN
- │         filter        ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
- └── scan  ·             ·
-·          table         square@primary
-·          spans         /2-/5/#
-·          parallel      ·
+·               distribution  local
+·               vectorized    true
+hash-join       ·             ·
+ │              type          inner
+ │              equality      (b) = (sq)
+ ├── filter     ·             ·
+ │    │         filter        ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+ │    └── scan  ·             ·
+ │              table         pairs@primary
+ │              spans         FULL SCAN
+ └── scan       ·             ·
+·               table         square@primary
+·               spans         /2-/5/#
+·               parallel      ·
 
 
 statement ok

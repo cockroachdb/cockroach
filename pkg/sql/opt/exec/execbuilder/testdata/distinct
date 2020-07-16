@@ -122,17 +122,18 @@ scan  ·             ·            (x, y, z)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
-·               distribution  local      ·       ·
-·               vectorized    true       ·       ·
-distinct        ·             ·          (z)     ·
- │              distinct on   z          ·       ·
- │              order key     z          ·       ·
- └── render     ·             ·          (z)     +z
-      │         render 0      z          ·       ·
-      └── scan  ·             ·          (y, z)  +z
-·               table         xyz@foo    ·       ·
-·               spans         FULL SCAN  ·       ·
-·               filter        y > 1      ·       ·
+·                    distribution  local      ·       ·
+·                    vectorized    true       ·       ·
+distinct             ·             ·          (z)     ·
+ │                   distinct on   z          ·       ·
+ │                   order key     z          ·       ·
+ └── render          ·             ·          (z)     +z
+      │              render 0      z          ·       ·
+      └── filter     ·             ·          (y, z)  +z
+           │         filter        y > 1      ·       ·
+           └── scan  ·             ·          (y, z)  +z
+·                    table         xyz@foo    ·       ·
+·                    spans         FULL SCAN  ·       ·
 
 statement ok
 CREATE TABLE abcd (

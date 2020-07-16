@@ -944,24 +944,25 @@ FROM
 WHERE
   t.z IS NULL
 ----
-tree                  field               description
-·                     distribution        local
-·                     vectorized          true
-render                ·                   ·
- └── filter           ·                   ·
-      │               filter              z IS NULL
-      └── merge-join  ·                   ·
-           │          type                left outer
-           │          equality            (a_z, a_y, a_x) = (z, y, x)
-           │          right cols are key  ·
-           │          mergeJoinOrder      +"(a_z=z)",+"(a_y=y)",+"(a_x=x)"
-           ├── scan   ·                   ·
-           │          table               b@idx
-           │          spans               /!NULL-
-           │          filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
-           └── scan   ·                   ·
-·                     table               a@primary
-·                     spans               FULL SCAN
+tree                      field               description
+·                         distribution        local
+·                         vectorized          true
+render                    ·                   ·
+ └── filter               ·                   ·
+      │                   filter              z IS NULL
+      └── merge-join      ·                   ·
+           │              type                left outer
+           │              equality            (a_z, a_y, a_x) = (z, y, x)
+           │              right cols are key  ·
+           │              mergeJoinOrder      +"(a_z=z)",+"(a_y=y)",+"(a_x=x)"
+           ├── filter     ·                   ·
+           │    │         filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
+           │    └── scan  ·                   ·
+           │              table               b@idx
+           │              spans               /!NULL-
+           └── scan       ·                   ·
+·                         table               a@primary
+·                         spans               FULL SCAN
 
 statement ok
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref

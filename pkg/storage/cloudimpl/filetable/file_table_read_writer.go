@@ -161,6 +161,10 @@ func (f *FileToTableSystem) FileSize(ctx context.Context, filename string) (int6
 		return 0, errors.Wrap(err, "failed to get size of file from the payload table")
 	}
 
+	if len(rows) == 0 {
+		return 0, errors.Newf("file %s does not exist in the UserFileStorage", filename)
+	}
+
 	return int64(tree.MustBeDInt(rows[0])), nil
 }
 

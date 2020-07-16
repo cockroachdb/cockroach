@@ -914,19 +914,20 @@ merge-join
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM parent1 INNER MERGE JOIN child1 ON parent1.pid1 = child1.pid1 AND parent1.v = child1.v WHERE parent1.v=1
 ----
-·           distribution       full                     ·                               ·
-·           vectorized         true                     ·                               ·
-merge-join  ·                  ·                        (pid1, v, pid1, cid1, cid2, v)  ·
- │          type               inner                    ·                               ·
- │          equality           (pid1, v) = (pid1, v)    ·                               ·
- │          left cols are key  ·                        ·                               ·
- │          mergeJoinOrder     +"(pid1=pid1)",+"(v=v)"  ·                               ·
- ├── scan   ·                  ·                        (pid1, v)                       +pid1
- │          table              parent1@primary          ·                               ·
- │          spans              FULL SCAN                ·                               ·
- │          filter             v = 1                    ·                               ·
- └── scan   ·                  ·                        (pid1, cid1, cid2, v)           +pid1
-·           table              child1@primary           ·                               ·
-·           spans              FULL SCAN                ·                               ·
-·           filter             v = 1                    ·                               ·
-
+·               distribution       full                     ·                               ·
+·               vectorized         true                     ·                               ·
+merge-join      ·                  ·                        (pid1, v, pid1, cid1, cid2, v)  ·
+ │              type               inner                    ·                               ·
+ │              equality           (pid1, v) = (pid1, v)    ·                               ·
+ │              left cols are key  ·                        ·                               ·
+ │              mergeJoinOrder     +"(pid1=pid1)",+"(v=v)"  ·                               ·
+ ├── filter     ·                  ·                        (pid1, v)                       +pid1
+ │    │         filter             v = 1                    ·                               ·
+ │    └── scan  ·                  ·                        (pid1, v)                       +pid1
+ │              table              parent1@primary          ·                               ·
+ │              spans              FULL SCAN                ·                               ·
+ └── filter     ·                  ·                        (pid1, cid1, cid2, v)           +pid1
+      │         filter             v = 1                    ·                               ·
+      └── scan  ·                  ·                        (pid1, cid1, cid2, v)           +pid1
+·               table              child1@primary           ·                               ·
+·               spans              FULL SCAN                ·                               ·
