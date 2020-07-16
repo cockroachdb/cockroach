@@ -217,6 +217,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	config.TestingSetupZoneConfigHook(stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(rpc.ContextOptions{
+			TenantID:   roachpb.SystemTenantID,
 			AmbientCtx: cfg.AmbientCtx,
 			Config:     &base.Config{Insecure: true},
 			Clock:      cfg.Clock,

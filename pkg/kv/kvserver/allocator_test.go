@@ -5611,6 +5611,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
@@ -5753,6 +5754,7 @@ func Example_rebalancing() {
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,

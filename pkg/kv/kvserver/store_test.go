@@ -207,6 +207,7 @@ func createTestStoreWithoutStart(
 	config.TestingSetupZoneConfigHook(stopper)
 
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: cfg.AmbientCtx,
 		Config:     &base.Config{Insecure: true},
 		Clock:      cfg.Clock,
