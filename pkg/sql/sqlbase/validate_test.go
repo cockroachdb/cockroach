@@ -29,7 +29,7 @@ const (
 	// must add a justification for this in the map.
 	todoIAmKnowinglyAddingTechDebt
 	// iSolemnlySwearThisFieldIsValidated means that a field was added to a
-	//validate method.
+	// validate method.
 	iSolemnlySwearThisFieldIsValidated
 )
 
@@ -94,9 +94,8 @@ var validationMap = []struct {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"MutationJobs": {status: thisFieldReferencesNoObjects},
-			"SequenceOpts": {status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"DropTime": {status: thisFieldReferencesNoObjects},
+			"SequenceOpts": {status: iSolemnlySwearThisFieldIsValidated},
+			"DropTime":     {status: thisFieldReferencesNoObjects},
 			"ReplacementOf": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(bulkio): add validation"},
 			"AuditMode": {status: thisFieldReferencesNoObjects},
@@ -160,13 +159,9 @@ var validationMap = []struct {
 			"DefaultExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"Hidden": {status: thisFieldReferencesNoObjects},
-			"UsesSequenceIds": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"OwnsSequenceIds": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
+			"Hidden":          {status: thisFieldReferencesNoObjects},
+			"UsesSequenceIds": {status: iSolemnlySwearThisFieldIsValidated},
+			"OwnsSequenceIds": {status: iSolemnlySwearThisFieldIsValidated},
 			"ComputeExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,6 +56,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 
 	err := assignSequenceOptions(desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID())
 	if err != nil {
+		return err
+	}
+
+	if err := desc.Validate(params.ctx, params.p.txn, keys.SystemSQLCodec); err != nil {
 		return err
 	}
 
