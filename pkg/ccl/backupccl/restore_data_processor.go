@@ -159,6 +159,7 @@ func runRestoreData(
 		progDetails := RestoreProgress{}
 		progDetails.Summary = countRows(importRes.(*roachpb.ImportResponse).Imported, spec.PKIDs)
 		progDetails.ProgressIdx = entry.ProgressIdx
+		progDetails.DataSpan = entry.Span
 		details, err := gogotypes.MarshalAny(&progDetails)
 		if err != nil {
 			return err
