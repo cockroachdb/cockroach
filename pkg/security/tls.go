@@ -33,8 +33,12 @@ const (
 	EmbeddedRootKey      = "client.root.key"
 	EmbeddedTestUserCert = "client.testuser.crt"
 	EmbeddedTestUserKey  = "client.testuser.key"
+)
 
-	EmbeddedTenantID           = 123456789
+// See 'securitytest/test_certs/regenerate.sh'.
+var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
+
+const (
 	EmbeddedTenantServerCACert = "ca-server-tenant.crt"        // CA for tenant server (KV server)
 	EmbeddedTenantServerCert   = "server-tenant.crt"           // tenant server (KV server) cert
 	EmbeddedTenantServerKey    = "server-tenant.key"           // tenant server (KV server) key
