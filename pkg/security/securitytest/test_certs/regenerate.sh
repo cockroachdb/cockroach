@@ -10,7 +10,9 @@ rm -f "${dir_n}"/*.{crt,key}
 
 # Tenant certs
 ./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-client-tenant.key" create-tenant-client-ca
-./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-client-tenant.key" create-tenant-client 123456789
+for id in 10 11 20; do
+./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-client-tenant.key" create-tenant-client "${id}"
+done
 
 ./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-server-tenant.key" create-tenant-server-ca
 ./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-server-tenant.key" create-tenant-server 127.0.0.1 ::1 localhost *.local

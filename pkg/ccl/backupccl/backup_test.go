@@ -4254,6 +4254,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 	defer cleanupFn()
 	srv := tc.Server(0)
 
+	// NB: tenant certs for 10, 11, 20 are embedded. See:
+	_ = security.EmbeddedTenantIDs()
+
 	// Setup a few tenants, each with a different table.
 	conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), TenantInfo: []byte("ten")})
 	defer conn10.Close()
