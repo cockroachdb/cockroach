@@ -83,6 +83,12 @@ typedef int (*CR_GEOS_BufferParams_setSingleSided_r)(CR_GEOS_Handle, CR_GEOS_Buf
 typedef CR_GEOS_Geometry (*CR_GEOS_BufferWithParams_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                        CR_GEOS_BufferParams, double width);
 
+typedef char (*CR_GEOS_isValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char* (*CR_GEOS_isValidReason_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_isValidDetail_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int flags, char** reason,
+                                        CR_GEOS_Geometry* loc);
+typedef CR_GEOS_Geometry (*CR_GEOS_MakeValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 
@@ -158,6 +164,11 @@ struct CR_GEOS {
   CR_GEOS_WKBReader_destroy_r GEOSWKBReader_destroy_r;
   CR_GEOS_WKBReader_read_r GEOSWKBReader_read_r;
 
+  CR_GEOS_isValid_r GEOSisValid_r;
+  CR_GEOS_isValidReason_r GEOSisValidReason_r;
+  CR_GEOS_isValidDetail_r GEOSisValidDetail_r;
+  CR_GEOS_MakeValid_r GEOSMakeValid_r;
+
   CR_GEOS_Area_r GEOSArea_r;
   CR_GEOS_Length_r GEOSLength_r;
 
@@ -229,6 +240,10 @@ struct CR_GEOS {
     INIT(GEOSGeomTypeId_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
+    INIT(GEOSisValid_r);
+    INIT(GEOSisValidReason_r);
+    INIT(GEOSisValidDetail_r);
+    INIT(GEOSMakeValid_r);
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
     INIT(GEOSGetCentroid_r);
@@ -511,6 +526,102 @@ CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
 
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
+}
+
+//
+// Validity checking.
+//
+
+CR_GEOS_Status CR_GEOS_IsValid(CR_GEOS* lib, CR_GEOS_Slice g, char* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *ret = 0;
+  if (geom != nullptr) {
+    auto r = lib->GEOSisValid_r(handle, geom);
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    } else {
+      *ret = r;
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_IsValidReason(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *ret = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto r = lib->GEOSisValidReason_r(handle, geom);
+    if (r != NULL) {
+      *ret = toGEOSString(r, strlen(r));
+      lib->GEOSFree_r(handle, r);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_IsValidDetail(CR_GEOS* lib, CR_GEOS_Slice g, int flags, char* retIsValid,
+                                     CR_GEOS_String* retReason, CR_GEOS_String* retLocationEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *retReason = {.data = NULL, .len = 0};
+  *retLocationEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    char* reason = NULL;
+    CR_GEOS_Geometry loc = NULL;
+    auto r = lib->GEOSisValidDetail_r(handle, geom, flags, &reason, &loc);
+
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    } else {
+      *retIsValid = r;
+    }
+
+    if (reason != NULL) {
+      *retReason = toGEOSString(reason, strlen(reason));
+      lib->GEOSFree_r(handle, reason);
+    }
+
+    if (loc != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, loc, retLocationEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, loc);
+    }
+
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_MakeValid(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_String* validEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *validEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto validGeom = lib->GEOSMakeValid_r(handle, geom);
+    if (validGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, validGeom, validEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, validGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
 }
 
 //

@@ -2016,7 +2016,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			types.Geometry,
 			infoBuilder{
 				info: `Returns the LineString corresponds to the max distance across every pair of points comprising the ` +
-					`given geometries. 
+					`given geometries.
 
 Note if geometries are the same, it will return the LineString with the maximum distance between the geometry's ` +
 					`vertexes. The function will return the longest line that was discovered first when comparing maximum ` +
@@ -2041,7 +2041,7 @@ Note if geometries are the same, it will return the LineString with the maximum 
 			types.Geometry,
 			infoBuilder{
 				info: `Returns the LineString corresponds to the minimum distance across every pair of points comprising ` +
-					`the given geometries. 
+					`the given geometries.
 
 Note if geometries are the same, it will return the LineString with the minimum distance between the geometry's ` +
 					`vertexes. The function will return the shortest line that was discovered first when comparing minimum ` +
@@ -2332,7 +2332,122 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		},
 	),
 
+	//
+	// Validity checks
+	//
+
+	"st_isvalid": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.IsValid(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			types.Bool,
+			infoBuilder{
+				info:         `Returns whether the geometry is valid as defined by the OGC spec.`,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"flags", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				flags := int(*args[1].(*tree.DInt))
+				validDetail, err := geomfn.IsValidDetail(g.Geometry, flags)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(validDetail.IsValid)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns whether the geometry is valid.
+
+For flags=0, validity is defined by the OGC spec.
+
+For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_isvalidreason": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.IsValidReason(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			types.String,
+			infoBuilder{
+				info:         `Returns a string containing the reason the geometry is invalid along with the point of interest, or "Valid Geometry" if it is valid. Validity is defined by the OGC spec.`,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"flags", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				flags := int(*args[1].(*tree.DInt))
+				validDetail, err := geomfn.IsValidDetail(g.Geometry, flags)
+				if err != nil {
+					return nil, err
+				}
+				if validDetail.IsValid {
+					return tree.NewDString("Valid Geometry"), nil
+				}
+				return tree.NewDString(validDetail.Reason), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the reason the geometry is invalid or "Valid Geometry" if it is valid.
+
+For flags=0, validity is defined by the OGC spec.
+
+For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_makevalid": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				validGeom, err := geomfn.MakeValid(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(validGeom), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns a valid form of the given geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+
+	//
 	// Topology operations
+	//
+
 	"st_centroid": makeBuiltin(
 		defProps(),
 		append(
