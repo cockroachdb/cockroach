@@ -922,6 +922,8 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 		//
 		// NB: entering this branch indicates that the batch contains only a
 		// single non-trivial command.
+		log.Infof(ctx, "here")
+		b.state.Stats.SysBytes += 10 // XXX: Going to delete more, so compensate.
 		err := loader.MigrateToRangeAppliedStateKey(ctx, b.batch, b.state.Stats)
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to migrate to range applied state")
@@ -950,7 +952,7 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 			loader.CalcAppliedIndexSysBytes(b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex)
 
 		// Set the legacy MVCC stats key.
-		if err := loader.SetMVCCStats(ctx, b.batch, b.state.Stats); err != nil {
+		if err := loader.SetMVCCStats(ctx, b.batch, b.state.Stats); err != nil { // XXX: Suspicious.
 			return wrapWithNonDeterministicFailure(err, "unable to update MVCCStats")
 		}
 	}

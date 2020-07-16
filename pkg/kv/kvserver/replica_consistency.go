@@ -673,6 +673,6 @@ func (r *Replica) sha512(
 	// XXX: What happens, given that checksums, before the version bump, will be
 	// computed using the new field in mind?
 
-	log.Infof(ctx, "=== SHA512 results: shasum: %x\npersisted: %v\ncomputed:  %v", result.SHA512[:], result.PersistedMS.String(), result.RecomputedMS.String())
+	log.Infof(ctx, "=== sha512 results: shasum: %x\npersisted: %v\ncomputed:  %v", result.SHA512[:], result.PersistedMS.String(), result.RecomputedMS.String())
 	return &result, nil
 }

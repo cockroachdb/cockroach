@@ -3493,11 +3493,33 @@ func ComputeStatsGo(
 				// Replicated RangeID-local key.
 				if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
 					// RangeAppliedState key. Ignore.
-					// XXX: MVCCStats stored here, so where are we adding the size?
+					// XXX: MVCCStats stored here, so where are we adding the size? Don't think this applies anymore.
 					continue
 				}
 			}
 		}
+
+		// Check for RangeStatsLegacyKey
+		if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			// RangeID-local key.
+			_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+			if err != nil {
+				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+			}
+
+			if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
+				// Replicated RangeID-local key.
+				if suffix.Equal(keys.LocalRangeStatsLegacySuffix) {
+					// RangeStatsLegacyKey key. Log.
+					// XXX: MVCCStats stored here, is this where are we adding
+					// the size?
+					log.Infof(context.TODO(), "=== Here!")
+				}
+			}
+		}
+
+		// XXX: What if I could assert on the type of the value itself? How does
+		// one "parse" and assert against specific types.
 
 		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()

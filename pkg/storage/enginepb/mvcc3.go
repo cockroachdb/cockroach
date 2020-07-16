@@ -14,88 +14,22 @@ import "fmt"
 
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
-	s := MVCCStats{
-		ContainsEstimates: ms.ContainsEstimates,
-		LastUpdateNanos:   ms.LastUpdateNanos,
-		IntentAge:         ms.IntentAge,
-		GCBytesAge:        ms.GCBytesAge,
-		LiveBytes:         ms.LiveBytes,
-		LiveCount:         ms.LiveCount,
-		KeyBytes:          ms.KeyBytes,
-		KeyCount:          ms.KeyCount,
-		ValBytes:          ms.ValBytes,
-		ValCount:          ms.ValCount,
-		IntentBytes:       ms.IntentBytes,
-		IntentCount:       ms.IntentCount,
-		SysBytes:          ms.SysBytes,
-		SysCount:          ms.SysCount,
-		AbortSpanBytes:    0,
-	}
-	return s
+	return MVCCStats(*ms)
 }
 
 // ToStatsDelta converts the receiver to an MVCCStatsDelta.
 func (ms *MVCCStats) ToStatsDelta() MVCCStatsDelta {
-	s := MVCCStatsDelta{
-		ContainsEstimates: ms.ContainsEstimates,
-		LastUpdateNanos:   ms.LastUpdateNanos,
-		IntentAge:         ms.IntentAge,
-		GCBytesAge:        ms.GCBytesAge,
-		LiveBytes:         ms.LiveBytes,
-		LiveCount:         ms.LiveCount,
-		KeyBytes:          ms.KeyBytes,
-		KeyCount:          ms.KeyCount,
-		ValBytes:          ms.ValBytes,
-		ValCount:          ms.ValCount,
-		IntentBytes:       ms.IntentBytes,
-		IntentCount:       ms.IntentCount,
-		SysBytes:          ms.SysBytes,
-		SysCount:          ms.SysCount,
-	}
-	return s
+	return MVCCStatsDelta(*ms)
 }
 
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCPersistentStats) ToStats() MVCCStats {
-	s := MVCCStats{
-		ContainsEstimates: ms.ContainsEstimates,
-		LastUpdateNanos:   ms.LastUpdateNanos,
-		IntentAge:         ms.IntentAge,
-		GCBytesAge:        ms.GCBytesAge,
-		LiveBytes:         ms.LiveBytes,
-		LiveCount:         ms.LiveCount,
-		KeyBytes:          ms.KeyBytes,
-		KeyCount:          ms.KeyCount,
-		ValBytes:          ms.ValBytes,
-		ValCount:          ms.ValCount,
-		IntentBytes:       ms.IntentBytes,
-		IntentCount:       ms.IntentCount,
-		SysBytes:          ms.SysBytes,
-		SysCount:          ms.SysCount,
-		AbortSpanBytes:    0,
-	}
-	return s
+	return MVCCStats(*ms)
 }
 
 // ToPersistentStats converts the receiver to an MVCCPersistentStats.
 func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
-	s := MVCCPersistentStats{
-		ContainsEstimates: ms.ContainsEstimates,
-		LastUpdateNanos:   ms.LastUpdateNanos,
-		IntentAge:         ms.IntentAge,
-		GCBytesAge:        ms.GCBytesAge,
-		LiveBytes:         ms.LiveBytes,
-		LiveCount:         ms.LiveCount,
-		KeyBytes:          ms.KeyBytes,
-		KeyCount:          ms.KeyCount,
-		ValBytes:          ms.ValBytes,
-		ValCount:          ms.ValCount,
-		IntentBytes:       ms.IntentBytes,
-		IntentCount:       ms.IntentCount,
-		SysBytes:          ms.SysBytes,
-		SysCount:          ms.SysCount,
-	}
-	return s
+	return MVCCPersistentStats(*ms)
 }
 
 // MustSetValue is like SetValue, except it resets the enum and panics if the

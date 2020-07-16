@@ -1116,7 +1116,7 @@ func removeDeadReplicas(
 			batch.Close()
 			return nil, err
 		}
-		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil {
+		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil { // XXX: Suspicious.
 			return nil, errors.Wrap(err, "updating MVCCStats")
 		}
 	}

@@ -854,7 +854,7 @@ func (b RangeIDPrefixBuf) RangeLeaseKey() roachpb.Key {
 // RangeStatsLegacyKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
 // See comment on RangeStatsLegacyKey function.
-func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
+func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key { // XXX: I wonder if we're ever reading this.
 	return append(b.replicatedPrefix(), LocalRangeStatsLegacySuffix...)
 }
 

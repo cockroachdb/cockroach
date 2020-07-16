@@ -289,6 +289,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 		LeaseAppliedIndex: leaseAppliedIndex,
 		RangeStats:        newMS.ToPersistentStats(),
 	}
+	// XXX: Current theory is that I've incorrectly persisted something. // XXX: Really suspicious.
+	log.Infof(ctx, "persisting sysbytes=%d", as.RangeStats.SysBytes)
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in C.MVCCComputeStats and ComputeStatsGo.
 	ms := (*enginepb.MVCCStats)(nil)
