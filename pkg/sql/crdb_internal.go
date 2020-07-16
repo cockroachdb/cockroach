@@ -2689,11 +2689,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			}
 
 			listenAddrRPC := d.Address
-			listenAddrSQL := d.SQLAddress
-			if listenAddrSQL.IsEmpty() {
-				// Pre-19.2 node or same address for both.
-				listenAddrSQL = listenAddrRPC
-			}
+			listenAddrSQL := d.CheckedSQLAddress()
 
 			advAddrRPC, err := g.GetNodeIDAddress(d.NodeID)
 			if err != nil {

@@ -41,9 +41,10 @@ const (
 	DefaultHTTPPort = "8080"
 
 	// NB: net.JoinHostPort is not a constant.
-	defaultAddr     = ":" + DefaultPort
-	defaultHTTPAddr = ":" + DefaultHTTPPort
-	defaultSQLAddr  = ":" + DefaultPort
+	defaultAddr       = ":" + DefaultPort
+	defaultSQLAddr    = ":" + DefaultPort
+	defaultTenantAddr = ":" + DefaultPort
+	defaultHTTPAddr   = ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -190,6 +191,18 @@ type Config struct {
 	// This is computed from SQLAddr if specified otherwise Addr.
 	SQLAdvertiseAddr string
 
+	// SplitListenTenant indicates whether to listen for tenant
+	// KV clients on a separate address from RPC requests.
+	SplitListenTenant bool
+
+	// TenantAddr is the configured tenant KV listen address.
+	// This is used if SplitListenTenant is set to true.
+	TenantAddr string
+
+	// TenantAdvertiseAddr is the advertised tenant KV address.
+	// This is computed from TenantAddr if specified otherwise Addr.
+	TenantAdvertiseAddr string
+
 	// HTTPAddr is the configured HTTP listen address.
 	HTTPAddr string
 
@@ -241,6 +254,9 @@ func (cfg *Config) InitDefaults() {
 	cfg.SplitListenSQL = false
 	cfg.SQLAddr = defaultSQLAddr
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
+	cfg.SplitListenTenant = false
+	cfg.TenantAddr = defaultTenantAddr
+	cfg.TenantAdvertiseAddr = cfg.TenantAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""

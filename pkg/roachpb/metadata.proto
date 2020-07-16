@@ -300,7 +300,11 @@ message NodeDescriptor {
   optional string cluster_name = 9 [(gogoproto.nullable) = false];
   // The SQL address. If empty, indicates that the base address field
   // is also used to accept SQL connections.
-  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLAddress"];
+  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false, 
+      (gogoproto.customname) = "SQLAddress"];
+  // The tenant KV address. If empty, indicates that the base address
+  // field is also used to accept tenant KV connections.
+  optional util.UnresolvedAddr tenant_address = 11 [(gogoproto.nullable) = false];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes

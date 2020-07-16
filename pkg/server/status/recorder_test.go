@@ -146,7 +146,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432", "foo:26259")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual

@@ -22,13 +22,16 @@ import (
 
 func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, c.All())
+
+	// Start the cluster with tenant RPC servers running on different ports
+	// on each host. Don't bind to external interfaces when running locally.
+	tenantAddr := ifLocal("127.0.0.1", "0.0.0.0") + ":0"
+	c.Start(ctx, t, c.All(), startArgs("--args=--tenant-addr="+tenantAddr))
 
 	_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant(123)`)
 	require.NoError(t, err)
 
-	kvAddrs := c.ExternalAddr(ctx, c.All())
-
+	kvAddrs := tenantAddrs(ctx, t, c)
 	errCh := make(chan error)
 	go func() {
 		errCh <- c.RunE(ctx, c.Node(1),
@@ -72,4 +75,17 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	require.NoError(t, db.QueryRow(`SELECT * FROM foo LIMIT 1`).Scan(&id, &v))
 	require.Equal(t, 1, id)
 	require.Equal(t, "bar", v)
+}
+
+func tenantAddrs(ctx context.Context, t *test, c *cluster) (addrs []string) {
+	// NB: iterate to avoid needing to strip node ID from output lines.
+	for _, node := range c.All() {
+		const cmd = "cat {store-dir}/cockroach.advertise-tenant-addr"
+		out, err := c.RunWithBuffer(ctx, t.l, c.Node(node), cmd)
+		if err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		addrs = append(addrs, string(out))
+	}
+	return addrs
 }

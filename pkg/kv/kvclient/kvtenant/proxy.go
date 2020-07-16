@@ -14,9 +14,12 @@ package kvtenant
 
 import (
 	"context"
+	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -61,4 +64,17 @@ func (requiresCCLBinaryFactory) NewProxy(
 	_ log.AmbientContext, _ *rpc.Context, _ retry.Options, _ []string,
 ) (Proxy, error) {
 	return nil, errors.Errorf(`tenant proxy requires a CCL binary`)
+}
+
+// AddressResolver wraps a Proxy in an adapter that allows it be used as a
+// nodedialer.AddressResolver. Addresses are resolved to a node's tenant KV
+// address. See NodeDescriptor.CheckedTenantAddress.
+func AddressResolver(p Proxy) nodedialer.AddressResolver {
+	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+		nd, err := p.GetNodeDescriptor(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return nd.CheckedTenantAddress(), nil
+	}
 }

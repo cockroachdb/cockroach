@@ -199,7 +199,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = firstListener
 			serverArgs.Addr = firstListener.Addr().String()
 		} else {
-			//serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 			serverArgs.JoinAddr = firstListener.Addr().String()
 		}
 
