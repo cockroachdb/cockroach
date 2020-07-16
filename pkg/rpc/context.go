@@ -224,34 +224,17 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		var authHook func(ctx context.Context) error
 		if !o.tenant {
-			authHook = requireSuperUser
+			ic := &kvAuthInterceptor{}
+			unaryInterceptor = append(unaryInterceptor, ic.UnaryInterceptor)
+			streamInterceptor = append(streamInterceptor, ic.StreamServerInterceptor)
 		} else {
-			authHook = func(ctx context.Context) error {
-				// TODO(tbg): pull the tenant ID from the incoming
-				// certificate and validate that the request is
-				// admissible.
-				return nil
-			}
+			// TODO(ajwerner): should we add per-tenant request count metrics labeled
+			// on fullName?
+			ic := &tenantAuthInterceptor{}
+			unaryInterceptor = append(unaryInterceptor, ic.UnaryInterceptor)
+			streamInterceptor = append(streamInterceptor, ic.StreamServerInterceptor)
 		}
-
-		unaryInterceptor = append(unaryInterceptor, func(
-			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-		) (interface{}, error) {
-			if err := authHook(ctx); err != nil {
-				return nil, err
-			}
-			return handler(ctx, req)
-		})
-		streamInterceptor = append(streamInterceptor, func(
-			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-		) error {
-			if err := authHook(stream.Context()); err != nil {
-				return err
-			}
-			return handler(srv, stream)
-		})
 	}
 
 	if o.interceptor != nil {
