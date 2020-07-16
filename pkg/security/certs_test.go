@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -382,7 +383,7 @@ func TestUseCerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext)
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +403,7 @@ func TestUseCerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext)
+		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -472,7 +473,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext)
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -492,7 +493,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondSCtx := rpc.MakeSecurityContext(clientContext)
+		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
 	if err != nil {
@@ -596,7 +597,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	sCtx := rpc.MakeSecurityContext(clientContext)
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -616,7 +617,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	{
-		secondCtx := rpc.MakeSecurityContext(clientContext)
+		secondCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
 		httpClient, err = secondCtx.GetHTTPClient()
 	}
 	if err != nil {
