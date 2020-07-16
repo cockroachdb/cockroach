@@ -72,10 +72,13 @@ func (r *Replica) canServeFollowerRead(
 
 	maxClosed, _ := r.maxClosed(ctx)
 	canServeFollowerRead := ts.LessEq(maxClosed)
+	tsDiff := ts.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
 		// We can't actually serve the read based on the closed timestamp.
 		// Signal the clients that we want an update so that future requests can succeed.
 		r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+		log.Eventf(ctx, "can't serve follower read; closed timestamp too low by: %s; maxClosed: %s ts: %s maxTS: %s",
+			tsDiff, maxClosed, ba.Timestamp, ba.Txn.MaxTimestamp)
 
 		if false {
 			// NB: this can't go behind V(x) because the log message created by the
@@ -93,7 +96,7 @@ func (r *Replica) canServeFollowerRead(
 	//
 	// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
 	// serve reads for that and smaller timestamps forever.
-	log.Event(ctx, "serving via follower read")
+	log.Eventf(ctx, "serving via follower read; query timestamp below closed timestamp by %s", -tsDiff)
 	r.store.metrics.FollowerReadsCount.Inc(1)
 	return nil
 }
