@@ -452,31 +452,33 @@ render               ·             ·            (pk1)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
-·               distribution  local        ·       ·
-·               vectorized    true         ·       ·
-limit           ·             ·            (x, y)  +y
- │              count         1            ·       ·
- └── sort       ·             ·            (x, y)  +y
-      │         order         +y           ·       ·
-      └── scan  ·             ·            (x, y)  ·
-·               table         xyz@primary  ·       ·
-·               spans         FULL SCAN    ·       ·
-·               filter        x = 1        ·       ·
+·                    distribution  local        ·       ·
+·                    vectorized    true         ·       ·
+limit                ·             ·            (x, y)  +y
+ │                   count         1            ·       ·
+ └── sort            ·             ·            (x, y)  +y
+      │              order         +y           ·       ·
+      └── filter     ·             ·            (x, y)  ·
+           │         filter        x = 1        ·       ·
+           └── scan  ·             ·            (x, y)  ·
+·                    table         xyz@primary  ·       ·
+·                    spans         FULL SCAN    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
-·                         distribution  local         ·        ·
-·                         vectorized    true          ·        ·
-group                     ·             ·             (count)  ·
- │                        aggregate 0   count_rows()  ·        ·
- │                        scalar        ·             ·        ·
- └── render               ·             ·             ()       ·
-      └── limit           ·             ·             (x, y)   +y
-           │              count         1             ·        ·
-           └── sort       ·             ·             (x, y)   +y
-                │         order         +y            ·        ·
-                └── scan  ·             ·             (x, y)   ·
-·                         table         xyz@primary   ·        ·
-·                         spans         FULL SCAN     ·        ·
-·                         filter        x = 1         ·        ·
+·                              distribution  local         ·        ·
+·                              vectorized    true          ·        ·
+group                          ·             ·             (count)  ·
+ │                             aggregate 0   count_rows()  ·        ·
+ │                             scalar        ·             ·        ·
+ └── render                    ·             ·             ()       ·
+      └── limit                ·             ·             (x, y)   +y
+           │                   count         1             ·        ·
+           └── sort            ·             ·             (x, y)   +y
+                │              order         +y            ·        ·
+                └── filter     ·             ·             (x, y)   ·
+                     │         filter        x = 1         ·        ·
+                     └── scan  ·             ·             (x, y)   ·
+·                              table         xyz@primary   ·        ·
+·                              spans         FULL SCAN     ·        ·

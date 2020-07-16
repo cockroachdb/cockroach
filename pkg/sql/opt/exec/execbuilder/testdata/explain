@@ -532,12 +532,13 @@ lookup-join  ·                      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-·     distribution  local        ·       ·
-·     vectorized    true         ·       ·
-scan  ·             ·            (k, v)  ·
-·     table         t@primary    ·       ·
-·     spans         FULL SCAN    ·       ·
-·     filter        (k % 2) = 0  ·       ·
+·          distribution  local        ·       ·
+·          vectorized    true         ·       ·
+filter     ·             ·            (k, v)  ·
+ │         filter        (k % 2) = 0  ·       ·
+ └── scan  ·             ·            (k, v)  ·
+·          table         t@primary    ·       ·
+·          spans         FULL SCAN    ·       ·
 
 query TTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
@@ -656,12 +657,13 @@ scan  ·             ·          (k int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ----
-·     distribution  local                          ·               ·
-·     vectorized    true                           ·               ·
-scan  ·             ·                              (k int, v int)  ·
-·     table         t@primary                      ·               ·
-·     spans         FULL SCAN                      ·               ·
-·     filter        ((v)[int] > (123)[int])[bool]  ·               ·
+·          distribution  local                          ·               ·
+·          vectorized    true                           ·               ·
+filter     ·             ·                              (k int, v int)  ·
+ │         filter        ((v)[int] > (123)[int])[bool]  ·               ·
+ └── scan  ·             ·                              (k int, v int)  ·
+·          table         t@primary                      ·               ·
+·          spans         FULL SCAN                      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
@@ -690,39 +692,41 @@ render       ·             ·                               (z int, v int)     
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-·                    distribution  local                        ·               ·
-·                    vectorized    false                        ·               ·
-count                ·             ·                            ()              ·
- └── delete          ·             ·                            ()              ·
-      │              from          t                            ·               ·
-      │              strategy      deleter                      ·               ·
-      │              auto commit   ·                            ·               ·
-      └── render     ·             ·                            (k int)         ·
-           │         render 0      (k)[int]                     ·               ·
-           └── scan  ·             ·                            (k int, v int)  ·
-·                    table         t@primary                    ·               ·
-·                    spans         FULL SCAN                    ·               ·
-·                    filter        ((v)[int] > (1)[int])[bool]  ·               ·
+·                         distribution  local                        ·               ·
+·                         vectorized    false                        ·               ·
+count                     ·             ·                            ()              ·
+ └── delete               ·             ·                            ()              ·
+      │                   from          t                            ·               ·
+      │                   strategy      deleter                      ·               ·
+      │                   auto commit   ·                            ·               ·
+      └── render          ·             ·                            (k int)         ·
+           │              render 0      (k)[int]                     ·               ·
+           └── filter     ·             ·                            (k int, v int)  ·
+                │         filter        ((v)[int] > (1)[int])[bool]  ·               ·
+                └── scan  ·             ·                            (k int, v int)  ·
+·                         table         t@primary                    ·               ·
+·                         spans         FULL SCAN                    ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-·                    distribution  local                          ·                          ·
-·                    vectorized    false                          ·                          ·
-count                ·             ·                              ()                         ·
- └── update          ·             ·                              ()                         ·
-      │              table         t                              ·                          ·
-      │              set           v                              ·                          ·
-      │              strategy      updater                        ·                          ·
-      │              auto commit   ·                              ·                          ·
-      └── render     ·             ·                              (k int, v int, v_new int)  ·
-           │         render 0      (k)[int]                       ·                          ·
-           │         render 1      (v)[int]                       ·                          ·
-           │         render 2      ((k)[int] + (1)[int])[int]     ·                          ·
-           └── scan  ·             ·                              (k int, v int)             ·
-·                    table         t@primary                      ·                          ·
-·                    spans         FULL SCAN                      ·                          ·
-·                    filter        ((v)[int] > (123)[int])[bool]  ·                          ·
+·                         distribution  local                          ·                          ·
+·                         vectorized    false                          ·                          ·
+count                     ·             ·                              ()                         ·
+ └── update               ·             ·                              ()                         ·
+      │                   table         t                              ·                          ·
+      │                   set           v                              ·                          ·
+      │                   strategy      updater                        ·                          ·
+      │                   auto commit   ·                              ·                          ·
+      └── render          ·             ·                              (k int, v int, v_new int)  ·
+           │              render 0      (k)[int]                       ·                          ·
+           │              render 1      (v)[int]                       ·                          ·
+           │              render 2      ((k)[int] + (1)[int])[int]     ·                          ·
+           └── filter     ·             ·                              (k int, v int)             ·
+                │         filter        ((v)[int] > (123)[int])[bool]  ·                          ·
+                └── scan  ·             ·                              (k int, v int)             ·
+·                         table         t@primary                      ·                          ·
+·                         spans         FULL SCAN                      ·                          ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -773,12 +777,13 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-·     distribution  local                                                                      ·               ·
-·     vectorized    true                                                                       ·               ·
-scan  ·             ·                                                                          (x int, y int)  ·
-·     table         tt@primary                                                                 ·               ·
-·     spans         FULL SCAN                                                                  ·               ·
-·     filter        ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+·          distribution  local                                                                      ·               ·
+·          vectorized    true                                                                       ·               ·
+filter     ·             ·                                                                          (x int, y int)  ·
+ │         filter        ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+ └── scan  ·             ·                                                                          (x int, y int)  ·
+·          table         tt@primary                                                                 ·               ·
+·          spans         FULL SCAN                                                                  ·               ·
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT

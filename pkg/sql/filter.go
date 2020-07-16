@@ -59,7 +59,3 @@ func (f *filterNode) Values() tree.Datums {
 }
 
 func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
-
-func isFilterTrue(expr tree.TypedExpr) bool {
-	return expr == nil || expr == tree.DBoolTrue
-}

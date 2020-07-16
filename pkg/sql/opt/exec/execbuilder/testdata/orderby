@@ -281,15 +281,16 @@ render                ·                ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-·               distribution  local
-·               vectorized    true
-render          ·             ·
- └── sort       ·             ·
-      │         order         +b,+a,+d
-      └── scan  ·             ·
-·               table         abc@primary
-·               spans         FULL SCAN
-·               filter        b > 10
+·                    distribution  local
+·                    vectorized    true
+render               ·             ·
+ └── sort            ·             ·
+      │              order         +b,+a,+d
+      └── filter     ·             ·
+           │         filter        b > 10
+           └── scan  ·             ·
+·                    table         abc@primary
+·                    spans         FULL SCAN
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -306,14 +307,15 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-·          distribution  local        ·             ·
-·          vectorized    true         ·             ·
-sort       ·             ·            (a, b, c, d)  +b,+a,+c
- │         order         +b,+a,+c     ·             ·
- └── scan  ·             ·            (a, b, c, d)  ·
-·          table         abc@primary  ·             ·
-·          spans         FULL SCAN    ·             ·
-·          filter        b > 10       ·             ·
+·               distribution  local        ·             ·
+·               vectorized    true         ·             ·
+sort            ·             ·            (a, b, c, d)  +b,+a,+c
+ │              order         +b,+a,+c     ·             ·
+ └── filter     ·             ·            (a, b, c, d)  ·
+      │         filter        b > 10       ·             ·
+      └── scan  ·             ·            (a, b, c, d)  ·
+·               table         abc@primary  ·             ·
+·               spans         FULL SCAN    ·             ·
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c

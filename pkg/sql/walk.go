@@ -185,7 +185,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			if n.index.IsPartial() {
 				v.observer.attr(name, "partial index", "")
 			}
-			if n.hardLimit > 0 && isFilterTrue(n.filter) {
+			if n.hardLimit > 0 {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 			}
 			if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
@@ -194,9 +194,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			if n.lockingWaitPolicy != sqlbase.ScanLockingWaitPolicy_BLOCK {
 				v.observer.attr(name, "locking wait policy", n.lockingWaitPolicy.PrettyString())
 			}
-		}
-		if v.observer.expr != nil {
-			v.expr(name, "filter", -1, n.filter)
 		}
 
 	case *filterNode:
@@ -222,7 +219,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				cols[i] = inputCols[c].Name
 			}
 			v.observer.attr(name, "key columns", strings.Join(cols, ", "))
-			v.expr(name, "filter", -1, n.table.filter)
 		}
 		n.input = v.visit(n.input)
 

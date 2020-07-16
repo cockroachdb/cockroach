@@ -581,26 +581,28 @@ render       ·              ·                                    ("coalesce") 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
-·          distribution  local                  ·          ·
-·          vectorized    true                   ·          ·
-render     ·             ·                      (a)        ·
- │         render 0      a                      ·          ·
- └── scan  ·             ·                      (a, b, d)  ·
-·          table         t@primary              ·          ·
-·          spans         FULL SCAN              ·          ·
-·          filter        (a >= b) AND (a <= d)  ·          ·
+·               distribution  local                  ·          ·
+·               vectorized    true                   ·          ·
+render          ·             ·                      (a)        ·
+ │              render 0      a                      ·          ·
+ └── filter     ·             ·                      (a, b, d)  ·
+      │         filter        (a >= b) AND (a <= d)  ·          ·
+      └── scan  ·             ·                      (a, b, d)  ·
+·               table         t@primary              ·          ·
+·               spans         FULL SCAN              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
-·          distribution  local               ·          ·
-·          vectorized    true                ·          ·
-render     ·             ·                   (a)        ·
- │         render 0      a                   ·          ·
- └── scan  ·             ·                   (a, b, d)  ·
-·          table         t@primary           ·          ·
-·          spans         FULL SCAN           ·          ·
-·          filter        (a < b) OR (a > d)  ·          ·
+·               distribution  local               ·          ·
+·               vectorized    true                ·          ·
+render          ·             ·                   (a)        ·
+ │              render 0      a                   ·          ·
+ └── filter     ·             ·                   (a, b, d)  ·
+      │         filter        (a < b) OR (a > d)  ·          ·
+      └── scan  ·             ·                   (a, b, d)  ·
+·               table         t@primary           ·          ·
+·               spans         FULL SCAN           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
