@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -37,39 +38,55 @@ import (
 func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// Validate the advertise address.
 	advHost, advPort, err := validateAdvertiseAddr(ctx,
-		cfg.AdvertiseAddr, "--listen-addr", cfg.Addr, "")
+		cfg.AdvertiseAddr, cfg.Addr, "", cliflags.ListenAddr)
 	if err != nil {
-		return errors.Wrap(err, "invalid --advertise-addr")
+		return invalidFlagErr(err, cliflags.AdvertiseAddr)
 	}
 	cfg.AdvertiseAddr = net.JoinHostPort(advHost, advPort)
 
 	// Validate the RPC listen address.
 	listenHost, listenPort, err := validateListenAddr(ctx, cfg.Addr, "")
 	if err != nil {
-		return errors.Wrap(err, "invalid --listen-addr")
+		return invalidFlagErr(err, cliflags.ListenAddr)
 	}
 	cfg.Addr = net.JoinHostPort(listenHost, listenPort)
 
 	// Validate the SQL advertise address. Use the provided advertise
 	// addr as default.
 	advSQLHost, advSQLPort, err := validateAdvertiseAddr(ctx,
-		cfg.SQLAdvertiseAddr, "--sql-addr", cfg.SQLAddr, advHost)
+		cfg.SQLAdvertiseAddr, cfg.SQLAddr, advHost, cliflags.ListenSQLAddr)
 	if err != nil {
-		return errors.Wrap(err, "invalid --advertise-sql-addr")
+		return invalidFlagErr(err, cliflags.SQLAdvertiseAddr)
 	}
 	cfg.SQLAdvertiseAddr = net.JoinHostPort(advSQLHost, advSQLPort)
 
 	// Validate the SQL listen address - use the resolved listen addr as default.
 	sqlHost, sqlPort, err := validateListenAddr(ctx, cfg.SQLAddr, listenHost)
 	if err != nil {
-		return errors.Wrap(err, "invalid --sql-addr")
+		return invalidFlagErr(err, cliflags.ListenSQLAddr)
 	}
 	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
+
+	// Validate the tenant advertise address. Use the provided advertise
+	// addr as default.
+	advTenantHost, advTenantPort, err := validateAdvertiseAddr(ctx,
+		cfg.TenantAdvertiseAddr, cfg.TenantAddr, advHost, cliflags.ListenTenantAddr)
+	if err != nil {
+		return invalidFlagErr(err, cliflags.TenantAdvertiseAddr)
+	}
+	cfg.TenantAdvertiseAddr = net.JoinHostPort(advTenantHost, advTenantPort)
+
+	// Validate the tenant listen address - use the resolved listen addr as default.
+	tenantHost, tenantPort, err := validateListenAddr(ctx, cfg.TenantAddr, listenHost)
+	if err != nil {
+		return invalidFlagErr(err, cliflags.ListenTenantAddr)
+	}
+	cfg.TenantAddr = net.JoinHostPort(tenantHost, tenantPort)
 
 	// Validate the HTTP advertise address. Use the provided advertise
 	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
-		cfg.HTTPAdvertiseAddr, "--http-addr", cfg.HTTPAddr, advHost)
+		cfg.HTTPAdvertiseAddr, cfg.HTTPAddr, advHost, cliflags.ListenHTTPAddr)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute public HTTP address")
 	}
@@ -79,7 +96,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// as default.
 	httpHost, httpPort, err := validateListenAddr(ctx, cfg.HTTPAddr, listenHost)
 	if err != nil {
-		return errors.Wrap(err, "invalid --http-addr")
+		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 	return nil
@@ -126,16 +143,16 @@ func UpdateAddrs(ctx context.Context, addr, advAddr *string, ln net.Addr) error 
 	return nil
 }
 
-// validateAdvertiseAddr validates an normalizes an address suitable
+// validateAdvertiseAddr validates and normalizes an address suitable
 // for use in gossiping - for use by other nodes. This ensures
 // that if the "host" part is empty, it gets filled in with
 // the configured listen address if any, or the canonical host name.
 func validateAdvertiseAddr(
-	ctx context.Context, advAddr, flag, listenAddr, defaultHost string,
+	ctx context.Context, advAddr, listenAddr, defaultHost string, listenFlag cliflags.FlagInfo,
 ) (string, string, error) {
 	listenHost, listenPort, err := getListenAddr(listenAddr, defaultHost)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "invalid %s", flag)
+		return "", "", invalidFlagErr(err, listenFlag)
 	}
 
 	advHost, advPort := "", ""
@@ -263,4 +280,8 @@ func LookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	}
 	// No IPv4 address, return the first resolved address instead.
 	return addrs[0].String(), nil
+}
+
+func invalidFlagErr(err error, flag cliflags.FlagInfo) error {
+	return errors.Wrapf(err, "invalid --%s", flag.Name)
 }

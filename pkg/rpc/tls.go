@@ -259,6 +259,9 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 		}
 	}
 
+	// TODO(tbg): Verify that the tenant listen and advertise addresses are
+	// compatible with the provided certificate.
+
 	// Verify that the http listen and advertise addresses are
 	// compatible with the provided certificate.
 	certInfo = cm.UICert()

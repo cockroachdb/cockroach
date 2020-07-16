@@ -333,7 +333,7 @@ func (n *Node) AnnotateCtxWithSpan(
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
-	addr, sqlAddr net.Addr,
+	addr, sqlAddr, tenantAddr net.Addr,
 	state initState,
 	clusterName string,
 	attrs roachpb.Attributes,
@@ -375,6 +375,7 @@ func (n *Node) start(
 		NodeID:          nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
+		TenantAddress:   util.MakeUnresolvedAddr(tenantAddr.Network(), tenantAddr.String()),
 		Attrs:           attrs,
 		Locality:        locality,
 		LocalityAddress: localityAddress,

@@ -107,6 +107,9 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
 		s.server.grpc.Stop()
+		if s.server.tenantGRPC != nil {
+			s.server.tenantGRPC.Stop()
+		}
 		s.server.stopper.Stop(ctx)
 	}()
 
@@ -204,6 +207,9 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) e
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
+	if s.tenantGRPC != nil {
+		s.tenantGRPC.setMode(modeDraining)
+	}
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
 	time.Sleep(drainWait.Get(&s.st.SV))
