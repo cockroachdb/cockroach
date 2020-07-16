@@ -579,6 +579,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	// Use a gossip instance that won't have the system config available in it.
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: tc.store.cfg.AmbientCtx,
 		Config:     &base.Config{Insecure: true},
 		Clock:      tc.store.cfg.Clock,
