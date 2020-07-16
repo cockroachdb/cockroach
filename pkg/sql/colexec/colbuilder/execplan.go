@@ -1946,21 +1946,23 @@ func planLogicalProjectionOp(
 	input = colexec.NewBatchSchemaSubsetEnforcer(allocator, input, typs, resultIdx, len(typs))
 	switch expr.(type) {
 	case *tree.AndExpr:
-		outputOp = colexec.NewAndProjOp(
+		outputOp, err = colexec.NewAndProjOp(
 			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			leftFeedOp, rightFeedOp,
+			typs[leftIdx], typs[rightIdx],
 			leftIdx, rightIdx, resultIdx,
 		)
 	case *tree.OrExpr:
-		outputOp = colexec.NewOrProjOp(
+		outputOp, err = colexec.NewOrProjOp(
 			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			leftFeedOp, rightFeedOp,
+			typs[leftIdx], typs[rightIdx],
 			leftIdx, rightIdx, resultIdx,
 		)
 	}
-	return outputOp, resultIdx, typs, internalMemUsedLeft + internalMemUsedRight, nil
+	return outputOp, resultIdx, typs, internalMemUsedLeft + internalMemUsedRight, err
 }
 
 // planIsNullProjectionOp plans the operator for IS NULL and IS NOT NULL
