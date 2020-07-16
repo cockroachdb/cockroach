@@ -287,11 +287,6 @@ func (t *Tracer) StartSpan(
 	}
 	s.SpanID = uint64(rand.Int63())
 
-	// Start recording if necessary.
-	if recordingType != NoRecording {
-		s.enableRecording(parentCtx.span, recordingType, false /* separateRecording */)
-	}
-
 	if t.useNetTrace() {
 		s.netTr = trace.New("tracing", operationName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
@@ -326,6 +321,12 @@ func (t *Tracer) StartSpan(
 		linkShadowSpan(s, shadowTr, parentShadowCtx, parentType)
 	}
 
+	// Start recording if necessary. This publishes the span to be retrieved by
+	// recordings and so it's done after all of s' fields not protected by a lock
+	// are set.
+	if recordingType != NoRecording {
+		s.enableRecording(parentCtx.span, recordingType, false /* separateRecording */)
+	}
 	return s
 }
 
