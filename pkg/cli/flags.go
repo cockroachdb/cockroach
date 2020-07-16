@@ -428,6 +428,12 @@ func init() {
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
 		}
 
+		// SQL max clients using TCP. Unix socket is not affected.
+		// TODO(knz): Make this configurable per listener.
+		// See: https://github.com/cockroachdb/cockroach/issues/44842
+		// See: https://github.com/cockroachdb/cockroach/issues/51453
+		intFlag(f, &baseCfg.MaxSQLClients, cliflags.ListenSQLMaxClients)
+
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)

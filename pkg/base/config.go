@@ -208,6 +208,11 @@ type Config struct {
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
 	ClockDevicePath string
+
+	// MaxSQLClients establishes a limit on the number of simultaneous SQL client
+	// connections on the main SQL listener.
+	// TODO(knz): make this configurable per listener.
+	MaxSQLClients int
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
@@ -246,6 +251,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
+	cfg.MaxSQLClients = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
