@@ -832,7 +832,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					tableNames: []string{"t"},
 				},
 			},
-			skip: "https://github.com/cockroachdb/cockroach/issues/51458",
 		},
 	}
 

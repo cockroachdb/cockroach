@@ -1097,29 +1097,16 @@ func TestHashRouterRandom(t *testing.T) {
 						require.NoError(t, resultsByOp[i].err)
 					}
 				}
-				requireOneError := func(t *testing.T, err error) {
+				requireErrFromEachOutput := func(t *testing.T, err error) {
 					t.Helper()
 					if err == nil {
 						t.Fatal("use requireNoErrors instead")
 					}
 					for i := range resultsByOp {
-						if err == nil {
-							// A match was already found. Since we only expect one error, this
-							// error must be nil.
-							require.Nil(t, resultsByOp[i].err, "expected error to be nil")
-							continue
-						}
 						if resultsByOp[i].err == nil {
-							// This result has no error but we have not yet found the expected
-							// error, continue to another result.
-							continue
+							t.Fatalf("unexpectedly no error from %d output", i)
 						}
 						require.True(t, testutils.IsError(resultsByOp[i].err, err.Error()), "unexpected error %v", resultsByOp[i].err)
-						err = nil
-					}
-					if err != nil {
-						// err is set to nil when a match is found.
-						t.Fatal("no matching error found")
 					}
 				}
 
@@ -1156,10 +1143,10 @@ func TestHashRouterRandom(t *testing.T) {
 						}
 					}
 				case hashRouterContextCanceled:
-					requireOneError(t, context.Canceled)
+					requireErrFromEachOutput(t, context.Canceled)
 					checkMetadata(t, []string{hashRouterMetadataMsg})
 				case hashRouterOutputErrorOnAddBatch:
-					requireOneError(t, errors.New(addBatchErrMsg))
+					requireErrFromEachOutput(t, errors.New(addBatchErrMsg))
 					checkMetadata(t, []string{hashRouterMetadataMsg})
 				case hashRouterOutputErrorOnNext:
 					// If an error is encountered in Next, it is returned to the caller,
