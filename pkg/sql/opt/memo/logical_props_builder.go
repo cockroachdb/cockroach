@@ -1268,7 +1268,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// Output Columns
 	// --------------
 	// Only non-mutation columns are output columns.
-	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		if private.IsColumnOutput(i) {
 			colID := private.Table.ColumnID(i)
 			rel.OutputCols.Add(colID)
@@ -1289,7 +1289,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// null or the corresponding insert and fetch/update columns are not null. In
 	// other words, if either the source or destination column is not null, then
 	// the column must be not null.
-	for i, n := 0, tab.AllColumnCount(); i < n; i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		tabColID := private.Table.ColumnID(i)
 		if !rel.OutputCols.Contains(tabColID) {
 			continue
@@ -1562,7 +1562,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	// Make now and annotate the metadata table with it for next time.
 	var allCols opt.ColSet
 	tab := md.Table(tabID)
-	for i := 0; i < tab.AllColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		allCols.Add(tabID.ColumnID(i))
 	}
 
@@ -1819,7 +1819,7 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 
 	// Only iterate over non-mutation columns, since even non-null mutation
 	// columns can be null during backfill.
-	for i := 0; i < tab.AllColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
 		if !cat.IsMutationColumn(tab, i) && !tab.Column(i).IsNullable() {
 			cs.Add(tabID.ColumnID(i))

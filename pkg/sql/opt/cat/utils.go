@@ -130,7 +130,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	var buf bytes.Buffer
-	for i := 0; i < tab.AllColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
 		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
 		child.Child(buf.String())

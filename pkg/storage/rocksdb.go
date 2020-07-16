@@ -1232,6 +1232,10 @@ type batchIterator struct {
 	batch *rocksDBBatch
 }
 
+func (r *batchIterator) SupportsPrev() bool {
+	return false
+}
+
 func (r *batchIterator) Stats() IteratorStats {
 	return r.iter.Stats()
 }
@@ -1958,6 +1962,10 @@ func (r *rocksDBIterator) destroy() {
 }
 
 // The following methods implement the Iterator interface.
+
+func (r *rocksDBIterator) SupportsPrev() bool {
+	return true
+}
 
 func (r *rocksDBIterator) Stats() IteratorStats {
 	stats := C.DBIterStats(r.iter)

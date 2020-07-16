@@ -5018,6 +5018,199 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	}
 }
 
+// readWriterReturningSeekLTTrackingIterator is used in a test to inject errors
+// and ensure that SeekLT is returned an appropriate number of times.
+type readWriterReturningSeekLTTrackingIterator struct {
+	it seekLTTrackingIterator
+	ReadWriter
+}
+
+// NewIterator injects a seekLTTrackingIterator over the engine's real iterator.
+func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) Iterator {
+	rw.it.Iterator = rw.ReadWriter.NewIterator(opts)
+	return &rw.it
+}
+
+// seekLTTrackingIterator is used to determine the number of times seekLT is
+// called.
+type seekLTTrackingIterator struct {
+	seekLTCalled int
+	Iterator
+}
+
+func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
+	it.seekLTCalled++
+	it.Iterator.SeekLT(k)
+}
+
+// TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage
+// collection only utilizes SeekLT if there are enough undeleted versions.
+func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCaseKey struct {
+		key         string
+		timestamps  []int
+		gcTimestamp int
+		expSeekLT   bool
+	}
+	type testCase struct {
+		name string
+		keys []testCaseKey
+	}
+	bytes := []byte("value")
+	toHLC := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
+	}
+	engineBatchIteratorSupportsPrev := func(engine Engine) bool {
+		batch := engine.NewBatch()
+		defer batch.Close()
+		it := batch.NewIterator(IterOptions{
+			UpperBound: keys.UserTableDataMin,
+			LowerBound: keys.MaxKey,
+		})
+		defer it.Close()
+		return it.SupportsPrev()
+	}
+	runTestCase := func(t *testing.T, tc testCase, engine Engine) {
+		ctx := context.Background()
+		ms := &enginepb.MVCCStats{}
+		for _, key := range tc.keys {
+			for _, seconds := range key.timestamps {
+				val := roachpb.MakeValueFromBytes(bytes)
+				ts := toHLC(seconds)
+				if err := MVCCPut(
+					ctx, engine, ms, roachpb.Key(key.key), ts, val, nil,
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+
+		supportsPrev := engineBatchIteratorSupportsPrev(engine)
+
+		var keys []roachpb.GCRequest_GCKey
+		var expectedSeekLTs int
+		for _, key := range tc.keys {
+			keys = append(keys, roachpb.GCRequest_GCKey{
+				Key:       roachpb.Key(key.key),
+				Timestamp: toHLC(key.gcTimestamp),
+			})
+			if supportsPrev && key.expSeekLT {
+				expectedSeekLTs++
+			}
+		}
+
+		batch := engine.NewBatch()
+		defer batch.Close()
+		rw := readWriterReturningSeekLTTrackingIterator{ReadWriter: batch}
+
+		require.NoError(t, MVCCGarbageCollect(ctx, &rw, ms, keys, toHLC(10)))
+		require.Equal(t, expectedSeekLTs, rw.it.seekLTCalled)
+	}
+	cases := []testCase{
+		{
+			name: "basic",
+			keys: []testCaseKey{
+				{
+					key:         "a",
+					timestamps:  []int{1, 2},
+					gcTimestamp: 1,
+				},
+				{
+					key:         "b",
+					timestamps:  []int{1, 2, 3},
+					gcTimestamp: 1,
+				},
+				{
+					key:         "c",
+					timestamps:  []int{1, 2, 3, 4},
+					gcTimestamp: 1,
+				},
+				{
+					key:         "d",
+					timestamps:  []int{1, 2, 3, 4, 5},
+					gcTimestamp: 1,
+					expSeekLT:   true,
+				},
+				{
+					key:         "e",
+					timestamps:  []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					gcTimestamp: 1,
+					expSeekLT:   true,
+				},
+				{
+					key:         "f",
+					timestamps:  []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					gcTimestamp: 6,
+					expSeekLT:   false,
+				},
+			},
+		},
+		{
+			name: "SeekLT to the end",
+			keys: []testCaseKey{
+				{
+					key:         "ee",
+					timestamps:  []int{2, 3, 4, 5, 6, 7, 8, 9},
+					gcTimestamp: 1,
+					expSeekLT:   true,
+				},
+			},
+		},
+		{
+			name: "Next to the end",
+			keys: []testCaseKey{
+				{
+					key:         "eee",
+					timestamps:  []int{8, 9},
+					gcTimestamp: 1,
+					expSeekLT:   false,
+				},
+			},
+		},
+		{
+			name: "Next to the next key",
+			keys: []testCaseKey{
+				{
+					key:         "eeee",
+					timestamps:  []int{8, 9},
+					gcTimestamp: 1,
+					expSeekLT:   false,
+				},
+				{
+					key:         "eeeee",
+					timestamps:  []int{8, 9},
+					gcTimestamp: 1,
+					expSeekLT:   false,
+				},
+			},
+		},
+		{
+			name: "Next to the end on the first version",
+			keys: []testCaseKey{
+				{
+					key:         "h",
+					timestamps:  []int{9},
+					gcTimestamp: 1,
+					expSeekLT:   false,
+				},
+			},
+		},
+	}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					engine := engineImpl.create()
+					defer engine.Close()
+					runTestCase(t, tc, engine)
+				})
+			}
+		})
+	}
+}
+
 // TestResolveIntentWithLowerEpoch verifies that trying to resolve
 // an intent at an epoch that is lower than the epoch of the intent
 // leaves the intent untouched.

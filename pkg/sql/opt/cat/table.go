@@ -41,9 +41,9 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// AllColumnCount returns the number of columns in the table. This includes
+	// ColumnCount returns the number of columns in the table. This includes
 	// public columns, write-only columns, etc.
-	AllColumnCount() int
+	ColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
 	// position within the table, where i < ColumnCount. Note that the Columns
