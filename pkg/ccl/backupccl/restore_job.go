@@ -13,9 +13,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"runtime"
-	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -28,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	"github.com/gogo/protobuf/types"
 )
 
 type intervalSpan roachpb.Span
@@ -124,7 +122,7 @@ func makeImportSpans(
 	lowWaterMark roachpb.Key,
 	user string,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
-) ([]importEntry, hlc.Timestamp, error) {
+) ([]execinfrapb.RestoreSpanEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
 	// OverlapCoveringMerge input first. Payloads are returned in the same order
 	// that they appear in the input; putting the completedSpan first means we'll
@@ -225,7 +223,7 @@ func makeImportSpans(
 	importRanges := covering.OverlapCoveringMerge(backupCoverings)
 
 	// Translate the output of OverlapCoveringMerge into requests.
-	var requestEntries []importEntry
+	var requestEntries []execinfrapb.RestoreSpanEntry
 rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
@@ -265,163 +263,13 @@ rangeLoop:
 			}
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
-			requestEntries = append(requestEntries, importEntry{
-				Span:      roachpb.Span{Key: importRange.Start, EndKey: importRange.End},
-				entryType: request,
-				files:     files,
+			requestEntries = append(requestEntries, execinfrapb.RestoreSpanEntry{
+				Span:  roachpb.Span{Key: importRange.Start, EndKey: importRange.End},
+				Files: files,
 			})
 		}
 	}
 	return requestEntries, maxEndTime, nil
-}
-
-// splitAndScatter creates new ranges for importSpans and scatters replicas and
-// leaseholders to be as evenly balanced as possible. It does this with some
-// amount of parallelism but also staying as close to the order in importSpans
-// as possible (the more out of order, the more work is done if a RESTORE job
-// loses its lease and has to be restarted).
-//
-// At a high level, this is accomplished by splitting and scattering large
-// "chunks" from the front of importEntries in one goroutine, each of which are
-// in turn passed to one of many worker goroutines that split and scatter the
-// individual entries.
-//
-// importEntries are sent to readyForImportCh as they are scattered, so letting
-// that channel send block can be used for backpressure on the splits and
-// scatters.
-//
-// TODO(dan): This logic is largely tuned by running BenchmarkRestore2TB. See if
-// there's some way to test it without running an O(hour) long benchmark.
-func splitAndScatter(
-	restoreCtx context.Context,
-	settings *cluster.Settings,
-	db *kv.DB,
-	kr *storageccl.KeyRewriter,
-	numClusterNodes int,
-	importSpans []importEntry,
-	readyForImportCh chan<- importEntry,
-) error {
-	var span opentracing.Span
-	ctx, span := tracing.ChildSpan(restoreCtx, "presplit-scatter")
-	defer tracing.FinishSpan(span)
-
-	g := ctxgroup.WithContext(ctx)
-
-	// TODO(dan): This not super principled. I just wanted something that wasn't
-	// a constant and grew slower than linear with the length of importSpans. It
-	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
-	chunkSize := int(math.Sqrt(float64(len(importSpans))))
-	importSpanChunks := make([][]importEntry, 0, len(importSpans)/chunkSize)
-	for start := 0; start < len(importSpans); {
-		importSpanChunk := importSpans[start:]
-		end := start + chunkSize
-		if end < len(importSpans) {
-			importSpanChunk = importSpans[start:end]
-		}
-		importSpanChunks = append(importSpanChunks, importSpanChunk)
-		start = end
-	}
-
-	importSpanChunksCh := make(chan []importEntry)
-	expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(importSpanChunksCh)
-		for idx, importSpanChunk := range importSpanChunks {
-			// TODO(dan): The structure between this and the below are very
-			// similar. Dedup.
-			chunkKey, err := rewriteBackupSpanKey(kr, importSpanChunk[0].Key)
-			if err != nil {
-				return err
-			}
-
-			// TODO(dan): Really, this should be splitting the Key of the first
-			// entry in the _next_ chunk.
-			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
-			if err := db.AdminSplit(ctx, chunkKey, expirationTime); err != nil {
-				return err
-			}
-
-			log.VEventf(restoreCtx, 1, "scattering chunk %d of %d", idx, len(importSpanChunks))
-			scatterReq := &roachpb.AdminScatterRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{
-					Key:    chunkKey,
-					EndKey: chunkKey.Next(),
-				}),
-				// TODO(dan): This is a bit of a hack, but it seems to be an effective
-				// one (see the PR that added it for graphs). As of the commit that
-				// added this, scatter is not very good at actually balancing leases.
-				// This is likely for two reasons: 1) there's almost certainly some
-				// regression in scatter's behavior, it used to work much better and 2)
-				// scatter has to operate by balancing leases for all ranges in a
-				// cluster, but in RESTORE, we really just want it to be balancing the
-				// span being restored into.
-				RandomizeLeases: true,
-			}
-			if _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
-				// TODO(dan): Unfortunately, Scatter is still too unreliable to
-				// fail the RESTORE when Scatter fails. I'm uncomfortable that
-				// this could break entirely and not start failing the tests,
-				// but on the bright side, it doesn't affect correctness, only
-				// throughput.
-				log.Errorf(ctx, "failed to scatter chunk %d: %s", idx, pErr.GoError())
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case importSpanChunksCh <- importSpanChunk:
-			}
-		}
-		return nil
-	})
-
-	// TODO(dan): This tries to cover for a bad scatter by having 2 * the number
-	// of nodes in the cluster. Is it necessary?
-	splitScatterWorkers := numClusterNodes * 2
-	var splitScatterStarted uint64 // Only access using atomic.
-	for worker := 0; worker < splitScatterWorkers; worker++ {
-		g.GoCtx(func(ctx context.Context) error {
-			for importSpanChunk := range importSpanChunksCh {
-				for _, importSpan := range importSpanChunk {
-					idx := atomic.AddUint64(&splitScatterStarted, 1)
-
-					newSpanKey, err := rewriteBackupSpanKey(kr, importSpan.Span.Key)
-					if err != nil {
-						return err
-					}
-
-					// TODO(dan): Really, this should be splitting the Key of
-					// the _next_ entry.
-					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
-					if err := db.AdminSplit(ctx, newSpanKey, expirationTime); err != nil {
-						return err
-					}
-
-					log.VEventf(restoreCtx, 1, "scattering %d of %d", idx, len(importSpans))
-					scatterReq := &roachpb.AdminScatterRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: newSpanKey, EndKey: newSpanKey.Next()}),
-					}
-					if _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
-						// TODO(dan): Unfortunately, Scatter is still too unreliable to
-						// fail the RESTORE when Scatter fails. I'm uncomfortable that
-						// this could break entirely and not start failing the tests,
-						// but on the bright side, it doesn't affect correctness, only
-						// throughput.
-						log.Errorf(ctx, "failed to scatter %d: %s", idx, pErr.GoError())
-					}
-
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case readyForImportCh <- importSpan:
-					}
-				}
-			}
-			return nil
-		})
-	}
-
-	return g.Wait()
 }
 
 // WriteDescriptors writes all the the new descriptors: First the ID ->
@@ -587,9 +435,8 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 // files.
 func restore(
 	restoreCtx context.Context,
-	db *kv.DB,
+	phs sql.PlanHookState,
 	numClusterNodes int,
-	settings *cluster.Settings,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -598,20 +445,20 @@ func restore(
 	spans []roachpb.Span,
 	job *jobs.Job,
 	encryption *roachpb.FileEncryptionOptions,
-	user string,
 ) (RowCount, error) {
+	user := phs.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
 
 	mu := struct {
 		syncutil.Mutex
-		res               RowCount
-		requestsCompleted []bool
-		highWaterMark     int
+		highWaterMark int
 	}{
 		highWaterMark: -1,
 	}
+
+	res := RowCount{}
 
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
@@ -619,17 +466,13 @@ func restore(
 		tableToSerialize := tables[i]
 		newDescBytes, err := protoutil.Marshal(tableToSerialize.DescriptorProto())
 		if err != nil {
-			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err,
+			return res, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
 			NewDesc: newDescBytes,
 		})
-	}
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(rekeys)
-	if err != nil {
-		return mu.res, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
@@ -638,13 +481,13 @@ func restore(
 	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo,
 		highWaterMark, user, errOnMissingRange)
 	if err != nil {
-		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
+		return res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
 
 	for i := range importSpans {
-		importSpans[i].progressIdx = i
+		importSpans[i].ProgressIdx = int64(i)
 	}
-	mu.requestsCompleted = make([]bool, len(importSpans))
+	requestsCompleted := make([]bool, len(importSpans))
 
 	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
 		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
@@ -652,7 +495,7 @@ func restore(
 			case *jobspb.Progress_Restore:
 				mu.Lock()
 				if mu.highWaterMark >= 0 {
-					d.Restore.HighWater = importSpans[mu.highWaterMark].Key
+					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
 				}
 				mu.Unlock()
 			default:
@@ -665,40 +508,22 @@ func restore(
 		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.TableDesc().PrimaryIndex.ID))] = true
 	}
 
-	// We're already limiting these on the server-side, but sending all the
-	// Import requests at once would fill up distsender/grpc/something and cause
-	// all sorts of badness (node liveness timeouts leading to mass leaseholder
-	// transfers, poor performance on SQL workloads, etc) as well as log spam
-	// about slow distsender requests. Rate limit them here, too.
-	//
-	// Use the number of cpus across all nodes in the cluster as the number of
-	// outstanding Import requests for the rate limiting. Note that this assumes
-	// all nodes in the cluster have the same number of cpus, but it's okay if
-	// that's wrong.
-	//
-	// TODO(dan): Make this limiting per node.
-	maxConcurrentImports := numClusterNodes * runtime.NumCPU()
-	importsSem := make(chan struct{}, maxConcurrentImports)
-
 	g := ctxgroup.WithContext(restoreCtx)
 
-	// The Import (and resulting AddSSTable) requests made below run on
-	// leaseholders, so presplit and scatter the ranges to balance the work
-	// among many nodes.
-	//
-	// We're about to start off some goroutines that presplit & scatter each
-	// import span. Once split and scattered, the span is submitted to
-	// readyForImportCh to indicate it's ready for Import. Since import is so
-	// much slower, we buffer the channel to keep the split/scatter work from
-	// getting too far ahead. This both naturally rate limits the split/scatters
-	// and bounds the number of empty ranges created if the RESTORE fails (or is
-	// canceled).
-	const presplitLeadLimit = 10
-	readyForImportCh := make(chan importEntry, presplitLeadLimit)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(readyForImportCh)
-		return splitAndScatter(ctx, settings, db, kr, numClusterNodes, importSpans, readyForImportCh)
-	})
+	// TODO(dan): This not super principled. I just wanted something that wasn't
+	// a constant and grew slower than linear with the length of importSpans. It
+	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
+	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
+	for start := 0; start < len(importSpans); {
+		importSpanChunk := importSpans[start:]
+		end := start + chunkSize
+		if end < len(importSpans) {
+			importSpanChunk = importSpans[start:end]
+		}
+		importSpanChunks = append(importSpanChunks, importSpanChunk)
+		start = end
+	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
 	g.GoCtx(func(ctx context.Context) error {
@@ -706,79 +531,65 @@ func restore(
 		defer tracing.FinishSpan(progressSpan)
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
+
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+
 	g.GoCtx(func(ctx context.Context) error {
-		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-		for readyForImportSpan := range readyForImportCh {
-			newSpanKey, err := rewriteBackupSpanKey(kr, readyForImportSpan.Span.Key)
-			if err != nil {
-				return err
-			}
-			idx := readyForImportSpan.progressIdx
-
-			importRequest := &roachpb.ImportRequest{
-				// Import is a point request because we don't want DistSender to split
-				// it. Assume (but don't require) the entire post-rewrite span is on the
-				// same range.
-				RequestHeader: roachpb.RequestHeader{Key: newSpanKey},
-				DataSpan:      readyForImportSpan.Span,
-				Files:         readyForImportSpan.files,
-				EndTime:       endTime,
-				Rekeys:        rekeys,
-				Encryption:    encryption,
+		// When a processor is done importing a span, it will send a progress update
+		// to progCh.
+		for progress := range progCh {
+			var progDetails RestoreProgress
+			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 			}
 
-			log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
+			res.add(progDetails.Summary)
+			idx := progDetails.ProgressIdx
 
-			select {
-			case importsSem <- struct{}{}:
-			case <-ctx.Done():
-				return ctx.Err()
+			// Assert that we're actually marking the correct span done. See #23977.
+			// TODO(pbardea): Pass back the dataspan key of the import request through
+			// the progress to compare.
+			//if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(importRequest.DataSpan.Key) {
+			//	mu.Unlock()
+			//	return errors.Newf("request %d for span %v (to %v) does not match import span for same idx: %v",
+			//		idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
+			//	)
+			//}
+			requestsCompleted[idx] = true
+			mu.Lock()
+			for j := mu.highWaterMark + 1; j < len(requestsCompleted) && requestsCompleted[j]; j++ {
+				mu.highWaterMark = j
 			}
+			mu.Unlock()
 
-			g.GoCtx(func(ctx context.Context) error {
-				ctx, importSpan := tracing.ChildSpan(ctx, "import")
-				log.Event(ctx, "acquired semaphore")
-				defer tracing.FinishSpan(importSpan)
-				defer func() { <-importsSem }()
-
-				importRes, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
-				if pErr != nil {
-					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
-
-				}
-
-				mu.Lock()
-				mu.res.add(countRows(importRes.(*roachpb.ImportResponse).Imported, pkIDs))
-
-				// Assert that we're actually marking the correct span done. See #23977.
-				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
-					mu.Unlock()
-					return errors.Newf("request %d for span %v (to %v) does not match import span for same idx: %v",
-						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
-					)
-				}
-				mu.requestsCompleted[idx] = true
-				for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-					mu.highWaterMark = j
-				}
-				mu.Unlock()
-
-				requestFinishedCh <- struct{}{}
-				return nil
-			})
+			// Signal that an ImportRequest finished to update job progress.
+			requestFinishedCh <- struct{}{}
 		}
-		log.Event(restoreCtx, "wait for outstanding imports to finish")
 		return nil
 	})
+
+	// TODO(pbardea): Improve logging in processors.
+	if err := distRestore(
+		restoreCtx,
+		phs,
+		importSpanChunks,
+		pkIDs,
+		encryption,
+		rekeys,
+		endTime,
+		progCh,
+	); err != nil {
+		return res, err
+	}
 
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return res, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
-	return mu.res, nil
+	return res, nil
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
@@ -1107,9 +918,8 @@ func (r *restoreResumer) Resume(
 
 	res, err := restore(
 		ctx,
-		p.ExecCfg().DB,
+		p,
 		numClusterNodes,
-		p.ExecCfg().Settings,
 		backupManifests,
 		details.BackupLocalityInfo,
 		details.EndTime,
@@ -1118,7 +928,6 @@ func (r *restoreResumer) Resume(
 		spans,
 		r.job,
 		details.Encryption,
-		p.User(),
 	)
 	if err != nil {
 		return err

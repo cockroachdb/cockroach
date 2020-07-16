@@ -91,6 +91,7 @@ func (s dbSplitAndScatterer) splitAndScatterKey(
 func (s dbSplitAndScatterer) findDestination(
 	_ context.Context, _ *roachpb.BatchResponse,
 ) roachpb.NodeID {
+	// TODO(pbardea): Implement me.
 	return roachpb.NodeID(0)
 }
 
@@ -238,7 +239,7 @@ func runSplitAndScatter(
 			for importSpanChunk := range importSpanChunksCh {
 				log.Infof(ctx, "processing a chunk")
 				for _, importSpan := range importSpanChunk {
-					log.Infof(ctx, "processing a span")
+					log.Infof(ctx, "processing a span [%s,%s)", importSpan.Span.Key, importSpan.Span.EndKey)
 					destination, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpan.Span.Key)
 					if err != nil {
 						return err
