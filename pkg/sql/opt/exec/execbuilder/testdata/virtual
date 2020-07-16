@@ -134,13 +134,13 @@ render                                                                     ·   
                      │                                                     table         pg_attribute@pg_attribute_attrelid_idx
                      │                                                     type          inner
                      │                                                     equality      (oid) = (attrelid)
-                     │                                                     pred          column131 = attnum
+                     │                                                     pred          column135 = attnum
                      └── render                                            ·             ·
                           └── virtual-table-lookup-join                    ·             ·
                                │                                           table         pg_attribute@pg_attribute_attrelid_idx
                                │                                           type          inner
                                │                                           equality      (oid) = (attrelid)
-                               │                                           pred          (column108 = attnum) AND (attrelid = 'b'::REGCLASS)
+                               │                                           pred          (column110 = attnum) AND (attrelid = 'b'::REGCLASS)
                                └── render                                  ·             ·
                                     └── virtual-table-lookup-join          ·             ·
                                          │                                 table         pg_class@pg_class_oid_idx
