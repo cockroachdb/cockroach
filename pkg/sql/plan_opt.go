@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -127,10 +128,21 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	physical := memo.RootProps()
 	resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
 	for i, col := range physical.Presentation {
+		colMeta := md.ColumnMeta(col.ID)
 		resultCols[i].Name = col.Alias
-		resultCols[i].Typ = md.ColumnMeta(col.ID).Type
+		resultCols[i].Typ = colMeta.Type
 		if err := checkResultType(resultCols[i].Typ); err != nil {
 			return 0, err
+		}
+		// If the column came from a table, set up the relevant metadata.
+		if colMeta.Table != opt.TableID(0) {
+			// Get the cat.Table that this column references.
+			tab := md.Table(colMeta.Table)
+			resultCols[i].TableID = sqlbase.ID(tab.ID())
+			// Convert the metadata opt.ColumnID to its ordinal position in the table.
+			colOrdinal := colMeta.Table.ColumnOrdinal(col.ID)
+			// Use that ordinal position to retrieve the column's stable ID.
+			resultCols[i].PGAttributeNum = sqlbase.ColumnID(tab.Column(colOrdinal).ColID())
 		}
 	}
 
