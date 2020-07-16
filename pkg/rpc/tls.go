@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -55,6 +56,7 @@ func wrapError(err error) error {
 type SecurityContext struct {
 	security.CertsLocator
 	config *base.Config
+	tenID  roachpb.TenantID
 	lazy   struct {
 		// The certificate manager. Must be accessed through GetCertificateManager.
 		certificateManager lazyCertificateManager
@@ -66,10 +68,11 @@ type SecurityContext struct {
 // MakeSecurityContext makes a SecurityContext.
 //
 // TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
-func MakeSecurityContext(cfg *base.Config) SecurityContext {
+func MakeSecurityContext(cfg *base.Config, tenID roachpb.TenantID) SecurityContext {
 	return SecurityContext{
 		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
 		config:       cfg,
+		tenID:        tenID,
 	}
 }
 
@@ -78,8 +81,13 @@ func MakeSecurityContext(cfg *base.Config) SecurityContext {
 // fails eagerly.
 func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManager, error) {
 	ctx.lazy.certificateManager.Do(func() {
+		var opts []security.Option
+		if !roachpb.IsSystemTenantID(ctx.tenID.ToUint64()) {
+			opts = append(opts, security.ForTenant(ctx.tenID.String()))
+		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
-			security.NewCertificateManager(ctx.config.SSLCertsDir)
+			security.NewCertificateManager(ctx.config.SSLCertsDir, opts...)
+
 		if ctx.lazy.certificateManager.err == nil && !ctx.config.Insecure {
 			infos, err := ctx.lazy.certificateManager.cm.ListCertificates()
 			if err != nil {
