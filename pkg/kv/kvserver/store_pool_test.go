@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -837,7 +838,7 @@ func TestGetLocalities(t *testing.T) {
 	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
 		return roachpb.NodeDescriptor{
 			NodeID:   roachpb.NodeID(tierCount),
-			Locality: createLocality(tierCount),
+			Locality: createLocality(tierCount - 1),
 		}
 	}
 
@@ -864,22 +865,30 @@ func TestGetLocalities(t *testing.T) {
 
 	var existingReplicas []roachpb.ReplicaDescriptor
 	for _, store := range stores {
-		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
+		existingReplicas = append(existingReplicas,
+			roachpb.ReplicaDescriptor{
+				NodeID:  store.Node.NodeID,
+				StoreID: store.StoreID,
+			},
+		)
 	}
 
-	localities := sp.getLocalities(existingReplicas)
+	localitiesByStore := sp.getLocalitiesByStore(existingReplicas)
+	localitiesByNode := sp.getLocalitiesByNode(existingReplicas)
 	for _, store := range stores {
+		storeID := store.StoreID
 		nodeID := store.Node.NodeID
-		locality, ok := localities[nodeID]
+		localityByStore, ok := localitiesByStore[storeID]
 		if !ok {
-			t.Fatalf("could not find locality for node %d", nodeID)
+			t.Fatalf("could not find locality for store %d", storeID)
 		}
-		if e, a := int(nodeID), len(locality.Tiers); e != a {
-			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
-		}
-		if e, a := createLocality(int(nodeID)).String(), sp.getNodeLocalityString(nodeID); e != a {
-			t.Fatalf("for getNodeLocalityString(%d), expected %q, got %q", nodeID, e, a)
-		}
+		localityByNode, ok := localitiesByNode[nodeID]
+		require.Truef(t, ok, "could not find locality for node %d", nodeID)
+		require.Equal(t, int(nodeID), len(localityByStore.Tiers))
+		require.Equal(t, localityByStore.Tiers[len(localityByStore.Tiers)-1],
+			roachpb.Tier{Key: "node", Value: nodeID.String()})
+		require.Equal(t, int(nodeID)-1, len(localityByNode.Tiers))
+		require.Equal(t, createLocality(int(nodeID)-1).String(), sp.getNodeLocalityString(nodeID))
 	}
 }
 

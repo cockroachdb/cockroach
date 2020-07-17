@@ -6432,6 +6432,12 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
+	// We now allow adding a replica to the same node, to support rebalances
+	// within the same node when replication is 1x, so add another replica to the
+	// range descriptor to avoid this case.
+	if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
+		t.Fatalf("Unexpected error %v", err)
+	}
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
