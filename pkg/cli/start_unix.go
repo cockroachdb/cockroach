@@ -30,7 +30,7 @@ import (
 // If two drain signals are seen, the second drain signal will be reraised
 // without a signal handler. The default action of any signal listed here thus
 // must terminate the process.
-var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM, unix.SIGQUIT}
+var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 // termSignal is the signal that causes an idempotent graceful
 // shutdown (i.e. second occurrence does not incur hard shutdown).
