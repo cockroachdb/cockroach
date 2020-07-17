@@ -637,20 +637,25 @@ func FinishSpan(span opentracing.Span) {
 //
 // See also ChildSpan() for a "parent-child relationship".
 func ForkCtxSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
+	sp := ForkSpan(ctx, opName)
+	return opentracing.ContextWithSpan(ctx, sp), sp
+}
+
+// ForkSpan: see ForkCtxSpan.
+func ForkSpan(ctx context.Context, opName string) opentracing.Span {
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		if _, noop := span.(*noopSpan); noop {
 			// Optimization: avoid ContextWithSpan call if tracing is disabled.
-			return ctx, span
+			return span
 		}
 		tr := span.Tracer()
 		if IsBlackHoleSpan(span) {
-			ns := &tr.(*Tracer).noopSpan
-			return opentracing.ContextWithSpan(ctx, ns), ns
+			return &tr.(*Tracer).noopSpan
 		}
 		newSpan := tr.StartSpan(opName, opentracing.FollowsFrom(span.Context()), LogTagsFromCtx(ctx))
-		return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+		return newSpan
 	}
-	return ctx, nil
+	return nil
 }
 
 // ChildSpan opens a span as a child of the current span in the context (if
