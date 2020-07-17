@@ -12,8 +12,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
 )
 
@@ -130,6 +133,52 @@ func nativeToDatum(
 	return d, nil
 }
 
+// getTargetColFromCodec gets the targeted columns based on codec so that
+// it can be injected into row converter. It also identifies the columns
+// that are in tableColNames but not in codec for checking, just in case
+// validation is strict.
+func getTargetColFromCodec(
+	codec *goavro.Codec, tableColNames map[string](struct{}),
+) ([]tree.Name, []string, error) {
+	schemaStr := codec.Schema()
+	var schema map[string]interface{}
+	err := json.Unmarshal([]byte(schemaStr), &schema)
+	if err != nil {
+		return []tree.Name{}, []string{}, err
+	}
+	colMap, ok := schema["fields"].([]interface{})
+	if !ok {
+		return []tree.Name{}, []string{}, errors.New("schema not found for this AVRO import")
+	}
+	targetCols := make([]tree.Name, 0)
+	targetColsMap := make(map[string]struct{})
+	for _, colInterface := range colMap {
+		col, ok := colInterface.(map[string]interface{})
+		if !ok {
+			return []tree.Name{}, []string{}, errors.New(
+				"schema fields cannot be properly casted into array of targeted columns",
+			)
+		}
+		colName, ok := col["name"].(string)
+		if !ok {
+			return []tree.Name{}, []string{}, errors.New(
+				"bad field name description for this column",
+			)
+		}
+		if _, ok := tableColNames[colName]; ok {
+			targetCols = append(targetCols, tree.Name(colName))
+			targetColsMap[colName] = struct{}{}
+		}
+	}
+	missingCols := make([]string, 0)
+	for colName := range tableColNames {
+		if _, ok := targetColsMap[colName]; !ok {
+			missingCols = append(missingCols, colName)
+		}
+	}
+	return targetCols, missingCols, nil
+}
+
 // A mapping from supported types.Family to the list of avro
 // type names that can be used to construct our target type.
 var familyToAvroT = map[types.Family][]string{
@@ -160,9 +209,10 @@ var familyToAvroT = map[types.Family][]string{
 
 // avroConsumer implements importRowConsumer interface.
 type avroConsumer struct {
-	importCtx      *parallelImportContext
-	fieldNameToIdx map[string]int
-	strict         bool
+	importCtx       *parallelImportContext
+	fieldNameToIdx  map[string]int
+	strict          bool
+	missingColNames []string
 }
 
 // Converts avro record to datums as expected by DatumRowConverter.
@@ -203,6 +253,13 @@ func (a *avroConsumer) FillDatums(
 ) error {
 	if err := a.convertNative(native, conv); err != nil {
 		return err
+	}
+
+	if a.strict && len(a.missingColNames) > 0 {
+		return fmt.Errorf(
+			"columns %s were not present in the import",
+			strings.Join(a.missingColNames, ", "),
+		)
 	}
 
 	// Set any nil datums to DNull (in case native
@@ -390,8 +447,9 @@ func newImportAvroPipeline(
 	avro *avroInputReader, input *fileReader,
 ) (importRowProducer, importRowConsumer, error) {
 	fieldIdxByName := make(map[string]int)
-	for idx, col := range avro.importContext.tableDesc.VisibleColumns() {
-		fieldIdxByName[col.Name] = idx
+	tableColNames := make(map[string](struct{}))
+	for _, col := range avro.importContext.tableDesc.VisibleColumns() {
+		tableColNames[col.Name] = struct{}{}
 	}
 
 	consumer := &avroConsumer{
@@ -405,6 +463,16 @@ func newImportAvroPipeline(
 		if err != nil {
 			return nil, nil, err
 		}
+		targetCols, missingColNames, err := getTargetColFromCodec(ocf.Codec(), tableColNames)
+		if err != nil {
+			return nil, nil, err
+		}
+		consumer.importCtx.targetCols = targetCols
+		consumer.missingColNames = missingColNames
+		for idx, col := range consumer.importCtx.targetCols {
+			fieldIdxByName[col.String()] = idx
+		}
+		consumer.fieldNameToIdx = fieldIdxByName
 		producer := &ocfStream{
 			ocf:      ocf,
 			progress: func() float32 { return input.ReadFraction() },
@@ -413,6 +481,19 @@ func newImportAvroPipeline(
 	}
 
 	codec, err := goavro.NewCodec(avro.opts.SchemaJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	targetCols, missingColNames, err := getTargetColFromCodec(codec, tableColNames)
+	if err != nil {
+		return nil, nil, err
+	}
+	consumer.importCtx.targetCols = targetCols
+	consumer.missingColNames = missingColNames
+	for idx, col := range consumer.importCtx.targetCols {
+		fieldIdxByName[col.String()] = idx
+	}
+	consumer.fieldNameToIdx = fieldIdxByName
 	if err != nil {
 		return nil, nil, err
 	}
