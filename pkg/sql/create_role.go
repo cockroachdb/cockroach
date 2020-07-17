@@ -327,5 +327,5 @@ func (p *planner) checkPasswordAndGetHash(
 		hashedPassword = []byte{}
 	}
 
-	return
+	return hashedPassword, nil
 }
