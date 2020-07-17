@@ -8,14 +8,18 @@ send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
 start_test "Check that the server emits a goroutine dump upon receiving signal"
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs --logtostderr\r"
+send "$argv start --insecure --pid-file=server_pid --store=path=logs/db --logtostderr\r"
 eexpect "CockroachDB node starting"
 
 system "kill -QUIT `cat server_pid`"
-eexpect "received signal 'quit'"
 eexpect "\nI*stack traces:"
 eexpect "RunAsyncTask"
-eexpect "server drained and shutdown completed"
+
+system "kill -QUIT `cat server_pid`"
+eexpect "\nI*stack traces:"
+eexpect "RunAsyncTask"
+
+interrupt
 # Check that the server eventually terminates.
 eexpect ":/# "
 end_test
@@ -27,6 +31,7 @@ eexpect root@
 system "killall -QUIT `basename \$(realpath $argv)`"
 eexpect "SIGQUIT: quit"
 eexpect "RunAsyncTask"
+
 # Check that the client terminates.
 eexpect ":/# "
 end_test
