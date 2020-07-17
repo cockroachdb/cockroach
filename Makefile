@@ -891,7 +891,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/ordered_sum_agg.eg.go \
   pkg/sql/colexec/ordered_sum_int_agg.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
-  pkg/sql/colexec/overloads_test_utils.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
   pkg/sql/colexec/proj_const_right_ops.eg.go \
   pkg/sql/colexec/proj_non_const_ops.eg.go \

@@ -126,6 +126,11 @@ eval
 false
 
 eval
+1.1 = 1.1
+----
+true
+
+eval
 1.1 != 1.2
 ----
 true
@@ -151,32 +156,37 @@ eval
 false
 
 eval
-1.1::decimal = 1.2::decimal
+1.1::float = 1.2::float
 ----
 false
 
 eval
-1.1::decimal != 1.2::decimal
+1.1::float = 1.1::float
 ----
 true
 
 eval
-1.1::decimal < 1.2::decimal
+1.1::float != 1.2::float
 ----
 true
 
 eval
-1.1::decimal <= 1.2::decimal
+1.1::float < 1.2::float
 ----
 true
 
 eval
-1.1::decimal > 1.2::decimal
+1.1::float <= 1.2::float
+----
+true
+
+eval
+1.1::float > 1.2::float
 ----
 false
 
 eval
-1.1::decimal >= 1.2::decimal
+1.1::float >= 1.2::float
 ----
 false
 
