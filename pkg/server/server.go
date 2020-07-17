@@ -1303,27 +1303,23 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
-	// determines when `./cockroach [...] --background` returns. For any initialized
-	// nodes (i.e. already part of a cluster) this is when this method returns
-	// (assuming there's no error). For nodes that need to join a cluster, we
-	// return once the initServer is ready to accept requests.
-	var onSuccessfulReturnFn, onInitServerReady func()
-	selfBootstrap := initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0
+	// We self bootstrap for when we're configured to do so, which should only
+	// happen during tests and for `cockroach start-single-node`.
+	selfBootstrap := s.cfg.AutoInitializeCluster && initServer.NeedsInit()
 	if selfBootstrap {
-		// If a new node is started without join flags, self-bootstrap.
-		//
-		// Note: this is behavior slated for removal, see:
-		// https://github.com/cockroachdb/cockroach/pull/44112
-		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-		switch {
-		case err == nil:
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-		case errors.Is(err, ErrClusterInitialized):
-		default:
-			// Process is shutting down.
+		if _, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+			return err
 		}
+	} else {
+		log.Info(ctx, "awaiting init command or join with an already initialized node.")
 	}
+
+	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
+	// determines when `./cockroach [...] --background` returns. For any
+	// initialized nodes (i.e. already part of a cluster) this is when this
+	// method returns (assuming there's no error). For nodes that need to join a
+	// cluster, we return once the initServer is ready to accept requests.
+	var onSuccessfulReturnFn, onInitServerReady func()
 	{
 		readyFn := func(bool) {}
 		if s.cfg.ReadyFn != nil {
@@ -1339,7 +1335,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// This opens the main listener. When the listener is open, we can call
-	// initServerReadyFn since any request initated to the initServer at that
+	// initServerReadyFn since any request initiated to the initServer at that
 	// point will reach it once ServeAndWait starts handling the queue of incoming
 	// connections.
 	startRPCServer(workersCtx)
