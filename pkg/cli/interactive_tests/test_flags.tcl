@@ -72,14 +72,12 @@ eexpect {Failed running "cockroach"}
 eexpect ":/# "
 end_test
 
-start_test "Check that start without --join reports a deprecation warning"
+start_test "Check that start without --join errors out"
 send "$argv start --insecure\r"
-eexpect "running 'cockroach start' without --join is deprecated."
-eexpect "node starting"
-interrupt
-eexpect ":/# "
+eexpect "ERROR: no --join flags provided to 'cockroach start'"
+eexpect "HINT: Consider using 'cockroach init' or 'cockroach start-single-node' instead"
+eexpect {Failed running "start"}
 end_test
-
 
 start_server $argv
 

@@ -221,6 +221,15 @@ type Config struct {
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
 	ClockDevicePath string
+
+	// AutoInitializeCluster, if set, causes the server to bootstrap the
+	// cluster. Note that if two nodes are started with this flag set
+	// and also configured to join each other, each node will bootstrap
+	// its own unique cluster and the join will fail.
+	//
+	// The flag exists mostly for the benefit of tests, and for
+	// `cockroach start-single-node`.
+	AutoInitializeCluster bool
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time

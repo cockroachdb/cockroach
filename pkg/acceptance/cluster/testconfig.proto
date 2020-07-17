@@ -22,9 +22,7 @@ enum InitMode {
   // init command.
   INIT_COMMAND = 0;
 
-  // INIT_BOOTSTRAP_NODE_ZERO uses the legacy protocol of omitting the
-  // join flag from node zero.
-  INIT_BOOTSTRAP_NODE_ZERO = 1;
+  reserved 1;
 
   // INIT_NONE starts every node with a join flag and leaves the
   // cluster uninitialized.
