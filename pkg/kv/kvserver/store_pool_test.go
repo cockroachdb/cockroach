@@ -863,17 +863,31 @@ func TestGetLocalities(t *testing.T) {
 
 	var existingReplicas []roachpb.ReplicaDescriptor
 	for _, store := range stores {
-		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
+		existingReplicas = append(existingReplicas,
+			roachpb.ReplicaDescriptor{
+				NodeID:  store.Node.NodeID,
+				StoreID: store.StoreID,
+			},
+		)
 	}
 
-	localities := sp.getLocalities(existingReplicas)
+	localitiesByStore := sp.getLocalitiesByStore(existingReplicas)
+	localitiesByNode := sp.getLocalitiesByNode(existingReplicas)
 	for _, store := range stores {
+		storeID := store.StoreID
 		nodeID := store.Node.NodeID
-		locality, ok := localities[nodeID]
+		localityByStore, ok := localitiesByStore[storeID]
+		if !ok {
+			t.Fatalf("could not find locality for store %d", storeID)
+		}
+		localityByNode, ok := localitiesByNode[nodeID]
 		if !ok {
 			t.Fatalf("could not find locality for node %d", nodeID)
 		}
-		if e, a := int(nodeID), len(locality.Tiers); e != a {
+		if e, a := int(nodeID), len(localityByStore.Tiers); e+1 != a {
+			t.Fatalf("for node %d, expected %d tiers, only got %d", storeID, e+1, a)
+		}
+		if e, a := int(nodeID), len(localityByNode.Tiers); e != a {
 			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
 		}
 		if e, a := createLocality(int(nodeID)).String(), sp.getNodeLocalityString(nodeID); e != a {

@@ -574,15 +574,39 @@ type StoreList struct {
 	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
 	// eligible to be rebalance targets.
 	candidateWritesPerSecond stat
+
+	// storePool links back to the storePool that was used to create this list
+	storePool *StorePool
+
+	// storeCountByNode records the number of stores per node that is known about
+	storeCountByNode map[roachpb.NodeID]int32
 }
 
-// Generates a new store list based on the passed in descriptors. It will
-// maintain the order of those descriptors.
-func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
-	sl := StoreList{stores: descriptors}
+// makeStoreListInternal Generates a new store list based on the passed in
+// descriptors. It will maintain the order of those descriptors.
+func (sp *StorePool) makeStoreListInternal(
+	descriptors []roachpb.StoreDescriptor, storeCountByNode map[roachpb.NodeID]int32,
+) StoreList {
+	sl := StoreList{
+		stores:           descriptors,
+		storePool:        sp,
+		storeCountByNode: storeCountByNode,
+	}
 	for _, desc := range descriptors {
+		// With same node rebalances enabled, we want to converge to the same number
+		// of ranges per node, rather than per store. Nodes may have a different
+		// number of stores and since it's not possible to have multiple replicas
+		// on the same node the average per store is not a the right measurement.
+		// For example a cluster with 40 ranges and 4 stores on 3 nodes will end
+		// up with the following ideal shape (n1,s1:40), (n2, s2:40), (n3, s3:20),
+		// (n3, s4, 20).
 		if maxCapacityCheck(desc) {
-			sl.candidateRanges.update(float64(desc.Capacity.RangeCount))
+			storeCount, ok := storeCountByNode[desc.Node.NodeID]
+			if !ok {
+				log.Fatalf(context.TODO(), "Unexpected missing node in storeCountByNode %d", desc.Node.NodeID)
+			} else {
+				sl.candidateRanges.update(float64(desc.Capacity.RangeCount * storeCount))
+			}
 		}
 		sl.candidateLeases.update(float64(desc.Capacity.LeaseCount))
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
@@ -626,7 +650,7 @@ func (sl StoreList) filter(constraints []zonepb.ConstraintsConjunction) StoreLis
 			filteredDescs = append(filteredDescs, store)
 		}
 	}
-	return makeStoreList(filteredDescs)
+	return sl.storePool.makeStoreList(filteredDescs)
 }
 
 type storeFilter int
@@ -645,6 +669,10 @@ const (
 )
 
 type throttledStoreReasons []string
+
+func (sp *StorePool) makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
+	return sp.makeStoreListInternal(descriptors, sp.getStoreCountByNode())
+}
 
 // getStoreList returns a storeList that contains all active stores that contain
 // the required attributes and their associated stats. The storeList is filtered
@@ -711,7 +739,34 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
 	}
-	return makeStoreList(storeDescriptors), aliveStoreCount, throttled
+	return sp.makeStoreListInternal(storeDescriptors, sp.getStoreCountByNodeRLocked()), aliveStoreCount, throttled
+}
+
+// getStoreCountByNode returns the number of stores per node based on all the
+// stores known to this pool. Dead/Unknown/Decommissioned stores are ignored.
+func (sp *StorePool) getStoreCountByNode() map[roachpb.NodeID]int32 {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+	return sp.getStoreCountByNodeRLocked()
+}
+
+// getStoreCountByNodeRLocked is the same function as getStoreCountByNode but
+// requires that the detailsMU read lock is held.
+func (sp *StorePool) getStoreCountByNodeRLocked() map[roachpb.NodeID]int32 {
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	storeCountByNode := make(map[roachpb.NodeID]int32)
+	for _, detail := range sp.detailsMu.storeDetails {
+		switch s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn); s {
+		case storeStatusThrottled, storeStatusAvailable:
+			storeCountByNode[detail.desc.Node.NodeID] = storeCountByNode[detail.desc.Node.NodeID] + 1
+		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
+			// Do nothing; this store cannot be used.
+		default:
+			panic(fmt.Sprintf("unknown store status: %d", s))
+		}
+	}
+	return storeCountByNode
 }
 
 type throttleReason int
@@ -757,10 +812,34 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 	}
 }
 
-// getLocalities returns the localities for the provided replicas.
+// getLocalitiesByStore returns the localities for the provided replicas. In
+// this case we consider the node part of the failure domain and add it to
+// the locality data.
+func (sp *StorePool) getLocalitiesByStore(
+	replicas []roachpb.ReplicaDescriptor,
+) map[roachpb.StoreID]roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	localities := make(map[roachpb.StoreID]roachpb.Locality)
+	for _, replica := range replicas {
+		nodeTier := roachpb.Tier{Key: "node", Value: replica.NodeID.String()}
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.StoreID] = locality.locality.AddTier(nodeTier)
+		} else {
+			localities[replica.StoreID] = roachpb.Locality{
+				Tiers: []roachpb.Tier{nodeTier},
+			}
+		}
+	}
+	return localities
+}
+
+// getLocalitiesByNode returns the localities for the provided replicas. In this
+// case we only consider the locality by node, where the node itself is not
+// part of the failure domain.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
-func (sp *StorePool) getLocalities(
+func (sp *StorePool) getLocalitiesByNode(
 	replicas []roachpb.ReplicaDescriptor,
 ) map[roachpb.NodeID]roachpb.Locality {
 	sp.localitiesMu.RLock()

@@ -21,8 +21,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -1082,14 +1085,21 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			},
 		}
 	}
-	localityForNodeID := func(sl StoreList, id roachpb.NodeID) roachpb.Locality {
+	localityForNodeID := func(sl StoreList, id roachpb.StoreID) roachpb.Locality {
 		for _, store := range sl.stores {
-			if store.Node.NodeID == id {
-				return store.Node.Locality
+			if store.StoreID == id {
+				return store.Locality()
 			}
 		}
 		t.Fatalf("no locality for n%d in StoreList %+v", id, sl)
 		return roachpb.Locality{}
+	}
+	gossipStores := func(sl StoreList, g *gossip.Gossip) {
+		stores := make([]*roachpb.StoreDescriptor, len(sl.stores))
+		for i := range sl.stores {
+			stores[i] = &sl.stores[i]
+		}
+		gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	}
 	locUS := roachpb.Locality{
 		Tiers: testStoreTierSetup("us", "", "", ""),
@@ -1103,13 +1113,27 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	locAU := roachpb.Locality{
 		Tiers: testStoreTierSetup("au", "", "", ""),
 	}
+	stopper3by3, g3by3, _, storePool3by3, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff,
+		false,
+		func() int { return 9 },
+		kvserverpb.NodeLivenessStatus_LIVE)
 	sl3by3 := StoreList{
 		stores: []roachpb.StoreDescriptor{
 			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
 			newStore(4, locEU), newStore(5, locEU), newStore(6, locEU),
 			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
 		},
+		storePool: storePool3by3,
 	}
+	gossipStores(sl3by3, g3by3)
+	defer stopper3by3.Stop(context.Background())
+
+	stopper4by3, g4by3, _, storePool4by3, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff,
+		false,
+		func() int { return 9 },
+		kvserverpb.NodeLivenessStatus_LIVE)
 	sl4by3 := StoreList{
 		stores: []roachpb.StoreDescriptor{
 			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
@@ -1117,7 +1141,10 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
 			newStore(10, locAU), newStore(11, locAU), newStore(12, locAU),
 		},
+		storePool: storePool4by3,
 	}
+	gossipStores(sl4by3, g4by3)
+	defer stopper4by3.Stop(context.Background())
 
 	testCases := []struct {
 		s               roachpb.StoreDescriptor
@@ -1184,21 +1211,22 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		removeStore := func(sl StoreList, nodeID roachpb.NodeID) StoreList {
 			for i, s := range sl.stores {
 				if s.Node.NodeID == nodeID {
-					return makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
+					return sl.storePool.makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
 				}
 			}
 			return sl
 		}
 		filteredSL := tc.sl
 		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
-		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+		existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 		var replicas []roachpb.ReplicaDescriptor
 		for _, nodeID := range tc.existingNodeIDs {
+			storeID := roachpb.StoreID(nodeID)
 			replicas = append(replicas, roachpb.ReplicaDescriptor{
 				NodeID:  nodeID,
-				StoreID: roachpb.StoreID(nodeID),
+				StoreID: storeID,
 			})
-			existingNodeLocalities[nodeID] = localityForNodeID(tc.sl, nodeID)
+			existingStoreLocalities[storeID] = localityForNodeID(tc.sl, storeID)
 			// For the sake of testing, remove all other existing stores from the
 			// store list to only test whether we want to remove the replica on tc.s.
 			if nodeID != tc.s.Node.NodeID {
@@ -1211,11 +1239,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			filteredSL,
 			constraint.AnalyzedConstraints{},
 			replicas,
-			existingNodeLocalities,
-			func(nodeID roachpb.NodeID) string {
-				locality := localityForNodeID(tc.sl, nodeID)
-				return locality.String()
-			},
+			existingStoreLocalities,
 			options)
 		actual := len(targets) > 0
 		if actual != tc.expected {
@@ -1254,17 +1278,17 @@ func TestAllocateDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
+				if _, ok := existingStoreLocalities[s.StoreID]; ok {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityAllocateScore(s, existingNodeLocalities)
+				actualScore := diversityAllocateScore(s, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1329,17 +1353,17 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
+				if _, ok := existingStoreLocalities[s.StoreID]; ok {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityRebalanceScore(s, existingNodeLocalities)
+				actualScore := diversityRebalanceScore(s, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1400,15 +1424,15 @@ func TestRemovalDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, storeID := range tc.stores {
 				s := testStores[storeID]
 				var score storeScore
-				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+				actualScore := diversityRemovalScore(s.StoreID, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1457,10 +1481,10 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 	// diversityAllocateScore and diversityRemovalScore as of their initial
 	// creation or else we would test them here as well.
 	for _, tc := range testCases {
-		existingLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+		existingLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 		for _, storeID := range tc.stores {
 			s := testStores[storeID]
-			existingLocalities[s.Node.NodeID] = s.Node.Locality
+			existingLocalities[s.StoreID] = s.Locality()
 		}
 		rangeScore := rangeDiversityScore(existingLocalities)
 		if a, e := rangeScore, tc.expected; a != e {
@@ -1468,16 +1492,16 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 		}
 		for _, storeID := range tc.stores {
 			s := testStores[storeID]
-			fromNodeID := s.Node.NodeID
-			s.Node.NodeID = 99
-			rebalanceScore := diversityRebalanceFromScore(s, fromNodeID, existingLocalities)
+			fromStoreID := s.StoreID
+			s.StoreID = 99
+			rebalanceScore := diversityRebalanceFromScore(s, fromStoreID, existingLocalities)
 			if a, e := rebalanceScore, tc.expected; a != e {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v) got %f, want %f",
-					s, fromNodeID, existingLocalities, a, e)
+					s, fromStoreID, existingLocalities, a, e)
 			}
 			if a, e := rebalanceScore, rangeScore; a != e {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v)=%f not equal to rangeDiversityScore(%v)=%f",
-					s, fromNodeID, existingLocalities, a, existingLocalities, e)
+					s, fromStoreID, existingLocalities, a, existingLocalities, e)
 			}
 		}
 	}
@@ -1488,38 +1512,108 @@ func TestBalanceScore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := scorerOptions{}
+
 	storeList := StoreList{
 		candidateRanges: stat{mean: 1000},
+		storeCountByNode: map[roachpb.NodeID]int32{
+			roachpb.NodeID(1): 1,
+			roachpb.NodeID(2): 1,
+			roachpb.NodeID(3): 1,
+			roachpb.NodeID(4): 1,
+		},
 	}
 
-	sEmpty := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    1024 * 1024 * 1024,
-		LogicalBytes: 0,
-	}
+	sEmpty := roachpb.StoreCapacity{}
 	sMean := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    512 * 1024 * 1024,
-		LogicalBytes: 512 * 1024 * 1024,
-		RangeCount:   1000,
+		RangeCount: 1000,
 	}
-	sRangesOverfull := sMean
-	sRangesOverfull.RangeCount = 1500
-	sRangesUnderfull := sMean
-	sRangesUnderfull.RangeCount = 500
-
+	sRangesOverfull := roachpb.StoreCapacity{
+		RangeCount: 1500,
+	}
+	sRangesUnderfull := roachpb.StoreCapacity{
+		RangeCount: 500,
+	}
 	testCases := []struct {
-		sc       roachpb.StoreCapacity
+		sd       roachpb.StoreDescriptor
 		expected float64
 	}{
-		{sEmpty, 1},
-		{sMean, 0},
-		{sRangesOverfull, -1},
-		{sRangesUnderfull, 1},
+		{roachpb.StoreDescriptor{Node: roachpb.NodeDescriptor{NodeID: 1}, Capacity: sEmpty}, 1},
+		{roachpb.StoreDescriptor{Node: roachpb.NodeDescriptor{NodeID: 2}, Capacity: sMean}, 0},
+		{roachpb.StoreDescriptor{Node: roachpb.NodeDescriptor{NodeID: 3}, Capacity: sRangesOverfull}, -1},
+		{roachpb.StoreDescriptor{Node: roachpb.NodeDescriptor{NodeID: 4}, Capacity: sRangesUnderfull}, 1},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(storeList, tc.sc, options), tc.expected; a.totalScore() != e {
-			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sc, a, e)
+		if a, e := balanceScore(context.Background(), storeList, tc.sd, options), tc.expected; a.totalScore() != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sd, a, e)
+		}
+	}
+}
+
+func TestMultiStoreBalanceScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	options := scorerOptions{}
+
+	storeList := StoreList{
+		candidateRanges: stat{mean: 900},
+		storeCountByNode: map[roachpb.NodeID]int32{
+			roachpb.NodeID(1): 3,
+			roachpb.NodeID(2): 2,
+			roachpb.NodeID(3): 1,
+		},
+	}
+
+	testCases := []struct {
+		sd       roachpb.StoreDescriptor
+		expected float64
+	}{
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 1},
+				Capacity: roachpb.StoreCapacity{RangeCount: 0},
+			},
+			expected: 1,
+		},
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 1},
+				Capacity: roachpb.StoreCapacity{RangeCount: 300},
+			},
+			expected: 0,
+		},
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 1},
+				Capacity: roachpb.StoreCapacity{RangeCount: 600},
+			},
+			expected: -1,
+		},
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 2},
+				Capacity: roachpb.StoreCapacity{RangeCount: 400},
+			},
+			expected: 1,
+		},
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 2},
+				Capacity: roachpb.StoreCapacity{RangeCount: 500},
+			},
+			expected: -1,
+		},
+		{
+			sd: roachpb.StoreDescriptor{
+				Node:     roachpb.NodeDescriptor{NodeID: 3},
+				Capacity: roachpb.StoreCapacity{RangeCount: 900},
+			},
+			expected: 0,
+		},
+	}
+	for i, tc := range testCases {
+		if a, e := balanceScore(context.Background(), storeList, tc.sd, options), tc.expected; a.totalScore() != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sd, a, e)
 		}
 	}
 }
@@ -1530,6 +1624,9 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 
 	storeList := StoreList{
 		candidateRanges: stat{mean: 1000},
+		storeCountByNode: map[roachpb.NodeID]int32{
+			roachpb.NodeID(1): 1,
+		},
 	}
 
 	testCases := []struct {
@@ -1548,14 +1645,17 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		sc := roachpb.StoreCapacity{
-			RangeCount: tc.rangeCount,
+		desc := roachpb.StoreDescriptor{
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: tc.rangeCount,
+			},
+			Node: roachpb.NodeDescriptor{NodeID: 1},
 		}
-		if a, e := rebalanceToConvergesOnMean(storeList, sc), tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := rebalanceToConvergesOnMean(context.Background(), storeList, desc), tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, desc, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(storeList, sc), tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := rebalanceFromConvergesOnMean(context.Background(), storeList, desc), tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, desc, a, e)
 		}
 	}
 }

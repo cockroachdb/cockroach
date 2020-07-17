@@ -209,6 +209,7 @@ func (c candidate) compare(o candidate) float64 {
 	if c.rangeCount == 0 && o.rangeCount == 0 {
 		return 0
 	}
+
 	if c.rangeCount < o.rangeCount {
 		return float64(o.rangeCount-c.rangeCount) / float64(o.rangeCount)
 	}
@@ -407,10 +408,11 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // for allocating a new replica ordered from the best to the worst. Only
 // stores that meet the criteria are included in the list.
 func allocateCandidates(
+	ctx context.Context,
 	sl StoreList,
 	constraints constraint.AnalyzedConstraints,
 	existing []roachpb.ReplicaDescriptor,
-	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
@@ -425,8 +427,8 @@ func allocateCandidates(
 		if !maxCapacityCheck(s) {
 			continue
 		}
-		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
-		balanceScore := balanceScore(sl, s.Capacity, options)
+		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
+		balanceScore := balanceScore(ctx, sl, s, options)
 		var convergesScore int
 		if options.qpsRebalanceThreshold > 0 {
 			if s.Capacity.QueriesPerSecond < underfullThreshold(sl.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
@@ -446,7 +448,7 @@ func allocateCandidates(
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
-			rangeCount:     int(s.Capacity.RangeCount),
+			rangeCount:     int(rangeCount(ctx, sl, s)),
 		})
 	}
 	if options.deterministic {
@@ -459,11 +461,14 @@ func allocateCandidates(
 
 // removeCandidates creates a candidate list of all existing replicas' stores
 // ordered from least qualified for removal to most qualified. Stores that are
-// marked as not valid, are in violation of a required criteria.
+// marked as not valid, are in violation of a required criteria. Only stores that
+// match the canRemoveStorePredicate will be considred for removal, all others
+// will be ignored.
 func removeCandidates(
+	ctx context.Context,
 	sl StoreList,
 	constraints constraint.AnalyzedConstraints,
-	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
@@ -478,10 +483,10 @@ func removeCandidates(
 			})
 			continue
 		}
-		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
-		balanceScore := balanceScore(sl, s.Capacity, options)
+		diversityScore := diversityRemovalScore(s.StoreID, existingStoreLocalities)
+		balanceScore := balanceScore(ctx, sl, s, options)
 		var convergesScore int
-		if !rebalanceFromConvergesOnMean(sl, s.Capacity) {
+		if !rebalanceFromConvergesOnMean(ctx, sl, s) {
 			// If removing this candidate replica does not converge the store
 			// stats to their means, we make it less attractive for removal by
 			// adding 1 to the constraint score. Note that when selecting a
@@ -497,7 +502,7 @@ func removeCandidates(
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
-			rangeCount:     int(s.Capacity.RangeCount),
+			rangeCount:     int(rangeCount(ctx, sl, s)),
 		})
 	}
 	if options.deterministic {
@@ -522,18 +527,13 @@ func rebalanceCandidates(
 	allStores StoreList,
 	constraints constraint.AnalyzedConstraints,
 	existingReplicas []roachpb.ReplicaDescriptor,
-	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
-	localityLookupFn func(roachpb.NodeID) string,
+	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	options scorerOptions,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
-	type existingStore struct {
-		cand        candidate
-		localityStr string
-	}
-	existingStores := make(map[roachpb.StoreID]existingStore)
+	existingStores := make(map[roachpb.StoreID]candidate)
 	var needRebalanceFrom bool
-	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
+	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.stores {
 		for _, repl := range existingReplicas {
 			if store.StoreID != repl.StoreID {
@@ -544,7 +544,7 @@ func rebalanceCandidates(
 			if !valid {
 				if !needRebalanceFrom {
 					log.VEventf(ctx, 2, "s%d: should-rebalance(invalid): locality:%q",
-						store.StoreID, store.Node.Locality)
+						store.StoreID, store.Locality())
 				}
 				needRebalanceFrom = true
 			}
@@ -555,15 +555,12 @@ func rebalanceCandidates(
 				}
 				needRebalanceFrom = true
 			}
-			existingStores[store.StoreID] = existingStore{
-				cand: candidate{
-					store:          store,
-					valid:          valid,
-					necessary:      necessary,
-					fullDisk:       fullDisk,
-					diversityScore: curDiversityScore,
-				},
-				localityStr: localityLookupFn(store.Node.NodeID),
+			existingStores[store.StoreID] = candidate{
+				store:          store,
+				valid:          valid,
+				necessary:      necessary,
+				fullDisk:       fullDisk,
+				diversityScore: curDiversityScore,
 			}
 		}
 	}
@@ -599,8 +596,8 @@ func rebalanceCandidates(
 		// include Node/Store Attributes because they affect constraints.
 		var matchedOtherExisting bool
 		for i, stores := range comparableStores {
-			if sameLocalityAndAttrs(stores.existing[0], existing.cand.store) {
-				comparableStores[i].existing = append(comparableStores[i].existing, existing.cand.store)
+			if sameLocalityAndAttrs(stores.existing[0], existing.store) {
+				comparableStores[i].existing = append(comparableStores[i].existing, existing.store)
 				matchedOtherExisting = true
 				break
 			}
@@ -610,21 +607,11 @@ func rebalanceCandidates(
 		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
-			// Nodes that already have a replica on one of their stores aren't valid
-			// rebalance targets. We do include stores that currently have a replica
-			// because we want them to be considered as valid stores in the
-			// ConvergesOnMean calculations below. This is subtle but important.
-			if nodeHasReplica(store.Node.NodeID, existingReplicas) &&
-				!storeHasReplica(store.StoreID, existingReplicas) {
-				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true",
-					store.Node.NodeID, existingReplicas)
-				continue
-			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
-				store, existing.cand.store.StoreID, constraints)
+				store, existing.store.StoreID, constraints)
 			maxCapacityOK := maxCapacityCheck(store)
 			diversityScore := diversityRebalanceFromScore(
-				store, existing.cand.store.Node.NodeID, existingNodeLocalities)
+				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
@@ -632,15 +619,15 @@ func rebalanceCandidates(
 				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 			}
-			if !cand.less(existing.cand) {
+			if !cand.less(existing) {
 				comparableCands = append(comparableCands, cand)
-				if !needRebalanceFrom && !needRebalanceTo && existing.cand.less(cand) {
+				if !needRebalanceFrom && !needRebalanceTo && existing.less(cand) {
 					needRebalanceTo = true
 					log.VEventf(ctx, 2,
 						"s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, "+
 							"oldDiversity:%f, newDiversity:%f, locality:%q",
-						existing.cand.store.StoreID, store.StoreID, existing.cand.necessary, cand.necessary,
-						existing.cand.diversityScore, cand.diversityScore, store.Node.Locality)
+						existing.store.StoreID, store.StoreID, existing.necessary, cand.necessary,
+						existing.diversityScore, cand.diversityScore, store.Locality())
 				}
 			}
 		}
@@ -655,8 +642,8 @@ func rebalanceCandidates(
 			bestStores[i] = bestCands[i].store
 		}
 		comparableStores = append(comparableStores, comparableStoreList{
-			existing:   []roachpb.StoreDescriptor{existing.cand.store},
-			sl:         makeStoreList(bestStores),
+			existing:   []roachpb.StoreDescriptor{existing.store},
+			sl:         allStores.storePool.makeStoreList(bestStores),
 			candidates: bestCands,
 		})
 	}
@@ -673,7 +660,7 @@ func rebalanceCandidates(
 		outer:
 			for _, comparable := range comparableStores {
 				for _, existingCand := range comparable.existing {
-					if existing.cand.store.StoreID == existingCand.StoreID {
+					if existing.store.StoreID == existingCand.StoreID {
 						sl = comparable.sl
 						break outer
 					}
@@ -681,7 +668,7 @@ func rebalanceCandidates(
 			}
 			// TODO(a-robinson): Some moderate refactoring could extract this logic out
 			// into the loop below, avoiding duplicate balanceScore calculations.
-			if shouldRebalance(ctx, existing.cand.store, sl, options) {
+			if shouldRebalance(ctx, existing.store, sl, options) {
 				shouldRebalanceCheck = true
 				break
 			}
@@ -705,24 +692,24 @@ func rebalanceCandidates(
 					existingDesc, existingStores)
 				continue
 			}
-			if !existing.cand.valid {
-				existing.cand.details = "constraint check fail"
-				existingCandidates = append(existingCandidates, existing.cand)
+			if !existing.valid {
+				existing.details = "constraint check fail"
+				existingCandidates = append(existingCandidates, existing)
 				continue
 			}
-			balanceScore := balanceScore(comparable.sl, existing.cand.store.Capacity, options)
+			balanceScore := balanceScore(ctx, comparable.sl, existing.store, options)
 			var convergesScore int
-			if !rebalanceFromConvergesOnMean(comparable.sl, existing.cand.store.Capacity) {
+			if !rebalanceFromConvergesOnMean(ctx, comparable.sl, existing.store) {
 				// Similarly to in removeCandidates, any replica whose removal
 				// would not converge the range stats to their means is given a
 				// constraint score boost of 1 to make it less attractive for
 				// removal.
 				convergesScore = 1
 			}
-			existing.cand.convergesScore = convergesScore
-			existing.cand.balanceScore = balanceScore
-			existing.cand.rangeCount = int(existing.cand.store.Capacity.RangeCount)
-			existingCandidates = append(existingCandidates, existing.cand)
+			existing.convergesScore = convergesScore
+			existing.balanceScore = balanceScore
+			existing.rangeCount = int(rangeCount(ctx, comparable.sl, existing.store))
+			existingCandidates = append(existingCandidates, existing)
 		}
 
 		for _, cand := range comparable.candidates {
@@ -736,8 +723,8 @@ func rebalanceCandidates(
 			// rebalance candidates.
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
-			cand.balanceScore = balanceScore(comparable.sl, s.Capacity, options)
-			if rebalanceToConvergesOnMean(comparable.sl, s.Capacity) {
+			cand.balanceScore = balanceScore(ctx, comparable.sl, s, options)
+			if rebalanceToConvergesOnMean(ctx, comparable.sl, s) {
 				// This is the counterpart of !rebalanceFromConvergesOnMean from
 				// the existing candidates. Candidates whose addition would
 				// converge towards the range count mean are promoted.
@@ -749,7 +736,7 @@ func rebalanceCandidates(
 					s, existingReplicas, cand.balanceScore, comparable.sl)
 				continue
 			}
-			cand.rangeCount = int(s.Capacity.RangeCount)
+			cand.rangeCount = int(rangeCount(ctx, comparable.sl, s))
 			candidates = append(candidates, cand)
 		}
 
@@ -850,21 +837,23 @@ func shouldRebalance(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList, options scorerOptions,
 ) bool {
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(options, sl.candidateRanges.mean)))
-	if store.Capacity.RangeCount > overfullThreshold {
+	rc := rangeCount(ctx, sl, store)
+	if rc > overfullThreshold {
 		log.VEventf(ctx, 2,
 			"s%d: should-rebalance(ranges-overfull): rangeCount=%d, mean=%.2f, overfull-threshold=%d",
-			store.StoreID, store.Capacity.RangeCount, sl.candidateRanges.mean, overfullThreshold)
+			store.StoreID, rc, sl.candidateRanges.mean, overfullThreshold)
 		return true
 	}
 
-	if float64(store.Capacity.RangeCount) > sl.candidateRanges.mean {
+	if float64(rc) > sl.candidateRanges.mean {
 		underfullThreshold := int32(math.Floor(underfullRangeThreshold(options, sl.candidateRanges.mean)))
 		for _, desc := range sl.stores {
-			if desc.Capacity.RangeCount < underfullThreshold {
+			descRangeCount := rangeCount(ctx, sl, desc)
+			if descRangeCount < underfullThreshold {
 				log.VEventf(ctx, 2,
 					"s%d: should-rebalance(better-fit-ranges=s%d): rangeCount=%d, otherRangeCount=%d, "+
 						"mean=%.2f, underfull-threshold=%d",
-					store.StoreID, desc.StoreID, store.Capacity.RangeCount, desc.Capacity.RangeCount,
+					store.StoreID, desc.StoreID, rc, descRangeCount,
 					sl.candidateRanges.mean, underfullThreshold)
 				return true
 			}
@@ -1058,14 +1047,14 @@ func constraintsCheck(
 // given range is. A higher score means the range is more diverse.
 // All below diversity-scoring methods should in theory be implemented by
 // calling into this one, but they aren't to avoid allocations.
-func rangeDiversityScore(existingNodeLocalities map[roachpb.NodeID]roachpb.Locality) float64 {
+func rangeDiversityScore(existingStoreLocalities map[roachpb.StoreID]roachpb.Locality) float64 {
 	var sumScore float64
 	var numSamples int
-	for n1, l1 := range existingNodeLocalities {
-		for n2, l2 := range existingNodeLocalities {
+	for s1, l1 := range existingStoreLocalities {
+		for s2, l2 := range existingStoreLocalities {
 			// Only compare pairs of replicas where s2 > s1 to avoid computing the
 			// diversity score between each pair of localities twice.
-			if n2 <= n1 {
+			if s2 <= s1 {
 				continue
 			}
 			sumScore += l1.DiversityScore(l2)
@@ -1082,7 +1071,7 @@ func rangeDiversityScore(existingNodeLocalities map[roachpb.NodeID]roachpb.Local
 // desirable it would be to add a replica to store. A higher score means the
 // store is a better fit.
 func diversityAllocateScore(
-	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	store roachpb.StoreDescriptor, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	var sumScore float64
 	var numSamples int
@@ -1090,8 +1079,8 @@ func diversityAllocateScore(
 	// how well the new store would fit, because for any store that we might
 	// consider adding the pairwise average diversity of the existing replicas
 	// is the same.
-	for _, locality := range existingNodeLocalities {
-		newScore := store.Node.Locality.DiversityScore(locality)
+	for _, locality := range existingStoreLocalities {
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
 	}
@@ -1106,15 +1095,15 @@ func diversityAllocateScore(
 // it would be to remove a node's replica of a range.  A higher score indicates
 // that the node is a better fit (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
-	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	storeID roachpb.StoreID, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	var sumScore float64
 	var numSamples int
-	locality := existingNodeLocalities[nodeID]
+	locality := existingStoreLocalities[storeID]
 	// We don't need to calculate the overall diversityScore for the range, because the original overall diversityScore
 	// of this range is always the same.
-	for otherNodeID, otherLocality := range existingNodeLocalities {
-		if otherNodeID == nodeID {
+	for otherStoreID, otherLocality := range existingStoreLocalities {
+		if otherStoreID == storeID {
 			continue
 		}
 		newScore := locality.DiversityScore(otherLocality)
@@ -1134,16 +1123,16 @@ func diversityRemovalScore(
 // higher score indicates that the provided store is a better fit for the
 // range.
 func diversityRebalanceScore(
-	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	store roachpb.StoreDescriptor, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
-	if len(existingNodeLocalities) == 0 {
+	if len(existingStoreLocalities) == 0 {
 		return roachpb.MaxDiversityScore
 	}
 	var maxScore float64
 	// For every existing node, calculate what the diversity score would be if we
 	// remove that node's replica to replace it with one on the provided store.
-	for removedNodeID := range existingNodeLocalities {
-		score := diversityRebalanceFromScore(store, removedNodeID, existingNodeLocalities)
+	for removedStoreID := range existingStoreLocalities {
+		score := diversityRebalanceFromScore(store, removedStoreID, existingStoreLocalities)
 		if score > maxScore {
 			maxScore = score
 		}
@@ -1159,24 +1148,24 @@ func diversityRebalanceScore(
 // range.
 func diversityRebalanceFromScore(
 	store roachpb.StoreDescriptor,
-	fromNodeID roachpb.NodeID,
-	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	fromStoreID roachpb.StoreID,
+	existingNodeLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	// Compute the pairwise diversity score of all replicas that will exist
 	// after adding store and removing fromNodeID.
 	var sumScore float64
 	var numSamples int
-	for nodeID, locality := range existingNodeLocalities {
-		if nodeID == fromNodeID {
+	for storeID, locality := range existingNodeLocalities {
+		if storeID == fromStoreID {
 			continue
 		}
-		newScore := store.Node.Locality.DiversityScore(locality)
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
-		for otherNodeID, otherLocality := range existingNodeLocalities {
+		for otherStoreID, otherLocality := range existingNodeLocalities {
 			// Only compare pairs of replicas where otherNodeID > nodeID to avoid
 			// computing the diversity score between each pair of localities twice.
-			if otherNodeID <= nodeID || otherNodeID == fromNodeID {
+			if otherStoreID <= storeID || otherStoreID == fromStoreID {
 				continue
 			}
 			newScore := locality.DiversityScore(otherLocality)
@@ -1198,14 +1187,31 @@ const (
 	underfull rangeCountStatus = 1
 )
 
+// rangeCount rangeCount computes the rangeCount to use for a given store.
+func rangeCount(ctx context.Context, sl StoreList, s roachpb.StoreDescriptor) int32 {
+	storeCount, ok := sl.storeCountByNode[s.Node.NodeID]
+	rangeCount := s.Capacity.RangeCount
+	if !ok {
+		log.Fatalf(ctx, "Unexpected error could not find storeCount for node=%s", s.Node.NodeID)
+	} else {
+		// Boost the rangeCount score here by the number of stores on the node,
+		// since the mean is computed as the mean of ranges per node.
+		rangeCount = s.Capacity.RangeCount * storeCount
+	}
+	return rangeCount
+}
+
 // balanceScore returns an arbitrarily scaled score where higher scores are for
 // stores where the range is a better fit based on various balance factors
 // like range count, disk usage, and QPS.
-func balanceScore(sl StoreList, sc roachpb.StoreCapacity, options scorerOptions) balanceDimensions {
+func balanceScore(
+	ctx context.Context, sl StoreList, s roachpb.StoreDescriptor, options scorerOptions,
+) balanceDimensions {
 	var dimensions balanceDimensions
-	if float64(sc.RangeCount) > overfullRangeThreshold(options, sl.candidateRanges.mean) {
+	rangeCount := float64(rangeCount(ctx, sl, s))
+	if rangeCount > overfullRangeThreshold(options, sl.candidateRanges.mean) {
 		dimensions.ranges = overfull
-	} else if float64(sc.RangeCount) < underfullRangeThreshold(options, sl.candidateRanges.mean) {
+	} else if rangeCount < underfullRangeThreshold(options, sl.candidateRanges.mean) {
 		dimensions.ranges = underfull
 	} else {
 		dimensions.ranges = balanced
@@ -1229,16 +1235,20 @@ func underfullThreshold(mean float64, thresholdFraction float64) float64 {
 	return mean - math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
-func rebalanceFromConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
-	return rebalanceConvergesOnMean(sl, sc, sc.RangeCount-1)
+func rebalanceFromConvergesOnMean(
+	ctx context.Context, sl StoreList, s roachpb.StoreDescriptor,
+) bool {
+	return rebalanceConvergesOnMean(ctx, sl, s, rangeCount(ctx, sl, s)-1)
 }
 
-func rebalanceToConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
-	return rebalanceConvergesOnMean(sl, sc, sc.RangeCount+1)
+func rebalanceToConvergesOnMean(ctx context.Context, sl StoreList, s roachpb.StoreDescriptor) bool {
+	return rebalanceConvergesOnMean(ctx, sl, s, rangeCount(ctx, sl, s)+1)
 }
 
-func rebalanceConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity, newRangeCount int32) bool {
-	return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
+func rebalanceConvergesOnMean(
+	ctx context.Context, sl StoreList, s roachpb.StoreDescriptor, newRangeCount int32,
+) bool {
+	return convergesOnMean(float64(rangeCount(ctx, sl, s)), float64(newRangeCount), sl.candidateRanges.mean)
 }
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
