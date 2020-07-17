@@ -68,6 +68,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func getAvroData(schema map[string]interface{}, rows []map[string]interface{}) (string, error) {
+	var data bytes.Buffer
+	schemaStr, err := json.Marshal(schema)
+	if err != nil {
+		return "", err
+	}
+	codec, err := goavro.NewCodec(string(schemaStr))
+	if err != nil {
+		return "", err
+	}
+	// Create an AVRO writer from the schema.
+	ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
+		W:     &data,
+		Codec: codec,
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, row := range rows {
+		err = ocf.Append([]interface{}{row})
+		if err != nil {
+			return "", err
+		}
+	}
+	// Retrieve the AVRO encoded data.
+	return data.String(), nil
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1087,48 +1115,26 @@ SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'hi');
 `)
 
-	// Create some AVRO encoded data.
-	var avroData string
-	{
-		var data bytes.Buffer
-		// Set up a simple schema for the import data.
-		schema := map[string]interface{}{
-			"type": "record",
-			"name": "t",
-			"fields": []map[string]interface{}{
-				{
-					"name": "a",
-					"type": "string",
-				},
-				{
-					"name": "b",
-					"type": "string",
-				},
+	avroSchema := map[string]interface{}{
+		"type": "record",
+		"name": "t",
+		"fields": []map[string]interface{}{
+			{
+				"name": "a",
+				"type": "string",
 			},
-		}
-		schemaStr, err := json.Marshal(schema)
-		require.NoError(t, err)
-		codec, err := goavro.NewCodec(string(schemaStr))
-		require.NoError(t, err)
-		// Create an AVRO writer from the schema.
-		ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
-			W:     &data,
-			Codec: codec,
-		})
-		require.NoError(t, err)
-		row1 := map[string]interface{}{
-			"a": "hello",
-			"b": "hello",
-		}
-		row2 := map[string]interface{}{
-			"a": "hi",
-			"b": "hi",
-		}
-		// Add the data rows to the writer.
-		require.NoError(t, ocf.Append([]interface{}{row1, row2}))
-		// Retrieve the AVRO encoded data.
-		avroData = data.String()
+			{
+				"name": "b",
+				"type": "string",
+			},
+		},
 	}
+	avroRows := []map[string]interface{}{
+		{"a": "hello", "b": "hello"},
+		{"a": "hi", "b": "hi"},
+	}
+	avroData, err := getAvroData(avroSchema, avroRows)
+	require.NoError(t, err)
 
 	tests := []struct {
 		create      string
@@ -1159,7 +1165,7 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 	}
 
 	// Set up a directory for the data files.
-	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
+	err = os.Mkdir(filepath.Join(baseDir, "test"), 0777)
 	require.NoError(t, err)
 	// Test IMPORT INTO.
 	for _, test := range tests {
@@ -3029,6 +3035,26 @@ func TestImportDefault(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
+	avroSchema := map[string]interface{}{
+		"type": "record",
+		"name": "t",
+		"fields": []map[string]interface{}{
+			{
+				"name": "a",
+				"type": "int",
+			},
+			{
+				"name": "b",
+				"type": "int",
+			},
+		},
+	}
+	avroRows := []map[string]interface{}{
+		{"a": 1, "b": 2, "c": 10},
+		{"a": 3, "b": 4},
+	}
+	avroData, err := getAvroData(avroSchema, avroRows)
+	require.NoError(t, err)
 	tests := []struct {
 		name       string
 		data       string
@@ -3149,6 +3175,14 @@ func TestImportDefault(t *testing.T) {
 		},
 		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
 		// IMPORT INTO are supported for these file formats.
+		{
+			name:            "avro",
+			data:            avroData,
+			create:          "a INT, b INT, c INT DEFAULT 33",
+			targetCols:      "a, b",
+			format:          "AVRO",
+			expectedResults: [][]string{{"1", "2", "33"}, {"3", "4", "33"}},
+		},
 	}
 	for _, test := range tests {
 		if test.sequence != "" {
