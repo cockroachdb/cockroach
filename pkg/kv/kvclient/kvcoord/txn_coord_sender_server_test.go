@@ -98,7 +98,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	db := kv.NewDB(ambient, tsf, s.Clock())
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	if err := txn.Put(ctx, key, "val"); err != nil {
 		t.Fatal(err)
