@@ -30,5 +30,6 @@ services:
       - ./psql/gss_test.go:/test/gss_test.go
       - ./psql/start.sh:/start.sh
       - ../../.localcluster.certs:/certs
+      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
 volumes:
   keytab:

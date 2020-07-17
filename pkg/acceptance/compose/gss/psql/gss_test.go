@@ -27,7 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/lib/pq/auth/kerberos"
 )
+
+func init() {
+	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+}
 
 func TestGSS(t *testing.T) {
 	connector, err := pq.NewConnector("user=root sslmode=require")
@@ -100,11 +105,38 @@ func TestGSS(t *testing.T) {
 			if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS '%s'`, tc.user)); err != nil {
 				t.Fatal(err)
 			}
-			out, err := exec.Command("psql", "-c", "SELECT 1", "-U", tc.user).CombinedOutput()
-			err = errors.Wrap(err, strings.TrimSpace(string(out)))
-			if !IsError(err, tc.gssErr) {
-				t.Errorf("expected err %v, got %v", tc.gssErr, err)
-			}
+			t.Run("libpq", func(t *testing.T) {
+				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require spn=postgres/gss_cockroach_1.gss_default", tc.user))
+				if err != nil {
+					t.Fatal(err)
+				}
+				userDB := gosql.OpenDB(userConnector)
+				defer userDB.Close()
+				_, err = userDB.Exec("SELECT 1")
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
+			t.Run("psql", func(t *testing.T) {
+				out, err := exec.Command("psql", "-c", "SELECT 1", "-U", tc.user).CombinedOutput()
+				err = errors.Wrap(err, strings.TrimSpace(string(out)))
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
+			t.Run("cockroach", func(t *testing.T) {
+				out, err := exec.Command("/cockroach/cockroach", "sql",
+					"-e", "SELECT 1",
+					"--certs-dir", "/certs",
+					// TODO(mjibson): Teach the CLI to not ask for passwords during kerberos.
+					// See #51588.
+					"--url", fmt.Sprintf("postgresql://%s:nopassword@cockroach:26257/?sslmode=require&spn=postgres/gss_cockroach_1.gss_default", tc.user),
+				).CombinedOutput()
+				err = errors.Wrap(err, strings.TrimSpace(string(out)))
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
 		})
 	}
 }
