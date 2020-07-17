@@ -571,6 +571,16 @@ The port number should be the same as in --tenant-addr unless port
 forwarding is set up on an intermediate firewall/router.`,
 	}
 
+	ListenSQLMaxClients = FlagInfo{
+		Name: "sql-max-clients",
+		Description: `
+Maximum number of client SQL sessions that can be opened via TCP.
+If left unspecified, there is no limit. This setting can
+be used to protect a cluster against misconfiguration of client
+apps. For good security, a rate limiter should be used in combination
+with this setting. This setting is experimental.`,
+	}
+
 	ListenHTTPAddr = FlagInfo{
 		Name: "http-addr",
 		Description: `

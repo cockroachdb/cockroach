@@ -184,6 +184,9 @@ type Server struct {
 	// force-enable conn/auth logging without dancing around the
 	// asynchronicity of cluster settings.
 	testingLogEnabled int32
+
+	// maxConns is the maximum number of simultaneous connections.
+	maxConns int
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -236,6 +239,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
+		maxConns:   cfg.MaxSQLClients,
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -482,6 +486,22 @@ func (s *Server) TestingEnableConnAuthLogging() {
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) error {
 	ctx, draining, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
+
+	// Reject the connection if there are too many connections already.
+	// Note that we do not carve out an exception for `root` or admin
+	// users here: the max is per listener, and admin connections can
+	// be established using a secondary admin-only listener with no max
+	// conn limit instead.
+	// See: https://github.com/cockroachdb/cockroach/issues/44842
+	// See: https://github.com/cockroachdb/cockroach/issues/51453
+	if numConns := s.metrics.Conns.Value(); socketType == SocketTCP && s.maxConns > 0 && numConns > int64(s.maxConns) {
+		errTooManyConns := pgerror.New(pgcode.CannotConnectNow, "too many connections; try again later")
+		if s.connLogEnabled() {
+			s.execCfg.AuthLogger.Logf(ctx, "connection refused: %d connections already open, max %d  allowed", numConns, s.maxConns)
+		}
+		log.Warningf(ctx, "%v", errTooManyConns)
+		return s.sendErr(ctx, conn, errTooManyConns)
+	}
 
 	// Some bookkeeping, for security-minded administrators.
 	// This registers the connection to the authentication log.

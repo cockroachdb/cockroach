@@ -1953,3 +1953,125 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestMaxNumConns checks that the maximum number of connections is enforced over TCP.
+func TestMaxNumConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params := base.TestServerArgs{Insecure: true, MaxSQLClients: 2}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pgBaseURL := url.URL{
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(host, port),
+		User:     url.User(security.RootUser),
+		RawQuery: "sslmode=disable",
+	}
+
+	db, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		t.Fatal(err)
+	}
+
+	db2, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	if err := db2.Ping(); err != nil {
+		t.Fatal(err)
+	}
+
+	db3, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db3.Close()
+	if err := db3.Ping(); !testutils.IsError(err, "too many connections") {
+		t.Fatalf("expected 'too many connections', got %v", err)
+	}
+}
+
+// TestNoMaxConnsViaUnix checks that the maximum number of connections is
+// not enforced over unix sockets.
+func TestNoMaxConnsViaUnix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets not support on windows")
+	}
+
+	// We need a temp directory in which we'll create the unix socket.
+	//
+	// On BSD, binding to a socket is limited to a path length of 104 characters
+	// (including the NUL terminator). In glibc, this limit is 108 characters.
+	//
+	// macOS has a tendency to produce very long temporary directory names, so
+	// we are careful to keep all the constants involved short.
+	tempDir, err := ioutil.TempDir("", "PGSQL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	const port = "6"
+
+	socketFile := filepath.Join(tempDir, ".s.PGSQL."+port)
+
+	params := base.TestServerArgs{
+		Insecure:      true,
+		MaxSQLClients: 2,
+		SocketFile:    socketFile,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
+	options := url.Values{
+		"host": []string{tempDir},
+	}
+	pgBaseURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(security.RootUser),
+		Host:     net.JoinHostPort("", port),
+		RawQuery: options.Encode(),
+	}
+
+	db, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		t.Fatal(err)
+	}
+
+	db2, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	if err := db2.Ping(); err != nil {
+		t.Fatal(err)
+	}
+
+	db3, err := gosql.Open("postgres", pgBaseURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db3.Close()
+	if err := db3.Ping(); err != nil {
+		t.Fatal(err)
+	}
+}
