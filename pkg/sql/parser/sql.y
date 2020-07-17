@@ -6010,11 +6010,11 @@ opt_using_gin_btree:
   {
     /* FORCE DOC */
     switch $2 {
-      case "gin":
+      case "gin", "gist":
         $$.val = true
       case "btree":
         $$.val = false
-      case "hash", "gist", "spgist", "brin":
+      case "hash", "spgist", "brin":
         return unimplemented(sqllex, "index using " + $2)
       default:
         sqllex.Error("unrecognized access method: " + $2)

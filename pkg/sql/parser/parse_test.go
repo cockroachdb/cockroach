@@ -1569,6 +1569,8 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE INDEX a ON b USING GIN (c)`,
 			`CREATE INVERTED INDEX a ON b (c)`},
+		{`CREATE INDEX a ON b USING GIST (c)`,
+			`CREATE INVERTED INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b USING GIN (c)`,
 			`CREATE UNIQUE INVERTED INDEX a ON b (c)`},
 
@@ -3419,7 +3421,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 
 		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`, ``},
-		{`CREATE INDEX a ON b USING GIST (c)`, 0, `index using gist`, ``},
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
