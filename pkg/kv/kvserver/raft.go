@@ -278,8 +278,8 @@ func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase
 	return ids
 }
 
-// traceLocalProposals logs a trace event with the provided string for each
-// locally proposed command which corresponds to an id in ids.
+// traceProposals logs a trace event with the provided string for each proposed
+// command which corresponds to an id in ids.
 func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 	ctxs := make([]context.Context, 0, len(ids))
 	r.mu.RLock()
