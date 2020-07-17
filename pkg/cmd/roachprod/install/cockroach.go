@@ -114,15 +114,15 @@ func argExists(args []string, target string) int {
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	// Check to see if node 1 was started, indicating the cluster is to be
 	// bootstrapped.
-	var bootstrappable bool
+	var bootstrap bool
 	for _, i := range c.ServerNodes() {
 		if i == 1 {
-			bootstrappable = true
+			bootstrap = true
 			break
 		}
 	}
 
-	if c.Secure && bootstrappable {
+	if c.Secure && bootstrap {
 		c.DistributeCerts()
 	}
 
@@ -217,10 +217,22 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 				args = append(args, "--locality="+locality)
 			}
 		}
-		// `cockroach start` without `--join` is no longer supported as 20.1.
-		if nodes[i] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
-			args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
+
+		// For a one-node cluster, use `start-single-node` to disable replication.
+		// For everything else we'll fall back to using `cockroach start`.
+		var startCmd string
+		if len(c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0")) {
+			startCmd = "start-single-node"
+			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
+		} else {
+			startCmd = "start"
+
+			// `cockroach start` without `--join` is no longer supported as 20.1.
+			if nodes[i] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
+				args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
+			}
 		}
+
 		if advertisePublicIP {
 			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i+1)))
 		} else if !c.IsLocal() {
@@ -261,12 +273,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			args = append(args, strings.Split(expandedArg, " ")...)
 		}
 
-		// For a one-node cluster, use start-single-node to disable replication.
-		startCmd := "start"
-		if len(c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0")) {
-			startCmd = "start-single-node"
-		}
-
 		binary := cockroachNodeBinary(c, nodes[i])
 		// NB: this is awkward as when the process fails, the test runner will show an
 		// unhelpful empty error (since everything has been redirected away). This is
@@ -300,7 +306,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		return nil, nil
 	})
 
-	if !bootstrappable {
+	if !bootstrap {
 		return
 	}
 

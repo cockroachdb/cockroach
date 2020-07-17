@@ -1377,6 +1377,29 @@ oid    typname  typowner  typlen  typbyval  typtype
 
 user root
 
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = 1000
+----
+oid     typname        typnamespace  typowner  typlen  typbyval  typtype
+1000    _bool          1307062959    NULL      -1      false     b
+
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = 100063
+----
+oid     typname        typnamespace  typowner  typlen  typbyval  typtype
+100063  newtype1       1307062959    NULL      -1      false     e
+
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = 1
+----
+oid     typname        typnamespace  typowner  typlen  typbyval  typtype
+
 ## pg_catalog.pg_proc
 
 query TOOOTTO colnames
