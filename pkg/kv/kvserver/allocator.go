@@ -502,8 +502,8 @@ func (a *Allocator) allocateTargetFromList(
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
 	candidates := allocateCandidates(
-		sl, analyzedConstraints, candidateReplicas, a.storePool.getLocalities(candidateReplicas),
-		options,
+		ctx, sl, analyzedConstraints, candidateReplicas,
+		a.storePool.getLocalitiesByStore(candidateReplicas), options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -566,9 +566,10 @@ func (a Allocator) RemoveTarget(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
+		ctx,
 		sl,
 		analyzedConstraints,
-		a.storePool.getLocalities(existingReplicas),
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
@@ -585,7 +586,6 @@ func (a Allocator) RemoveTarget(
 			}
 		}
 	}
-
 	return roachpb.ReplicaDescriptor{}, "", errors.New("could not select an appropriate replica to be removed")
 }
 
@@ -663,8 +663,7 @@ func (a Allocator) RebalanceTarget(
 		sl,
 		analyzedConstraints,
 		existingReplicas,
-		a.storePool.getLocalities(existingReplicas),
-		a.storePool.getNodeLocalityString,
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,
 	)
 
@@ -742,7 +741,7 @@ func (a Allocator) RebalanceTarget(
 	}
 	detailsBytes, err := json.Marshal(dDetails)
 	if err != nil {
-		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %+v", err)
+		log.VEventf(ctx, 2, "failed to marshal details for choosing rebalance target: %+v", err)
 	}
 
 	addTarget := roachpb.ReplicationTarget{
@@ -800,7 +799,7 @@ func (a *Allocator) TransferLeaseTarget(
 			filteredDescs = append(filteredDescs, s)
 		}
 	}
-	sl = makeStoreList(filteredDescs)
+	sl = a.storePool.makeStoreList(filteredDescs)
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
@@ -1005,7 +1004,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	if stats == nil || !enableLoadBasedLeaseRebalancing.Get(&a.storePool.st.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
-	replicaLocalities := a.storePool.getLocalities(existing)
+	replicaLocalities := a.storePool.getLocalitiesByNode(existing)
 	for _, locality := range replicaLocalities {
 		if len(locality.Tiers) == 0 {
 			return decideWithoutStats, roachpb.ReplicaDescriptor{}

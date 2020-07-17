@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -414,8 +415,8 @@ func TestStoreListFilter(t *testing.T) {
 			expected:   true,
 		},
 	}
-
-	var sl StoreList
+	storeCountByNode := make(map[roachpb.NodeID]int32)
+	sl := StoreList{storeCountByNode: storeCountByNode}
 	var expected []roachpb.StoreDescriptor
 	for i, s := range stores {
 		storeDesc := roachpb.StoreDescriptor{
@@ -426,6 +427,7 @@ func TestStoreListFilter(t *testing.T) {
 				},
 			},
 		}
+		storeCountByNode[storeDesc.Node.NodeID] = 1
 		// Randomly stick the attributes in either the node or the store to get
 		// code coverage of both locations.
 		if rand.Intn(2) == 0 {
@@ -837,7 +839,7 @@ func TestGetLocalities(t *testing.T) {
 	createDescWithLocality := func(tierCount int) roachpb.NodeDescriptor {
 		return roachpb.NodeDescriptor{
 			NodeID:   roachpb.NodeID(tierCount),
-			Locality: createLocality(tierCount),
+			Locality: createLocality(tierCount - 1),
 		}
 	}
 
@@ -864,23 +866,108 @@ func TestGetLocalities(t *testing.T) {
 
 	var existingReplicas []roachpb.ReplicaDescriptor
 	for _, store := range stores {
-		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{NodeID: store.Node.NodeID})
+		existingReplicas = append(existingReplicas,
+			roachpb.ReplicaDescriptor{
+				NodeID:  store.Node.NodeID,
+				StoreID: store.StoreID,
+			},
+		)
 	}
 
-	localities := sp.getLocalities(existingReplicas)
+	localitiesByStore := sp.getLocalitiesByStore(existingReplicas)
+	localitiesByNode := sp.getLocalitiesByNode(existingReplicas)
 	for _, store := range stores {
+		storeID := store.StoreID
 		nodeID := store.Node.NodeID
-		locality, ok := localities[nodeID]
+		localityByStore, ok := localitiesByStore[storeID]
 		if !ok {
-			t.Fatalf("could not find locality for node %d", nodeID)
+			t.Fatalf("could not find locality for store %d", storeID)
 		}
-		if e, a := int(nodeID), len(locality.Tiers); e != a {
-			t.Fatalf("for node %d, expected %d tiers, only got %d", nodeID, e, a)
-		}
-		if e, a := createLocality(int(nodeID)).String(), sp.getNodeLocalityString(nodeID); e != a {
-			t.Fatalf("for getNodeLocalityString(%d), expected %q, got %q", nodeID, e, a)
-		}
+		localityByNode, ok := localitiesByNode[nodeID]
+		require.Truef(t, ok, "could not find locality for node %d", nodeID)
+		require.Equal(t, int(nodeID), len(localityByStore.Tiers))
+		require.Equal(t, localityByStore.Tiers[len(localityByStore.Tiers)-1],
+			roachpb.Tier{Key: "node", Value: nodeID.String()})
+		require.Equal(t, int(nodeID)-1, len(localityByNode.Tiers))
+		require.Equal(t, createLocality(int(nodeID)-1).String(), sp.getNodeLocalityString(nodeID))
 	}
+}
+
+func TestGetStoreCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper, g, _, sp, mnl := createTestStorePool(
+		TestTimeUntilStoreDead, false, /* deterministic */
+		func() int { return 10 }, /* nodeCount */
+		kvserverpb.NodeLivenessStatus_DEAD)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+		},
+		{
+			StoreID: 6,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+		},
+	}
+
+	sg.GossipStores(stores, t)
+	for i := 1; i <= 3; i++ {
+		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_LIVE)
+	}
+
+	storeCount := sp.getStoreCountByNode()
+	expectedStoreCount := map[roachpb.NodeID]int32{
+		roachpb.NodeID(1): 1,
+		roachpb.NodeID(2): 2,
+		roachpb.NodeID(3): 3,
+	}
+	require.Equal(t, storeCount, expectedStoreCount)
+
+	// Mark node 1 throttled.
+	storeCount = sp.getStoreCountByNode()
+	require.Equal(t, storeCount, expectedStoreCount)
+
+	// Mark node 1 decommissioning.
+	mnl.setNodeStatus(1, kvserverpb.NodeLivenessStatus_DECOMMISSIONING)
+	storeCount = sp.getStoreCountByNode()
+	expectedStoreCount = map[roachpb.NodeID]int32{
+		roachpb.NodeID(2): 2,
+		roachpb.NodeID(3): 3,
+	}
+	require.Equal(t, storeCount, expectedStoreCount)
+
+	// Mark node 1 dead.
+	mnl.setNodeStatus(1, kvserverpb.NodeLivenessStatus_DEAD)
+	storeCount = sp.getStoreCountByNode()
+	require.Equal(t, storeCount, expectedStoreCount)
+
+	// Mark node 2 unavailable.
+	mnl.setNodeStatus(2, kvserverpb.NodeLivenessStatus_UNAVAILABLE)
+	storeCount = sp.getStoreCountByNode()
+	expectedStoreCount = map[roachpb.NodeID]int32{
+		roachpb.NodeID(3): 3,
+	}
+	require.Equal(t, storeCount, expectedStoreCount)
 }
 
 func TestStorePoolDecommissioningReplicas(t *testing.T) {

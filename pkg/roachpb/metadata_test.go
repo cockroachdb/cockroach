@@ -268,3 +268,15 @@ func TestDiversityScore(t *testing.T) {
 		})
 	}
 }
+
+func TestAddTier(t *testing.T) {
+	l1 := Locality{}
+	l2 := Locality{
+		Tiers: []Tier{{Key: "foo", Value: "bar"}},
+	}
+	l3 := Locality{
+		Tiers: []Tier{{Key: "foo", Value: "bar"}, {Key: "bar", Value: "foo"}},
+	}
+	require.Equal(t, l2, l1.AddTier(Tier{Key: "foo", Value: "bar"}))
+	require.Equal(t, l3, l2.AddTier(Tier{Key: "bar", Value: "foo"}))
+}
