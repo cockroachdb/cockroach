@@ -348,16 +348,18 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 			memMonitors = append(memMonitors, m)
 		}
 	}
-	vsc := colexec.NewVectorizedStatsCollector(
-		op, id, idTagKey, len(inputs) == 0, inputWatch, memMonitors, diskMonitors,
-	)
-	for _, input := range inputs {
+	inputStatsCollectors := make([]*colexec.VectorizedStatsCollector, len(inputs))
+	for i, input := range inputs {
 		sc, ok := input.(*colexec.VectorizedStatsCollector)
 		if !ok {
 			return nil, errors.New("unexpectedly an input is not collecting stats")
 		}
-		sc.SetOutputWatch(inputWatch)
+		inputStatsCollectors[i] = sc
 	}
+	vsc := colexec.NewVectorizedStatsCollector(
+		op, id, idTagKey, len(inputs) == 0, inputWatch, memMonitors, diskMonitors,
+		inputStatsCollectors,
+	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
 }
