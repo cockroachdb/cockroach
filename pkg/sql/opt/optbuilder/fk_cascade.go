@@ -113,7 +113,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 
 	// Set list of columns that will be fetched by the input expression.
 	for i := range mb.outScope.cols {
-		mb.fetchOrds[i] = scopeOrdinal(i)
+		mb.fetchColIDs[i] = mb.outScope.cols[i].id
 	}
 	mb.buildDelete(nil /* returning */)
 	return mb.outScope.expr, nil
@@ -223,7 +223,7 @@ func (cb *onDeleteSetBuilder) Build(
 
 	// Set list of columns that will be fetched by the input expression.
 	for i := range mb.outScope.cols {
-		mb.fetchOrds[i] = scopeOrdinal(i)
+		mb.fetchColIDs[i] = mb.outScope.cols[i].id
 	}
 	// Add target columns.
 	numFKCols := fk.ColumnCount()
@@ -445,7 +445,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 
 	// Set list of columns that will be fetched by the input expression.
 	for i := range tableScopeCols {
-		mb.fetchOrds[i] = scopeOrdinal(i)
+		mb.fetchColIDs[i] = tableScopeCols[i].id
 	}
 	// Add target columns.
 	for i := 0; i < numFKCols; i++ {

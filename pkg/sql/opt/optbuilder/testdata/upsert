@@ -1635,76 +1635,72 @@ upsert decimals
  ├── fetch columns: decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
  ├── insert-mapping:
  │    ├── a:8 => decimals.a:1
- │    ├── b:17 => decimals.b:2
+ │    ├── b:9 => decimals.b:2
  │    ├── c:10 => decimals.c:3
  │    └── d:12 => decimals.d:4
  ├── update-mapping:
- │    ├── b:17 => decimals.b:2
- │    └── upsert_d:22 => decimals.d:4
- ├── check columns: check1:23 check2:24
+ │    ├── b:9 => decimals.b:2
+ │    └── upsert_d:21 => decimals.d:4
+ ├── check columns: check1:22 check2:23
  └── project
-      ├── columns: check1:23 check2:24 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17 d:19 upsert_a:20 upsert_c:21 upsert_d:22
+      ├── columns: check1:22 check2:23 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 d:18 upsert_a:19 upsert_c:20 upsert_d:21
       ├── project
-      │    ├── columns: upsert_a:20 upsert_c:21 upsert_d:22 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17 d:19
+      │    ├── columns: upsert_a:19 upsert_c:20 upsert_d:21 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 d:18
       │    ├── project
-      │    │    ├── columns: d:19 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17
+      │    │    ├── columns: d:18 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── project
-      │    │    │    ├── columns: column18:18 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: b:17 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    │    ├── columns: a:8 b:9 c:10 d:12
-      │    │    │    │    │    │    ├── grouping columns: a:8
+      │    │    │    ├── columns: column17:17 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    │    ├── columns: a:8 b:9 c:10 d:12
+      │    │    │    │    │    ├── grouping columns: a:8
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: d:12 a:8 b:9 c:10
+      │    │    │    │    │    │    │    ├── columns: column11:11 a:8 b:9 c:10
       │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: column11:11 a:8 b:9 c:10
+      │    │    │    │    │    │    │    │    ├── columns: a:8 b:9 c:10
       │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    ├── columns: a:8 b:9 c:10
-      │    │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6
-      │    │    │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6
-      │    │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
-      │    │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │    │         └── 1.23 [as=column7:7]
+      │    │    │    │    │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6
+      │    │    │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    │    │    ├── columns: column1:5!null column2:6
+      │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:5, 0) [as=a:8]
-      │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:6, 1) [as=b:9]
-      │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column7:7, 1) [as=c:10]
+      │    │    │    │    │    │    │    │    │         └── 1.23 [as=column7:7]
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a:8 + c:10 [as=column11:11]
+      │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:5, 0) [as=a:8]
+      │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:6, 1) [as=b:9]
+      │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column7:7, 1) [as=c:10]
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column11:11, 1) [as=d:12]
-      │    │    │    │    │    │    └── aggregations
-      │    │    │    │    │    │         ├── first-agg [as=b:9]
-      │    │    │    │    │    │         │    └── b:9
-      │    │    │    │    │    │         ├── first-agg [as=c:10]
-      │    │    │    │    │    │         │    └── c:10
-      │    │    │    │    │    │         └── first-agg [as=d:12]
-      │    │    │    │    │    │              └── d:12
-      │    │    │    │    │    ├── scan decimals
-      │    │    │    │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
-      │    │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │    │         └── decimals.d:16
-      │    │    │    │    │    │              └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── a:8 = decimals.a:13
-      │    │    │    │    └── projections
-      │    │    │    │         └── crdb_internal.round_decimal_values(b:9, 1) [as=b:17]
+      │    │    │    │    │    │    │         └── a:8 + c:10 [as=column11:11]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column11:11, 1) [as=d:12]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=b:9]
+      │    │    │    │    │         │    └── b:9
+      │    │    │    │    │         ├── first-agg [as=c:10]
+      │    │    │    │    │         │    └── c:10
+      │    │    │    │    │         └── first-agg [as=d:12]
+      │    │    │    │    │              └── d:12
+      │    │    │    │    ├── scan decimals
+      │    │    │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── decimals.d:16
+      │    │    │    │    │              └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL
+      │    │    │    │    └── filters
+      │    │    │    │         └── a:8 = decimals.a:13
       │    │    │    └── projections
-      │    │    │         └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL [as=column18:18]
+      │    │    │         └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL [as=column17:17]
       │    │    └── projections
-      │    │         └── crdb_internal.round_decimal_values(column18:18, 1) [as=d:19]
+      │    │         └── crdb_internal.round_decimal_values(column17:17, 1) [as=d:18]
       │    └── projections
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:20]
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN c:10 ELSE decimals.c:15 END [as=upsert_c:21]
-      │         └── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE d:19 END [as=upsert_d:22]
+      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
+      │         ├── CASE WHEN decimals.a:13 IS NULL THEN c:10 ELSE decimals.c:15 END [as=upsert_c:20]
+      │         └── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE d:18 END [as=upsert_d:21]
       └── projections
-           ├── round(upsert_a:20) = upsert_a:20 [as=check1:23]
-           └── b:17[0] > 1 [as=check2:24]
+           ├── round(upsert_a:19) = upsert_a:19 [as=check1:22]
+           └── b:9[0] > 1 [as=check2:23]
 
 # Regular UPSERT case.
 build
