@@ -103,7 +103,8 @@ require (
 	github.com/kr/pretty v0.2.0
 	github.com/kr/text v0.2.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lib/pq v1.5.2
+	github.com/lib/pq v1.7.0
+	github.com/lib/pq/auth/kerberos v0.0.0-20200713203914-24222a3b71eb
 	github.com/lightstep/lightstep-tracer-go v0.15.6
 	github.com/linkedin/goavro/v2 v2.8.1
 	github.com/lufia/iostat v1.0.0
@@ -128,6 +129,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5
 	github.com/pierrec/lz4 v2.4.1+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
+	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/client_model v0.2.0
