@@ -1097,6 +1097,22 @@ given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_isvalid"></a><code>st_isvalid(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is valid as defined by the OGC spec.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_isvalid"></a><code>st_isvalid(geometry: geometry, flags: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is valid.</p>
+<p>For flags=0, validity is defined by the OGC spec.</p>
+<p>For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_isvalidreason"></a><code>st_isvalidreason(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a string containing the reason the geometry is invalid along with the point of interest, or “Valid Geometry” if it is valid. Validity is defined by the OGC spec.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_isvalidreason"></a><code>st_isvalidreason(geometry: geometry, flags: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the reason the geometry is invalid or “Valid Geometry” if it is valid.</p>
+<p>For flags=0, validity is defined by the OGC spec.</p>
+<p>For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_length"></a><code>st_length(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geography in meters. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
@@ -1143,6 +1159,9 @@ given Geometry.</p>
 <tr><td><a name="st_makepolygon"></a><code>st_makepolygon(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Polygon with the given outer LineString.</p>
 </span></td></tr>
 <tr><td><a name="st_makepolygon"></a><code>st_makepolygon(outer: geometry, interior: anyelement[]) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Polygon with the given outer LineString and interior (hole) LineString(s).</p>
+</span></td></tr>
+<tr><td><a name="st_makevalid"></a><code>st_makevalid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a valid form of the given geometry according to the OGC spec.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance across every pair of points comprising the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>
 </span></td></tr>
