@@ -36,7 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/lib/pq/auth/kerberos"
 )
+
+func init() {
+	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+}
 
 type sqlConnI interface {
 	driver.Conn
