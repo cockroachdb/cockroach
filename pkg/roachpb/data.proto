@@ -392,24 +392,29 @@ message Transaction {
   //    purposes of uncertainty.
   //
   // There are two invariants necessary for this property to hold:
-  // 1. a leaseholder's clock must always be equal to or greater than the timestamp
-  //    of all writes that it has served. This is trivial to enforce for
-  //    non-transactional writes. It is more complicated for transactional writes
-  //    which may move their commit timestamp forward over their lifetime before
-  //    committing, even after writing intents on remote Ranges. To accommodate
-  //    this situation, transactions ensure that at the time of their commit, any
-  //    leaseholder for a Range that contains one of its intent has an HLC clock
-  //    with an equal or greater timestamp than the transaction's commit timestamp.
-  //    TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
-  // 2. a leaseholder's clock must always be equal to or greater than the timestamp
-  //    of all writes that previous leaseholders for its Range have served. We
-  //    enforce that when a Replica acquires a lease it bumps its node's clock to a
-  //    time higher than the previous leaseholder's clock when it stopped serving
-  //    writes. This is accomplished cooperatively for lease transfers and through
-  //    a statis period before lease expiration for lease acquisitions. It then
-  //    follows by induction that, in conjunction with the previous invariant, this
-  //    invariant holds for all leaseholders, given that a Range's initial
-  //    leaseholder assumes responsibility for an empty range with no writes.
+  //
+  // 1. a leaseholder's clock must always be equal to or greater than the
+  // timestamp of all writes that it has served. This is trivial to enforce for
+  // non-transactional writes. It is more complicated for transactional writes
+  // which may move their commit timestamp forward over their lifetime before
+  // committing, even after writing intents on remote Ranges. To accommodate
+  // this situation, transactions ensure that at the time of their commit, any
+  // leaseholder for a Range that contains one of its intent has an HLC clock
+  // with an equal or greater timestamp than the transaction's commit timestamp.
+  // TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+  //
+  // 2. a store's clock must always be equal to or greater than the timestamp of
+  // all writes that current & previous leaseholders for its Range have served.
+  // We enforce that when a Replica acquires a lease it bumps its node's clock
+  // to a time higher than the previous leaseholder's clock when it stopped
+  // serving writes. This is accomplished cooperatively for lease transfers and
+  // through a statis period before lease expiration for lease acquisitions. It
+  // then follows by induction that, in conjunction with the previous invariant,
+  // this invariant holds for all leaseholders, given that a Range's initial
+  // leaseholder assumes responsibility for an empty range with no writes. Note
+  // that we currently *do not* guarantee that this invariant is always upheld
+  // for the non-leaseholder stores of a given range. See the follower reads
+  // section below for more details.
   //
   // ### Usage:
   //
@@ -440,6 +445,22 @@ message Transaction {
   // Transaction.UpdateObservedTimestamp to maintain the sorted order. The
   // slice should be treated as immutable and all updates should be performed
   // on a copy of the slice.
+  //
+  // ### Follower Reads:
+  //
+  // If the store serving a request weren't a leaseholder for the range, we
+  // can't always guarantee that invariant 2 stated above in our formalization
+  // is upheld. If the closed timestamp duration is greater than the max offset,
+  // invariant 2 is upheld, but note that this isn't a useful insight because it
+  // would not allow us to reduce the upper bound on the uncertainty interval of
+  // the request, as the observed timestamp of such a store, at the time it
+  // serves the follower-read, will be above the max offset. However, if the max
+  // offset is greater than the closed timestamp duration, follower replicas
+  // serving read requests are *not* guaranteed to have their clock timestamps
+  // be above the clock timestamp of the leaseholder of their range. This means
+  // that we can only limit the upper bound of our uncertainty interval for read
+  // requests served by a leaseholder and *not* for the ones served by
+  // followers.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
   // If set, a write performed by the transaction could not be performed at the
   // transaction's read timestamp because a newer value was present. Had our
