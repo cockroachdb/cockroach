@@ -550,28 +550,32 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	testCases := []struct {
-		existing     []roachpb.ReplicaDescriptor
-		expectTarget bool
+		existing              []roachpb.ReplicaDescriptor
+		expectTargetAllocate  bool
+		expectTargetRebalance bool
 	}{
 		{
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1},
 			},
-			expectTarget: true,
+			expectTargetAllocate:  true,
+			expectTargetRebalance: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 2},
 				{NodeID: 2, StoreID: 3},
 			},
-			expectTarget: true,
+			expectTargetAllocate:  true,
+			expectTargetRebalance: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 2},
 				{NodeID: 3, StoreID: 6},
 			},
-			expectTarget: true,
+			expectTargetAllocate:  true,
+			expectTargetRebalance: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
@@ -579,7 +583,8 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				{NodeID: 2, StoreID: 3},
 				{NodeID: 3, StoreID: 5},
 			},
-			expectTarget: false,
+			expectTargetAllocate:  false,
+			expectTargetRebalance: true,
 		},
 		{
 			existing: []roachpb.ReplicaDescriptor{
@@ -587,7 +592,8 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				{NodeID: 2, StoreID: 4},
 				{NodeID: 3, StoreID: 6},
 			},
-			expectTarget: false,
+			expectTargetAllocate:  false,
+			expectTargetRebalance: false,
 		},
 	}
 
@@ -598,9 +604,9 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				zonepb.EmptyCompleteZoneConfig(),
 				tc.existing,
 			)
-			if e, a := tc.expectTarget, result != nil; e != a {
+			if e, a := tc.expectTargetAllocate, result != nil; e != a {
 				t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
-					tc.existing, result, err, tc.expectTarget)
+					tc.existing, result, err, tc.expectTargetAllocate)
 			}
 		}
 
@@ -614,11 +620,115 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 			)
-			if e, a := tc.expectTarget, ok; e != a {
+			if e, a := tc.expectTargetRebalance, ok; e != a {
 				t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
-					tc.existing, target, details, tc.expectTarget)
+					tc.existing, target, details, tc.expectTargetRebalance)
 			}
 		}
+	}
+}
+
+func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	store1 := roachpb.StoreDescriptor{
+		StoreID:  1,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 40},
+	}
+	store2 := roachpb.StoreDescriptor{
+		StoreID:  2,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 0},
+	}
+
+	// We start out with 40 ranges on 3 nodes and 3 stores, we then add a new store
+	// on Node 1 and try to rebalance all the ranges. What we want to see happen
+	// is an equilibrium where 20 ranges move from Store 1 to Store 2.
+	stores := []*roachpb.StoreDescriptor{
+		&store1,
+		&store2,
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 40},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 40},
+		},
+	}
+
+	ranges := make([]roachpb.RangeDescriptor, 40)
+	for i := 0; i < 40; i++ {
+		ranges[i] = roachpb.RangeDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 3},
+				{NodeID: 3, StoreID: 4},
+			},
+		}
+	}
+
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+	storeGossiper := gossiputil.NewStoreGossiper(g)
+	storeGossiper.GossipStores(stores, t)
+
+	// We run through all the ranges once to get the cluster to balance.
+	// After that we should not be seeing replicas move.
+	var rangeUsageInfo RangeUsageInfo
+	for i := 1; i < 40; i++ {
+		add, remove, _, ok := a.RebalanceTarget(
+			context.Background(),
+			zonepb.EmptyCompleteZoneConfig(),
+			nil, /* raftStatus */
+			ranges[i].InternalReplicas,
+			rangeUsageInfo,
+			storeFilterThrottled,
+		)
+		if ok {
+			// Update the descriptor.
+			newReplicas := make([]roachpb.ReplicaDescriptor, 0, len(ranges[i].InternalReplicas))
+			for _, repl := range ranges[i].InternalReplicas {
+				if remove.StoreID != repl.StoreID {
+					newReplicas = append(newReplicas, repl)
+				}
+			}
+			newReplicas = append(newReplicas, roachpb.ReplicaDescriptor{
+				StoreID: add.StoreID,
+				NodeID:  add.NodeID,
+			})
+			ranges[i].InternalReplicas = newReplicas
+
+			for _, store := range stores {
+				if store.StoreID == add.StoreID {
+					store.Capacity.RangeCount = store.Capacity.RangeCount + 1
+				} else if store.StoreID == remove.StoreID {
+					store.Capacity.RangeCount = store.Capacity.RangeCount - 1
+				}
+			}
+			storeGossiper.GossipStores(stores, t)
+		}
+	}
+
+	// Verify that the stores are reasonably balanced.
+	require.True(t, math.Abs(float64(
+		store1.Capacity.RangeCount-store2.Capacity.RangeCount)) <= minRangeRebalanceThreshold)
+	// We dont expect any range wanting to move since the system should have
+	// reached a stable state at this point.
+	for i := 1; i < 40; i++ {
+		_, _, _, ok := a.RebalanceTarget(
+			context.Background(),
+			zonepb.EmptyCompleteZoneConfig(),
+			nil, /* raftStatus */
+			ranges[i].InternalReplicas,
+			rangeUsageInfo,
+			storeFilterThrottled,
+		)
+		require.False(t, ok)
 	}
 }
 
@@ -2784,6 +2894,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 			analyzed,
 			a.storePool.getLocalities(existingRepls),
 			a.scorerOptions(),
+			func(descriptor roachpb.StoreDescriptor) bool { return true },
 		)
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d: expected removeCandidates(%v) = %v, but got %v",

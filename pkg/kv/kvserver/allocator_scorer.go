@@ -87,6 +87,9 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
+// StoreDescriptorPredicate represents a predicate for StoreDescriptor.
+type storeDescriptorPredicate func(descriptor roachpb.StoreDescriptor) bool
+
 type scorerOptions struct {
 	deterministic           bool
 	rangeRebalanceThreshold float64
@@ -208,6 +211,18 @@ func (c candidate) compare(o candidate) float64 {
 	// avoids returning NaN in such cases.
 	if c.rangeCount == 0 && o.rangeCount == 0 {
 		return 0
+	}
+	// For same node rebalances we need to manually consider the
+	// minRangeRebalanceThreshold, since in lopsided clusters their under/over
+	// replication is not properly captured in the balanceScore.
+	if c.store.Node.NodeID == o.store.Node.NodeID && c.store.Node.NodeID != 0 {
+		if c.rangeCount < o.rangeCount {
+			if o.rangeCount-c.rangeCount <= minRangeRebalanceThreshold {
+				return 0
+			}
+		} else if c.rangeCount-o.rangeCount <= minRangeRebalanceThreshold {
+			return 0
+		}
 	}
 	if c.rangeCount < o.rangeCount {
 		return float64(o.rangeCount-c.rangeCount) / float64(o.rangeCount)
@@ -459,12 +474,15 @@ func allocateCandidates(
 
 // removeCandidates creates a candidate list of all existing replicas' stores
 // ordered from least qualified for removal to most qualified. Stores that are
-// marked as not valid, are in violation of a required criteria.
+// marked as not valid, are in violation of a required criteria. Only stores that
+// match the canRemoveStorePredicate will be considred for removal, all others
+// will be ignored.
 func removeCandidates(
 	sl StoreList,
 	constraints constraint.AnalyzedConstraints,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	options scorerOptions,
+	canRemoveStorePredicate storeDescriptorPredicate,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
@@ -476,6 +494,11 @@ func removeCandidates(
 				necessary: necessary,
 				details:   "constraint check fail",
 			})
+			continue
+		}
+		// If the candidate does not pass the predicate then we cannot remove it,
+		// as in it must be a replica that remains.
+		if !canRemoveStorePredicate(s) {
 			continue
 		}
 		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
@@ -610,16 +633,6 @@ func rebalanceCandidates(
 		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
-			// Nodes that already have a replica on one of their stores aren't valid
-			// rebalance targets. We do include stores that currently have a replica
-			// because we want them to be considered as valid stores in the
-			// ConvergesOnMean calculations below. This is subtle but important.
-			if nodeHasReplica(store.Node.NodeID, existingReplicas) &&
-				!storeHasReplica(store.StoreID, existingReplicas) {
-				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true",
-					store.Node.NodeID, existingReplicas)
-				continue
-			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
 				store, existing.cand.store.StoreID, constraints)
 			maxCapacityOK := maxCapacityCheck(store)
