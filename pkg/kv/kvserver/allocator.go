@@ -502,8 +502,8 @@ func (a *Allocator) allocateTargetFromList(
 	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
 	candidates := allocateCandidates(
-		sl, analyzedConstraints, candidateReplicas, a.storePool.getLocalities(candidateReplicas),
-		options,
+		sl, analyzedConstraints, candidateReplicas,
+		a.storePool.getLocalitiesByStore(candidateReplicas), options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -568,7 +568,7 @@ func (a Allocator) RemoveTarget(
 	rankedCandidates := removeCandidates(
 		sl,
 		analyzedConstraints,
-		a.storePool.getLocalities(existingReplicas),
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
@@ -663,8 +663,7 @@ func (a Allocator) RebalanceTarget(
 		sl,
 		analyzedConstraints,
 		existingReplicas,
-		a.storePool.getLocalities(existingReplicas),
-		a.storePool.getNodeLocalityString,
+		a.storePool.getLocalitiesByStore(existingReplicas),
 		options,
 	)
 
@@ -1005,7 +1004,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	if stats == nil || !enableLoadBasedLeaseRebalancing.Get(&a.storePool.st.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
-	replicaLocalities := a.storePool.getLocalities(existing)
+	replicaLocalities := a.storePool.getLocalitiesByNode(existing)
 	for _, locality := range replicaLocalities {
 		if len(locality.Tiers) == 0 {
 			return decideWithoutStats, roachpb.ReplicaDescriptor{}

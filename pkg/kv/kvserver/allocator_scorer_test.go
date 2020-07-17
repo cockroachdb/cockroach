@@ -482,7 +482,7 @@ var (
 				Attrs: []string{"a"},
 			},
 			Node: roachpb.NodeDescriptor{
-				NodeID: roachpb.NodeID(testStoreUSa15Dupe),
+				NodeID: roachpb.NodeID(testStoreUSa15),
 				Locality: roachpb.Locality{
 					Tiers: testStoreTierSetup("us", "a", "1", "5"),
 				},
@@ -1082,10 +1082,10 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			},
 		}
 	}
-	localityForNodeID := func(sl StoreList, id roachpb.NodeID) roachpb.Locality {
+	localityForStoreID := func(sl StoreList, id roachpb.StoreID) roachpb.Locality {
 		for _, store := range sl.stores {
-			if store.Node.NodeID == id {
-				return store.Node.Locality
+			if store.StoreID == id {
+				return store.Locality()
 			}
 		}
 		t.Fatalf("no locality for n%d in StoreList %+v", id, sl)
@@ -1191,14 +1191,15 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		}
 		filteredSL := tc.sl
 		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
-		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+		existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 		var replicas []roachpb.ReplicaDescriptor
 		for _, nodeID := range tc.existingNodeIDs {
+			storeID := roachpb.StoreID(nodeID)
 			replicas = append(replicas, roachpb.ReplicaDescriptor{
 				NodeID:  nodeID,
-				StoreID: roachpb.StoreID(nodeID),
+				StoreID: storeID,
 			})
-			existingNodeLocalities[nodeID] = localityForNodeID(tc.sl, nodeID)
+			existingStoreLocalities[storeID] = localityForStoreID(tc.sl, storeID)
 			// For the sake of testing, remove all other existing stores from the
 			// store list to only test whether we want to remove the replica on tc.s.
 			if nodeID != tc.s.Node.NodeID {
@@ -1211,11 +1212,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			filteredSL,
 			constraint.AnalyzedConstraints{},
 			replicas,
-			existingNodeLocalities,
-			func(nodeID roachpb.NodeID) string {
-				locality := localityForNodeID(tc.sl, nodeID)
-				return locality.String()
-			},
+			existingStoreLocalities,
 			options)
 		actual := len(targets) > 0
 		if actual != tc.expected {
@@ -1254,17 +1251,17 @@ func TestAllocateDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
+				if _, ok := existingStoreLocalities[s.StoreID]; ok {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityAllocateScore(s, existingNodeLocalities)
+				actualScore := diversityAllocateScore(s, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1329,17 +1326,17 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
+				if _, ok := existingStoreLocalities[s.StoreID]; ok {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityRebalanceScore(s, existingNodeLocalities)
+				actualScore := diversityRebalanceScore(s, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1400,15 +1397,15 @@ func TestRemovalDiversityScore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 			for _, s := range tc.stores {
-				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
+				existingStoreLocalities[testStores[s].StoreID] = testStores[s].Locality()
 			}
 			var scores storeScores
 			for _, storeID := range tc.stores {
 				s := testStores[storeID]
 				var score storeScore
-				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+				actualScore := diversityRemovalScore(s.StoreID, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1436,19 +1433,19 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 		{[]roachpb.StoreID{testStoreUSa15}, 1.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe}, 0.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1}, 0.25},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSb}, 0.5},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSb}, 2.0 / 3.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreEurope}, 1.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1}, 1.0 / 6.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSb}, 1.0 / 3.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSb}, 4.0 / 9.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreEurope}, 2.0 / 3.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb}, 5.0 / 12.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb}, 19.0 / 36.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreEurope}, 3.0 / 4.0},
-		{[]roachpb.StoreID{testStoreUSa1, testStoreUSb, testStoreEurope}, 5.0 / 6.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb}, 1.0 / 3.0},
+		{[]roachpb.StoreID{testStoreUSa1, testStoreUSb, testStoreEurope}, 8.0 / 9.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb}, 5.0 / 12.0},
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreEurope}, 7.0 / 12.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSb, testStoreEurope}, 2.0 / 3.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb, testStoreEurope}, 17.0 / 24.0},
-		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope}, 3.0 / 5.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSb, testStoreEurope}, 26.0 / 36.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb, testStoreEurope}, 55.0 / 72.0},
+		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope}, 13.0 / 20.0},
 	}
 
 	// Ensure that rangeDiversityScore and diversityRebalanceFromScore return
@@ -1457,27 +1454,27 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 	// diversityAllocateScore and diversityRemovalScore as of their initial
 	// creation or else we would test them here as well.
 	for _, tc := range testCases {
-		existingLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+		existingLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 		for _, storeID := range tc.stores {
 			s := testStores[storeID]
-			existingLocalities[s.Node.NodeID] = s.Node.Locality
+			existingLocalities[s.StoreID] = s.Locality()
 		}
 		rangeScore := rangeDiversityScore(existingLocalities)
-		if a, e := rangeScore, tc.expected; a != e {
+		if a, e := rangeScore, tc.expected; !scoresAlmostEqual(a, e) {
 			t.Errorf("rangeDiversityScore(%v) got %f, want %f", existingLocalities, a, e)
 		}
 		for _, storeID := range tc.stores {
 			s := testStores[storeID]
-			fromNodeID := s.Node.NodeID
-			s.Node.NodeID = 99
-			rebalanceScore := diversityRebalanceFromScore(s, fromNodeID, existingLocalities)
-			if a, e := rebalanceScore, tc.expected; a != e {
+			fromStoreID := s.StoreID
+			s.StoreID = 99
+			rebalanceScore := diversityRebalanceFromScore(s, fromStoreID, existingLocalities)
+			if a, e := rebalanceScore, tc.expected; !scoresAlmostEqual(a, e) {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v) got %f, want %f",
-					s, fromNodeID, existingLocalities, a, e)
+					s, fromStoreID, existingLocalities, a, e)
 			}
-			if a, e := rebalanceScore, rangeScore; a != e {
+			if a, e := rebalanceScore, rangeScore; !scoresAlmostEqual(a, e) {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v)=%f not equal to rangeDiversityScore(%v)=%f",
-					s, fromNodeID, existingLocalities, a, existingLocalities, e)
+					s, fromStoreID, existingLocalities, a, existingLocalities, e)
 			}
 		}
 	}
