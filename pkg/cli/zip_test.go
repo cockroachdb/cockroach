@@ -286,6 +286,8 @@ func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/51538")
+
 	if testing.Short() {
 		t.Skip("short flag")
 	}
