@@ -194,13 +194,13 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
 
-	checkCol := func(sourceCol *scopeColumn, scopeOrd scopeOrdinal, targetColID opt.ColumnID) {
+	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
-		// Add ordinal of new scope column to the list of columns to update.
-		mb.updateOrds[ord] = scopeOrd
+		// Add source column ID to the list of columns to update.
+		mb.updateColIDs[ord] = sourceCol.id
 
 		// Rename the column to match the target column being updated.
 		sourceCol.name = mb.tab.Column(ord).ColName()
@@ -217,10 +217,9 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
 		scopeCol := mb.b.addColumn(projectionsScope, targetColMeta.Alias+"_new", texpr)
-		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
-		checkCol(scopeCol, scopeColOrd, targetColID)
+		checkCol(scopeCol, targetColID)
 	}
 
 	n := 0
@@ -235,8 +234,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 				// Type check and rename columns.
 				for i := range subqueryScope.cols {
-					scopeColOrd := scopeOrdinal(len(projectionsScope.cols) + i)
-					checkCol(&subqueryScope.cols[i], scopeColOrd, mb.targetColList[n])
+					checkCol(&subqueryScope.cols[i], mb.targetColList[n])
 					n++
 				}
 
@@ -296,7 +294,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// their default values. This is necessary because they may not yet have been
 	// set by the backfiller.
 	mb.addSynthesizedCols(
-		mb.updateOrds,
+		mb.updateColIDs,
 		func(colOrd int) bool {
 			return !mb.tab.Column(colOrd).IsComputed() && cat.IsMutationColumn(mb.tab, colOrd)
 		},
@@ -305,7 +303,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// Possibly round DECIMAL-related columns containing update values. Do
 	// this before evaluating computed expressions, since those may depend on
 	// the inserted columns.
-	mb.roundDecimalValues(mb.updateOrds, false /* roundComputedCols */)
+	mb.roundDecimalValues(mb.updateColIDs, false /* roundComputedCols */)
 
 	// Disambiguate names so that references in the computed expression refer to
 	// the correct columns.
@@ -313,12 +311,12 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 
 	// Add all computed columns in case their values have changed.
 	mb.addSynthesizedCols(
-		mb.updateOrds,
+		mb.updateColIDs,
 		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.
-	mb.roundDecimalValues(mb.updateOrds, true /* roundComputedCols */)
+	mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
