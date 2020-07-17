@@ -27,6 +27,12 @@ statement error unknown SRID for Geography: 404
 SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 
 statement ok
+CREATE INDEX geo_table_geom_idx ON geo_table USING GIST(geom)
+
+statement ok
+CREATE INDEX geo_table_geog_idx ON geo_table USING GIST(geog)
+
+statement ok
 CREATE TABLE geom_table_negative_values(
   a geometry(geometry, -1)
 )
@@ -81,10 +87,10 @@ SELECT orphan FROM geo_table
 query TTBTTTB rowsort
 SHOW COLUMNS FROM geo_table
 ----
-id      INT8                      false  NULL  ·  {primary}  false
-geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {}         false
-geom    GEOMETRY(POINT)           true   NULL  ·  {}         false
-orphan  GEOGRAPHY                 true   NULL  ·  {}         false
+id      INT8                      false  NULL  ·  {primary,geo_table_geom_idx,geo_table_geog_idx}  false
+geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx}                             false
+geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx}                             false
+orphan  GEOGRAPHY                 true   NULL  ·  {}                                               false
 
 statement error column bad_pk is of type geography and thus is not indexable
 CREATE TABLE bad_geog_table(bad_pk geography primary key)
