@@ -526,7 +526,8 @@ func (a Allocator) simulateRemoveTarget(
 	candidates []roachpb.ReplicaDescriptor,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
-) (roachpb.ReplicaDescriptor, string, error) {
+	storeFilter roachpb.StoreDescriptorFilter,
+) (*candidate, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
 	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
@@ -537,7 +538,7 @@ func (a Allocator) simulateRemoveTarget(
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_REPLICA)
 	}()
 	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
-	return a.RemoveTarget(ctx, zone, candidates, existingReplicas)
+	return a.doRemoveTarget(ctx, zone, candidates, existingReplicas, storeFilter)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -551,41 +552,16 @@ func (a Allocator) RemoveTarget(
 	candidates []roachpb.ReplicaDescriptor,
 	existingReplicas []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
-	if len(candidates) == 0 {
-		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
+	removeCandidate, removeDetails, err := a.doRemoveTarget(ctx, zone, candidates,
+		existingReplicas, roachpb.NoOpStoreDescriptorFilter{})
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, removeDetails, err
 	}
-
-	// Retrieve store descriptors for the provided candidates from the StorePool.
-	existingStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
-	for i, exist := range candidates {
-		existingStoreIDs[i] = exist.StoreID
-	}
-	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, storeFilterNone)
-
-	analyzedConstraints := constraint.AnalyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
-	options := a.scorerOptions()
-	rankedCandidates := removeCandidates(
-		sl,
-		analyzedConstraints,
-		a.storePool.getLocalities(existingReplicas),
-		options,
-	)
-	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
-	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
-		for _, exist := range existingReplicas {
-			if exist.StoreID == bad.store.StoreID {
-				log.VEventf(ctx, 3, "remove target: %s", bad)
-				details := decisionDetails{Target: bad.compactString(options)}
-				detailsBytes, err := json.Marshal(details)
-				if err != nil {
-					log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
-				}
-				return exist, string(detailsBytes), nil
-			}
+	for _, exist := range existingReplicas {
+		if exist.StoreID == removeCandidate.store.StoreID {
+			return exist, removeDetails, nil
 		}
 	}
-
 	return roachpb.ReplicaDescriptor{}, "", errors.New("could not select an appropriate replica to be removed")
 }
 
@@ -675,14 +651,13 @@ func (a Allocator) RebalanceTarget(
 	// pretty sure we won't want to remove immediately after adding it.
 	// If we would, we don't want to actually rebalance to that target.
 	var target *candidate
-	var removeReplica roachpb.ReplicaDescriptor
+	var removalTarget *candidate
 	var existingCandidates candidateList
 	for {
 		target, existingCandidates = bestRebalanceTarget(a.randGen, results)
 		if target == nil {
 			return zero, zero, "", false
 		}
-
 		// Add a fake new replica to our copy of the range descriptor so that we can
 		// simulate the removal logic. If we decide not to go with this target, note
 		// that this needs to be removed from desc before we try any other target.
@@ -710,23 +685,26 @@ func (a Allocator) RebalanceTarget(
 			return zero, zero, "", false
 		}
 
-		var removeDetails string
 		var err error
-		removeReplica, removeDetails, err = a.simulateRemoveTarget(
+		var removeDetails string
+		var storeFilter roachpb.StoreDescriptorFilter = roachpb.NoOpStoreDescriptorFilter{}
+		if isSameNodeRebalanceAttempt(existingPlusOneNew, target) {
+			storeFilter = roachpb.SameNodeStoreDescriptorFilter{NodeID: target.store.Node.NodeID}
+		}
+		removalTarget, removeDetails, err = a.simulateRemoveTarget(
 			ctx,
 			target.store.StoreID,
 			zone,
 			replicaCandidates,
 			existingPlusOneNew,
 			rangeUsageInfo,
+			storeFilter,
 		)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %+v", err)
 			return zero, zero, "", false
 		}
-		if target.store.StoreID != removeReplica.StoreID {
-			// Successfully populated these variables
-			_, _ = target, removeReplica
+		if target.store.StoreID != removalTarget.store.StoreID && removalTarget.less(*target) {
 			break
 		}
 
@@ -750,8 +728,8 @@ func (a Allocator) RebalanceTarget(
 		StoreID: target.store.StoreID,
 	}
 	removeTarget := roachpb.ReplicationTarget{
-		NodeID:  removeReplica.NodeID,
-		StoreID: removeReplica.StoreID,
+		NodeID:  removalTarget.store.Node.NodeID,
+		StoreID: removalTarget.store.StoreID,
 	}
 	return addTarget, removeTarget, string(detailsBytes), true
 }
@@ -1377,4 +1355,64 @@ func maxReplicaID(replicas []roachpb.ReplicaDescriptor) roachpb.ReplicaID {
 		}
 	}
 	return max
+}
+
+// doRemoveTarget returns a suitable replica to remove from the provided replica
+// set. It first attempts to randomly select a target from the set of stores
+// that have greater than the average number of replicas. Failing that, it
+// falls back to selecting a random target from any of the existing
+// replicas.
+func (a Allocator) doRemoveTarget(
+	ctx context.Context,
+	zone *zonepb.ZoneConfig,
+	candidates []roachpb.ReplicaDescriptor,
+	existingReplicas []roachpb.ReplicaDescriptor,
+	storeFilter roachpb.StoreDescriptorFilter,
+) (*candidate, string, error) {
+	if len(candidates) == 0 {
+		return nil, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
+	}
+
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	existingStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
+	for i, exist := range candidates {
+		existingStoreIDs[i] = exist.StoreID
+	}
+	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, storeFilterNone)
+
+	analyzedConstraints := constraint.AnalyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
+	options := a.scorerOptions()
+	rankedCandidates := removeCandidates(
+		sl,
+		analyzedConstraints,
+		a.storePool.getLocalities(existingReplicas),
+		options,
+		storeFilter,
+	)
+	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
+	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
+		log.VEventf(ctx, 3, "remove target: %s", bad)
+		details := decisionDetails{Target: bad.compactString(options)}
+		detailsBytes, err := json.Marshal(details)
+		if err != nil {
+			log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
+		}
+		return bad, string(detailsBytes), nil
+	}
+
+	return nil, "", errors.New("could not select an appropriate replica to be removed")
+}
+
+// isSameNodeRebalanceAttempt returns true if the target candidate is on the
+//same node as an existing replica.
+func isSameNodeRebalanceAttempt(
+	existingReplicas []roachpb.ReplicaDescriptor, target *candidate,
+) bool {
+	for _, repl := range existingReplicas {
+		if target.store.Node.NodeID == repl.NodeID && target.store.StoreID != repl.StoreID {
+			return true
+		}
+	}
+	return false
 }

@@ -91,3 +91,119 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidateReplicationChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	learnerType := roachpb.LEARNER
+	desc := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 3, StoreID: 1},
+			{NodeID: 4, StoreID: 1, Type: &learnerType},
+		},
+	}
+
+	// Test Case 1: Add a new replica to another node.
+	err := validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 2: Remove a replica from an existing node.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 3: Remove a replica from wrong node.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 1}},
+	})
+	require.Error(t, err)
+
+	// Test Case 4: Remove a replica from wrong store.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+	})
+	require.Error(t, err)
+
+	// Test Case 5: Re-balance a replica within a store.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 6: Re-balance a replica within a store, but attempt remove from
+	// the wrong one.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
+	})
+	require.Error(t, err)
+
+	// Test Case 7: Add replica to same node and store.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.Error(t, err)
+
+	// Test Case 8: Add replica to same node and different store.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+	})
+	require.Error(t, err)
+
+	// Test Case 9: Try to rebalance a replica on the same node, but also add an extra.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
+	})
+	require.Error(t, err)
+
+	// Test Case 10: Try to add twice to the same node.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 4, StoreID: 1}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 4, StoreID: 2}},
+	})
+	require.Error(t, err)
+
+	// Test Case 11: Try to remove twice to the same node.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+	})
+	require.Error(t, err)
+
+	// Test Case 12: Try to add where there is already a learner.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 4, StoreID: 2}},
+	})
+	require.Error(t, err)
+
+	// Test Case 13: Add/Remove multiple replicas.
+	err = validateReplicationChanges(desc, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 1}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 5, StoreID: 1}},
+		{ChangeType: roachpb.ADD_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 6, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 3, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 14: We are rebalancing within a node and do a remove
+	descRelancing := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 1},
+			{NodeID: 1, StoreID: 2, Type: &learnerType},
+		},
+	}
+	err = validateReplicationChanges(descRelancing, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.REMOVE_REPLICA, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+}

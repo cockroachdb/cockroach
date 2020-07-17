@@ -644,3 +644,31 @@ var DefaultLocationInformation = []struct {
 		Longitude: "3.81886",
 	},
 }
+
+// StoreDescriptorFilter defines an interfaces that filters out
+// StoreDescriptors.
+type StoreDescriptorFilter interface {
+	Filter(descriptor StoreDescriptor) bool
+}
+
+// SameNodeStoreDescriptorFilter is a struct that implements
+// StoreDescriptorFilter and filters StoreDescriptors based on their NodeID.
+type SameNodeStoreDescriptorFilter struct {
+	NodeID NodeID
+}
+
+// Filter on SameNodeStoreDescriptorFilter, filters out nodes based on their
+// NodeID.
+func (filter SameNodeStoreDescriptorFilter) Filter(descriptor StoreDescriptor) bool {
+	return descriptor.Node.NodeID == filter.NodeID
+}
+
+// NoOpStoreDescriptorFilter is a dummy implementation of StoreDescriptorFilter
+type NoOpStoreDescriptorFilter struct {
+}
+
+// Filter on NoOpStoreDescriptorFilter is a dummy implementation of
+// StoreDescriptorFilter
+func (filter NoOpStoreDescriptorFilter) Filter(descriptor StoreDescriptor) bool {
+	return true
+}

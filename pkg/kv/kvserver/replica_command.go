@@ -1125,50 +1125,87 @@ func validateReplicationChanges(
 ) error {
 	// First make sure that the changes don't self-overlap (i.e. we're not adding
 	// a replica twice, or removing and immediately re-adding it).
-	byNodeID := make(map[roachpb.NodeID]roachpb.ReplicationChange, len(chgs))
+	byNodeAndStoreID := make(map[roachpb.NodeID]map[roachpb.StoreID]roachpb.ReplicationChange, len(chgs))
 	for _, chg := range chgs {
-		if _, ok := byNodeID[chg.Target.NodeID]; ok {
-			return fmt.Errorf("changes %+v refer to n%d twice", chgs, chg.Target.NodeID)
+		byStoreID, ok := byNodeAndStoreID[chg.Target.NodeID]
+		if !ok {
+			byStoreID = make(map[roachpb.StoreID]roachpb.ReplicationChange)
+			byNodeAndStoreID[chg.Target.NodeID] = byStoreID
+		} else {
+			// The only operation that is allowed within a node is an Add/Remove
+			for _, prevChg := range byStoreID {
+				if prevChg.ChangeType == chg.ChangeType {
+					return fmt.Errorf("changes %+v refer to n%d twice for change %v",
+						chgs, chg.Target.NodeID, chg.ChangeType)
+				}
+			}
 		}
-		byNodeID[chg.Target.NodeID] = chg
+		if _, ok := byStoreID[chg.Target.StoreID]; ok {
+			return fmt.Errorf("changes %+v refer to n%d and s%d twice", chgs,
+				chg.Target.NodeID, chg.Target.StoreID)
+		}
+		byStoreID[chg.Target.StoreID] = chg
 	}
 
 	// Then, check that we're not adding a second replica on nodes that already
-	// have one, or "re-add" an existing replica. We delete from byNodeID so that
-	// after this loop, it contains only StoreIDs that we haven't seen in desc.
+	// have one, or "re-add" an existing replica. We delete from byNodeAndStoreID so that
+	// after this loop, it contains only Nodes that we haven't seen in desc.
 	for _, rDesc := range desc.Replicas().All() {
-		chg, ok := byNodeID[rDesc.NodeID]
-		delete(byNodeID, rDesc.NodeID)
-		if !ok || chg.ChangeType != roachpb.ADD_REPLICA {
+		byStoreID, ok := byNodeAndStoreID[rDesc.NodeID]
+		if !ok {
 			continue
 		}
-		// We're adding a replica that's already there. This isn't allowed, even
-		// when the newly added one would be on a different store.
-		if rDesc.StoreID != chg.Target.StoreID {
-			return errors.Errorf("unable to add replica %v; node already has a replica in %s", chg.Target.StoreID, desc)
+		delete(byNodeAndStoreID, rDesc.NodeID)
+		if len(byStoreID) == 2 {
+			chg, k := byStoreID[rDesc.StoreID]
+			// We should be removing the replica from the existing store during a
+			// rebalance within the node
+			if !k || chg.ChangeType != roachpb.REMOVE_REPLICA {
+				return errors.Errorf(
+					"Expected replica to be removed from %v during a lateral rebalance within the node.", rDesc)
+			}
+			continue
+		}
+		chg, ok := byStoreID[rDesc.StoreID]
+		// The only valid condition here is that if this is a removal
+		// of an existing store
+		if ok {
+			if chg.ChangeType == roachpb.REMOVE_REPLICA {
+				continue
+			}
+			// Looks like we found a replica with the same store and node id. If the
+			// replica is already a learner, then either some previous leaseholder was
+			// trying to add it with the learner+snapshot+voter cycle and got
+			// interrupted or else we hit a race between the replicate queue and
+			// AdminChangeReplicas.
+			if rDesc.GetType() == roachpb.LEARNER {
+				return errors.Errorf(
+					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
+			}
+
+			// Otherwise, we already had a full voter replica. Can't add another to
+			// this store.
+			return errors.Errorf("unable to add replica %v which is already present in %s", chg.Target, desc)
 		}
 
-		// Looks like we found a replica with the same store and node id. If the
-		// replica is already a learner, then either some previous leaseholder was
-		// trying to add it with the learner+snapshot+voter cycle and got
-		// interrupted or else we hit a race between the replicate queue and
-		// AdminChangeReplicas.
-		if rDesc.GetType() == roachpb.LEARNER {
-			return errors.Errorf(
-				"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
+		for _, c := range byStoreID {
+			// We're adding a replica that's already there. This isn't allowed, even
+			// when the newly added one would be on a different store.
+			if c.ChangeType == roachpb.ADD_REPLICA {
+				return errors.Errorf("unable to add replica %v; node already has a replica in %s", c.Target.StoreID, desc)
+			}
+			return errors.Errorf("removing %v which is not in %s", c.Target, desc)
 		}
-
-		// Otherwise, we already had a full voter replica. Can't add another to
-		// this store.
-		return errors.Errorf("unable to add replica %v which is already present in %s", chg.Target, desc)
 	}
 
 	// Any removals left in the map now refer to nonexisting replicas, and we refuse them.
-	for _, chg := range byNodeID {
-		if chg.ChangeType != roachpb.REMOVE_REPLICA {
-			continue
+	for _, byStoreID := range byNodeAndStoreID {
+		for _, chg := range byStoreID {
+			if chg.ChangeType != roachpb.REMOVE_REPLICA {
+				continue
+			}
+			return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
 		}
-		return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
 	}
 	return nil
 }
