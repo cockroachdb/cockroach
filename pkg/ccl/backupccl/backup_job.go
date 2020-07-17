@@ -535,21 +535,6 @@ func (b *backupResumer) Resume(
 		return err
 	}
 
-	err = b.clearStats(ctx, p.ExecCfg().DB)
-	if err != nil {
-		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
-	}
-	b.deleteCheckpoint(ctx, p.ExecCfg())
-
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*b.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
-
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
@@ -557,6 +542,12 @@ func (b *backupResumer) Resume(
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
 	}
+
+	err = b.clearStats(ctx, p.ExecCfg().DB)
+	if err != nil {
+		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
+	}
+	b.deleteCheckpoint(ctx, p.ExecCfg())
 
 	// Collect telemetry.
 	{
@@ -579,6 +570,15 @@ func (b *backupResumer) Resume(
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
 			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
 		}
+	}
+
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*b.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(res.Rows)),
+		tree.NewDInt(tree.DInt(res.IndexEntries)),
+		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 
 	return nil
