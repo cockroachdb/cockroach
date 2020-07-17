@@ -122,33 +122,18 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		return b.buildExplainOpt(explain)
 	}
 
-	// The auto commit flag should reflect what would happen if this statement
-	// was run without the explain, so recalculate it.
-	defer func(oldVal bool) {
-		b.allowAutoCommit = oldVal
-	}(b.allowAutoCommit)
-	b.allowAutoCommit = b.canAutoCommit(explain.Input)
-
-	input, err := b.buildRelational(explain.Input)
+	// Create a separate builder for the explain query.
+	explainBld := New(b.factory, b.mem, b.catalog, explain.Input, b.evalCtx)
+	explainBld.disableTelemetry = true
+	plan, err := explainBld.Build()
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	plan, err := b.factory.ConstructPlan(input.root, b.subqueries, b.cascades, b.checks)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	node, err := b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	// The subqueries/cascades/checks are now owned by the explain node;
-	// remove them so they don't also show up in the final plan.
-	b.subqueries = nil
-	b.cascades = nil
-	b.checks = nil
 	return planWithColumns(node, explain.ColList), nil
 }
 
