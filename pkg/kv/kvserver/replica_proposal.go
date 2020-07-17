@@ -231,7 +231,9 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	limiter := limit.NewLimiter(rate.Limit(consistencyCheckRate.Get(&r.store.ClusterSettings().SV)))
 
 	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
+
+	// Don't inherit the ctx cancelation.
+	if err := stopper.RunAsyncTaskNoCancelation(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
 		func() {
 			defer snap.Close()
 			var snapshot *roachpb.RaftSnapshotData
@@ -241,7 +243,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 
 			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, limiter)
 			if err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Errorf(ctx, "error computing checksum: %s", err)
 				result = nil
 			}
 			r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
@@ -642,7 +644,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		// blocks waiting for the lease acquisition to finish but it can't finish
 		// because we're not processing raft messages due to holding
 		// processRaftMu (and running on the processRaft goroutine).
-		if err := r.store.Stopper().RunAsyncTask(
+		if err := r.store.Stopper().RunAsyncTaskNoCancelation(
 			ctx, "storage.Replica: gossipping first range",
 			func(ctx context.Context) {
 				hasLease, pErr := r.getLeaseForGossip(ctx)

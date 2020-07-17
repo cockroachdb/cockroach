@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -304,6 +305,10 @@ func (s *Stopper) RunTaskWithErr(
 
 // RunAsyncTask is like RunTask, except the callback is run in a goroutine. The
 // method doesn't block for the callback to finish execution.
+//
+// Note that the task inherits ctx's cancelation. If the caller doesn't intent
+// to wait for this task, it needs to make sure it doesn't blindly pass a
+// cancelable context. See RunAsyncTaskNoCancelation().
 func (s *Stopper) RunAsyncTask(
 	ctx context.Context, taskName string, f func(context.Context),
 ) error {
@@ -323,6 +328,20 @@ func (s *Stopper) RunAsyncTask(
 		f(ctx)
 	}()
 	return nil
+}
+
+// RunAsyncTaskNoCancelation is like RunAsyncTask except that it runs the task
+// with a context that doesn't inherit the caller's cancelation or timeout.
+//
+// TODO(andrei): Another thing that's reasonable for the caller to want is to
+// not pass a cancelation, but for the take to get a cancelation on quiescing
+// (WithCancelOnQuiesce). We should refactor this method into a set of options
+// to RunAsyncTask.
+func (s *Stopper) RunAsyncTaskNoCancelation(
+	ctx context.Context, taskName string, f func(context.Context),
+) error {
+	asyncCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	return s.RunAsyncTask(asyncCtx, taskName, f)
 }
 
 // RunLimitedAsyncTask runs function f in a goroutine, using the given
