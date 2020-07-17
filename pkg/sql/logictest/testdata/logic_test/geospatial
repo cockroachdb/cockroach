@@ -586,6 +586,27 @@ Square (left)                             1
 Square (right)                            1
 Square overlapping left and right square  1.1
 
+# Validity checking.
+query TBBBTTTT
+SELECT
+  dsc,
+  ST_IsValid(geom),
+  ST_IsValid(geom, 0),
+  ST_IsValid(geom, 1),
+  ST_IsValidReason(geom),
+  ST_IsValidReason(geom, 0),
+  ST_IsValidReason(geom, 1),
+  ST_AsEWKT(ST_MakeValid(geom))
+FROM ( VALUES
+  ('valid geom', 'POINT(1.0 2.0)'::geometry),
+  ('invalid polygon', 'POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))'::geometry),
+  ('self-intersecting polygon', 'POLYGON ((14 20, 8 45, 20 35, 14 20, 16 30, 12 30, 14 20))'::geometry)
+) t(dsc, geom)
+----
+valid geom                 true   true   true   Valid Geometry                 Valid Geometry          Valid Geometry     POINT (1 2)
+invalid polygon            false  false  false  Self-intersection[1.5 1.5]     Self-intersection       Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1 1, 1.5 1.5, 1.5 -1.5, 1 1)), LINESTRING (1.5 1.5, 2 2))
+self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]  Ring Self-intersection  Valid Geometry     POLYGON ((14 20, 8 45, 20 35, 14 20), (14 20, 16 30, 12 30, 14 20))
+
 # Unary operators
 query TRRRR
 SELECT

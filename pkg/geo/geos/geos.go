@@ -606,3 +606,82 @@ func RelatePattern(a geopb.EWKB, b geopb.EWKB, pattern string) (bool, error) {
 	}
 	return ret == 1, nil
 }
+
+//
+// Validity checking.
+//
+
+// IsValid returns whether the given geometry is valid.
+func IsValid(ewkb geopb.EWKB) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(
+		C.CR_GEOS_IsValid(g, goToCSlice(ewkb), &ret),
+	); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// IsValidReason the reasoning for whether the Geometry is valid or invalid.
+func IsValidReason(ewkb geopb.EWKB) (string, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return "", err
+	}
+	var ret C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_IsValidReason(g, goToCSlice(ewkb), &ret),
+	); err != nil {
+		return "", err
+	}
+
+	return string(cStringToSafeGoBytes(ret)), nil
+}
+
+// IsValidDetail returns information regarding whether a geometry is valid or invalid.
+// It takes in a flag parameter which behaves the same as the GEOS module, where 1
+// means that self-intersecting rings forming holes are considered valid.
+// It returns a bool representing whether it is valid, a string giving a reason for
+// invalidity and an EWKB representing the location things are invalid at.
+func IsValidDetail(ewkb geopb.EWKB, flags int) (bool, string, geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, "", nil, err
+	}
+	var retIsValid C.char
+	var retReason C.CR_GEOS_String
+	var retLocationEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_IsValidDetail(
+			g,
+			goToCSlice(ewkb),
+			C.int(flags),
+			&retIsValid,
+			&retReason,
+			&retLocationEWKB,
+		),
+	); err != nil {
+		return false, "", nil, err
+	}
+	return retIsValid == 1,
+		string(cStringToSafeGoBytes(retReason)),
+		cStringToSafeGoBytes(retLocationEWKB),
+		nil
+}
+
+// MakeValid returns a valid form of the EWKB.
+func MakeValid(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_MakeValid(g, goToCSlice(ewkb), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
