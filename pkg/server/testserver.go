@@ -543,11 +543,7 @@ func makeSQLServerArgs(
 		},
 		ds,
 	)
-	db := kv.NewDB(
-		baseCfg.AmbientCtx,
-		tcsFactory,
-		clock,
-	)
+	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 
 	circularInternalExecutor := &sql.InternalExecutor{}
 	// Protected timestamps won't be available (at first) in multi-tenant

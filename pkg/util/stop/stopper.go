@@ -18,11 +18,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -30,6 +32,10 @@ import (
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
+
+func init() {
+	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
+}
 
 const asyncTaskNamePrefix = "[async] "
 
@@ -44,7 +50,7 @@ var ErrUnavailable = &roachpb.NodeUnavailableError{}
 func register(s *Stopper) {
 	trackedStoppers.Lock()
 	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
-		stopperWithStack{s: s, stack: debug.Stack()})
+		stopperWithStack{s: s, createdAt: string(debug.Stack())})
 	trackedStoppers.Unlock()
 }
 
@@ -62,8 +68,8 @@ func unregister(s *Stopper) {
 }
 
 type stopperWithStack struct {
-	s     *Stopper
-	stack []byte
+	s         *Stopper
+	createdAt string // stack from NewStopper()
 }
 
 var trackedStoppers struct {
@@ -86,13 +92,11 @@ func HandleDebug(w http.ResponseWriter, r *http.Request) {
 
 // PrintLeakedStoppers prints (using `t`) the creation site of each Stopper
 // for which `.Stop()` has not yet been called.
-func PrintLeakedStoppers(t interface {
-	Logf(string, ...interface{})
-}) {
+func PrintLeakedStoppers(t testing.TB) {
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
 	for _, tracked := range trackedStoppers.stoppers {
-		t.Logf("leaked stopper, created at:\n%s", tracked.stack)
+		t.Logf("leaked stopper, created at:\n%s", tracked.createdAt)
 	}
 }
 

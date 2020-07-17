@@ -246,7 +246,7 @@ func startConnExecutor(
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		})
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)

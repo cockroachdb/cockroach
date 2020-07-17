@@ -43,15 +43,13 @@ import (
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
-	return createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), nil)
+	return createTestDBWithKnobs(t, nil)
 }
 
-func createTestDBWithContextAndKnobs(
-	t testing.TB, dbCtx kv.DBContext, knobs *kvserver.StoreTestingKnobs,
+func createTestDBWithKnobs(
+	t testing.TB, knobs *kvserver.StoreTestingKnobs,
 ) *localtestcluster.LocalTestCluster {
 	s := &localtestcluster.LocalTestCluster{
-		DBContext:         &dbCtx,
-		Stopper:           dbCtx.Stopper,
 		StoreTestingKnobs: knobs,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
@@ -237,11 +235,11 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 			AmbientCtx: ambient,
 			Settings:   st,
 			Clock:      s.Clock,
-			Stopper:    s.Stopper,
+			Stopper:    s.Stopper(),
 		},
 		ds,
 	)
-	db := kv.NewDB(ambient, tsf, s.Clock)
+	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
 	ctx := context.Background()
 
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
@@ -282,7 +280,7 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -306,14 +304,14 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.Cfg.Settings,
 			Clock:             s.Clock,
-			Stopper:           s.Stopper,
+			Stopper:           s.Stopper(),
 		},
 		NewDistSenderForLocalTestCluster(
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper, s.Gossip,
+			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
 		),
 	)
-	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock)
+	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
 
 	// We're going to test twice. In both cases the heartbeat is supposed to
 	// notice that its transaction is aborted, but:
@@ -660,7 +658,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 			},
 		}
 
-		s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), knobs)
+		s := createTestDBWithKnobs(t, knobs)
 		defer s.Stop()
 
 		ctx := context.Background()
@@ -818,7 +816,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				},
 				senderFn,
 			)
-			db := kv.NewDB(ambient, tsf, clock)
+			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
 			now := clock.Now()
 			origTxnProto := roachpb.MakeTransaction(
@@ -962,7 +960,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	)
 	defer stopper.Stop(ctx)
 
-	db := kv.NewDB(ambient, factory, clock)
+	db := kv.NewDB(ambient, factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Acquire locks on a-b, c, u-w before the final batch.
@@ -1053,9 +1051,7 @@ func checkTxnMetricsOnce(
 // have a faster sample interval and returns a cleanup function to be
 // executed by callers.
 func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetrics, func()) {
-	dbCtx := kv.DefaultDBContext()
 	s := &localtestcluster.LocalTestCluster{
-		DBContext: &dbCtx,
 		// Liveness heartbeat txns mess up the metrics.
 		DisableLivenessHeartbeat: true,
 		DontCreateSystemRanges:   true,
@@ -1336,7 +1332,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				senderFn,
 			)
 
-			db := kv.NewDB(ambient, factory, clock)
+			db := kv.NewDB(ambient, factory, clock, stopper)
 			txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 			if pErr := txn.Put(ctx, "a", "b"); pErr != nil {
 				t.Fatalf("put failed: %s", pErr)
@@ -1416,7 +1412,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(ambient, factory, clock)
+	db := kv.NewDB(ambient, factory, clock, stopper)
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTxn); !ok {
@@ -1484,7 +1480,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(ambient, factory, clock)
+	db := kv.NewDB(ambient, factory, clock, stopper)
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	// Register a matcher catching the commit attempt.
@@ -1578,7 +1574,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "explicit txn", func(t *testing.T, explicitTxn bool) {
 		testutils.RunTrueAndFalse(t, "with get", func(t *testing.T, withGet bool) {
 			calls = nil
-			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				if withGet {
@@ -1684,7 +1680,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	for i, test := range testArgs {
 		t.Run(test.expMethod.String(), func(t *testing.T) {
 			calls = nil
-			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 			if err := db.Txn(ctx, test.f); err != nil {
 				t.Fatalf("%d: unexpected error on commit: %s", i, err)
 			}
@@ -1727,7 +1723,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		return errors.New("foo")
 	}); err == nil {
@@ -1784,7 +1780,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
 		testutils.RunTrueAndFalse(t, "success", func(t *testing.T, success bool) {
@@ -1876,7 +1872,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		defer func() { attempt++ }()
@@ -1932,7 +1928,7 @@ func TestSequenceNumbers(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	for i := 0; i < 5; i++ {
@@ -1982,7 +1978,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(ambient, factory, clock)
+	db := kv.NewDB(ambient, factory, clock, stopper)
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		g, gCtx := errgroup.WithContext(ctx)
@@ -2024,7 +2020,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 	curReq := 0
 	requests := []struct {
@@ -2100,7 +2096,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		},
 		sender,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 	// We're going to run two tests: one where the EndTxn is by itself in a
 	// batch, one where it is not. As of June 2018, the EndTxn is elided in
@@ -2164,9 +2160,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		AmbientCtx: ambientCtx,
 		Settings:   s.Cfg.Settings,
 		Clock:      s.Clock,
-		Stopper:    s.Stopper,
+		Stopper:    s.Stopper(),
 	}, senderFn)
-	db := kv.NewDB(ambientCtx, tsf, s.Clock)
+	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(ctx, "key", "val")
@@ -2245,7 +2241,7 @@ func TestAnchorKey(t *testing.T) {
 		},
 		senderFn,
 	)
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		ba := txn.NewBatch()
@@ -2283,7 +2279,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 		},
 	}
 
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), knobs)
+	s := createTestDBWithKnobs(t, knobs)
 	defer s.Stop()
 
 	ctx := context.Background()
@@ -2314,7 +2310,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), nil /* knobs */)
+	s := createTestDBWithKnobs(t, nil /* knobs */)
 	defer s.Stop()
 	ctx := context.Background()
 

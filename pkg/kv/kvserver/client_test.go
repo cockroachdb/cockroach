@@ -177,7 +177,7 @@ func createTestStoreWithOpts(
 		},
 		distSender,
 	)
-	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock)
+	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock, stopper)
 	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
 	storeCfg.Transport = kvserver.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -823,7 +823,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 		},
 		m.distSenders[idx],
 	)
-	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx])
+	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx], stopper)
 }
 
 func (m *multiTestContext) populateStorePool(

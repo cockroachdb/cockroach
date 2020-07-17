@@ -164,18 +164,18 @@ func TestIsPushed(t *testing.T) {
 	}
 }
 
-func makeConfig(s kv.SenderFunc) Config {
+func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	var cfg Config
 	cfg.RangeDesc = &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
 	}
 	manual := hlc.NewManualClock(123)
 	cfg.Clock = hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	cfg.Stopper = stop.NewStopper()
+	cfg.Stopper = stopper
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
 		factory := kv.NonTransactionalFactoryFunc(s)
-		cfg.DB = kv.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock)
+		cfg.DB = kv.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock, stopper)
 	}
 	return cfg
 }
@@ -186,12 +186,14 @@ func makeConfig(s kv.SenderFunc) Config {
 // leak.
 func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := makeConfig(nil)
-	defer cfg.Stopper.Stop(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	cfg := makeConfig(nil, stopper)
 	q := NewQueue(cfg)
 	q.Enable()
 
-	ctx, cancel := context.WithCancel(context.Background())
 	waitingRes := make(chan *roachpb.Error)
 	go func() {
 		req := &roachpb.QueryTxnRequest{WaitForUpdate: true}
@@ -223,13 +225,14 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 // released.
 func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
 	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return mockSender(ctx, ba)
-	})
-	defer cfg.Stopper.Stop(context.Background())
+	}, stopper)
 	q := NewQueue(cfg)
 	q.Enable()
 

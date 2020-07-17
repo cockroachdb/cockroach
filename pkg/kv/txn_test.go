@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -40,10 +41,12 @@ func TestTxnSnowballTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	tracer := tracing.NewTracer()
 	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock, stopper)
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		log.Event(ctx, "inside txn")
@@ -134,16 +137,16 @@ func TestInitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	// This test is mostly an excuse to exercise otherwise unused code.
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			br := ba.CreateReply()
-			return br, nil
-		}), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		return br, nil
+	}), clock, stopper)
 
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	if pErr := txn.InitPut(ctx, "a", "b", false); pErr != nil {
@@ -158,8 +161,11 @@ func TestInitPut(t *testing.T) {
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	dbCtx := DefaultDBContext()
+	dbCtx := DefaultDBContext(stopper)
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(
 		testutils.MakeAmbientCtx(),
@@ -181,14 +187,15 @@ func TestTransactionConfig(t *testing.T) {
 func TestCommitTransactionOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	count := 0
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			count++
-			return ba.CreateReply(), nil
-		}), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		count++
+		return ba.CreateReply(), nil
+	}), clock, stopper)
 	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
@@ -206,17 +213,18 @@ func TestCommitTransactionOnce(t *testing.T) {
 func TestAbortMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			calls = append(calls, ba.Methods()...)
-			if et, ok := ba.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).Commit {
-				t.Errorf("expected commit to be false")
-			}
-			return ba.CreateReply(), nil
-		}), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		calls = append(calls, ba.Methods()...)
+		if et, ok := ba.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).Commit {
+			t.Errorf("expected commit to be false")
+		}
+		return ba.CreateReply(), nil
+	}), clock, stopper)
 
 	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 		if err := txn.Put(ctx, "a", "b"); err != nil {
@@ -258,37 +266,38 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%T", test.err), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
 			count := 0
-			db := NewDB(
-				testutils.MakeAmbientCtx(),
-				newTestTxnFactory(
-					func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(
+				func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
-						if _, ok := ba.GetArg(roachpb.Put); ok {
-							count++
-							if count == 1 {
-								var pErr *roachpb.Error
-								if errors.HasType(test.err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
-									// This error requires an observed timestamp to have been
-									// recorded on the origin node.
-									ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})
-									pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
-									pErr.OriginNode = 1
-								} else {
-									pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
-								}
-
-								if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-									// HACK ALERT: to do without a TxnCoordSender, we jump through
-									// hoops to get the retryable error expected by db.Txn().
-									return nil, roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-										pErr.Message, ba.Txn.ID, *ba.Txn))
-								}
-								return nil, pErr
+					if _, ok := ba.GetArg(roachpb.Put); ok {
+						count++
+						if count == 1 {
+							var pErr *roachpb.Error
+							if errors.HasType(test.err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
+								// This error requires an observed timestamp to have been
+								// recorded on the origin node.
+								ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
+								pErr.OriginNode = 1
+							} else {
+								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
 							}
+
+							if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+								// HACK ALERT: to do without a TxnCoordSender, we jump through
+								// hoops to get the retryable error expected by db.Txn().
+								return nil, roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
+									pErr.Message, ba.Txn.ID, *ba.Txn))
+							}
+							return nil, pErr
 						}
-						return ba.CreateReply(), nil
-					}), clock)
+					}
+					return ba.CreateReply(), nil
+				}), clock, stopper)
 			err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
 				return txn.Put(ctx, "a", "b")
 			})
@@ -317,9 +326,11 @@ func TestTransactionStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock, stopper)
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
 			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
@@ -355,9 +366,11 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock, stopper)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	b1 := &Batch{}
@@ -377,23 +390,23 @@ func TestSetPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var expected roachpb.UserPriority
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		newTestTxnFactory(
-			func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				if ba.UserPriority != expected {
-					pErr := roachpb.NewErrorf("Priority not set correctly in the batch! "+
-						"(expected: %s, value: %s)", expected, ba.UserPriority)
-					return nil, pErr
-				}
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if ba.UserPriority != expected {
+				pErr := roachpb.NewErrorf("Priority not set correctly in the batch! "+
+					"(expected: %s, value: %s)", expected, ba.UserPriority)
+				return nil, pErr
+			}
 
-				br := &roachpb.BatchResponse{}
-				br.Txn.Update(ba.Txn) // copy
-				return br, nil
-			}), clock)
+			br := &roachpb.BatchResponse{}
+			br.Txn.Update(ba.Txn) // copy
+			return br, nil
+		}), clock, stopper)
 
 	// Verify the normal priority setting path.
 	expected = roachpb.NormalUserPriority
@@ -419,8 +432,11 @@ func TestSetPriority(t *testing.T) {
 func TestWrongTxnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock, stopper)
 
 	var retries int
 	txnClosure := func(ctx context.Context, outerTxn *Txn) error {
@@ -445,8 +461,12 @@ func TestWrongTxnRetry(t *testing.T) {
 func TestBatchMixRawRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
+	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock, stopper)
 
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTxnRequest{})
@@ -460,17 +480,16 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	mc := hlc.NewManualClock(1)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		MakeMockTxnSenderFactory(
-			func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
-				return nil, nil
-			}),
-		clock)
+	db := NewDB(testutils.MakeAmbientCtx(), MakeMockTxnSenderFactory(
+		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			return nil, nil
+		}), clock, stopper)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	if txn.deadline() != nil {
@@ -508,17 +527,16 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	mc := hlc.NewManualClock(1)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	db := NewDB(
-		testutils.MakeAmbientCtx(),
-		MakeMockTxnSenderFactory(
-			func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
-				return nil, nil
-			}),
-		clock)
+	db := NewDB(testutils.MakeAmbientCtx(), MakeMockTxnSenderFactory(
+		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			return nil, nil
+		}), clock, stopper)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	require.EqualError(t, txn.SetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
 	require.False(t, txn.systemConfigTrigger)
