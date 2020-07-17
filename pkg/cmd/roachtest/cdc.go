@@ -55,6 +55,8 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
+	t.Skip("flaky #51543", "https://github.com/cockroachdb/cockroach/issues/51543")
+
 	// Skip the poller test on v19.2. After 19.2 is out, we should likely delete
 	// the test entirely.
 	if !args.rangefeed && t.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) > 0 {
@@ -225,6 +227,8 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 }
 
 func runCDCBank(ctx context.Context, t *test, c *cluster) {
+	t.Skip("flaky #51543", "https://github.com/cockroachdb/cockroach/issues/51543")
+
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
@@ -374,6 +378,8 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
+	t.Skip("flaky #51543", "https://github.com/cockroachdb/cockroach/issues/51543")
+
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Start(ctx, t, crdbNodes)
