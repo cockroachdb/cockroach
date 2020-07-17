@@ -68,6 +68,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func getAvroData(schema map[string]interface{}, rows []map[string]interface{}) (string, error) {
+	var data bytes.Buffer
+	schemaStr, err := json.Marshal(schema)
+	if err != nil {
+		return "", err
+	}
+	codec, err := goavro.NewCodec(string(schemaStr))
+	if err != nil {
+		return "", err
+	}
+	// Create an AVRO writer from the schema.
+	ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
+		W:     &data,
+		Codec: codec,
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, row := range rows {
+		err = ocf.Append([]interface{}{row})
+		if err != nil {
+			return "", err
+		}
+	}
+	// Retrieve the AVRO encoded data.
+	return data.String(), nil
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1087,48 +1115,26 @@ SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'hi');
 `)
 
-	// Create some AVRO encoded data.
-	var avroData string
-	{
-		var data bytes.Buffer
-		// Set up a simple schema for the import data.
-		schema := map[string]interface{}{
-			"type": "record",
-			"name": "t",
-			"fields": []map[string]interface{}{
-				{
-					"name": "a",
-					"type": "string",
-				},
-				{
-					"name": "b",
-					"type": "string",
-				},
+	avroSchema := map[string]interface{}{
+		"type": "record",
+		"name": "t",
+		"fields": []map[string]interface{}{
+			{
+				"name": "a",
+				"type": "string",
 			},
-		}
-		schemaStr, err := json.Marshal(schema)
-		require.NoError(t, err)
-		codec, err := goavro.NewCodec(string(schemaStr))
-		require.NoError(t, err)
-		// Create an AVRO writer from the schema.
-		ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
-			W:     &data,
-			Codec: codec,
-		})
-		require.NoError(t, err)
-		row1 := map[string]interface{}{
-			"a": "hello",
-			"b": "hello",
-		}
-		row2 := map[string]interface{}{
-			"a": "hi",
-			"b": "hi",
-		}
-		// Add the data rows to the writer.
-		require.NoError(t, ocf.Append([]interface{}{row1, row2}))
-		// Retrieve the AVRO encoded data.
-		avroData = data.String()
+			{
+				"name": "b",
+				"type": "string",
+			},
+		},
 	}
+	avroRows := []map[string]interface{}{
+		{"a": "hello", "b": "hello"},
+		{"a": "hi", "b": "hi"},
+	}
+	avroData, err := getAvroData(avroSchema, avroRows)
+	require.NoError(t, err)
 
 	tests := []struct {
 		create      string
@@ -1177,7 +1183,7 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 	}
 
 	// Set up a directory for the data files.
-	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
+	err = os.Mkdir(filepath.Join(baseDir, "test"), 0777)
 	require.NoError(t, err)
 	// Test IMPORT INTO.
 	for _, test := range tests {
@@ -3047,6 +3053,26 @@ func TestImportDefault(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
+	avroSchema := map[string]interface{}{
+		"type": "record",
+		"name": "t",
+		"fields": []map[string]interface{}{
+			{
+				"name": "a",
+				"type": "int",
+			},
+			{
+				"name": "b",
+				"type": "int",
+			},
+		},
+	}
+	avroRows := []map[string]interface{}{
+		{"a": 1, "b": 2, "c": 10},
+		{"a": 3, "b": 4},
+	}
+	avroData, err := getAvroData(avroSchema, avroRows)
+	require.NoError(t, err)
 	tests := []struct {
 		name       string
 		data       string
@@ -3143,8 +3169,8 @@ func TestImportDefault(t *testing.T) {
 			format:        "CSV",
 			expectedError: "unsafe for import",
 		},
-		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
-		// IMPORT INTO are supported for these file formats.
+		// TODO (anzoteh96): once IMPORT INTO is supported by dump
+		// formats, it will be worthwhile to add tests here.
 		{
 			name:            "delimited",
 			data:            "1\t2\n3\t4",
@@ -3161,6 +3187,14 @@ func TestImportDefault(t *testing.T) {
 			with:            `delimiter = ","`,
 			format:          "PGCOPY",
 			expectedResults: [][]string{{"2", "42", "1"}, {"4", "42", "3"}},
+		},
+		{
+			name:            "avro",
+			data:            avroData,
+			create:          "a INT, b INT, c INT DEFAULT 33",
+			targetCols:      "a, b",
+			format:          "AVRO",
+			expectedResults: [][]string{{"1", "2", "33"}, {"3", "4", "33"}},
 		},
 	}
 	for _, test := range tests {
@@ -3356,24 +3390,28 @@ func TestImportDefault(t *testing.T) {
 			targetCols []string
 			randomCols []string
 			data       string
+			format     string
 		}{
 			{
 				name:       "random-multiple",
 				create:     "a INT, b FLOAT DEFAULT random(), c STRING, d FLOAT DEFAULT random()",
 				targetCols: []string{"a", "c"},
 				randomCols: []string{selectNotNull("b"), selectNotNull("d")},
+				format:     "CSV",
 			},
 			{
 				name:       "gen_random_uuid",
 				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid()",
 				targetCols: []string{"a", "b"},
 				randomCols: []string{selectNotNull("c")},
+				format:     "CSV",
 			},
 			{
 				name:       "mixed_random_uuid",
 				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid(), d FLOAT DEFAULT random()",
 				targetCols: []string{"a", "b"},
 				randomCols: []string{selectNotNull("c")},
+				format:     "CSV",
 			},
 			{
 				name:       "random_with_targeted",
@@ -3381,9 +3419,16 @@ func TestImportDefault(t *testing.T) {
 				targetCols: []string{"a", "b"},
 				randomCols: []string{selectNotNull("d")},
 				data:       "1,0.37\n2,0.455\n3,3.14\n4,0.246\n5,0.42",
+				format:     "CSV",
 			},
-			// TODO (anzoteh96): create a testcase for AVRO once we manage to extract
-			// targeted columns from the AVRO schema.
+			{
+				name:       "avro",
+				create:     "a INT, b INT, c FLOAT DEFAULT random()",
+				targetCols: []string{"a", "b"},
+				randomCols: []string{selectNotNull("c")},
+				data:       avroData,
+				format:     "AVRO",
+			},
 		}
 		for _, test := range testCases {
 			t.Run(test.name, func(t *testing.T) {
@@ -3397,8 +3442,9 @@ func TestImportDefault(t *testing.T) {
 				// Let's do 3 IMPORTs for each test case to ensure that the values produced
 				// do not overlap.
 				for i := 0; i < 3; i++ {
-					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) %s DATA (%s)`,
 						strings.Join(test.targetCols, ", "),
+						test.format,
 						fileName))
 				}
 				var numDistinctRows int
