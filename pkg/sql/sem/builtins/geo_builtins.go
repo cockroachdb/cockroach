@@ -1570,6 +1570,23 @@ Flags shown square brackets after the geometry type have the following meaning:
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_force2d": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceLayout(g.Geometry, geom.XY)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry which only contains X and Y coordinates.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_numgeometries": makeBuiltin(
 		defProps(),
 		geometryOverload1(
