@@ -292,6 +292,18 @@ func (*CommentOnTable) StatementType() StatementType { return DDL }
 func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
 
 // StatementType implements the Statement interface.
+func (*CommentOnView) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnView) StatementTag() string { return "COMMENT ON VIEW" }
+
+// StatementType implements the Statement interface.
+func (*CommentOnSequence) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnSequence) StatementTag() string { return "COMMENT ON SEQUENCE" }
+
+// StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -945,6 +957,8 @@ func (n *CommentOnColumn) String() string                { return AsString(n) }
 func (n *CommentOnDatabase) String() string              { return AsString(n) }
 func (n *CommentOnIndex) String() string                 { return AsString(n) }
 func (n *CommentOnTable) String() string                 { return AsString(n) }
+func (n *CommentOnView) String() string                  { return AsString(n) }
+func (n *CommentOnSequence) String() string              { return AsString(n) }
 func (n *CommitTransaction) String() string              { return AsString(n) }
 func (n *CopyFrom) String() string                       { return AsString(n) }
 func (n *CreateChangefeed) String() string               { return AsString(n) }

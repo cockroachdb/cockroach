@@ -67,6 +67,10 @@ func buildOpaque(
 		plan, err = p.CommentOnIndex(ctx, n)
 	case *tree.CommentOnTable:
 		plan, err = p.CommentOnTable(ctx, n)
+	case *tree.CommentOnView:
+		plan, err = p.CommentOnView(ctx, n)
+	case *tree.CommentOnSequence:
+		plan, err = p.CommentOnSequence(ctx, n)
 	case *tree.CreateDatabase:
 		plan, err = p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
@@ -176,6 +180,8 @@ func init() {
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnIndex{},
 		&tree.CommentOnTable{},
+		&tree.CommentOnView{},
+		&tree.CommentOnSequence{},
 		&tree.CreateDatabase{},
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},

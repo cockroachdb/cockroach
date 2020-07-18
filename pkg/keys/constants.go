@@ -385,6 +385,8 @@ const (
 	TableCommentType    = 1
 	ColumnCommentType   = 2
 	IndexCommentType    = 3
+	ViewCommentType     = 4
+	SequenceCommentType = 5
 )
 
 const (

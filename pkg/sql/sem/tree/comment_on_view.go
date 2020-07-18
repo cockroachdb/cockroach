@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,25 +10,20 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+)
 
-// CommentOnTable represents an COMMENT ON TABLE|VIEW statement. If IsView is true then we are adding a comment to a
-// view.
-type CommentOnTable struct {
-	Table   *UnresolvedObjectName
+// CommentOnView represents a COMMENT ON VIEW statement.
+type CommentOnView struct {
+	View    *UnresolvedObjectName
 	Comment *string
-	IsView  bool
 }
 
 // Format implements the NodeFormatter interface.
-func (n *CommentOnTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("COMMENT ON ")
-	if n.IsView {
-		ctx.WriteString("VIEW ")
-	} else {
-		ctx.WriteString("TABLE ")
-	}
-	ctx.FormatNode(n.Table)
+func (n *CommentOnView) Format(ctx *FmtCtx) {
+	ctx.WriteString("COMMENT ON VIEW ")
+	ctx.FormatNode(n.View)
 	ctx.WriteString(" IS ")
 	if n.Comment != nil {
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())

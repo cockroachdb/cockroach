@@ -922,6 +922,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&commentOnDatabaseNode{}): "comment on database",
 	reflect.TypeOf(&commentOnIndexNode{}):    "comment on index",
 	reflect.TypeOf(&commentOnTableNode{}):    "comment on table",
+	reflect.TypeOf(&commentOnViewNode{}):     "comment on view",
+	reflect.TypeOf(&commentOnSequenceNode{}): "comment on sequence",
 	reflect.TypeOf(&controlJobsNode{}):       "control jobs",
 	reflect.TypeOf(&createDatabaseNode{}):    "create database",
 	reflect.TypeOf(&createIndexNode{}):       "create index",
