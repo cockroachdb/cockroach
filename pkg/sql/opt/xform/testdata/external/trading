@@ -1314,21 +1314,21 @@ upsert transactiondetails
  │    ├── current_timestamp:13 => transactiondate:4
  │    ├── int8:14 => cardid:5
  │    ├── int8:15 => quantity:6
- │    ├── sellprice:29 => transactiondetails.sellprice:7
- │    ├── buyprice:30 => transactiondetails.buyprice:8
+ │    ├── sellprice:19 => transactiondetails.sellprice:7
+ │    ├── buyprice:20 => transactiondetails.buyprice:8
  │    └── column18:18 => transactiondetails.version:9
  ├── update-mapping:
- │    ├── sellprice:29 => transactiondetails.sellprice:7
- │    └── buyprice:30 => transactiondetails.buyprice:8
+ │    ├── sellprice:19 => transactiondetails.sellprice:7
+ │    └── buyprice:20 => transactiondetails.buyprice:8
  ├── input binding: &2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: upsert_dealerid:31 upsert_isbuy:32 upsert_transactiondate:33 upsert_cardid:34 sellprice:29 buyprice:30 "?column?":11!null bool:12!null current_timestamp:13!null int8:14!null int8:15!null column18:18 transactiondetails.dealerid:21 transactiondetails.isbuy:22 transactiondate:23 cardid:24 quantity:25 transactiondetails.sellprice:26 transactiondetails.buyprice:27 transactiondetails.version:28
+ │    ├── columns: upsert_dealerid:29 upsert_isbuy:30 upsert_transactiondate:31 upsert_cardid:32 "?column?":11!null bool:12!null current_timestamp:13!null int8:14!null int8:15!null column18:18 sellprice:19 buyprice:20 transactiondetails.dealerid:21 transactiondetails.isbuy:22 transactiondate:23 cardid:24 quantity:25 transactiondetails.sellprice:26 transactiondetails.buyprice:27 transactiondetails.version:28
  │    ├── cardinality: [1 - 2]
  │    ├── volatile
  │    ├── key: (14,15)
- │    ├── fd: ()-->(11-13), (14,15)-->(18,21-33), (21-25)-->(26-28), (21)-->(31), (21,22)-->(32), (21,23)-->(33), (14,21,24)-->(34)
+ │    ├── fd: ()-->(11-13), (14,15)-->(18-28), (21-25)-->(26-28), (21)-->(29), (21,22)-->(30), (21,23)-->(31), (14,21,24)-->(32)
  │    ├── left-join (lookup transactiondetails)
  │    │    ├── columns: "?column?":11!null bool:12!null current_timestamp:13!null int8:14!null int8:15!null column18:18 sellprice:19 buyprice:20 transactiondetails.dealerid:21 transactiondetails.isbuy:22 transactiondate:23 cardid:24 quantity:25 transactiondetails.sellprice:26 transactiondetails.buyprice:27 transactiondetails.version:28
  │    │    ├── key columns: [11 12 13 14 15] = [21 22 23 24 25]
@@ -1351,19 +1351,19 @@ upsert transactiondetails
  │    │    │    │    ├── volatile
  │    │    │    │    ├── fd: ()-->(11-13)
  │    │    │    │    ├── values
- │    │    │    │    │    ├── columns: detail_b:54!null detail_c:55!null detail_q:56!null detail_s:57!null
+ │    │    │    │    │    ├── columns: detail_b:52!null detail_c:53!null detail_q:54!null detail_s:55!null
  │    │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    │    ├── ('2.29', '49833', '4', '2.89')
  │    │    │    │    │    └── ('17.59', '29483', '2', '18.93')
  │    │    │    │    └── projections
- │    │    │    │         ├── crdb_internal.round_decimal_values(detail_s:57::STRING::DECIMAL(10,4), 4) [as=sellprice:19, outer=(57), immutable]
- │    │    │    │         ├── crdb_internal.round_decimal_values(detail_b:54::STRING::DECIMAL(10,4), 4) [as=buyprice:20, outer=(54), immutable]
+ │    │    │    │         ├── crdb_internal.round_decimal_values(detail_s:55::STRING::DECIMAL(10,4), 4) [as=sellprice:19, outer=(55), immutable]
+ │    │    │    │         ├── crdb_internal.round_decimal_values(detail_b:52::STRING::DECIMAL(10,4), 4) [as=buyprice:20, outer=(52), immutable]
  │    │    │    │         ├── cluster_logical_timestamp() [as=column18:18, volatile]
  │    │    │    │         ├── 1 [as="?column?":11]
  │    │    │    │         ├── false [as=bool:12]
  │    │    │    │         ├── '2017-05-10 13:00:00+00:00' [as=current_timestamp:13]
- │    │    │    │         ├── detail_c:55::STRING::INT8 [as=int8:14, outer=(55), immutable]
- │    │    │    │         └── detail_q:56::STRING::INT8 [as=int8:15, outer=(56), immutable]
+ │    │    │    │         ├── detail_c:53::STRING::INT8 [as=int8:14, outer=(53), immutable]
+ │    │    │    │         └── detail_q:54::STRING::INT8 [as=int8:15, outer=(54), immutable]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=sellprice:19, outer=(19)]
  │    │    │         │    └── sellprice:19
@@ -1379,37 +1379,35 @@ upsert transactiondetails
  │    │    │              └── current_timestamp:13
  │    │    └── filters (true)
  │    └── projections
- │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN "?column?":11 ELSE transactiondetails.dealerid:21 END [as=upsert_dealerid:31, outer=(11,21)]
- │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN bool:12 ELSE transactiondetails.isbuy:22 END [as=upsert_isbuy:32, outer=(12,21,22)]
- │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN current_timestamp:13 ELSE transactiondate:23 END [as=upsert_transactiondate:33, outer=(13,21,23)]
- │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN int8:14 ELSE cardid:24 END [as=upsert_cardid:34, outer=(14,21,24)]
- │         ├── crdb_internal.round_decimal_values(sellprice:19, 4) [as=sellprice:29, outer=(19), immutable]
- │         └── crdb_internal.round_decimal_values(buyprice:20, 4) [as=buyprice:30, outer=(20), immutable]
+ │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN "?column?":11 ELSE transactiondetails.dealerid:21 END [as=upsert_dealerid:29, outer=(11,21)]
+ │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN bool:12 ELSE transactiondetails.isbuy:22 END [as=upsert_isbuy:30, outer=(12,21,22)]
+ │         ├── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN current_timestamp:13 ELSE transactiondate:23 END [as=upsert_transactiondate:31, outer=(13,21,23)]
+ │         └── CASE WHEN transactiondetails.dealerid:21 IS NULL THEN int8:14 ELSE cardid:24 END [as=upsert_cardid:32, outer=(14,21,24)]
  └── f-k-checks
       ├── f-k-checks-item: transactiondetails(dealerid,isbuy,transactiondate) -> transactions(dealerid,isbuy,date)
       │    └── anti-join (lookup transactions)
-      │         ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39
-      │         ├── key columns: [37 38 39] = [40 41 42]
+      │         ├── columns: upsert_dealerid:35 upsert_isbuy:36 upsert_transactiondate:37
+      │         ├── key columns: [35 36 37] = [38 39 40]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 2]
       │         ├── with-scan &2
-      │         │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39
+      │         │    ├── columns: upsert_dealerid:35 upsert_isbuy:36 upsert_transactiondate:37
       │         │    ├── mapping:
-      │         │    │    ├──  upsert_dealerid:31 => upsert_dealerid:37
-      │         │    │    ├──  upsert_isbuy:32 => upsert_isbuy:38
-      │         │    │    └──  upsert_transactiondate:33 => upsert_transactiondate:39
+      │         │    │    ├──  upsert_dealerid:29 => upsert_dealerid:35
+      │         │    │    ├──  upsert_isbuy:30 => upsert_isbuy:36
+      │         │    │    └──  upsert_transactiondate:31 => upsert_transactiondate:37
       │         │    └── cardinality: [1 - 2]
       │         └── filters (true)
       └── f-k-checks-item: transactiondetails(cardid) -> cards(id)
            └── anti-join (lookup cards)
-                ├── columns: upsert_cardid:47
-                ├── key columns: [47] = [48]
+                ├── columns: upsert_cardid:45
+                ├── key columns: [45] = [46]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
                 ├── with-scan &2
-                │    ├── columns: upsert_cardid:47
+                │    ├── columns: upsert_cardid:45
                 │    ├── mapping:
-                │    │    └──  upsert_cardid:34 => upsert_cardid:47
+                │    │    └──  upsert_cardid:32 => upsert_cardid:45
                 │    └── cardinality: [1 - 2]
                 └── filters (true)
 

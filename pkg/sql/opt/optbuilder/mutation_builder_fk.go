@@ -148,7 +148,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 
 			cols := make(opt.ColList, len(h.tabOrdinals))
 			for i, tabOrd := range h.tabOrdinals {
-				cols[i] = mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
+				cols[i] = mb.fetchColIDs[tabOrd]
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKName:    h.fk.Name(),
@@ -282,14 +282,14 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
 			newCols := make(opt.ColList, len(h.tabOrdinals))
 			for i, tabOrd := range h.tabOrdinals {
-				fetchOrd := mb.fetchOrds[tabOrd]
-				updateOrd := mb.updateOrds[tabOrd]
-				if updateOrd == -1 {
-					updateOrd = fetchOrd
+				fetchColID := mb.fetchColIDs[tabOrd]
+				updateColID := mb.updateColIDs[tabOrd]
+				if updateColID == 0 {
+					updateColID = fetchColID
 				}
 
-				oldCols[i] = mb.scopeOrdToColID(fetchOrd)
-				newCols[i] = mb.scopeOrdToColID(updateOrd)
+				oldCols[i] = fetchColID
+				newCols[i] = updateColID
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKName:    h.fk.Name(),
@@ -399,16 +399,16 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
 			newCols := make(opt.ColList, len(h.tabOrdinals))
 			for i, tabOrd := range h.tabOrdinals {
-				fetchOrd := mb.fetchOrds[tabOrd]
-				// Here we don't need to use the upsertOrds because the rows that
+				fetchColID := mb.fetchColIDs[tabOrd]
+				// Here we don't need to use the upsertColIDs because the rows that
 				// correspond to inserts will be ignored in the cascade.
-				updateOrd := mb.updateOrds[tabOrd]
-				if updateOrd == -1 {
-					updateOrd = fetchOrd
+				updateColID := mb.updateColIDs[tabOrd]
+				if updateColID == 0 {
+					updateColID = fetchColID
 				}
 
-				oldCols[i] = mb.scopeOrdToColID(fetchOrd)
-				newCols[i] = mb.scopeOrdToColID(updateOrd)
+				oldCols[i] = fetchColID
+				newCols[i] = updateColID
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKName:    h.fk.Name(),
@@ -449,11 +449,11 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 }
 
 // outboundFKColsUpdated returns true if any of the FK columns for an outbound
-// constraint are being updated (according to updateOrds).
+// constraint are being updated (according to updateColIDs).
 func (mb *mutationBuilder) outboundFKColsUpdated(fkOrdinal int) bool {
 	fk := mb.tab.OutboundForeignKey(fkOrdinal)
 	for i, n := 0, fk.ColumnCount(); i < n; i++ {
-		if ord := fk.OriginColumnOrdinal(mb.tab, i); mb.updateOrds[ord] != -1 {
+		if ord := fk.OriginColumnOrdinal(mb.tab, i); mb.updateColIDs[ord] != 0 {
 			return true
 		}
 	}
@@ -461,11 +461,11 @@ func (mb *mutationBuilder) outboundFKColsUpdated(fkOrdinal int) bool {
 }
 
 // inboundFKColsUpdated returns true if any of the FK columns for an inbound
-// constraint are being updated (according to updateOrds).
+// constraint are being updated (according to updateColIDs).
 func (mb *mutationBuilder) inboundFKColsUpdated(fkOrdinal int) bool {
 	fk := mb.tab.InboundForeignKey(fkOrdinal)
 	for i, n := 0, fk.ColumnCount(); i < n; i++ {
-		if ord := fk.ReferencedColumnOrdinal(mb.tab, i); mb.updateOrds[ord] != -1 {
+		if ord := fk.ReferencedColumnOrdinal(mb.tab, i); mb.updateColIDs[ord] != 0 {
 			return true
 		}
 	}
@@ -529,8 +529,8 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 	// mutation is the result of a SET NULL cascade action.
 	numNullCols := 0
 	for _, tabOrd := range h.tabOrdinals {
-		col := mb.scopeOrdToColID(mb.mapToReturnScopeOrd(tabOrd))
-		if memo.OutputColumnIsAlwaysNull(mb.outScope.expr, col) {
+		colID := mb.mapToReturnColID(tabOrd)
+		if memo.OutputColumnIsAlwaysNull(mb.outScope.expr, colID) {
 			numNullCols++
 		}
 	}
@@ -611,9 +611,9 @@ func (h *fkCheckHelper) makeFKInputScan(
 	outCols = make(opt.ColList, len(inputCols))
 	for i, tabOrd := range h.tabOrdinals {
 		if typ == fkInputScanNewVals {
-			inputCols[i] = mb.scopeOrdToColID(mb.mapToReturnScopeOrd(tabOrd))
+			inputCols[i] = mb.mapToReturnColID(tabOrd)
 		} else {
-			inputCols[i] = mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
+			inputCols[i] = mb.fetchColIDs[tabOrd]
 		}
 		if inputCols[i] == 0 {
 			panic(errors.AssertionFailedf("no value for FK column (tabOrd=%d)", tabOrd))
