@@ -232,6 +232,21 @@ func TestVarianceDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalVarianceAggregate, makeDecimalTestDatum(10))
 }
 
+func TestVarPopIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newIntVarPopAggregate, makeIntTestDatum(10))
+}
+
+func TestVarPopFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newFloatVarPopAggregate, makeFloatTestDatum(10))
+}
+
+func TestVarPopDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newDecimalVarPopAggregate, makeDecimalTestDatum(10))
+}
+
 func TestStdDevIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntStdDevAggregate, makeIntTestDatum(10))
@@ -245,6 +260,21 @@ func TestStdDevFloatResultDeepCopy(t *testing.T) {
 func TestStdDevDecimalResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalStdDevAggregate, makeDecimalTestDatum(10))
+}
+
+func TestStdDevPopIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newIntStdDevPopAggregate, makeIntTestDatum(10))
+}
+
+func TestStdDevPopFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newFloatStdDevPopAggregate, makeFloatTestDatum(10))
+}
+
+func TestStdDevPopDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newDecimalStdDevPopAggregate, makeDecimalTestDatum(10))
 }
 
 // makeNullTestDatum will create an array of only DNull
@@ -579,6 +609,30 @@ func BenchmarkVarianceAggregateDecimal(b *testing.B) {
 	}
 }
 
+func BenchmarkVarPopAggregateInt(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newIntVarPopAggregate, makeIntTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkVarPopAggregateFloat(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newFloatVarPopAggregate, makeFloatTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkVarPopAggregateDecimal(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newDecimalVarPopAggregate, makeDecimalTestDatum(count))
+		})
+	}
+}
+
 func BenchmarkStdDevAggregateInt(b *testing.B) {
 	for _, count := range []int{1000} {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
@@ -599,6 +653,30 @@ func BenchmarkStdDevAggregateDecimal(b *testing.B) {
 	for _, count := range []int{1000} {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 			runBenchmarkAggregate(b, newDecimalStdDevAggregate, makeDecimalTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkStdDevPopAggregateInt(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newIntStdDevPopAggregate, makeIntTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkStdDevPopAggregateFloat(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newFloatStdDevPopAggregate, makeFloatTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkStdDevPopAggregateDecimal(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newDecimalStdDevPopAggregate, makeDecimalTestDatum(count))
 		})
 	}
 }
