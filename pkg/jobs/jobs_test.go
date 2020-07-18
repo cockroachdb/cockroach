@@ -1363,6 +1363,21 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("job with created by fields", func(t *testing.T) {
+		createdByType := "internal_test"
+
+		job := registry.NewJob(jobs.Record{
+			Details:   jobspb.RestoreDetails{},
+			Progress:  jobspb.RestoreProgress{},
+			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
+		})
+		require.NoError(t, job.Created(ctx))
+
+		loadedJob, err := registry.LoadJob(ctx, *job.ID())
+		require.NoError(t, err)
+		require.NotNil(t, loadedJob.CreatedBy())
+		require.Equal(t, job.CreatedBy(), loadedJob.CreatedBy())
+	})
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
