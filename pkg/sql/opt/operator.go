@@ -203,6 +203,8 @@ var AggregateOpReverseMap = map[Operator]string{
 	AnyNotNullAggOp:   "any_not_null",
 	PercentileDiscOp:  "percentile_disc_impl",
 	PercentileContOp:  "percentile_cont_impl",
+	VarPopOp:          "var_pop",
+	StdDevPopOp:       "stddev_pop",
 }
 
 // WindowOpReverseMap maps from an optimizer operator type to the name of a
@@ -281,7 +283,8 @@ func AggregateIgnoresNulls(op Operator) bool {
 
 	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
 		ConstNotNullAggOp, CorrOp, CountOp, MaxOp, MinOp, SqrDiffOp, StdDevOp,
-		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp:
+		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileDiscOp,
+		PercentileContOp, StdDevPopOp, VarPopOp:
 		return true
 
 	case ArrayAggOp, ConcatAggOp, ConstAggOp, CountRowsOp, FirstAggOp, JsonAggOp,
@@ -304,7 +307,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		ConstNotNullAggOp, CorrOp, FirstAggOp, JsonAggOp, JsonbAggOp,
 		MaxOp, MinOp, SqrDiffOp, StdDevOp, StringAggOp, SumOp, SumIntOp,
 		VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp,
-		JsonObjectAggOp, JsonbObjectAggOp:
+		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, VarPopOp:
 		return true
 
 	case CountOp, CountRowsOp:
@@ -330,7 +333,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
 		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
 		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp,
-		JsonObjectAggOp, JsonbObjectAggOp:
+		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, VarPopOp:
 		return true
 
 	case VarianceOp, StdDevOp, CorrOp:
@@ -381,7 +384,7 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 
 	case ArrayAggOp, AvgOp, ConcatAggOp, CorrOp, JsonAggOp,
 		JsonbAggOp, PercentileContOp, PercentileDiscOp, SqrDiffOp,
-		StdDevOp, StringAggOp, VarianceOp:
+		StdDevOp, StringAggOp, VarianceOp, StdDevPopOp, VarPopOp:
 		return false
 
 	default:
@@ -399,7 +402,7 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 
 	case ArrayAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp, SumIntOp,
 		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
-		StringAggOp, PercentileDiscOp, PercentileContOp:
+		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, VarPopOp:
 		return false
 
 	default:
