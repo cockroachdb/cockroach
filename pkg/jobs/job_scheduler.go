@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -294,32 +293,4 @@ func StartJobSchedulerDaemon(
 	}
 
 	scheduler.runDaemon(ctx, stopper)
-}
-
-// MarkJobCreatedBy updates record for system job with jobID id, and sets
-// jobs created_by_type and created_by_id to the specified values.
-// The update is performed using specified executor and transaction.
-// TODO(yevgeniy): Remove this method.  We should be able to mark
-//    created by columns when we create job records.
-func MarkJobCreatedBy(
-	ctx context.Context,
-	jobID int64,
-	createdByName string,
-	createdByID int64,
-	env scheduledjobs.JobSchedulerEnv,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
-) error {
-	updateQuery := fmt.Sprintf(
-		"UPDATE %s SET created_by_type=$1, created_by_id=$2 WHERE id=$3",
-		env.SystemJobsTableName())
-	n, err := ex.Exec(ctx, "mark-job-created-by", txn,
-		updateQuery, createdByName, createdByID, jobID)
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return errors.Newf("expected to update 1 row, updated %d for job %d", n, jobID)
-	}
-	return nil
 }
