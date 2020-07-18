@@ -26,6 +26,23 @@ CREATE TABLE u (
 )
 
 # ---------------------------------------------------------
+# SELECT
+# ---------------------------------------------------------
+
+query T kvtrace
+SELECT a FROM t WHERE a > b AND c = 'foo'
+----
+Scan /Table/53/{4-5}
+
+query T kvtrace
+SELECT a FROM t@c_partial WHERE a > b AND c = 'foo'
+----
+Scan /Table/53/{4-5}
+
+statement error index "c_partial" is a partial index that is unsuitable for executing this query
+SELECT a FROM t@c_partial WHERE a > b AND c = 'bar'
+
+# ---------------------------------------------------------
 # INSERT
 # ---------------------------------------------------------
 
