@@ -50,9 +50,9 @@ VALUES (
        '123',
        '2019-10-22',
        1.23,
-       123,
-       123,
-       123,
+       1,
+       20,
+       312,
        123,
        1.23,
        '123',
@@ -70,9 +70,9 @@ VALUES (
        '456',
        '2020-05-21',
        4.56,
-       456,
-       456,
-       456,
+       4,
+       -50,
+       789,
        456,
        4.56,
        '456',
@@ -84,6 +84,26 @@ VALUES (
        '[2, "hi", {"b": ["bar", {"c": 4}]}]',
        '1:00:00.456',
        B'11'
+       ),
+       (
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        2,
+        2,
+        2,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        '[1, "hello", {"a": ["foo", {"b": 3}]}]',
+        NULL,
+        B'11010'
        )
 
 query T
@@ -100,6 +120,7 @@ SELECT _inet & _inet FROM many_types
 NULL
 127.0.0.1
 192.168.0.0/16
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
@@ -152,20 +173,23 @@ SELECT _float^_float FROM many_types
 NULL
 1.28998092100128
 1011.29924392386
+NULL
 
 query R rowsort
 SELECT _int^_decimal FROM many_types
 ----
 NULL
-372.03456145999677855
-1333152042999.6318928
+1168.9882627536962329
+16243182903566.959706
+NULL
 
 query T rowsort
 SELECT _inet - _int2 FROM many_types
 ----
 NULL
-126.255.255.134
-192.167.254.56/16
+127.0.0.0
+192.167.255.252/16
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _inet - 1 FROM many_types
@@ -181,6 +205,7 @@ SELECT _inet - 1 FROM many_types
 NULL
 127.0.0.0
 192.167.255.255/16
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _int4 + _inet FROM many_types
@@ -195,8 +220,9 @@ query T rowsort
 SELECT _int4 + _inet FROM many_types
 ----
 NULL
-127.0.0.124
-192.168.1.200/16
+127.0.0.21
+192.167.255.206/16
+NULL
 
 query T
 EXPLAIN (VEC) SELECT 2 + _inet FROM many_types
@@ -212,6 +238,7 @@ SELECT 2 + _inet FROM many_types
 NULL
 127.0.0.3
 192.168.0.2/16
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _time + _interval FROM many_types
@@ -227,6 +254,7 @@ SELECT _time + _interval FROM many_types
 NULL
 0000-01-01 13:34:56.124456 +0000 UTC
 0000-01-01 02:23:45.468345 +0000 UTC
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _json - _int FROM many_types
@@ -242,6 +270,7 @@ SELECT _json - _int FROM many_types
 NULL
 [1, "hello", {"a": ["foo", {"b": 3}]}]
 [2, "hi", {"b": ["bar", {"c": 4}]}]
+[1, "hello"]
 
 query T
 EXPLAIN (VEC) SELECT _bytes || _bytes FROM many_types
@@ -257,6 +286,7 @@ SELECT _bytes || _bytes FROM many_types
 NULL
 123123
 456456
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _string || _string FROM many_types
@@ -272,6 +302,7 @@ SELECT _string || _string FROM many_types
 NULL
 123123
 456456
+NULL
 
 query T
 EXPLAIN (VEC) SELECT _json || _json FROM many_types
@@ -287,6 +318,7 @@ SELECT _json || _json FROM many_types
 NULL
 [1, "hello", {"a": ["foo", {"b": 3}]}, 1, "hello", {"a": ["foo", {"b": 3}]}]
 [2, "hi", {"b": ["bar", {"c": 4}]}, 2, "hi", {"b": ["bar", {"c": 4}]}]
+[1, "hello", {"a": ["foo", {"b": 3}]}, 1, "hello", {"a": ["foo", {"b": 3}]}]
 
 query T
 EXPLAIN (VEC) SELECT _varbit || _varbit FROM many_types
@@ -302,6 +334,7 @@ SELECT _varbit || _varbit FROM many_types
 NULL
 11
 1111
+1101011010
 
 query T
 EXPLAIN (VEC) SELECT _int << 1 FROM many_types
@@ -323,15 +356,17 @@ query I rowsort
 SELECT _int2 >> 1 FROM many_types
 ----
 NULL
-61
-228
+0
+2
+1
 
 query I rowsort
 SELECT _int4 >> 3 FROM many_types
 ----
 NULL
-15
-57
+2
+-7
+0
 
 statement error shift argument out of range
 SELECT _int << 64 FROM many_types
@@ -345,30 +380,7 @@ SELECT _int >> 63 FROM many_types
 NULL
 0
 0
-
-statement ok
-INSERT
-  INTO many_types
-VALUES (
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        2,
-        2,
-        2,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        '[1, "hello", {"a": ["foo", {"b": 3}]}]',
-        NULL,
-        B'11010'
-       )
+0
 
 query T
 EXPLAIN (VEC) SELECT _varbit << 4 FROM many_types
@@ -480,21 +492,18 @@ SELECT _int2^_int FROM many_types WHERE _int2 < 10 AND _int < 10
 query I rowsort
 SELECT _int2^_int2 FROM many_types WHERE _int2 < 10
 ----
+1
+256
 4
 
 statement error integer out of range
-SELECT _int2^_int2 FROM many_types
-
-query I rowsort
-SELECT _int2^_int4 FROM many_types WHERE _int2 < 10 AND _int4 < 10
-----
-4
+SELECT _int2^_int4 FROM many_types
 
 query T
 SELECT _json -> _int2 FROM many_types
 ----
 NULL
-NULL
+"hello"
 NULL
 {"a": ["foo", {"b": 3}]}
 
@@ -613,3 +622,20 @@ NULL
 true
 true
 false
+
+query T
+EXPLAIN (VEC) SELECT _int4 // _int FROM many_types WHERE _int <> 0
+----
+│
+└ Node 1
+  └ *colexec.projFloorDivInt64Int64Op
+    └ *colexec.castOp
+      └ *colexec.selNEInt64Int64ConstOp
+        └ *colfetcher.colBatchScan
+
+query III rowsort
+SELECT _int, _int2, _int // _int2 FROM many_types WHERE _int2 <> 0
+----
+312  1  312
+789  4  197
+2    2  1
