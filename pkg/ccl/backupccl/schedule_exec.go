@@ -91,15 +91,9 @@ func (se *scheduledBackupExecutor) ExecuteJob(
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
 
-	var jobID int64
 	g.GoCtx(func(ctx context.Context) error {
 		select {
-		case datums := <-resultCh:
-			d, ok := datums[0].(*tree.DInt)
-			if !ok {
-				return errors.Newf("expected jobID, found %T ", datums[0])
-			}
-			jobID = int64(*d)
+		case <-resultCh:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -114,13 +108,6 @@ func (se *scheduledBackupExecutor) ExecuteJob(
 	})
 
 	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	// Mark the job as created by this schedule.
-	if err := jobs.MarkJobCreatedBy(
-		ctx, jobID, jobs.CreatedByScheduledJobs, sj.ScheduleID(), env, cfg.InternalExecutor, txn,
-	); err != nil {
 		return err
 	}
 
@@ -140,7 +127,7 @@ func (se *scheduledBackupExecutor) NotifyJobTermination(
 }
 
 // extractBackupStatement returns tree.Backup node encoded inside scheduled job.
-func extractBackupStatement(sj *jobs.ScheduledJob) (*tree.Backup, error) {
+func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, error) {
 	args := &ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling args")
@@ -152,7 +139,13 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*tree.Backup, error) {
 	}
 
 	if backupStmt, ok := node.AST.(*tree.Backup); ok {
-		return backupStmt, nil
+		return &annotatedBackupStatement{
+			Backup: backupStmt,
+			CreatedByInfo: &jobs.CreatedByInfo{
+				Name: jobs.CreatedByScheduledJobs,
+				ID:   sj.ScheduleID(),
+			},
+		}, nil
 	}
 
 	return nil, errors.Newf("unexpect node type %T", node)
