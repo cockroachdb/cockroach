@@ -16414,7 +16414,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16435,7 +16435,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16453,7 +16453,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16470,7 +16470,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16530,7 +16530,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16551,7 +16551,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16569,7 +16569,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16586,7 +16586,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16646,7 +16646,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16667,7 +16667,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16685,7 +16685,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16702,7 +16702,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16906,7 +16906,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16927,7 +16927,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -16945,7 +16945,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -16962,7 +16962,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17022,7 +17022,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17043,7 +17043,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17061,7 +17061,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17078,7 +17078,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17138,7 +17138,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17159,7 +17159,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17177,7 +17177,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17194,7 +17194,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17398,7 +17398,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17419,7 +17419,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17437,7 +17437,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17454,7 +17454,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17514,7 +17514,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17535,7 +17535,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17553,7 +17553,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17570,7 +17570,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17630,7 +17630,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17651,7 +17651,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						projCol[i] = int64(arg1) // int64(arg2)
+						projCol[i] = int64(arg1) / int64(arg2)
 					}
 
 				}
@@ -17669,7 +17669,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}
@@ -17686,7 +17686,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 					if int64(arg2) == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
 					}
-					projCol[i] = int64(arg1) // int64(arg2)
+					projCol[i] = int64(arg1) / int64(arg2)
 				}
 
 			}

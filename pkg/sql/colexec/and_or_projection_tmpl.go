@@ -28,9 +28,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
-// {{range .}}
+// {{range .Operations}}
+// {{$Operation := .}}
+
+func New_OPERATIONProjOp(
+	allocator *colmem.Allocator,
+	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
+	leftFeedOp, rightFeedOp *FeedOperator,
+	leftInputType, rightInputType *types.T,
+	leftIdx, rightIdx, outputIdx int,
+) (colexecbase.Operator, error) {
+	leftFamily := leftInputType.Family()
+	leftIsBool := leftFamily == types.BoolFamily
+	leftIsNull := leftFamily == types.UnknownFamily
+	rightFamily := rightInputType.Family()
+	rightIsBool := rightFamily == types.BoolFamily
+	rightIsNull := rightFamily == types.UnknownFamily
+	if (!leftIsBool && !leftIsNull && !rightIsBool && !rightIsNull) ||
+		(leftIsNull && rightIsNull) {
+		// Either one of the families are neither Bool nor Unknown (which is
+		// unexpected because the logical operations can be applied only to
+		// bools or NULLs) or both families are Unknown (which is unexpected
+		// because we assume that the optimizer is smart enough to reduce such
+		// cases), so we return an assertion failure.
+		return nil, errors.AssertionFailedf(
+			"unexpected input families for _OPERATION logical operation: %s, %s", leftFamily, rightFamily,
+		)
+	}
+	if leftIsNull {
+		return new_OPERATIONLeftNullProjOp(
+			allocator, input, leftProjOpChain, rightProjOpChain,
+			leftFeedOp, rightFeedOp, leftIdx, rightIdx, outputIdx,
+		), nil
+	} else if rightIsNull {
+		return new_OPERATIONRightNullProjOp(
+			allocator, input, leftProjOpChain, rightProjOpChain,
+			leftFeedOp, rightFeedOp, leftIdx, rightIdx, outputIdx,
+		), nil
+	} else {
+		return new_OPERATIONProjOp(
+			allocator, input, leftProjOpChain, rightProjOpChain,
+			leftFeedOp, rightFeedOp, leftIdx, rightIdx, outputIdx,
+		), nil
+	}
+}
+
+// {{end}}
+
+// {{range .Overloads}}
 
 type _OP_LOWERProjOp struct {
 	allocator *colmem.Allocator
@@ -51,10 +100,10 @@ type _OP_LOWERProjOp struct {
 	origSel []int
 }
 
-// New_OP_TITLEProjOp returns a new projection operator that logical-_OP_TITLE's
+// new_OP_TITLEProjOp returns a new projection operator that logical-_OP_TITLE's
 // the boolean columns at leftIdx and rightIdx, returning the result in
 // outputIdx.
-func New_OP_TITLEProjOp(
+func new_OP_TITLEProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
 	leftFeedOp, rightFeedOp *FeedOperator,
@@ -132,20 +181,38 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// knownResult indicates the boolean value which if present on the left side
 	// fully determines the result of the logical operation.
 	var (
-		knownResult             bool
-		isLeftNull, isRightNull bool
+		knownResult                   bool
+		leftVec, rightVec             coldata.Vec
+		leftValIsNull, rightValIsNull bool
+		leftVal, rightVal             bool
 	)
 	// {{if _IS_OR_OP}}
 	knownResult = true
 	// {{end}}
-	leftCol := batch.ColVec(o.leftIdx)
-	leftColVals := leftCol.Bool()
+
+	leftVec = batch.ColVec(o.leftIdx)
 	var curIdx int
+	// {{if _L_IS_NULL_VECTOR}}
+	// Left vector represents a constant NULL value, so we need to include
+	// all of the tuples in the batch for the right side to be evaluated.
+	if usesSel {
+		sel := batch.Selection()
+		copy(sel[:origLen], o.origSel[:origLen])
+	} else {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := 0; i < origLen; i++ {
+			sel[i] = i
+		}
+	}
+	curIdx = origLen
+	// {{else}}
+	leftVals := leftVec.Bool()
 	if usesSel {
 		sel := batch.Selection()
 		origSel := o.origSel[:origLen]
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
+		if leftVec.MaybeHasNulls() {
+			leftNulls := leftVec.Nulls()
 			for _, i := range origSel {
 				_ADD_TUPLE_FOR_RIGHT(true)
 			}
@@ -157,8 +224,8 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
+		if leftVec.MaybeHasNulls() {
+			leftNulls := leftVec.Nulls()
 			for i := 0; i < origLen; i++ {
 				_ADD_TUPLE_FOR_RIGHT(true)
 			}
@@ -168,16 +235,21 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	}
+	// {{end}}
 
-	var ranRightSide bool
+	// {{if not _R_IS_NULL_VECTOR}}
+	// {{/* We don't need to run the right side if we have a NULL vector on the right. */}}
+	var rightVals []bool
 	if curIdx > 0 {
 		// We only run the right-side projection if there are non-zero number of
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.batch = batch
 		batch = o.rightProjOpChain.Next(ctx)
-		ranRightSide = true
+		rightVec = batch.ColVec(o.rightIdx)
+		rightVals = rightVec.Bool()
 	}
+	// {{end}}
 
 	// Now we need to restore the original selection vector and length.
 	if usesSel {
@@ -188,16 +260,8 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	batch.SetLength(origLen)
 
-	var (
-		rightCol     coldata.Vec
-		rightColVals []bool
-	)
-	if ranRightSide {
-		rightCol = batch.ColVec(o.rightIdx)
-		rightColVals = rightCol.Bool()
-	}
 	outputCol := batch.ColVec(o.outputIdx)
-	outputColVals := outputCol.Bool()
+	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
 	if outputCol.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
@@ -206,20 +270,26 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
-	if leftCol.MaybeHasNulls() {
-		leftNulls := leftCol.Nulls()
-		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			_SET_VALUES(_IS_OR_OP, true, true)
+	if leftVec.MaybeHasNulls() {
+		// {{if not _L_IS_NULL_VECTOR}}
+		leftNulls := leftVec.Nulls()
+		// {{end}}
+		if rightVec != nil && rightVec.MaybeHasNulls() {
+			// {{if not _R_IS_NULL_VECTOR}}
+			rightNulls := rightVec.Nulls()
+			// {{end}}
+			_SET_VALUES(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, true, true)
 		} else {
-			_SET_VALUES(_IS_OR_OP, true, false)
+			_SET_VALUES(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, true, false)
 		}
 	} else {
-		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			_SET_VALUES(_IS_OR_OP, false, true)
+		if rightVec != nil && rightVec.MaybeHasNulls() {
+			// {{if not _R_IS_NULL_VECTOR}}
+			rightNulls := rightVec.Nulls()
+			// {{end}}
+			_SET_VALUES(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, false, true)
 		} else {
-			_SET_VALUES(_IS_OR_OP, false, false)
+			_SET_VALUES(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, false, false)
 		}
 	}
 
@@ -236,11 +306,11 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 func _ADD_TUPLE_FOR_RIGHT(_L_HAS_NULLS bool) { // */}}
 	// {{define "addTupleForRight" -}}
 	// {{if _L_HAS_NULLS}}
-	isLeftNull = leftNulls.NullAt(i)
+	leftValIsNull = leftNulls.NullAt(i)
 	// {{else}}
-	isLeftNull = false
+	leftValIsNull = false
 	// {{end}}
-	if isLeftNull || leftColVals[i] != knownResult {
+	if leftValIsNull || leftVals[i] != knownResult {
 		// We add the tuple into the selection vector if the left value is NULL or
 		// it is different from knownResult.
 		sel[curIdx] = i
@@ -254,20 +324,33 @@ func _ADD_TUPLE_FOR_RIGHT(_L_HAS_NULLS bool) { // */}}
 
 // {{/*
 // This code snippet sets the result of applying a logical operation AND or OR
-// to two boolean vectors while paying attention to null values.
-func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
+// to two vectors (either of which could be a boolean vector or a NULL vector,
+// but both cannot be NULL vectors at the same time) while paying attention to
+// null values.
+func _SET_VALUES(
+	_IS_OR_OP bool,
+	_L_IS_NULL_VECTOR bool,
+	_R_IS_NULL_VECTOR bool,
+	_L_HAS_NULLS bool,
+	_R_HAS_NULLS bool,
+) { // */}}
 	// {{define "setValues" -}}
 	if sel := batch.Selection(); sel != nil {
 		for _, idx := range sel[:origLen] {
-			_SET_SINGLE_VALUE(_IS_OR_OP, _L_HAS_NULLS, _R_HAS_NULLS)
+			_SET_SINGLE_VALUE(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, _L_HAS_NULLS, _R_HAS_NULLS)
 		}
 	} else {
-		if ranRightSide {
-			_ = rightColVals[origLen-1]
+		// {{if not _L_IS_NULL_VECTOR}}
+		_ = leftVals[origLen-1]
+		// {{end}}
+		// {{if not _R_IS_NULL_VECTOR}}
+		if rightVals != nil {
+			_ = rightVals[origLen-1]
 		}
-		_ = outputColVals[origLen-1]
-		for idx := range leftColVals[:origLen] {
-			_SET_SINGLE_VALUE(_IS_OR_OP, _L_HAS_NULLS, _R_HAS_NULLS)
+		// {{end}}
+		_ = outputVals[origLen-1]
+		for idx := 0; idx < origLen; idx++ {
+			_SET_SINGLE_VALUE(_IS_OR_OP, _L_IS_NULL_VECTOR, _R_IS_NULL_VECTOR, _L_HAS_NULLS, _R_HAS_NULLS)
 		}
 	}
 	// {{end}}
@@ -279,56 +362,52 @@ func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 // {{/*
 // This code snippet sets the result of applying a logical operation AND or OR
 // to two boolean values which can be null.
-func _SET_SINGLE_VALUE(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
+func _SET_SINGLE_VALUE(
+	_IS_OR_OP bool,
+	_L_IS_NULL_VECTOR bool,
+	_R_IS_NULL_VECTOR bool,
+	_L_HAS_NULLS bool,
+	_R_HAS_NULLS bool,
+) { // */}}
 	// {{define "setSingleValue" -}}
-	// {{if _L_HAS_NULLS}}
-	isLeftNull = leftNulls.NullAt(idx)
+	// {{if _L_IS_NULL_VECTOR}}
+	leftValIsNull = true
 	// {{else}}
-	isLeftNull = false
+	// {{if _L_HAS_NULLS}}
+	leftValIsNull = leftNulls.NullAt(idx)
+	// {{else}}
+	leftValIsNull = false
 	// {{end}}
-	leftVal := leftColVals[idx]
-	if !isLeftNull && leftVal == knownResult {
-		outputColVals[idx] = leftVal
+	leftVal = leftVals[idx]
+	// {{end}}
+	if !leftValIsNull && leftVal == knownResult {
+		// In this case, the result is fully determined by the left argument,
+		// so the right argument wasn't even evaluated.
+		outputVals[idx] = leftVal
 	} else {
+		// {{if _R_IS_NULL_VECTOR}}
+		rightValIsNull = true
+		// {{else}}
 		// {{if _R_HAS_NULLS}}
-		isRightNull = rightNulls.NullAt(idx)
+		rightValIsNull = rightNulls.NullAt(idx)
 		// {{else}}
-		isRightNull = false
+		rightValIsNull = false
 		// {{end}}
-		rightVal := rightColVals[idx]
-		// {{if _IS_OR_OP}}
-		// The rules for OR'ing two booleans are:
-		// 1. if at least one of the values is TRUE, then the result is also TRUE
-		// 2. if both values are FALSE, then the result is also FALSE
-		// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-		//    the result is NULL.
-		if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-			// Rule 1: at least one boolean is TRUE.
-			outputColVals[idx] = true
-		} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-			// Rule 2: both booleans are FALSE.
-			outputColVals[idx] = false
+		rightVal = rightVals[idx]
+		// {{end}}
+		// The rules for performing a logical operation on two booleans are:
+		// 1. if at least one of the values is "knownResult", then the result
+		// is also "knownResult"
+		// 2. if both values are the opposite of "knownResult", then the result
+		// is also the opposite of "knownResult"
+		// 3. in all other cases, the result is NULL.
+		if (!leftValIsNull && leftVal == knownResult) || (!rightValIsNull && rightVal == knownResult) {
+			outputVals[idx] = knownResult
+		} else if (!leftValIsNull && leftVal != knownResult) && (!rightValIsNull && rightVal != knownResult) {
+			outputVals[idx] = !knownResult
 		} else {
-			// Rule 3.
 			outputNulls.SetNull(idx)
 		}
-		// {{else}}
-		// The rules for AND'ing two booleans are:
-		// 1. if at least one of the values is FALSE, then the result is also FALSE
-		// 2. if both values are TRUE, then the result is also TRUE
-		// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-		//    the result is NULL.
-		if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-			// Rule 1: at least one boolean is FALSE.
-			outputColVals[idx] = false
-		} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-			// Rule 2: both booleans are TRUE.
-			outputColVals[idx] = true
-		} else {
-			// Rule 3.
-			outputNulls.SetNull(idx)
-		}
-		// {{end}}
 	}
 	// {{end}}
 	// {{/*

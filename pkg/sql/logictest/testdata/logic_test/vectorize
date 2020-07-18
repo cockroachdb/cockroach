@@ -286,6 +286,12 @@ SELECT a, b, a < 2 AND b > 0 AND a * b != 3, a < 2 AND b < 2 FROM a WHERE a < 2 
 0  1  true  true
 1  2  true  false
 
+query IIBBBBBB rowsort
+SELECT a, b, a < b AND NULL, a > b AND NULL, NULL OR a < b, NULL OR a > b, NULL AND NULL, NULL OR NULL FROM a WHERE a = 0
+----
+0 0 false false NULL NULL NULL NULL
+0 1 NULL  false true NULL NULL NULL
+
 statement ok
 RESET vectorize;
 CREATE TABLE b (a INT, b STRING, PRIMARY KEY (b,a));

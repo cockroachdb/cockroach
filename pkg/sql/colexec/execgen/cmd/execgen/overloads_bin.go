@@ -206,10 +206,15 @@ func registerBinOpOutputTypes() {
 
 func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
 	opStr := op.String()
-	if op == tree.Bitxor {
+	switch op {
+	case tree.Bitxor:
 		// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
 		// we override the former.
 		opStr = "^"
+	case tree.FloorDiv:
+		// tree.FloorDiv is "//" when stringified, but that would be the
+		// beginning of a comment in Go and we need to use "/".
+		opStr = "/"
 	}
 	return &overloadBase{
 		kind:  binaryOverload,
