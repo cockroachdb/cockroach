@@ -108,6 +108,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	o.stateMap = make(map[groupStateKey]*groupState)
 	o.matchedRule = nil
 	o.appliedRule = nil
+	o.disabledRules = util.FastIntSet{}
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
 		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
 	}
