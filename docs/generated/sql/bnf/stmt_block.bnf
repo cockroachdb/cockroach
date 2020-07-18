@@ -55,6 +55,8 @@ comment_stmt ::=
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'VIEW' view_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'SEQUENCE' sequence_name 'IS' comment_text
 
 execute_stmt ::=
 	'EXECUTE' table_alias_name execute_param_clause
@@ -240,6 +242,12 @@ column_path ::=
 table_index_name ::=
 	table_name '@' index_name
 	| standalone_index_name
+
+view_name ::=
+	table_name
+
+sequence_name ::=
+	db_object_name
 
 table_alias_name ::=
 	name
@@ -1534,12 +1542,6 @@ opt_temp ::=
 	'TEMPORARY'
 	| 'TEMP'
 	| 
-
-view_name ::=
-	table_name
-
-sequence_name ::=
-	db_object_name
 
 opt_sequence_option_list ::=
 	sequence_option_list

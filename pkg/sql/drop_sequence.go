@@ -111,6 +111,12 @@ func (p *planner) dropSequenceImpl(
 	if err := removeSequenceOwnerIfExists(ctx, p, seqDesc.ID, seqDesc.GetSequenceOpts()); err != nil {
 		return err
 	}
+
+	// Drop any comments for the sequence.
+	if err := p.removeTableComments(ctx, seqDesc); err != nil {
+		return err
+	}
+
 	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
 }
 

@@ -2186,18 +2186,25 @@ statement ok
 CREATE TABLE t(x INT);
 
 statement ok
+CREATE VIEW v AS SELECT x FROM t;
+
+statement ok
 COMMENT ON TABLE t IS 'waa'
 
 statement ok
 COMMENT ON COLUMN t.x IS 'woo'
 
-query TTTT
+statement ok
+COMMENT ON VIEW v IS 'woo'
+
+query TTTTT
 SELECT obj_description('t'::regclass::oid),
        obj_description('t'::regclass::oid, 'pg_class'),
        obj_description('t'::regclass::oid, 'notexist'),
-       col_description('t'::regclass, 1)
+       col_description('t'::regclass, 1),
+       obj_description('v'::regclass::oid)
 ----
-waa  waa  NULL  woo
+waa  waa  NULL  woo  woo
 
 statement ok
 COMMENT ON DATABASE test is 'foo'
@@ -2543,12 +2550,12 @@ NULL
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+62
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+63
 
 query T
 SELECT crdb_internal.get_zone_config(-1)::string
@@ -2598,12 +2605,12 @@ user testuser
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+62
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+63
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
