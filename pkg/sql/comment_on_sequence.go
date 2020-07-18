@@ -1,7 +1,18 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package sql
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -16,7 +27,9 @@ type commentOnSequenceNode struct {
 
 // CommentOnSequence adds comment on a sequence.
 // Privileges: CREATE on sequence.
-func (p *planner) CommentOnSequence(ctx context.Context, n *tree.CommentOnSequence) (planNode, error) {
+func (p *planner) CommentOnSequence(
+	ctx context.Context, n *tree.CommentOnSequence,
+) (planNode, error) {
 	sequenceDesc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.Sequence, true, tree.ResolveRequireSequenceDesc)
 	if err != nil {
 		return nil, err
