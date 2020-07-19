@@ -78,9 +78,13 @@ message StatementStatistics {
   // sent to the reg cluster.
   optional SensitiveInfo sensitive_info = 12 [(gogoproto.nullable) = false];
 
-  optional int64 bytes_read = 13 [(gogoproto.nullable) = false];
+  reserved 13, 14;
 
-  optional int64 rows_read = 14 [(gogoproto.nullable) = false];
+  // BytesRead collects the number of bytes read from disk.
+  optional NumericStat bytes_read = 15 [(gogoproto.nullable) = false];
+
+  // RowsRead collects the number of rows read from disk.
+  optional NumericStat rows_read = 16 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }

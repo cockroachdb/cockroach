@@ -829,7 +829,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
+	stats, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
@@ -837,7 +837,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), bytesRead, rowsRead,
+		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), stats,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -868,6 +868,14 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	return nil
 }
 
+// topLevelQueryStats returns some basic statistics about the run of the query.
+type topLevelQueryStats struct {
+	// bytesRead is the number of bytes read from disk.
+	bytesRead int64
+	// rowsRead is the number of rows read from disk.
+	rowsRead int64
+}
+
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
@@ -879,7 +887,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	res RestrictedCommandResult,
 	distribute bool,
 	progressAtomic *uint64,
-) (bytesRead, rowsRead int64, _ error) {
+) (topLevelQueryStats, error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
@@ -925,7 +933,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
 		) {
-			return recv.bytesRead, recv.rowsRead, recv.commErr
+			return recv.stats, recv.commErr
 		}
 	}
 	recv.discardRows = planner.discardRows
@@ -938,14 +946,14 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// need to have access to the main query tree.
 	defer cleanup()
 	if recv.commErr != nil || res.Err() != nil {
-		return recv.bytesRead, recv.rowsRead, recv.commErr
+		return recv.stats, recv.commErr
 	}
 
 	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
 		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv, distribute,
 	)
 
-	return recv.bytesRead, recv.rowsRead, recv.commErr
+	return recv.stats, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
