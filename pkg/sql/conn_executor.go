@@ -1813,7 +1813,7 @@ func (ex *connExecutor) execCopyIn(
 			ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
-				_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */, nil /* progressAtomic */)
+				_, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */, nil /* progressAtomic */)
 				return err
 			},
 		)

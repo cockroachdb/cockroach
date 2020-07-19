@@ -85,6 +85,8 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.RunLat.Add(other.RunLat, s.Count, other.Count)
 	s.ServiceLat.Add(other.ServiceLat, s.Count, other.Count)
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
+	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
+	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
@@ -94,8 +96,6 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
 
-	s.BytesRead += other.BytesRead
-	s.RowsRead += other.RowsRead
 	s.Count += other.Count
 }
 
@@ -112,6 +112,6 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.ServiceLat.AlmostEqual(other.ServiceLat, eps) &&
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
-		s.BytesRead == other.BytesRead &&
-		s.RowsRead == other.RowsRead
+		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
+		s.RowsRead.AlmostEqual(other.RowsRead, eps)
 }

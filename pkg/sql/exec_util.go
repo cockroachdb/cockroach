@@ -2209,12 +2209,12 @@ func (s *sqlStatsCollector) recordStatement(
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	bytesRead, rowsRead int64,
+	stats topLevelQueryStats,
 ) {
 	s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
-		ovhLat, bytesRead, rowsRead,
+		ovhLat, stats,
 	)
 }
 

@@ -660,8 +660,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
   overhead_lat_var    FLOAT NOT NULL,
-  bytes_read          INT NOT NULL,
-  rows_read           INT NOT NULL,
+  bytes_read_avg      FLOAT NOT NULL,
+  bytes_read_var      FLOAT NOT NULL,
+  rows_read_avg       FLOAT NOT NULL,
+  rows_read_var       FLOAT NOT NULL,
   implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -738,8 +740,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
-					tree.NewDInt(tree.DInt(s.data.BytesRead)),
-					tree.NewDInt(tree.DInt(s.data.RowsRead)),
+					tree.NewDFloat(tree.DFloat(s.data.BytesRead.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.BytesRead.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.RowsRead.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.RowsRead.GetVariance(s.data.Count))),
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.Unlock()
