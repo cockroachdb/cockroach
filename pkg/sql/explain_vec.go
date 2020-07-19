@@ -37,8 +37,6 @@ type explainVecNode struct {
 	options *tree.ExplainOptions
 	plan    planMaybePhysical
 
-	stmtType tree.StatementType
-
 	run struct {
 		lines []string
 		// The current row returned by the node.
@@ -61,7 +59,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	)
 	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.stmtType, n.subqueryPlans, distribution)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
@@ -138,13 +136,11 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, params runParams) *execi
 func newPlanningCtxForExplainPurposes(
 	distSQLPlanner *DistSQLPlanner,
 	params runParams,
-	stmtType tree.StatementType,
 	subqueryPlans []subquery,
 	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, distribution.WillDistribute())
 	planCtx.ignoreClose = true
-	planCtx.stmtType = stmtType
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {
 		p := &planCtx.planner.curPlan.subqueryPlans[i]
