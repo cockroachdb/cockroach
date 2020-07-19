@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -40,15 +41,13 @@ type explainPlanNode struct {
 
 	plan planComponents
 
-	stmtType tree.StatementType
-
 	run explainPlanRun
 }
 
 // makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
-	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents, stmtType tree.StatementType,
+	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents,
 ) (planNode, error) {
 	flags := explain.MakeFlags(opts)
 
@@ -60,8 +59,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	columns = append(sqlbase.ResultColumns(nil), columns...)
 
 	node := &explainPlanNode{
-		plan:     *plan,
-		stmtType: stmtType,
+		plan: *plan,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
@@ -99,7 +97,7 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return populateExplain(params, &e.explainer, e.run.results, &e.plan, e.stmtType)
+	return populateExplain(params, &e.explainer, e.run.results, &e.plan)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -140,54 +138,10 @@ func (e *explainer) init(flags explain.Flags) {
 // populateExplain walks the plan and generates rows in a valuesNode.
 // The subquery plans, if any are known to the planner, are printed
 // at the bottom.
-func populateExplain(
-	params runParams, e *explainer, v *valuesNode, plan *planComponents, stmtType tree.StatementType,
-) error {
-	// Determine the "distributed" and "vectorized" values, which we will emit as
+func populateExplain(params runParams, e *explainer, v *valuesNode, plan *planComponents) error {
+	// Determine the "distributed" and "vectorized" values and emit them as
 	// special rows.
-	var willVectorize bool
-	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	distribution := getPlanDistributionForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
-	)
-	willDistribute := distribution.WillDistribute()
-	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, distribution)
-	defer func() {
-		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
-	}()
-	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
-	if err == nil {
-		// There might be an issue making the physical plan, but that should not
-		// cause an error or panic, so swallow the error. See #40677 for example.
-		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
-		flows := physicalPlan.GenerateFlowSpecs()
-		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
-		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
-
-		ctxSessionData := flowCtx.EvalCtx.SessionData
-		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
-			willVectorize = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
-			willVectorize = false
-		} else {
-			willVectorize = true
-			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
-			for scheduledOnNodeID, flow := range flows {
-				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(
-					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
-				); err != nil {
-					willVectorize = false
-					break
-				}
-			}
-		}
-	}
-
-	// First, emit the "distribution" and "vectorized" information rows.
+	distribution, willVectorize := explainGetDistributedAndVectorized(params, plan)
 	e.ob.AddField("distribution", distribution.String())
 	e.ob.AddField("vectorized", fmt.Sprintf("%t", willVectorize))
 
@@ -380,4 +334,54 @@ func (e *explainer) attr(nodeName, fieldName, attr string) {
 func (e *explainer) leaveNode(name string, _ planNode) error {
 	e.ob.LeaveNode()
 	return nil
+}
+
+// explainGetDistributedAndVectorized determines the "distributed" and
+// "vectorized" properties for EXPLAIN.
+func explainGetDistributedAndVectorized(
+	params runParams, plan *planComponents,
+) (distribution physicalplan.PlanDistribution, willVectorize bool) {
+	// Determine the "distributed" and "vectorized" values, which we will emit as
+	// special rows.
+	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+	distribution = getPlanDistributionForExplainPurposes(
+		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+	)
+	willDistribute := distribution.WillDistribute()
+	outerSubqueries := params.p.curPlan.subqueryPlans
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
+	if err == nil {
+		// There might be an issue making the physical plan, but that should not
+		// cause an error or panic, so swallow the error. See #40677 for example.
+		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
+		flows := physicalPlan.GenerateFlowSpecs()
+		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
+		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
+
+		ctxSessionData := flowCtx.EvalCtx.SessionData
+		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
+		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
+			willVectorize = false
+		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
+			willVectorize = false
+		} else {
+			willVectorize = true
+			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
+			for scheduledOnNodeID, flow := range flows {
+				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
+				if _, err := colflow.SupportsVectorized(
+					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
+				); err != nil {
+					willVectorize = false
+					break
+				}
+			}
+		}
+	}
+	return distribution, willVectorize
 }
