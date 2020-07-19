@@ -2052,7 +2052,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	key := roachpb.Key("a")
 	db := tc.Servers[0].DB()
 	rangeInfo, err := getRangeInfo(ctx, db, key)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, rangeInfo.Desc.InternalReplicas, 1)
 	targets1, targets2 := makeReplicationTargets(2, 3, 4), makeReplicationTargets(4, 5)
 	expects1 := rangeInfo.Desc
@@ -2080,7 +2080,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	wg.Wait()
 
 	infoAfter, err := getRangeInfo(ctx, db, key)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	assert.Falsef(t, err1 == nil && err2 == nil,
 		"expected one of racing AdminChangeReplicasRequests to fail but neither did")
@@ -2146,7 +2146,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	// and then allowing multiple writes to overlap and validate that the state
 	// corresponds to a valid history of events.
 	rangeInfo, err := getRangeInfo(ctx, db, key)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	addReplicas := func() error {
 		_, err := db.AdminChangeReplicas(
 			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(
@@ -2647,7 +2647,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	key := roachpb.Key("a")
 	assert.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
 	rangeInfo, err := getRangeInfo(ctx, db, key)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Len(t, rangeInfo.Desc.InternalReplicas, 3)
 	assert.Equal(t, rangeInfo.Lease.Replica.NodeID, roachpb.NodeID(1))
 	for id := roachpb.StoreID(1); id <= 3; id++ {
@@ -2664,7 +2664,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 
 	// Code above verified r1 is the leaseholder, so use it to ChangeReplicas.
 	r1, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(rangeInfo.Desc.RangeID)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	expDescAfterAdd := rangeInfo.Desc // for use with ChangeReplicas
 	expDescAfterAdd.NextReplicaID++
 	expDescAfterAdd.InternalReplicas = append(expDescAfterAdd.InternalReplicas, roachpb.ReplicaDescriptor{
@@ -2689,7 +2689,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	go func() { change(); wg.Done() }()
 	wg.Wait()
 	rangeInfo, err = getRangeInfo(ctx, db, key)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.True(t, len(rangeInfo.Desc.InternalReplicas) >= 3)
 	assert.Falsef(t, relocateErr == nil && changeErr == nil,
 		"expected one of racing AdminRelocateReplicas and ChangeReplicas "+

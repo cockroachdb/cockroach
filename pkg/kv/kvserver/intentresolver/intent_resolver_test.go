@@ -282,7 +282,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	// processing of the intents resulting in no error and the consumption of the
 	// sendFuncs.
 	err = ir.CleanupIntentsAsync(context.Background(), testIntents, true)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, sf.len(), 0)
 }
 
@@ -398,7 +398,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 	err := ir.CleanupIntentsAsync(ctx, testIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Both txns should be pushed and all four intents should be resolved.
 	sort.Strings(reqs.pushed)
@@ -579,7 +579,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 				return nil
 			})
 			stopper.Stop(context.Background())
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -669,7 +669,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 	err := ir.CleanupTxnIntentsAsync(ctx, 1, testEndTxnIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// All four intents should be resolved and both txn records should be GCed.
 	sort.Strings(reqs.resolved)

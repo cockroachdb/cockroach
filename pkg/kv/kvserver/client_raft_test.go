@@ -4457,7 +4457,7 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	// Make the transport flaky for the range in question to encourage proposals
 	// to be sent more times and ultimately traced more.
 	ri, err := getRangeInfo(ctx, db, roachpb.Key("foo"))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	for i := 0; i < 3; i++ {
 		mtc.transport.Listen(mtc.stores[i].Ident.StoreID, &unreliableRaftHandler{
@@ -4577,7 +4577,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		mtc.waitForValues(keyA, []int64{1, 1, 1})
 		disabled.Store(true)
 		repl1, err := mtc.stores[0].GetReplica(1)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		// Transfer the lease on range 1. Make sure there's no pending transfer.
 		var lease roachpb.Lease
 		testutils.SucceedsSoon(t, func() error {
@@ -4925,7 +4925,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		split(t, db, scratchTableKey)
 		ri, err := getRangeInfo(ctx, db, scratchTableKey)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		lhsID = ri.Desc.RangeID
 		// First put the range on all three nodes.
 		mtc.replicateRange(lhsID, 1, 2)

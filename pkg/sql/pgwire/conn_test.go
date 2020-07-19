@@ -698,7 +698,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 
 		if !open {
 			_, err = tx.Exec("bogus")
-			require.NotNil(t, err)
+			require.Error(t, err)
 		}
 		err = conn.Close()
 		require.NoError(t, err)

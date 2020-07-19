@@ -98,7 +98,7 @@ func TestProposalBuffer(t *testing.T) {
 		leaseReq := i == 3
 		pd, data := newPropData(leaseReq)
 		mlai, err := b.Insert(pd, data)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		if leaseReq {
 			expMlai := uint64(i)
 			require.Equal(t, uint64(0), mlai)
@@ -120,7 +120,7 @@ func TestProposalBuffer(t *testing.T) {
 	// Remember that the lease request above did not receive a lease index.
 	pd, data := newPropData(false)
 	mlai, err := b.Insert(pd, data)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	expMlai := uint64(num + 1)
 	require.Equal(t, expMlai, mlai)
 	require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
@@ -143,7 +143,7 @@ func TestProposalBuffer(t *testing.T) {
 	// Insert one more proposal. The lease applied index should adjust to
 	// the increase accordingly.
 	mlai, err = b.Insert(pd, data)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	expMlai = p.lai + 1
 	require.Equal(t, expMlai, mlai)
 	require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
@@ -245,7 +245,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(false)
 		_, err := b.Insert(pd, data)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	require.Equal(t, num, b.Len())
 
@@ -279,7 +279,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(i%2 == 0)
 		_, err := b.Insert(pd, data)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	var insertErr = errors.New("failed insertion")

@@ -346,7 +346,7 @@ func TestOnAcquisition(t *testing.T) {
 		}))
 	ctx := context.Background()
 	alloc, err := qp.Acquire(ctx, 1)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.True(t, called)
 	alloc.Release()
 }
@@ -601,7 +601,7 @@ func TestLen(t *testing.T) {
 	allocCh := make(chan *quotapool.IntAlloc)
 	doAcquire := func(ctx context.Context) {
 		alloc, err := qp.Acquire(ctx, 1)
-		if ctx.Err() == nil && assert.Nil(t, err) {
+		if ctx.Err() == nil && assert.NoError(t, err) {
 			allocCh <- alloc
 		}
 	}
@@ -617,7 +617,7 @@ func TestLen(t *testing.T) {
 	assert.Equal(t, 0, qp.Len())
 	// Acquire all of the quota from the pool.
 	alloc, err := qp.Acquire(ctx, 1)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	// The length should still be 0.
 	assert.Equal(t, 0, qp.Len())
 	// Launch a goroutine to acquire quota, ensure that the length increases.

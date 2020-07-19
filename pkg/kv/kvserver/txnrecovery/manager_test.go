@@ -142,7 +142,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 		iceErr := roachpb.NewIndeterminateCommitError(txn)
 		resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 		assert.NotNil(t, resTxn)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		if !prevent {
 			assert.Equal(t, roachpb.COMMITTED, resTxn.Status)
@@ -318,7 +318,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 			resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 			assert.NotNil(t, resTxn)
 			assert.Equal(t, c.changedTxn, *resTxn)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 
 			expMetrics = expMetrics.merge(c.metricImpact)
 			assertMetrics(t, m, expMetrics)
@@ -365,5 +365,5 @@ func TestResolveIndeterminateCommitTxnWithoutInFlightWrites(t *testing.T) {
 	resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 	assert.NotNil(t, resTxn)
 	assert.Equal(t, roachpb.COMMITTED, resTxn.Status)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }

@@ -1501,7 +1501,7 @@ func TestGRPCDialClass(t *testing.T) {
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	remoteAddr := ln.Addr().String()
 	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
 
@@ -1620,12 +1620,12 @@ func TestTestingKnobs(t *testing.T) {
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	remoteAddr := ln.Addr().String()
 	sysConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, SystemClass).Connect(context.Background())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defConn, err := clientCtx.GRPCDialNode(remoteAddr, 1, DefaultClass).Connect(context.Background())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	const unaryMethod = "/cockroach.rpc.Testing/Foo"
 	const streamMethod = "/cockroach.rpc.Testing/Bar"
 	const numSysUnary = 3
@@ -1633,7 +1633,7 @@ func TestTestingKnobs(t *testing.T) {
 		ba := roachpb.BatchRequest{}
 		br := roachpb.BatchResponse{}
 		err := sysConn.Invoke(context.Background(), unaryMethod, &ba, &br)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	const numDefStream = 4
 	for i := 0; i < numDefStream; i++ {
@@ -1642,7 +1642,7 @@ func TestTestingKnobs(t *testing.T) {
 			ClientStreams: true,
 		}
 		cs, err := defConn.NewStream(context.Background(), &desc, streamMethod)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Nil(t, cs.SendMsg(&roachpb.BatchRequest{}))
 		var br roachpb.BatchResponse
 		require.Nil(t, cs.RecvMsg(&br))

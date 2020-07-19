@@ -55,12 +55,12 @@ func noErr(f func(Args)) func(Args) error {
 
 func (tr Transitions) applyWithoutErr(t *testing.T, a Args) State {
 	s, err := tr.apply(a)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	return s
 }
 func (tr Transitions) applyWithErr(t *testing.T, a Args) error {
 	_, err := tr.apply(a)
-	require.NotNil(t, err)
+	require.Error(t, err)
 	return err
 }
 

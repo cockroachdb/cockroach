@@ -321,7 +321,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	// Now merge the ranges back together and ensure that there's two values in
 	// the merged range.
 	merged, err := tc.Server(0).MergeRanges(lr.StartKey.AsRawKey())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	mergedRepls := replsForRange(ctx, t, tc, merged)
 	// The hazard here is that a follower is not yet aware of the merge and will
 	// return an error. We'll accept that because a client wouldn't see that error
@@ -606,7 +606,7 @@ RESET statement_timeout;
 	})
 
 	desc, err := tc.LookupRange(startKey)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// First, we perform an arbitrary lease transfer because that will turn the
 	// lease into an epoch based one (the initial lease is likely expiration based

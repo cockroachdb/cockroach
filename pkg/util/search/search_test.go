@@ -216,7 +216,7 @@ func TestBinarySearcher(t *testing.T) {
 	res, err := bs.Search(func(i int) (bool, error) {
 		return i <= 25, nil
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, res, 26)
 
 	// Looking for 25. Should result in 25 because of precision.
@@ -224,7 +224,7 @@ func TestBinarySearcher(t *testing.T) {
 	res, err = bs.Search(func(i int) (bool, error) {
 		return i <= 25, nil
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, res, 25)
 }
 
@@ -302,7 +302,7 @@ func TestLineSearcher(t *testing.T) {
 	res, err := ls.Search(func(i int) (bool, error) {
 		return i <= 25, nil
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, res, 26)
 
 	// Looking for 25. Should result in 25 because of precision.
@@ -310,7 +310,7 @@ func TestLineSearcher(t *testing.T) {
 	res, err = ls.Search(func(i int) (bool, error) {
 		return i <= 25, nil
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, res, 25)
 }
 
@@ -342,7 +342,7 @@ func TestIdenticalSearchers(t *testing.T) {
 		for _, fn := range searcherFns {
 			s := fn(min, max)
 			val, err := s.Search(pred)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.Equal(t, val, toFind, "searching with %T in range [%d,%d)", s, min, max)
 		}
 

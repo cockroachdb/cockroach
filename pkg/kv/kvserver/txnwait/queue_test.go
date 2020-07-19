@@ -269,7 +269,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 			ctx := context.Background()
 			req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
 			res, err := q.MaybeWaitForPush(ctx, &req)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, res)
 			require.Equal(t, roachpb.ABORTED, res.PusheeTxn.Status)
 		}()

@@ -147,7 +147,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			g.notify()
 
 			err := w.WaitOn(ctx, makeReq(), g)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		})
 	})
 
@@ -159,7 +159,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 		go cancel()
 
 		err := w.WaitOn(ctxWithCancel, makeReq(), g)
-		require.NotNil(t, err)
+		require.Error(t, err)
 		require.Equal(t, context.Canceled.Error(), err.GoError().Error())
 	})
 
@@ -172,7 +172,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 		}()
 
 		err := w.WaitOn(ctx, makeReq(), g)
-		require.NotNil(t, err)
+		require.Error(t, err)
 		require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 	})
 }
@@ -218,7 +218,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 			g.notify()
 
 			err := w.WaitOn(ctx, makeReq(), g)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		})
 	})
 
@@ -230,7 +230,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 		go cancel()
 
 		err := w.WaitOn(ctxWithCancel, makeReq(), g)
-		require.NotNil(t, err)
+		require.Error(t, err)
 		require.Equal(t, context.Canceled.Error(), err.GoError().Error())
 	})
 
@@ -243,7 +243,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 		}()
 
 		err := w.WaitOn(ctx, makeReq(), g)
-		require.NotNil(t, err)
+		require.Error(t, err)
 		require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 	})
 }
@@ -274,7 +274,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			// It returns immediately.
 			if k == waitElsewhere && !lockHeld {
 				err := w.WaitOn(ctx, req, g)
-				require.Nil(t, err)
+				require.NoError(t, err)
 				return
 			}
 
@@ -283,7 +283,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			if req.Txn == nil && !lockHeld {
 				defer notifyUntilDone(t, g)()
 				err := w.WaitOn(ctx, req, g)
-				require.Nil(t, err)
+				require.NoError(t, err)
 				return
 			}
 
@@ -324,7 +324,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			}
 
 			err := w.WaitOn(ctx, req, g)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		})
 	})
 }
@@ -339,7 +339,7 @@ func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	defer notifyUntilDone(t, g)()
 
 	err := w.WaitOn(ctx, makeReq(), g)
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 func notifyUntilDone(t *testing.T, g *mockLockTableGuard) func() {

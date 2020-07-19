@@ -2757,7 +2757,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		if tc.expectAccess {
 			require.NoError(t, err)
 		} else {
-			require.NotNil(t, err)
+			require.Error(t, err)
 			require.Regexp(t, "undeclared span", err)
 		}
 	}

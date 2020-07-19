@@ -3517,7 +3517,7 @@ func TestConnectionClass(t *testing.T) {
 	// Verify that the request carries the class we expect it to for its span.
 	verifyClass := func(class rpc.ConnectionClass, args roachpb.BatchRequest) {
 		span, err := keys.Range(args.Requests)
-		if assert.Nil(t, err) {
+		if assert.NoError(t, err) {
 			assert.Equalf(t, rpc.ConnectionClassForKey(span.Key), class,
 				"unexpected class for span key %v", span.Key)
 		}
@@ -3566,7 +3566,7 @@ func TestConnectionClass(t *testing.T) {
 				},
 			})
 			_, err := ds.Send(context.Background(), ba)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		})
 	}
 }
