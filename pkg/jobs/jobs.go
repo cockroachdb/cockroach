@@ -38,13 +38,21 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id  *int64
-	txn *kv.Txn
-	mu  struct {
+	id        *int64
+	createdBy *CreatedByInfo
+	txn       *kv.Txn
+	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
 	}
+}
+
+// CreatedByInfo encapsulates they type and the ID of the system which created
+// this job.
+type CreatedByInfo struct {
+	Name string
+	ID   int64
 }
 
 // Record bundles together the user-managed fields in jobspb.Payload.
@@ -61,6 +69,9 @@ type Record struct {
 	// a version < 20.1, so it can only be used in cases where all nodes having
 	// versions >= 20.1 is guaranteed.
 	NonCancelable bool
+	// CreatedBy, if set, annotates this record with the information on
+	// this job creator.
+	CreatedBy *CreatedByInfo
 }
 
 // StartableJob is a job created with a transaction to be started later.
@@ -176,6 +187,12 @@ func SimplifyInvalidStatusError(err error) error {
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
 	return j.id
+}
+
+// CreatedBy returns name/id of this job creator.  This will be nil if this information
+// was not set.
+func (j *Job) CreatedBy() *CreatedByInfo {
+	return j.createdBy
 }
 
 // Created records the creation of a new job in the system.jobs table and
@@ -673,8 +690,10 @@ func HasJobNotFoundError(err error) bool {
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
+	var createdBy *CreatedByInfo
+
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
+		const stmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt, *j.ID())
@@ -689,12 +708,17 @@ func (j *Job) load(ctx context.Context) error {
 			return err
 		}
 		progress, err = UnmarshalProgress(row[1])
+		if err != nil {
+			return err
+		}
+		createdBy, err = unmarshalCreatedBy(row[2], row[3])
 		return err
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
 	j.mu.progress = *progress
+	j.createdBy = createdBy
 	return nil
 }
 
@@ -723,9 +747,18 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 			return err
 		}
 
-		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
+		if j.createdBy == nil {
+			const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
+			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
+			return err
+		}
+		const stmt = `
+INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
+VALUES ($1, $2, $3, $4, $5, $6)`
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
 		return err
+
 	}); err != nil {
 		return err
 	}
@@ -776,6 +809,23 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 		return nil, err
 	}
 	return progress, nil
+}
+
+// unnarshalCreatedBy unrmarshals and returns created_by_type and created_by_id datums
+// which may be tree.DNull, or tree.DString and tree.DInt respectively.
+func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, error) {
+	if createdByType == tree.DNull || createdByID == tree.DNull {
+		return nil, nil
+	}
+	if ds, ok := createdByType.(*tree.DString); ok {
+		if id, ok := createdByID.(*tree.DInt); ok {
+			return &CreatedByInfo{Name: string(*ds), ID: int64(*id)}, nil
+		}
+		return nil, errors.Errorf(
+			"Job: failed to unmarshal created_by_type as DInt (was %T)", createdByID)
+	}
+	return nil, errors.Errorf(
+		"Job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
 }
 
 // CurrentStatus returns the current job status from the jobs table or error.

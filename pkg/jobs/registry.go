@@ -349,7 +349,8 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 // NewJob creates a new Job.
 func (r *Registry) NewJob(record Record) *Job {
 	job := &Job{
-		registry: r,
+		registry:  r,
+		createdBy: record.CreatedBy,
 	}
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
