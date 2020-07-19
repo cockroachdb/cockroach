@@ -131,7 +131,6 @@ func constructExplainPlanNode(
 			options:       options,
 			plan:          p.main,
 			subqueryPlans: p.subqueryPlans,
-			stmtType:      stmtType,
 		}, nil
 
 	case tree.ExplainPlan:
@@ -142,7 +141,6 @@ func constructExplainPlanNode(
 			context.TODO(),
 			options,
 			&p.planComponents,
-			stmtType,
 		)
 
 	default:
