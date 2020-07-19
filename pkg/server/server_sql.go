@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -498,6 +499,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	if tenantKnobs := cfg.TestingKnobs.TenantTestingKnobs; tenantKnobs != nil {
 		execCfg.TenantTestingKnobs = tenantKnobs.(*sql.TenantTestingKnobs)
 	}
+	distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
@@ -688,6 +690,24 @@ func (s *sqlServer) start(
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
+
+	// Start scheduled jobs daemon.
+	jobs.StartJobSchedulerDaemon(
+		ctx,
+		stopper,
+		&scheduledjobs.JobExecutionConfig{
+			Settings:         s.execCfg.Settings,
+			InternalExecutor: s.internalExecutor,
+			DB:               s.execCfg.DB,
+			TestingKnobs:     knobs.JobsTestingKnobs,
+			PlanHookMaker: func(opName string, txn *kv.Txn, user string) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(opName, txn, user, &sql.MemoryMetrics{}, s.execCfg)
+			},
+		},
+		scheduledjobs.ProdJobSchedulerEnv,
+	)
 
 	return nil
 }

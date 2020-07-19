@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,18 +49,23 @@ type scheduledJobRecord struct {
 // ScheduledJob  is a representation of the scheduled job.
 // This struct can marshal/unmarshal changes made to the underlying system.scheduled_job table.
 type ScheduledJob struct {
-	env jobSchedulerEnv
+	env scheduledjobs.JobSchedulerEnv
 
 	// The "record" for this schedule job.  Do not access this field
 	// directly (except in tests); Use Get/Set methods on ScheduledJob instead.
 	rec scheduledJobRecord
+
+	// The time this scheduled job was supposed to run.
+	// This field is initialized to rec.NextRun when the scheduled job record
+	// is loaded from the table.
+	scheduledTime time.Time
 
 	// Set of changes to this job that need to be persisted.
 	dirty map[string]struct{}
 }
 
 // NewScheduledJob creates and initializes ScheduledJob.
-func NewScheduledJob(env jobSchedulerEnv) *ScheduledJob {
+func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	return &ScheduledJob{
 		env:   env,
 		dirty: make(map[string]struct{}),
@@ -81,6 +87,13 @@ func (j *ScheduledJob) SetScheduleName(name string) {
 // A sentinel value of time.Time{} indicates this schedule is paused.
 func (j *ScheduledJob) NextRun() time.Time {
 	return j.rec.NextRun
+}
+
+// ScheduledRunTime returns the time this schedule was supposed to execute.
+// This value reflects the 'next_run' value loaded from the system.scheduled_jobs table,
+// prior to any mutations to the 'next_run' value.
+func (j *ScheduledJob) ScheduledRunTime() time.Time {
+	return j.scheduledTime
 }
 
 // IsPaused returns true if this schedule is paused.
@@ -228,6 +241,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []sqlbase.Result
 		}
 	}
 
+	j.scheduledTime = j.rec.NextRun
 	return nil
 }
 

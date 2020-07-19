@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
@@ -30,9 +30,7 @@ const InlineExecutorName = "inline"
 // inlineScheduledJobExecutor implements ScheduledJobExecutor interface.
 // This executor runs SQL statement "inline" -- that is, it executes statement
 // directly under transaction.
-type inlineScheduledJobExecutor struct {
-	ex sqlutil.InternalExecutor
-}
+type inlineScheduledJobExecutor struct{}
 
 var _ ScheduledJobExecutor = &inlineScheduledJobExecutor{}
 
@@ -40,7 +38,11 @@ const retryFailedJobAfter = time.Minute
 
 // ExecuteJob implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) ExecuteJob(
-	ctx context.Context, schedule *ScheduledJob, txn *kv.Txn,
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	txn *kv.Txn,
 ) error {
 	sqlArgs := &jobspb.SqlStatementExecutionArg{}
 
@@ -52,7 +54,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 	// to capture execution traces, or some similar debug information and save that.
 	// Also, performing this under the same transaction as the scan loop is not ideal
 	// since a single failure would result in rollback for all of the changes.
-	_, err := e.ex.ExecEx(ctx, "inline-exec", txn,
+	_, err := cfg.InternalExecutor.ExecEx(ctx, "inline-exec", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		sqlArgs.Statement,
 	)
@@ -67,7 +69,12 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 
 // NotifyJobTermination implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) NotifyJobTermination(
-	_ context.Context, md *JobMetadata, schedule *ScheduledJob, _ *kv.Txn,
+	_ context.Context,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
+	md *JobMetadata,
+	schedule *ScheduledJob,
+	_ *kv.Txn,
 ) error {
 	// For now, only interested in failed status.
 	if md.Status == StatusFailed {
@@ -79,7 +86,7 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 func init() {
 	RegisterScheduledJobExecutorFactory(
 		InlineExecutorName,
-		func(ex sqlutil.InternalExecutor) (ScheduledJobExecutor, error) {
-			return &inlineScheduledJobExecutor{ex}, nil
+		func() (ScheduledJobExecutor, error) {
+			return &inlineScheduledJobExecutor{}, nil
 		})
 }

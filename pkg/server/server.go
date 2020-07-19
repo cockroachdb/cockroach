@@ -1681,10 +1681,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 
-	// Start scheduled jobs daemon.
-	jobs.StartJobSchedulerDaemon(
-		ctx, s.stopper, &s.st.SV, jobs.ProdJobSchedulerEnv, s.db, s.sqlServer.internalExecutor)
-
 	log.Event(ctx, "server ready")
 	return nil
 }

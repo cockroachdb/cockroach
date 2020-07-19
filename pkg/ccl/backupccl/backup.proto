@@ -159,3 +159,13 @@ message EncryptionInfo {
 message StatsTable {
   repeated sql.stats.TableStatisticProto statistics = 1;
 }
+
+// ScheduledBackupExecutionArgs is the arguments to the scheduled backup executor.
+message ScheduledBackupExecutionArgs {
+  enum BackupType {
+    FULL = 0;
+    INCREMENTAL = 1;
+  }
+  BackupType backup_type = 1;
+  string backup_statement = 2;
+}
