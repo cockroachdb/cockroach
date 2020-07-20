@@ -37,15 +37,17 @@ func unsafeExpressionError(err error, msg string, expr string) error {
 	return errors.Wrapf(err, "default expression %q is unsafe for import: %s", expr, msg)
 }
 
+// importDefaultExprVisitor must be invoked on a typed expression.
 type importDefaultExprVisitor struct {
 	err error
-	ctx *tree.EvalContext
 }
 
+// VisitPre implements tree.Visitor interface.
 func (v *importDefaultExprVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	return v.err == nil, expr
 }
 
+// VisitPost implements tree.Visitor interface.
 func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr) {
 	if v.err != nil {
 		return expr
@@ -53,56 +55,34 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 	switch fn := expr.(type) {
 	case *tree.FuncExpr:
 		if fn.ResolvedOverload().Volatility > tree.VolatilityImmutable {
-			fnName := fn.Func.String()
-			if _, ok := supportedImportFunctions[fnName]; !ok {
-				v.err = errors.Newf(`function %s unsupported by IMPORT INTO`, fnName)
+			resolvedFnName := fn.Func.FunctionReference.(*tree.FunctionDefinition).Name
+			if _, ok := supportedImportFunctions[resolvedFnName]; !ok {
+				v.err = errors.Newf(`function %s unsupported by IMPORT INTO`, resolvedFnName)
 			}
 		}
 	}
 	return expr
 }
 
-func getImmutableDefault(
+func sanitizeExprsForImport(
 	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
-) tree.Datum {
+) (tree.TypedExpr, error) {
 	semaCtx := tree.MakeSemaContext()
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
-	if err != nil {
-		return nil
-	}
-	datum, err := typedExpr.Eval(evalCtx)
-	if err != nil {
-		return nil
-	}
-	return datum
-}
-
-func SanitizeExprsForImport(
-	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
-) (tree.Datum, error) {
-	semaCtx := tree.MakeSemaContext()
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
 	if err == nil {
-		datum, err := typedExpr.Eval(evalCtx)
-		if err != nil {
-			return nil, unsafeExpressionError(err, "eval", expr.String())
-		}
-		return datum, nil
+		return typedExpr.Eval(evalCtx)
 	}
 	typedExpr, err = tree.TypeCheck(ctx, expr, &semaCtx, targetType)
 	if err != nil {
-		return nil, unsafeExpressionError(err, "typeChecking", expr.String())
+		return nil, unsafeExpressionError(err, "type checking error", expr.String())
 	}
-	v := importDefaultExprVisitor{ctx: evalCtx}
-	newExpr, _ := tree.WalkExpr(&v, typedExpr)
+	v := &importDefaultExprVisitor{}
+	newExpr, _ := tree.WalkExpr(v, typedExpr)
 	if v.err != nil {
-		return nil, unsafeExpressionError(v.err, "walking", expr.String())
+		return nil, unsafeExpressionError(v.err, "expr walking error", expr.String())
 	}
-	datum, err := newExpr.(tree.TypedExpr).Eval(evalCtx)
-	if err != nil {
-		return nil, unsafeExpressionError(err, "eval", expr.String())
-	}
-	return datum, nil
+	return newExpr.(tree.TypedExpr), nil
 }
 
 // KVInserter implements the putter interface.
@@ -286,8 +266,8 @@ type DatumRowConverter struct {
 	cols                  []sqlbase.ColumnDescriptor
 	VisibleCols           []sqlbase.ColumnDescriptor
 	VisibleColTypes       []*types.T
-	defaultExprs          []tree.TypedExpr
-	defaultCache          []tree.Datum
+	defaultCache          []tree.TypedExpr
+	defaultUnsafeErr      []error
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
@@ -369,7 +349,6 @@ func NewDatumRowConverter(
 
 	c.ri = ri
 	c.cols = cols
-	c.defaultExprs = defaultExprs
 
 	c.VisibleCols = targetColDescriptors
 	c.VisibleColTypes = make([]*types.T, len(c.VisibleCols))
@@ -378,7 +357,8 @@ func NewDatumRowConverter(
 	}
 
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
-	c.defaultCache = make([]tree.Datum, len(cols))
+	c.defaultCache = make([]tree.TypedExpr, len(cols))
+	c.defaultUnsafeErr = make([]error, len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
@@ -398,11 +378,29 @@ func NewDatumRowConverter(
 			c.hidden = i
 			c.Datums = append(c.Datums, nil)
 		} else {
-			if !isTargetCol(col) && col.DefaultExpr != nil {
+			if col.DefaultExpr != nil {
 				// Placeholder for columns with default values that will be evaluated when
 				// each import row is being created.
-				c.defaultCache[i] = getImmutableDefault(ctx, evalCtx, defaultExprs[i], col.Type)
-				c.Datums = append(c.Datums, nil)
+				c.defaultCache[i], err = sanitizeExprsForImport(ctx, evalCtx, defaultExprs[i], col.Type)
+				if err != nil {
+					// This expression may not be safe for import but we don't want to
+					// call the user out at this stage: targeted columns may not have been
+					// identified now (e.g. "IMPORT PGDUMP...") and we want to throw an error
+					// only at the "Row" stage when the targeted columns have been identified.
+					c.defaultUnsafeErr[i] = err
+				} else {
+					// TODO (anzoteh96): currently, all the functions we support are immutable / stable,
+					// so it's okay for defaultCache to be evaluated here. However, when we add support for
+					// unique_rowid, it changes for every row and therefore can no longer be evaluated right away.
+					// We therefore need a flag to determine when we can evaluate here.
+					c.defaultCache[i], err = c.defaultCache[i].Eval(evalCtx)
+					if err != nil {
+						return nil, errors.Wrapf(err, "error evaluating default expression")
+					}
+				}
+				if !isTargetCol(col) {
+					c.Datums = append(c.Datums, nil)
+				}
 			}
 		}
 	}
@@ -461,12 +459,18 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	for i := range c.cols {
 		col := &c.cols[i]
 		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
-			if c.defaultCache[i] != nil {
-				c.Datums[i] = c.defaultCache[i]
-			} else {
-				datum, err := SanitizeExprsForImport(ctx, c.EvalCtx, c.defaultExprs[i], c.defaultExprs[i].ResolvedType())
+			if c.defaultUnsafeErr[i] != nil {
+				return errors.Wrapf(
+					c.defaultUnsafeErr[i], "default expression %q unsafe for import", col.DefaultExprStr())
+			}
+			switch expr := c.defaultCache[i].(type) {
+			case tree.Datum:
+				c.Datums[i] = expr
+			default:
+				datum, err := expr.Eval(c.EvalCtx)
 				if err != nil {
-					return errors.Wrapf(err, "error sanitizing expression")
+					return errors.Wrapf(
+						err, "error evaluating default expression %q", col.DefaultExprStr())
 				}
 				c.Datums[i] = datum
 			}
@@ -478,7 +482,8 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	var computedCols []sqlbase.ColumnDescriptor
 
 	insertRow, err := GenerateInsertRow(
-		c.defaultExprs, computeExprs, c.cols, computedCols, c.EvalCtx, c.tableDesc, c.Datums, &c.computedIVarContainer)
+		c.defaultCache, computeExprs, c.cols, computedCols, c.EvalCtx,
+		c.tableDesc, c.Datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
