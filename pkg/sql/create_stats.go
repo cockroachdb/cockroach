@@ -411,11 +411,6 @@ func (r *createStatsResumer) Resume(
 		return err
 	}
 
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
-
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
 		return nil
