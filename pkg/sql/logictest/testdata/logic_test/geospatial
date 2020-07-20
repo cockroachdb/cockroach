@@ -3408,3 +3408,37 @@ NULL
 
 statement error POINT EMPTY
 SELECT st_azimuth('0101000020E6100000000000000000F87F000000000000F87F':::GEOGRAPHY::GEOGRAPHY, '0101000020E6100000000000000000F03F000000000000F03F':::GEOGRAPHY::GEOGRAPHY)::FLOAT8
+
+# Test for string arguments being cast to GEOMETRY.
+query RTTTR
+SELECT
+  ST_Area(geom_str),
+  ST_AsEWKT(geom_str),
+  ST_AsGeoJSON(geom_str),
+  ST_AsText(geom_str),
+  ST_Length(geom_str)
+FROM (VALUES
+  ('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0 ))'),
+  ('LINESTRING(0 0, 1 1, 2 2)')
+) t(geom_str)
+----
+1  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))  {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]}  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))  0
+0  LINESTRING (0 0, 1 1, 2 2)           {"type":"LineString","coordinates":[[0,0],[1,1],[2,2]]}             LINESTRING (0 0, 1 1, 2 2)           2.82842712474619
+
+# Test for 2+ arguments string arguments which resolve and get cast to GEOMETRY.
+query BBRBB
+SELECT
+  ST_CoveredBy(a, b),
+  ST_Covers(a, b),
+  ST_Distance(a, b),
+  ST_DWithin(a, b, 10),
+  ST_Intersects(a, b)
+FROM ( VALUES
+  ('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))', 'POINT(1.0 1.0)'),
+  ('POINT(3 0)', 'POINT(10 0)'),
+  ('POINT(3 0)', 'POINT(100 0)')
+) t(a, b)
+----
+false  true   0   true   true
+false  false  7   true   false
+false  false  97  false  false
