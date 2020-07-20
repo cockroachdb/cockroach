@@ -35,6 +35,8 @@ const (
 	likePrefixNegate
 	likeRegexp
 	likeRegexpNegate
+	likeContains
+	likeContainsNegate
 )
 
 func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error) {
@@ -76,6 +78,13 @@ func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error
 				return likePrefixNegate, prefix, nil
 			}
 			return likePrefix, prefix, nil
+		}
+		if firstChar == '%' && lastChar == '%' {
+			contains := pattern[1 : len(pattern)-1]
+			if negate {
+				return likeContainsNegate, contains, nil
+			}
+			return likeContains, contains, nil
 		}
 	}
 	// Default (slow) case: execute as a regular expression match.
@@ -160,6 +169,16 @@ func GetLikeOperator(
 		return &selNotRegexpBytesBytesConstOp{
 			selConstOpBase: base,
 			constArg:       re,
+		}, nil
+	case likeContains:
+		return &selContainsBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       pat,
+		}, nil
+	case likeContainsNegate:
+		return &selNotContainsBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       pat,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)
@@ -254,6 +273,16 @@ func GetLikeProjectionOperator(
 		return &projNotRegexpBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        re,
+		}, nil
+	case likeContains:
+		return &projContainsBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        pat,
+		}, nil
+	case likeContainsNegate:
+		return &projNotContainsBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        pat,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)

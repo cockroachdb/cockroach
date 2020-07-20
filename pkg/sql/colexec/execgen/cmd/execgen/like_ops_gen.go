@@ -113,6 +113,9 @@ func genLikeOps(inputFileContents string, wr io.Writer) error {
 		makeOverload("Regexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = %s.Match(%s)", targetElem, rightElem, leftElem)
 		}),
+		makeOverload("Contains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
+		}),
 		makeOverload("NotPrefix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
@@ -121,6 +124,9 @@ func genLikeOps(inputFileContents string, wr io.Writer) error {
 		}),
 		makeOverload("NotRegexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = !%s.Match(%s)", targetElem, rightElem, leftElem)
+		}),
+		makeOverload("NotContains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = !bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
 		}),
 	}
 	return tmpl.Execute(wr, overloads)

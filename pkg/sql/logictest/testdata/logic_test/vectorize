@@ -438,12 +438,22 @@ SELECT * FROM e WHERE x NOT LIKE 'a%c'
 ----
 xyz
 
-query TBBBBBBBB
-SELECT x, x LIKE '%', x NOT LIKE '%', x LIKE 'ab%', x NOT LIKE 'ab%', x LIKE '%bc', x NOT LIKE '%bc', x LIKE 'a%c', x NOT LIKE 'a%c' FROM e ORDER BY x
+query T
+SELECT * FROM e WHERE x LIKE '%b%'
 ----
-NULL  NULL  NULL   NULL   NULL   NULL   NULL   NULL   NULL
-abc   true  false  true   false  true   false  true   false
-xyz   true  false  false  true   false  true   false  true
+abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '%b%'
+----
+xyz
+
+query TBBBBBBBBBB
+SELECT x, x LIKE '%', x NOT LIKE '%', x LIKE 'ab%', x NOT LIKE 'ab%', x LIKE '%bc', x NOT LIKE '%bc', x LIKE 'a%c', x NOT LIKE 'a%c', x LIKE '%b%', x NOT LIKE '%b%' FROM e ORDER BY x
+----
+NULL  NULL  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+abc   true  false  true   false  true   false  true   false  true   false
+xyz   true  false  false  true   false  true   false  true   false  true
 
 # Regression test for composite null handling
 # https://github.com/cockroachdb/cockroach/issues/37358
