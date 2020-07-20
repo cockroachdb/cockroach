@@ -11317,6 +11317,12 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool enable_time_bound_iterator_optimization() const;
   void set_enable_time_bound_iterator_optimization(bool value);
 
+  // bool fail_on_intents = 11;
+  void clear_fail_on_intents();
+  static const int kFailOnIntentsFieldNumber = 11;
+  bool fail_on_intents() const;
+  void set_fail_on_intents(bool value);
+
   // int64 target_file_size = 10;
   void clear_target_file_size();
   static const int kTargetFileSizeFieldNumber = 10;
@@ -11341,6 +11347,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool return_sst_;
   bool omit_checksum_;
   bool enable_time_bound_iterator_optimization_;
+  bool fail_on_intents_;
   ::google::protobuf::int64 target_file_size_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -27561,6 +27568,20 @@ inline void ExportRequest::set_target_file_size(::google::protobuf::int64 value)
   
   target_file_size_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportRequest.target_file_size)
+}
+
+// bool fail_on_intents = 11;
+inline void ExportRequest::clear_fail_on_intents() {
+  fail_on_intents_ = false;
+}
+inline bool ExportRequest::fail_on_intents() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportRequest.fail_on_intents)
+  return fail_on_intents_;
+}
+inline void ExportRequest::set_fail_on_intents(bool value) {
+  
+  fail_on_intents_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportRequest.fail_on_intents)
 }
 
 // -------------------------------------------------------------------

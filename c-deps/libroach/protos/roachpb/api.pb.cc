@@ -24392,6 +24392,7 @@ const int ExportRequest::kEnableTimeBoundIteratorOptimizationFieldNumber;
 const int ExportRequest::kStorageByLocalityKvFieldNumber;
 const int ExportRequest::kEncryptionFieldNumber;
 const int ExportRequest::kTargetFileSizeFieldNumber;
+const int ExportRequest::kFailOnIntentsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportRequest::ExportRequest()
@@ -24640,6 +24641,20 @@ bool ExportRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool fail_on_intents = 11;
+      case 11: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(88u /* 88 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &fail_on_intents_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -24759,6 +24774,11 @@ void ExportRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(10, this->target_file_size(), output);
   }
 
+  // bool fail_on_intents = 11;
+  if (this->fail_on_intents() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(11, this->fail_on_intents(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportRequest)
@@ -24827,6 +24847,11 @@ size_t ExportRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // bool fail_on_intents = 11;
+  if (this->fail_on_intents() != 0) {
+    total_size += 1 + 1;
+  }
+
   // int64 target_file_size = 10;
   if (this->target_file_size() != 0) {
     total_size += 1 +
@@ -24876,6 +24901,9 @@ void ExportRequest::MergeFrom(const ExportRequest& from) {
   if (from.enable_time_bound_iterator_optimization() != 0) {
     set_enable_time_bound_iterator_optimization(from.enable_time_bound_iterator_optimization());
   }
+  if (from.fail_on_intents() != 0) {
+    set_fail_on_intents(from.fail_on_intents());
+  }
   if (from.target_file_size() != 0) {
     set_target_file_size(from.target_file_size());
   }
@@ -24907,6 +24935,7 @@ void ExportRequest::InternalSwap(ExportRequest* other) {
   swap(return_sst_, other->return_sst_);
   swap(omit_checksum_, other->omit_checksum_);
   swap(enable_time_bound_iterator_optimization_, other->enable_time_bound_iterator_optimization_);
+  swap(fail_on_intents_, other->fail_on_intents_);
   swap(target_file_size_, other->target_file_size_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
