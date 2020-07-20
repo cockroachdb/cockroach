@@ -958,7 +958,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	// Run migration and verify we have added columns and renamed column family.
 	require.NoError(t, mt.runMigration(ctx, migration))
 
-	newJobsTable := sqlbase.TestingGetTableDescriptor(
+	newJobsTable := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
 	require.Equal(t, 9, len(newJobsTable.Columns))
 	require.Equal(t, "claim_session_id", newJobsTable.Columns[7].Name)
@@ -972,7 +972,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))
-	newJobsTableAgain := sqlbase.TestingGetTableDescriptor(
+	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
 	require.Equal(t, newJobsTable, newJobsTableAgain)
 }
