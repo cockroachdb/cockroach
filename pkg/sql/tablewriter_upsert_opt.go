@@ -46,8 +46,7 @@ import (
 type optTableUpserter struct {
 	tableWriterBase
 
-	ri    row.Inserter
-	alloc *sqlbase.DatumAlloc
+	ri row.Inserter
 
 	// Should we collect the rows for a RETURNING clause?
 	collectRows bool
@@ -70,13 +69,6 @@ type optTableUpserter struct {
 
 	// Contains all the rows to be inserted.
 	insertRows rowcontainer.RowContainer
-
-	// existingRows is used to store rows in a batch when checking for conflicts
-	// with rows earlier in the batch. Is is reused per batch.
-	existingRows *rowcontainer.RowContainer
-
-	// For allocation avoidance.
-	indexKeyPrefix []byte
 
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
@@ -117,18 +109,19 @@ func (tu *optTableUpserter) init(
 	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext,
 ) error {
 	tu.tableWriterBase.init(txn)
-	tableDesc := tu.tableDesc()
 
 	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0, /* rowCapacity */
 	)
 
-	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
+	// collectRows, set upon initialization, indicates whether or not we want
+	// rows returned from the operation.
 	if tu.collectRows {
+		tu.resultRow = make(tree.Datums, len(tu.returnCols))
 		tu.rowsUpserted = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
-			tu.insertRows.Len(),
+			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
+			0, /* rowCapacity */
 		)
 
 		// Create the map from colIds to the expected columns.
@@ -136,6 +129,7 @@ func (tu *optTableUpserter) init(
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
 		tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
+		tableDesc := tu.tableDesc()
 		for i := range tableDesc.Columns {
 			id := tableDesc.Columns[i].ID
 			tu.colIDToReturnIndex[id] = i
@@ -154,23 +148,6 @@ func (tu *optTableUpserter) init(
 		}
 	}
 
-	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
-	)
-
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(
-		evalCtx.Codec, tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID,
-	)
-
-	if tu.collectRows {
-		tu.resultRow = make(tree.Datums, len(tu.returnCols))
-		tu.rowsUpserted = rowcontainer.NewRowContainer(
-			evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
-			tu.insertRows.Len(),
-		)
-	}
-
 	return nil
 }
 
@@ -179,9 +156,6 @@ func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
 	tu.insertRows.Clear(ctx)
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
-	}
-	if tu.existingRows != nil {
-		tu.existingRows.Clear(ctx)
 	}
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
@@ -202,9 +176,6 @@ func (tu *optTableUpserter) curBatchSize() int { return tu.insertRows.Len() }
 // close is part of the tableWriter interface.
 func (tu *optTableUpserter) close(ctx context.Context) {
 	tu.insertRows.Close(ctx)
-	if tu.existingRows != nil {
-		tu.existingRows.Close(ctx)
-	}
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
 	}
