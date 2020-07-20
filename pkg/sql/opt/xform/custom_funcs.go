@@ -2570,8 +2570,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	}
 }
 
-// deriveJoinSize returns the number of base relations (i.e., not joins)
-// being joined underneath the given relational expression.
+// deriveJoinSize returns the number of nodes in the root's connected component
+// after removing all non-inner-join nodes in the tree (can be zero). It is used
+// to decide whether join reordering rules should fire.
 func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
 	relProps := e.Relational()
 	if relProps.IsAvailable(props.JoinSize) {
@@ -2581,18 +2582,50 @@ func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
 
 	switch j := e.(type) {
 	case *memo.InnerJoinExpr:
-		relProps.Rule.JoinSize = c.deriveJoinSize(j.Left) + c.deriveJoinSize(j.Right)
+		relProps.Rule.JoinSize = 1 + c.deriveJoinSize(j.Left) + c.deriveJoinSize(j.Right)
 	default:
-		relProps.Rule.JoinSize = 1
+		relProps.Rule.JoinSize = 0
 	}
 
 	return relProps.Rule.JoinSize
 }
 
 // ShouldReorderJoins returns whether the optimizer should attempt to find
-// a better ordering of inner joins.
+// a better ordering of inner joins. This is the case if:
+//   1. The given expression is the first expression of its group. This is to
+//      avoid duplicate work (for example, matching on the commuted version of
+//      a join that has already been reordered).
+//   2. The size of the join tree is greater than one and does not exceed
+//      ReorderJoinsLimit.
 func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
-	return c.deriveJoinSize(root) <= c.e.evalCtx.SessionData.ReorderJoinsLimit
+	// Only match the first expression of a group to avoid duplicate work.
+	if root != root.FirstExpr() {
+		return false
+	}
+
+	private, ok := root.Private().(*memo.JoinPrivate)
+	if !ok {
+		panic(errors.AssertionFailedf("operator does not have a join private: %v", root.Op()))
+	}
+	if private.WasReordered {
+		// All orderings have already been considered for the join tree rooted at
+		// this join.
+		return false
+	}
+
+	// Don't match if joinSize is 1, because only commutation is possible for a
+	// single join.
+	joinSize := c.deriveJoinSize(root)
+	return joinSize > 1 && joinSize <= c.e.evalCtx.SessionData.ReorderJoinsLimit
+}
+
+// ReorderJoins adds alternate orderings of the given join tree to the memo. The
+// first expression of the memo group is used for construction of the join
+// graph. For more information, see the comment in join_order_builder.go.
+func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr) memo.RelExpr {
+	c.e.o.JoinOrderBuilder().Init(c.e.f)
+	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
+	return grp
 }
 
 // IsSimpleEquality returns true if all of the filter conditions are equalities

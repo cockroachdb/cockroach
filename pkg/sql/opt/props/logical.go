@@ -275,9 +275,9 @@ type Relational struct {
 		// is only valid once the Rule.Available.UnfilteredCols bit has been set.
 		UnfilteredCols opt.ColSet
 
-		// JoinSize is the number of relations being *inner* joined underneath
-		// this node. It is used to only reorder joins via AssociateJoin up to
-		// a certain limit.
+		// JoinSize is the number of nodes in the root's connected component after
+		// removing all non-inner-join nodes in the tree. It is used to only reorder
+		// joins via ReorderJoins up to a certain limit.
 		JoinSize int
 	}
 }
