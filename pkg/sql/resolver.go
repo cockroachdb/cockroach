@@ -148,10 +148,12 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
-func (p *planner) makeTypeLookupFn(ctx context.Context) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id, tree.ObjectLookupFlags{})
-	}
+// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
+func (p *planner) GetTypeDescriptor(
+	ctx context.Context, id sqlbase.ID,
+) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	// TODO (rohany): This should go through the descs.Collection.
+	return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id, tree.ObjectLookupFlags{})
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
@@ -183,7 +185,7 @@ func (p *planner) ResolveType(
 			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
 	}
 
-	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
+	return tdesc.MakeTypesT(ctx, &tn, p)
 }
 
 // ResolveTypeByID implements the tree.TypeResolver interface.
@@ -200,7 +202,7 @@ func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, err
 	if err != nil {
 		return nil, err
 	}
-	return desc.MakeTypesT(name, p.makeTypeLookupFn(ctx))
+	return desc.MakeTypesT(ctx, name, p)
 }
 
 // maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.
@@ -214,7 +216,7 @@ func (p *planner) maybeHydrateTypesInDescriptor(
 	switch t := objDesc.(type) {
 	case *sqlbase.MutableTableDescriptor:
 		// MutableTableDescriptors are safe to modify in place.
-		if err := sqlbase.HydrateTypesInTableDescriptor(t.TableDesc(), p.makeTypeLookupFn(ctx)); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), p); err != nil {
 			return nil, err
 		}
 		return objDesc, nil
@@ -226,7 +228,7 @@ func (p *planner) maybeHydrateTypesInDescriptor(
 		}
 		// Make a copy of the underlying TableDescriptor.
 		desc := protoutil.Clone(t.TableDesc()).(*sqlbase.TableDescriptor)
-		if err := sqlbase.HydrateTypesInTableDescriptor(desc, p.makeTypeLookupFn(ctx)); err != nil {
+		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc, p); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*desc), nil

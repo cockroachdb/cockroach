@@ -327,14 +327,14 @@ func parseStats(
 			// collecting the stats. Changes to types are backwards compatible across
 			// versions, so using a newer version of the type metadata here is safe.
 			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+				typeLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 					return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
 				}
-				name, typeDesc, err := typeLookup(sqlbase.ID(typ.StableTypeID()))
+				name, typeDesc, err := typeLookup(ctx, sqlbase.ID(typ.StableTypeID()))
 				if err != nil {
 					return err
 				}
-				return typeDesc.HydrateTypeInfoWithName(typ, name, typeLookup)
+				return typeDesc.HydrateTypeInfoWithName(ctx, typ, name, sqlbase.TypeLookupFunc(typeLookup))
 			})
 			if err != nil {
 				return nil, err

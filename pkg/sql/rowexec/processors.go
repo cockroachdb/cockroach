@@ -252,6 +252,15 @@ func NewProcessor(
 		}
 		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, outputs[0])
 	}
+	if core.SplitAndScatter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewSplitAndScatterProcessor == nil {
+			return nil, errors.New("SplitAndScatter processor unimplemented")
+		}
+		return NewSplitAndScatterProcessor(flowCtx, processorID, *core.SplitAndScatter, outputs[0])
+	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -346,6 +355,9 @@ var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadI
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewSplitAndScatterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.SplitAndScatterSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
