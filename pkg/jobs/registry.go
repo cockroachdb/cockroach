@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -622,19 +622,11 @@ func (r *Registry) Start(
 		log.Infof(ctx, "Registry live claim (instance_id: %s, sid: %s).\n",
 			r.ID(), s.ID())
 
-		// TODO(spaskob): this is just a hack for now to make all tests pass. In
-		// reality there may be claims whose sessions rows have been deleted by
-		// someone else and we should be able to claim these jobs.
-		now := tree.TimestampToDecimal(r.db.Clock().Now())
 		if _, err := r.ex.QueryRowEx(
 			ctx, "expire-sessions", nil,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
-WITH deleted_sessions AS (
-	DELETE FROM system.sqlliveness WHERE expiration < $1 RETURNING session_id
-)
 UPDATE system.jobs SET claim_session_id = NULL
-WHERE claim_session_id IN (SELECT * FROM deleted_sessions)`,
-			now,
+WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 		); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 			return
