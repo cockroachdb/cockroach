@@ -74,85 +74,67 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 	return execPlan{root: root}, err
 }
 
+func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
+	fmtFlags := memo.ExprFmtHideAll
+	switch {
+	case explain.Options.Flags[tree.ExplainFlagVerbose]:
+		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
+			memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
+
+	case explain.Options.Flags[tree.ExplainFlagTypes]:
+		fmtFlags = memo.ExprFmtHideQualifications
+	}
+
+	// Format the plan here and pass it through to the exec factory.
+
+	// If catalog option was passed, show catalog object details for all tables.
+	var planText bytes.Buffer
+	if explain.Options.Flags[tree.ExplainFlagCatalog] {
+		for _, t := range b.mem.Metadata().AllTables() {
+			tp := treeprinter.New()
+			cat.FormatTable(b.catalog, t.Table, tp)
+			planText.WriteString(tp.String())
+		}
+		// TODO(radu): add views, sequences
+	}
+
+	f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
+	f.FormatExpr(explain.Input)
+	planText.WriteString(f.Buffer.String())
+
+	// If we're going to display the environment, there's a bunch of queries we
+	// need to run to get that information, and we can't run them from here, so
+	// tell the exec factory what information it needs to fetch.
+	var envOpts exec.ExplainEnvData
+	if explain.Options.Flags[tree.ExplainFlagEnv] {
+		envOpts = b.getEnvData()
+	}
+
+	node, err := b.factory.ConstructExplainOpt(planText.String(), envOpts)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, explain.ColList), nil
+}
+
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
-	var node exec.Node
-
 	if explain.Options.Mode == tree.ExplainOpt {
-		fmtFlags := memo.ExprFmtHideAll
-		switch {
-		case explain.Options.Flags[tree.ExplainFlagVerbose]:
-			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
-				memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
-
-		case explain.Options.Flags[tree.ExplainFlagTypes]:
-			fmtFlags = memo.ExprFmtHideQualifications
-		}
-
-		// Format the plan here and pass it through to the exec factory.
-
-		// If catalog option was passed, show catalog object details for all tables.
-		var planText bytes.Buffer
-		if explain.Options.Flags[tree.ExplainFlagCatalog] {
-			for _, t := range b.mem.Metadata().AllTables() {
-				tp := treeprinter.New()
-				cat.FormatTable(b.catalog, t.Table, tp)
-				planText.WriteString(tp.String())
-			}
-			// TODO(radu): add views, sequences
-		}
-
-		f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
-		f.FormatExpr(explain.Input)
-		planText.WriteString(f.Buffer.String())
-
-		// If we're going to display the environment, there's a bunch of queries we
-		// need to run to get that information, and we can't run them from here, so
-		// tell the exec factory what information it needs to fetch.
-		var envOpts exec.ExplainEnvData
-		if explain.Options.Flags[tree.ExplainFlagEnv] {
-			envOpts = b.getEnvData()
-		}
-
-		var err error
-		node, err = b.factory.ConstructExplainOpt(planText.String(), envOpts)
-		if err != nil {
-			return execPlan{}, err
-		}
-	} else {
-
-		// The auto commit flag should reflect what would happen if this statement
-		// was run without the explain, so recalculate it.
-		defer func(oldVal bool) {
-			b.allowAutoCommit = oldVal
-		}(b.allowAutoCommit)
-		b.allowAutoCommit = b.canAutoCommit(explain.Input)
-
-		input, err := b.buildRelational(explain.Input)
-		if err != nil {
-			return execPlan{}, err
-		}
-
-		plan, err := b.factory.ConstructPlan(input.root, b.subqueries, b.cascades, b.checks)
-		if err != nil {
-			return execPlan{}, err
-		}
-
-		node, err = b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
-		if err != nil {
-			return execPlan{}, err
-		}
+		return b.buildExplainOpt(explain)
 	}
 
-	ep := execPlan{root: node}
-	for i, c := range explain.ColList {
-		ep.outputCols.Set(int(c), i)
+	// Create a separate builder for the explain query.
+	explainBld := New(b.factory, b.mem, b.catalog, explain.Input, b.evalCtx)
+	explainBld.disableTelemetry = true
+	plan, err := explainBld.Build()
+	if err != nil {
+		return execPlan{}, err
 	}
-	// The subqueries/cascades/checks are now owned by the explain node;
-	// remove them so they don't also show up in the final plan.
-	b.subqueries = nil
-	b.cascades = nil
-	b.checks = nil
-	return ep, nil
+	node, err := b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	return planWithColumns(node, explain.ColList), nil
 }
 
 func (b *Builder) buildShowTrace(show *memo.ShowTraceForSessionExpr) (execPlan, error) {
@@ -160,11 +142,7 @@ func (b *Builder) buildShowTrace(show *memo.ShowTraceForSessionExpr) (execPlan, 
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, c := range show.ColList {
-		ep.outputCols.Set(int(c), i)
-	}
-	return ep, nil
+	return planWithColumns(node, show.ColList), nil
 }
 
 func (b *Builder) buildAlterTableSplit(split *memo.AlterTableSplitExpr) (execPlan, error) {
@@ -186,11 +164,7 @@ func (b *Builder) buildAlterTableSplit(split *memo.AlterTableSplitExpr) (execPla
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, c := range split.Columns {
-		ep.outputCols.Set(int(c), i)
-	}
-	return ep, nil
+	return planWithColumns(node, split.Columns), nil
 }
 
 func (b *Builder) buildAlterTableUnsplit(unsplit *memo.AlterTableUnsplitExpr) (execPlan, error) {
@@ -206,11 +180,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *memo.AlterTableUnsplitExpr) (e
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, c := range unsplit.Columns {
-		ep.outputCols.Set(int(c), i)
-	}
-	return ep, nil
+	return planWithColumns(node, unsplit.Columns), nil
 }
 
 func (b *Builder) buildAlterTableUnsplitAll(
@@ -221,11 +191,7 @@ func (b *Builder) buildAlterTableUnsplitAll(
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, c := range unsplitAll.Columns {
-		ep.outputCols.Set(int(c), i)
-	}
-	return ep, nil
+	return planWithColumns(node, unsplitAll.Columns), nil
 }
 
 func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr) (execPlan, error) {
@@ -242,11 +208,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, c := range relocate.Columns {
-		ep.outputCols.Set(int(c), i)
-	}
-	return ep, nil
+	return planWithColumns(node, relocate.Columns), nil
 }
 
 func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) {
@@ -328,9 +290,15 @@ func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+	return planWithColumns(node, export.Columns), nil
+}
+
+// planWithColumns creates an execPlan for a node which has a fixed output
+// schema.
+func planWithColumns(node exec.Node, cols opt.ColList) execPlan {
 	ep := execPlan{root: node}
-	for i, c := range export.Columns {
+	for i, c := range cols {
 		ep.outputCols.Set(int(c), i)
 	}
-	return ep, nil
+	return ep
 }

@@ -156,11 +156,6 @@ func clusterNodeCount(gw gossip.DeprecatedGossip) (int, error) {
 	return nodes, nil
 }
 
-type spanAndTime struct {
-	span       roachpb.Span
-	start, end hlc.Timestamp
-}
-
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:

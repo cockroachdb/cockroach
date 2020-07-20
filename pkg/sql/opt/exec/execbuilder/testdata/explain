@@ -1082,3 +1082,17 @@ group      ·             ·
  └── scan  ·             ·
 ·          table         tc@primary
 ·          spans         FULL SCAN
+
+# Verify that subqueries are handled correctly, namely that we can have
+# subqueries outside of the EXPLAINed query.
+query ITTT
+WITH
+  a AS MATERIALIZED (SELECT max(k) FROM t WHERE k > (SELECT v FROM t WHERE v = k + 1)),
+  b AS MATERIALIZED (EXPLAIN SELECT k, v FROM t)
+SELECT * FROM a, b
+----
+NULL  ·     distribution  local
+NULL  ·     vectorized    true
+NULL  scan  ·             ·
+NULL  ·     table         t@primary
+NULL  ·     spans         FULL SCAN

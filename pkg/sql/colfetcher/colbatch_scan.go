@@ -45,6 +45,9 @@ type colBatchScan struct {
 	limitHint   int64
 	parallelize bool
 	ctx         context.Context
+	// rowsRead contains the number of total rows this colBatchScan has returned
+	// so far.
+	rowsRead int
 	// init is true after Init() has been called.
 	init bool
 }
@@ -72,6 +75,7 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	if bat.Selection() != nil {
 		colexecerror.InternalError("unexpectedly a selection vector is set on the batch coming from CFetcher")
 	}
+	s.rowsRead += bat.Length()
 	return bat
 }
 
@@ -96,6 +100,11 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, s.flowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
+	meta := execinfrapb.GetProducerMeta()
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = s.rf.fetcher.GetBytesRead()
+	meta.Metrics.RowsRead = int64(s.rowsRead)
+	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
 
