@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,8 @@ type FileToTableExecutorRows struct {
 type FileToTableSystemExecutor interface {
 	Query(ctx context.Context, opName, query, username string,
 		qargs ...interface{}) (*FileToTableExecutorRows, error)
+	Exec(ctx context.Context, opName, query, username string,
+		qargs ...interface{}) error
 }
 
 // InternalFileToTableExecutor is the SQL query executor which uses an internal
@@ -80,18 +83,27 @@ func (i *InternalFileToTableExecutor) Query(
 	return &result, nil
 }
 
+// Exec implements the FileToTableSystemExecutor interface.
+func (i *InternalFileToTableExecutor) Exec(
+	ctx context.Context, opName, query, username string, qargs ...interface{},
+) error {
+	_, err := i.ie.ExecEx(ctx, opName, nil,
+		sqlbase.InternalExecutorSessionDataOverride{User: username}, query, qargs...)
+	return err
+}
+
 // SQLConnFileToTableExecutor is the SQL query executor which uses a network
 // backed SQL connection to interact with the database.
 type SQLConnFileToTableExecutor struct {
-	conn driver.QueryerContext
+	executor cloud.SQLConnI
 }
 
 var _ FileToTableSystemExecutor = &SQLConnFileToTableExecutor{}
 
 // MakeSQLConnFileToTableExecutor returns an instance of a
 // SQLConnFileToTableExecutor.
-func MakeSQLConnFileToTableExecutor(conn driver.QueryerContext) *SQLConnFileToTableExecutor {
-	return &SQLConnFileToTableExecutor{conn: conn}
+func MakeSQLConnFileToTableExecutor(executor cloud.SQLConnI) *SQLConnFileToTableExecutor {
+	return &SQLConnFileToTableExecutor{executor: executor}
 }
 
 // Query implements the FileToTableSystemExecutor interface.
@@ -111,11 +123,28 @@ func (i *SQLConnFileToTableExecutor) Query(
 	}
 
 	var err error
-	result.sqlConnExecResults, err = i.conn.QueryContext(ctx, query, argVals)
+	result.sqlConnExecResults, err = i.executor.QueryContext(ctx, query, argVals)
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// Exec implements the FileToTableSystemExecutor interface.
+func (i *SQLConnFileToTableExecutor) Exec(
+	ctx context.Context, _, query, _ string, qargs ...interface{},
+) error {
+	argVals := make([]driver.NamedValue, len(qargs))
+	for i, qarg := range qargs {
+		namedVal := driver.NamedValue{
+			// Ordinal position is 1 indexed.
+			Ordinal: i + 1,
+			Value:   qarg,
+		}
+		argVals[i] = namedVal
+	}
+	_, err := i.executor.ExecContext(ctx, query, argVals)
+	return err
 }
 
 // FileToTableSystem can be used to store, retrieve and delete the
@@ -308,6 +337,10 @@ filename`, f.GetFQFileTableName())
 			filename := vals[0].(string)
 			files = append(files, filename)
 		}
+
+		if err = rows.sqlConnExecResults.Close(); err != nil {
+			return nil, err
+		}
 	default:
 		return []string{}, errors.New("unsupported executor type in FileSize")
 	}
@@ -353,33 +386,31 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 // DeleteFile deletes the blobs and metadata of filename from the user scoped
 // tables.
 func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) error {
-	e, err := resolveInternalFileToTableExecutor(f.executor)
-	if err != nil {
-		return err
+	txnErr := f.executor.Exec(ctx, "delete-file", `BEGIN`, f.username)
+	defer func() {
+		if txnErr == nil {
+			_ = f.executor.Exec(ctx, "commit", `COMMIT`, f.username)
+		} else {
+			_ = f.executor.Exec(ctx, "rollback", `ROLLBACK`, f.username)
+		}
+	}()
+
+	deleteFileQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename=$1`, f.GetFQFileTableName())
+	txnErr = f.executor.Exec(ctx, "delete-file-table", deleteFileQuery,
+		f.username, filename)
+	if txnErr != nil {
+		return errors.Wrap(txnErr, "failed to delete from the file table")
 	}
 
-	if err := e.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		deleteFileQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename=$1`, f.GetFQFileTableName())
-		_, err := e.ie.QueryEx(ctx, "delete-file-table", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: f.username},
-			deleteFileQuery, filename)
-		if err != nil {
-			return errors.Wrap(err, "failed to delete from the file table")
-		}
+	deletePayloadQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename=$1`,
+		f.GetFQPayloadTableName())
 
-		deletePayloadQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename=$1`,
-			f.GetFQPayloadTableName())
-		_, err = e.ie.QueryEx(ctx, "delete-payload-table", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: f.username},
-			deletePayloadQuery, filename)
-		if err != nil {
-			return errors.Wrap(err, "failed to delete from the payload table")
-		}
-
-		return nil
-	}); err != nil {
-		return err
+	txnErr = f.executor.Exec(ctx, "delete-payload-table", deletePayloadQuery, f.username,
+		filename)
+	if txnErr != nil {
+		return errors.Wrap(txnErr, "failed to delete from the payload table")
 	}
+
 	return nil
 }
 
