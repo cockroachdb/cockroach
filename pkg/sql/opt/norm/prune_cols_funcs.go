@@ -150,8 +150,20 @@ func neededMutationFetchCols(
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			indexCols := tabMeta.IndexColumns(i)
-			if !indexCols.Intersects(updateCols) {
-				// This index is not being updated.
+
+			// If the columns being updated are not part of the index and the
+			// index is not a partial index, then the update does not require
+			// changes to the index. Partial indexes may be updated (even when a
+			// column in the index is not changing) when rows that were not
+			// previously in the index must be added to the index because they
+			// now satisfy the partial index predicate.
+			// TODO(mgartner): Index columns are not necessary when neither the
+			// index columns nor the columns referenced in the partial index
+			// predicate are being updated. We should prune mutation fetch
+			// columns when this is the case, rather than always marking index
+			// columns of partial indexes as "needed".
+			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
+			if !indexCols.Intersects(updateCols) && !isPartialIndex {
 				continue
 			}
 
