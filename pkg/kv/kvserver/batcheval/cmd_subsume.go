@@ -132,9 +132,10 @@ func Subsume(
 
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
-	reply.FreezeStart = cArgs.EvalCtx.Clock().Now()
+	freezeStart := cArgs.EvalCtx.Clock().Now()
+	reply.FreezeStart = freezeStart
 
 	return result.Result{
-		Local: result.LocalResult{MaybeWatchForMerge: true},
+		Local: result.LocalResult{FreezeStart: freezeStart},
 	}, nil
 }

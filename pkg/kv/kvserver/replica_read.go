@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 )
@@ -166,14 +167,25 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.AcquiredLocks = nil
 	}
 
-	if lResult.MaybeWatchForMerge {
-		// A merge is (likely) about to be carried out, and this replica needs
-		// to block all traffic until the merge either commits or aborts. See
-		// docs/tech-notes/range-merges.md.
+	if !lResult.FreezeStart.IsEmpty() {
+		// A merge is (likely) about to be carried out, and this replica needs to
+		// block all non-read traffic until the merge either commits or aborts. See
+		// docs/tech-notes/range-merges.md. This replica also needs to block read
+		// traffic for all "recent" timestamps. Specifically, we can only let reads
+		// through if they don't contain the freezeTimestamp in their uncertainty
+		// window. See example in `checkForPendingMergeRLocked` for details.
+		r.mu.Lock()
+		// Note that if the merge txn retries for any reason (for example, if the
+		// left-hand side range undergoes a lease transfer before the merge
+		// completes), the right-hand side range will get re-subsumed. This will
+		// lead to `freezeStartTs` being overwritten with the new subsumption time.
+		// This is fine.
+		r.mu.freezeStartTs = lResult.FreezeStart
+		r.mu.Unlock()
 		if err := r.maybeWatchForMerge(ctx); err != nil {
 			return roachpb.NewError(err)
 		}
-		lResult.MaybeWatchForMerge = false
+		lResult.FreezeStart = hlc.Timestamp{}
 	}
 
 	if !lResult.IsZero() {

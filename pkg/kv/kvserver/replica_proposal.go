@@ -610,8 +610,8 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	if lResult.EndTxns != nil {
 		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
 	}
-	if lResult.MaybeWatchForMerge {
-		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
+	if !lResult.FreezeStart.IsEmpty() {
+		log.Fatalf(ctx, "LocalEvalResult.FreezeStart should be zero: %s", lResult.FreezeStart)
 	}
 
 	if lResult.AcquiredLocks != nil {
