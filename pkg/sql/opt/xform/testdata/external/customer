@@ -37,17 +37,17 @@ opt
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id
 ----
 inner-join (merge)
- ├── columns: id:1!null dst:4!null
+ ├── columns: id:1!null dst:5!null
  ├── left ordering: +1
- ├── right ordering: +4
- ├── fd: (1)==(4), (4)==(1)
+ ├── right ordering: +5
+ ├── fd: (1)==(5), (5)==(1)
  ├── scan nodes
  │    ├── columns: id:1!null
  │    ├── key: (1)
  │    └── ordering: +1
  ├── scan edges@edges_auto_index_fk_dst_ref_nodes
- │    ├── columns: dst:4!null
- │    └── ordering: +4
+ │    ├── columns: dst:5!null
+ │    └── ordering: +5
  └── filters (true)
 
 # ------------------------------------------------------------------------------
@@ -284,24 +284,24 @@ opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
 ----
 group-by
- ├── columns: owner_id:12 count:16!null
- ├── grouping columns: owner_id:12
- ├── key: (12)
- ├── fd: (12)-->(16)
+ ├── columns: owner_id:13 count:18!null
+ ├── grouping columns: owner_id:13
+ ├── key: (13)
+ ├── fd: (13)-->(18)
  ├── inner-join (merge)
- │    ├── columns: vehicle_id:3!null v.id:9!null owner_id:12
+ │    ├── columns: vehicle_id:3!null v.id:10!null owner_id:13
  │    ├── left ordering: +3
- │    ├── right ordering: +9
- │    ├── fd: (3)==(9), (9)==(3)
+ │    ├── right ordering: +10
+ │    ├── fd: (3)==(10), (10)==(3)
  │    ├── scan r@rides_vehicle_id_idx
  │    │    ├── columns: vehicle_id:3
  │    │    └── ordering: +3
  │    ├── scan v@vehicles_id_idx
- │    │    ├── columns: v.id:9!null owner_id:12
- │    │    └── ordering: +9
+ │    │    ├── columns: v.id:10!null owner_id:13
+ │    │    └── ordering: +10
  │    └── filters (true)
  └── aggregations
-      └── count-rows [as=count_rows:16]
+      └── count-rows [as=count_rows:18]
 
 # ------------------------------------------------------------------------------
 # Github Issue 24415: Ensure the optimizer uses the covering index.
@@ -328,16 +328,16 @@ opt
 SELECT id, sum(value) FROM data GROUP BY id
 ----
 group-by
- ├── columns: id:1 sum:14
+ ├── columns: id:1 sum:15
  ├── grouping columns: id:1
  ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(14)
+ ├── fd: (1)-->(15)
  ├── scan data@foo
  │    ├── columns: id:1 value:2
  │    └── ordering: +1
  └── aggregations
-      └── sum [as=sum:14, outer=(2)]
+      └── sum [as=sum:15, outer=(2)]
            └── value:2
 
 # ------------------------------------------------------------------------------
@@ -426,7 +426,7 @@ opt
 EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
 ----
 explain
- ├── columns: tree:4 field:5 description:6
+ ├── columns: tree:5 field:6 description:7
  └── offset
       ├── columns: id:1!null
       ├── internal-ordering: +1
@@ -496,25 +496,25 @@ opt
 SELECT count(l_orderkey) FROM orders, lineitem WHERE orders.o_orderkey = lineitem.l_orderkey
 ----
 scalar-group-by
- ├── columns: count:28!null
+ ├── columns: count:30!null
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(28)
+ ├── fd: ()-->(30)
  ├── inner-join (merge)
- │    ├── columns: o_orderkey:1!null l_orderkey:11!null
+ │    ├── columns: o_orderkey:1!null l_orderkey:12!null
  │    ├── left ordering: +1
- │    ├── right ordering: +11
- │    ├── fd: (1)==(11), (11)==(1)
+ │    ├── right ordering: +12
+ │    ├── fd: (1)==(12), (12)==(1)
  │    ├── scan orders@o_ok
  │    │    ├── columns: o_orderkey:1!null
  │    │    ├── key: (1)
  │    │    └── ordering: +1
  │    ├── scan lineitem@l_ok
- │    │    ├── columns: l_orderkey:11!null
- │    │    └── ordering: +11
+ │    │    ├── columns: l_orderkey:12!null
+ │    │    └── ordering: +12
  │    └── filters (true)
  └── aggregations
-      └── count-rows [as=count:28]
+      └── count-rows [as=count:30]
 
 # ------------------------------------------------------------------------------
 # Ensure we do a lookup join when one side comes from an SRF.
@@ -543,33 +543,33 @@ WHERE
   secondary_id = (elem->>'secondary_id')::UUID
 ----
 project
- ├── columns: secondary_id:6 "?column?":7
+ ├── columns: secondary_id:7 "?column?":8
  ├── stable
  ├── inner-join (lookup idtable)
- │    ├── columns: primary_id:1!null idtable.secondary_id:2!null data:3!null value:4!null column5:5!null
+ │    ├── columns: primary_id:1!null idtable.secondary_id:2!null data:3!null value:5!null column6:6!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── immutable
- │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
+ │    ├── fd: (1)-->(2,3), (5)-->(6), (2)==(6), (6)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)
- │    │    ├── columns: primary_id:1!null idtable.secondary_id:2!null value:4!null column5:5!null
- │    │    ├── key columns: [5] = [2]
+ │    │    ├── columns: primary_id:1!null idtable.secondary_id:2!null value:5!null column6:6!null
+ │    │    ├── key columns: [6] = [2]
  │    │    ├── immutable
- │    │    ├── fd: (4)-->(5), (1)-->(2), (2)==(5), (5)==(2)
+ │    │    ├── fd: (5)-->(6), (1)-->(2), (2)==(6), (6)==(2)
  │    │    ├── project
- │    │    │    ├── columns: column5:5 value:4!null
+ │    │    │    ├── columns: column6:6 value:5!null
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── immutable
- │    │    │    ├── fd: (4)-->(5)
+ │    │    │    ├── fd: (5)-->(6)
  │    │    │    ├── values
- │    │    │    │    ├── columns: value:4!null
+ │    │    │    │    ├── columns: value:5!null
  │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    ├── ('{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}',)
  │    │    │    │    └── ('{"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}',)
  │    │    │    └── projections
- │    │    │         └── (value:4->>'secondary_id')::UUID [as=column5:5, outer=(4), immutable]
+ │    │    │         └── (value:5->>'secondary_id')::UUID [as=column6:6, outer=(5), immutable]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      ├── value:4->>'secondary_id' [as=secondary_id:6, outer=(4), immutable]
-      └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":7, outer=(1,3), stable]
+      ├── value:5->>'secondary_id' [as=secondary_id:7, outer=(5), immutable]
+      └── data:3 || jsonb_build_object('primary_id', primary_id:1) [as="?column?":8, outer=(1,3), stable]

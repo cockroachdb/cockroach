@@ -13,30 +13,30 @@ DELETE FROM parent WHERE p > 1
 root
  ├── delete parent
  │    ├── columns: <none>
- │    ├── fetch columns: p:2
+ │    ├── fetch columns: p:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent
  │    └── select
- │         ├── columns: p:2!null
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan parent
- │         │    └── columns: p:2!null
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
- │              └── p:2 > 1
+ │              └── p:3 > 1
  └── cascade
       └── delete child
            ├── columns: <none>
-           ├── fetch columns: c:5 child.p:6
+           ├── fetch columns: c:8 child.p:9
            └── semi-join (hash)
-                ├── columns: c:5!null child.p:6!null
+                ├── columns: c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
                 ├── scan child
-                │    └── columns: c:5!null child.p:6!null
+                │    └── columns: c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
                 ├── with-scan &1
-                │    ├── columns: p:7!null
+                │    ├── columns: p:11!null
                 │    └── mapping:
-                │         └──  parent.p:2 => p:7
+                │         └──  parent.p:3 => p:11
                 └── filters
-                     └── child.p:6 = p:7
+                     └── child.p:9 = p:11
 
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
@@ -49,47 +49,47 @@ DELETE FROM parent WHERE p > 1
 root
  ├── delete parent
  │    ├── columns: <none>
- │    ├── fetch columns: p:2
+ │    ├── fetch columns: p:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent
  │    └── select
- │         ├── columns: p:2!null
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan parent
- │         │    └── columns: p:2!null
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
- │              └── p:2 > 1
+ │              └── p:3 > 1
  └── cascade
       ├── delete child
       │    ├── columns: <none>
-      │    ├── fetch columns: c:5 child.p:6
+      │    ├── fetch columns: c:8 child.p:9
       │    ├── input binding: &2
       │    ├── cascades
       │    │    └── fk_c_ref_child
       │    └── semi-join (hash)
-      │         ├── columns: c:5!null child.p:6!null
+      │         ├── columns: c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
       │         ├── scan child
-      │         │    └── columns: c:5!null child.p:6!null
+      │         │    └── columns: c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
       │         ├── with-scan &1
-      │         │    ├── columns: p:7!null
+      │         │    ├── columns: p:11!null
       │         │    └── mapping:
-      │         │         └──  parent.p:2 => p:7
+      │         │         └──  parent.p:3 => p:11
       │         └── filters
-      │              └── child.p:6 = p:7
+      │              └── child.p:9 = p:11
       └── cascade
            └── delete grandchild
                 ├── columns: <none>
-                ├── fetch columns: g:10 grandchild.c:11
+                ├── fetch columns: g:15 grandchild.c:16
                 └── semi-join (hash)
-                     ├── columns: g:10!null grandchild.c:11
+                     ├── columns: g:15!null grandchild.c:16 grandchild.crdb_internal_mvcc_timestamp:17
                      ├── scan grandchild
-                     │    └── columns: g:10!null grandchild.c:11
+                     │    └── columns: g:15!null grandchild.c:16 grandchild.crdb_internal_mvcc_timestamp:17
                      ├── with-scan &2
-                     │    ├── columns: c:12!null
+                     │    ├── columns: c:18!null
                      │    └── mapping:
-                     │         └──  child.c:5 => c:12
+                     │         └──  child.c:8 => c:18
                      └── filters
-                          └── grandchild.c:11 = c:12
+                          └── grandchild.c:16 = c:18
 
 # Cascade with check query.
 exec-ddl
@@ -106,43 +106,43 @@ DELETE FROM parent WHERE p > 1
 root
  ├── delete parent
  │    ├── columns: <none>
- │    ├── fetch columns: p:2
+ │    ├── fetch columns: p:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent
  │    └── select
- │         ├── columns: p:2!null
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── scan parent
- │         │    └── columns: p:2!null
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
  │         └── filters
- │              └── p:2 > 1
+ │              └── p:3 > 1
  └── cascade
       └── delete child
            ├── columns: <none>
-           ├── fetch columns: child.c:5 child.p:6
+           ├── fetch columns: child.c:8 child.p:9
            ├── input binding: &2
            ├── semi-join (hash)
-           │    ├── columns: child.c:5!null child.p:6!null
+           │    ├── columns: child.c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
            │    ├── scan child
-           │    │    └── columns: child.c:5!null child.p:6!null
+           │    │    └── columns: child.c:8!null child.p:9!null child.crdb_internal_mvcc_timestamp:10
            │    ├── with-scan &1
-           │    │    ├── columns: p:7!null
+           │    │    ├── columns: p:11!null
            │    │    └── mapping:
-           │    │         └──  parent.p:2 => p:7
+           │    │         └──  parent.p:3 => p:11
            │    └── filters
-           │         └── child.p:6 = p:7
+           │         └── child.p:9 = p:11
            └── f-k-checks
                 └── f-k-checks-item: grandchild(c) -> child(c)
                      └── semi-join (hash)
-                          ├── columns: c:8!null
+                          ├── columns: c:12!null
                           ├── with-scan &2
-                          │    ├── columns: c:8!null
+                          │    ├── columns: c:12!null
                           │    └── mapping:
-                          │         └──  child.c:5 => c:8
+                          │         └──  child.c:8 => c:12
                           ├── scan grandchild
-                          │    └── columns: grandchild.c:10
+                          │    └── columns: grandchild.c:14
                           └── filters
-                               └── c:8 = grandchild.c:10
+                               └── c:12 = grandchild.c:14
 
 # Self-reference with cascade.
 exec-ddl
@@ -155,67 +155,67 @@ DELETE FROM self WHERE a=1
 root
  ├── delete self
  │    ├── columns: <none>
- │    ├── fetch columns: a:3 b:4
+ │    ├── fetch columns: a:4 b:5
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_b_ref_self
  │    └── select
- │         ├── columns: a:3!null b:4
+ │         ├── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
  │         ├── scan self
- │         │    └── columns: a:3!null b:4
+ │         │    └── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
  │         └── filters
- │              └── a:3 = 1
+ │              └── a:4 = 1
  └── cascade
       ├── delete self
       │    ├── columns: <none>
-      │    ├── fetch columns: self.a:7 b:8
+      │    ├── fetch columns: self.a:10 b:11
       │    ├── input binding: &2
       │    ├── cascades
       │    │    └── fk_b_ref_self
       │    └── semi-join (hash)
-      │         ├── columns: self.a:7!null b:8
+      │         ├── columns: self.a:10!null b:11 crdb_internal_mvcc_timestamp:12
       │         ├── scan self
-      │         │    └── columns: self.a:7!null b:8
+      │         │    └── columns: self.a:10!null b:11 crdb_internal_mvcc_timestamp:12
       │         ├── with-scan &1
-      │         │    ├── columns: a:9!null
+      │         │    ├── columns: a:13!null
       │         │    └── mapping:
-      │         │         └──  self.a:3 => a:9
+      │         │         └──  self.a:4 => a:13
       │         └── filters
-      │              └── b:8 = a:9
+      │              └── b:11 = a:13
       └── cascade
            ├── delete self
            │    ├── columns: <none>
-           │    ├── fetch columns: self.a:12 b:13
+           │    ├── fetch columns: self.a:17 b:18
            │    ├── input binding: &3
            │    ├── cascades
            │    │    └── fk_b_ref_self
            │    └── semi-join (hash)
-           │         ├── columns: self.a:12!null b:13
+           │         ├── columns: self.a:17!null b:18 crdb_internal_mvcc_timestamp:19
            │         ├── scan self
-           │         │    └── columns: self.a:12!null b:13
+           │         │    └── columns: self.a:17!null b:18 crdb_internal_mvcc_timestamp:19
            │         ├── with-scan &2
-           │         │    ├── columns: a:14!null
+           │         │    ├── columns: a:20!null
            │         │    └── mapping:
-           │         │         └──  self.a:7 => a:14
+           │         │         └──  self.a:10 => a:20
            │         └── filters
-           │              └── b:13 = a:14
+           │              └── b:18 = a:20
            └── cascade
                 └── delete self
                      ├── columns: <none>
-                     ├── fetch columns: self.a:17 b:18
+                     ├── fetch columns: self.a:24 b:25
                      ├── input binding: &4
                      ├── cascades
                      │    └── fk_b_ref_self
                      └── semi-join (hash)
-                          ├── columns: self.a:17!null b:18
+                          ├── columns: self.a:24!null b:25 crdb_internal_mvcc_timestamp:26
                           ├── scan self
-                          │    └── columns: self.a:17!null b:18
+                          │    └── columns: self.a:24!null b:25 crdb_internal_mvcc_timestamp:26
                           ├── with-scan &3
-                          │    ├── columns: a:19!null
+                          │    ├── columns: a:27!null
                           │    └── mapping:
-                          │         └──  self.a:12 => a:19
+                          │         └──  self.a:17 => a:27
                           └── filters
-                               └── b:18 = a:19
+                               └── b:25 = a:27
 
 # Cascade cycle.
 exec-ddl
@@ -248,64 +248,64 @@ DELETE FROM ab WHERE a = 1
 root
  ├── delete ab
  │    ├── columns: <none>
- │    ├── fetch columns: a:3 b:4
+ │    ├── fetch columns: a:4 b:5
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── ef_ab
  │    └── select
- │         ├── columns: a:3!null b:4
+ │         ├── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
  │         ├── scan ab
- │         │    └── columns: a:3!null b:4
+ │         │    └── columns: a:4!null b:5 crdb_internal_mvcc_timestamp:6
  │         └── filters
- │              └── a:3 = 1
+ │              └── a:4 = 1
  └── cascade
       ├── delete ef
       │    ├── columns: <none>
-      │    ├── fetch columns: e:7 f:8
+      │    ├── fetch columns: e:10 f:11
       │    ├── input binding: &2
       │    ├── cascades
       │    │    └── cd_ef
       │    └── semi-join (hash)
-      │         ├── columns: e:7!null f:8
+      │         ├── columns: e:10!null f:11 ef.crdb_internal_mvcc_timestamp:12
       │         ├── scan ef
-      │         │    └── columns: e:7!null f:8
+      │         │    └── columns: e:10!null f:11 ef.crdb_internal_mvcc_timestamp:12
       │         ├── with-scan &1
-      │         │    ├── columns: a:9!null
+      │         │    ├── columns: a:13!null
       │         │    └── mapping:
-      │         │         └──  ab.a:3 => a:9
+      │         │         └──  ab.a:4 => a:13
       │         └── filters
-      │              └── f:8 = a:9
+      │              └── f:11 = a:13
       └── cascade
            ├── delete cd
            │    ├── columns: <none>
-           │    ├── fetch columns: c:12 d:13
+           │    ├── fetch columns: c:17 d:18
            │    ├── input binding: &3
            │    ├── cascades
            │    │    └── ab_cd
            │    └── semi-join (hash)
-           │         ├── columns: c:12!null d:13
+           │         ├── columns: c:17!null d:18 cd.crdb_internal_mvcc_timestamp:19
            │         ├── scan cd
-           │         │    └── columns: c:12!null d:13
+           │         │    └── columns: c:17!null d:18 cd.crdb_internal_mvcc_timestamp:19
            │         ├── with-scan &2
-           │         │    ├── columns: e:14!null
+           │         │    ├── columns: e:20!null
            │         │    └── mapping:
-           │         │         └──  ef.e:7 => e:14
+           │         │         └──  ef.e:10 => e:20
            │         └── filters
-           │              └── d:13 = e:14
+           │              └── d:18 = e:20
            └── cascade
                 └── delete ab
                      ├── columns: <none>
-                     ├── fetch columns: ab.a:17 b:18
+                     ├── fetch columns: ab.a:24 b:25
                      ├── input binding: &4
                      ├── cascades
                      │    └── ef_ab
                      └── semi-join (hash)
-                          ├── columns: ab.a:17!null b:18
+                          ├── columns: ab.a:24!null b:25 ab.crdb_internal_mvcc_timestamp:26
                           ├── scan ab
-                          │    └── columns: ab.a:17!null b:18
+                          │    └── columns: ab.a:24!null b:25 ab.crdb_internal_mvcc_timestamp:26
                           ├── with-scan &3
-                          │    ├── columns: c:19!null
+                          │    ├── columns: c:27!null
                           │    └── mapping:
-                          │         └──  cd.c:12 => c:19
+                          │         └──  cd.c:17 => c:27
                           └── filters
-                               └── b:18 = c:19
+                               └── b:25 = c:27

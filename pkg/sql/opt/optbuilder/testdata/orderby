@@ -17,7 +17,7 @@ sort
  └── project
       ├── columns: c:3
       └── scan t
-           └── columns: a:1!null b:2 c:3
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT c FROM t ORDER BY c DESC
@@ -28,7 +28,7 @@ sort
  └── project
       ├── columns: c:3
       └── scan t
-           └── columns: a:1!null b:2 c:3
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b
@@ -39,7 +39,7 @@ sort
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 c:3
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b DESC
@@ -50,7 +50,7 @@ sort
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 c:3
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -66,7 +66,7 @@ limit
  │    └── project
  │         ├── columns: a:1!null b:2
  │         └── scan t
- │              └── columns: a:1!null b:2 c:3
+ │              └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── 2
 
 build
@@ -76,7 +76,7 @@ project
  ├── columns: a:1!null
  ├── ordering: -1
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 # This query causes an error in Postgres, and the optimizer has followed
@@ -95,7 +95,7 @@ project
  ├── columns: foo:1!null b:2
  ├── ordering: -1
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 # Check that ambiguous references to renders are properly reported.
@@ -118,7 +118,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 1.00
  │    └── scan t
- │         ├── columns: a:1!null b:2 c:3
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  │         ├── ordering: +1
  │         └── limit hint: 1.00
  └── 1
@@ -132,7 +132,7 @@ project
  ├── columns: b:1!null c:2
  ├── ordering: +1
  └── scan t
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: +1
 
 build
@@ -142,7 +142,7 @@ project
  ├── columns: foo.bar:1!null b:2
  ├── ordering: -1
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 build
@@ -152,7 +152,7 @@ project
  ├── columns: foo:1!null b:2
  ├── ordering: -1
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 build
@@ -162,7 +162,7 @@ project
  ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 build
@@ -177,7 +177,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 1.00
  │    └── scan t
- │         ├── columns: a:1!null b:2 c:3
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  │         ├── ordering: +1
  │         └── limit hint: 1.00
  └── 1
@@ -189,7 +189,7 @@ project
  ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1,+2
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 build
@@ -199,7 +199,7 @@ project
  ├── columns: b:2  [hidden: a:1!null]
  ├── ordering: -1,-2
  └── scan t,rev
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: -1
 
 # both presentation and ordering
@@ -209,44 +209,58 @@ SELECT a, b, b FROM t ORDER BY c
 sort
  ├── columns: a:1!null b:2 b:2  [hidden: c:3]
  ├── ordering: +3
- └── scan t
-      └── columns: a:1!null b:2 c:3
+ └── project
+      ├── columns: a:1!null b:2 c:3
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, t.*)
 ----
-sort
+project
  ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+2,+3
- └── scan t
-      └── columns: a:1!null b:2 c:3
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, a), c
 ----
-sort
+project
  ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1!null b:2 c:3
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY b, (a, c)
 ----
-sort
+project
  ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1!null b:2 c:3
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT * FROM t ORDER BY (b, (a, c))
 ----
-sort
+project
  ├── columns: a:1!null b:2 c:3
  ├── ordering: +2,+1,+3
- └── scan t
-      └── columns: a:1!null b:2 c:3
+ └── sort
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      ├── ordering: +2,+1
+      └── scan t
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
@@ -255,10 +269,10 @@ project
  ├── columns: a:1!null b:2!null
  ├── ordering: +2,+1
  └── select
-      ├── columns: a:1!null b:2!null c:3
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4
       ├── ordering: +1 opt(2)
       ├── scan t
-      │    ├── columns: a:1!null b:2 c:3
+      │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       │    └── ordering: +1 opt(2)
       └── filters
            └── b:2 = 7
@@ -272,37 +286,37 @@ sort
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 c:3
+           └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
 
 build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1!null b:2!null ab:4!null
- ├── ordering: -4,+1
+ ├── columns: a:1!null b:2!null ab:5!null
+ ├── ordering: -5,+1
  └── project
-      ├── columns: ab:4!null a:1!null b:2!null
+      ├── columns: ab:5!null a:1!null b:2!null
       ├── select
-      │    ├── columns: a:1!null b:2!null c:3
+      │    ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4
       │    ├── scan t
-      │    │    └── columns: a:1!null b:2 c:3
+      │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       │    └── filters
       │         └── b:2 = 7
       └── projections
-           └── a:1 + b:2 [as=ab:4]
+           └── a:1 + b:2 [as=ab:5]
 
 build
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
 sort
- ├── columns: a:1!null  [hidden: column4:4]
- ├── ordering: -4,+1
+ ├── columns: a:1!null  [hidden: column5:5]
+ ├── ordering: -5,+1
  └── project
-      ├── columns: column4:4 a:1!null
+      ├── columns: column5:5 a:1!null
       ├── scan t
-      │    └── columns: a:1!null b:2 c:3
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── a:1 + b:2 [as=column4:4]
+           └── a:1 + b:2 [as=column5:5]
 
 build
 SELECT a FROM t ORDER BY (((a)))
@@ -311,7 +325,7 @@ project
  ├── columns: a:1!null
  ├── ordering: +1
  └── scan t
-      ├── columns: a:1!null b:2 c:3
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── ordering: +1
 
 build
@@ -326,7 +340,7 @@ limit
  │    ├── ordering: -1
  │    ├── limit hint: 4.00
  │    └── scan t,rev
- │         ├── columns: a:1!null b:2 c:3
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  │         ├── ordering: -1
  │         └── limit hint: 4.00
  └── 4
@@ -343,7 +357,7 @@ limit
  │    ├── ordering: -1
  │    ├── limit hint: 4.00
  │    └── scan t,rev
- │         ├── columns: a:1!null b:2 c:3
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  │         ├── ordering: -1
  │         └── limit hint: 4.00
  └── 4
@@ -514,92 +528,100 @@ build
 SELECT * FROM t ORDER BY 1+2
 ----
 project
- ├── columns: a:1!null b:2 c:3  [hidden: column4:4!null]
- ├── ordering: +4
+ ├── columns: a:1!null b:2 c:3  [hidden: column5:5!null]
+ ├── ordering: +5
  ├── scan t
- │    └── columns: a:1!null b:2 c:3
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      └── 1 + 2 [as=column4:4]
+      └── 1 + 2 [as=column5:5]
 
 build
 SELECT 1 AS r, * FROM t ORDER BY 1
 ----
 project
- ├── columns: r:4!null a:1!null b:2 c:3
- ├── ordering: +4
+ ├── columns: r:5!null a:1!null b:2 c:3
+ ├── ordering: +5
  ├── scan t
- │    └── columns: a:1!null b:2 c:3
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      └── 1 [as=r:4]
+      └── 1 [as=r:5]
 
 build
 SELECT * FROM t ORDER BY length('abc')
 ----
 project
- ├── columns: a:1!null b:2 c:3  [hidden: column4:4]
- ├── ordering: +4
+ ├── columns: a:1!null b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
  ├── scan t
- │    └── columns: a:1!null b:2 c:3
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
  └── projections
-      └── length('abc') [as=column4:4]
+      └── length('abc') [as=column5:5]
 
 build
 SELECT b+2 AS r FROM t ORDER BY b+2
 ----
 sort
- ├── columns: r:4
- ├── ordering: +4
+ ├── columns: r:5
+ ├── ordering: +5
  └── project
-      ├── columns: r:4
+      ├── columns: r:5
       ├── scan t
-      │    └── columns: a:1!null b:2 c:3
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── b:2 + 2 [as=r:4]
+           └── b:2 + 2 [as=r:5]
 
 # Check that the sort picks up a renamed render properly.
 build
 SELECT b+2 AS y FROM t ORDER BY y
 ----
 sort
- ├── columns: y:4
- ├── ordering: +4
+ ├── columns: y:5
+ ├── ordering: +5
  └── project
-      ├── columns: y:4
+      ├── columns: y:5
       ├── scan t
-      │    └── columns: a:1!null b:2 c:3
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── b:2 + 2 [as=y:4]
+           └── b:2 + 2 [as=y:5]
 
 build
 SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort
- ├── columns: y:4
- ├── ordering: +4
+ ├── columns: y:5
+ ├── ordering: +5
  └── project
-      ├── columns: y:4
+      ├── columns: y:5
       ├── scan t
-      │    └── columns: a:1!null b:2 c:3
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── b:2 + 2 [as=y:4]
+           └── b:2 + 2 [as=y:5]
 
 build
 SELECT b, c FROM t ORDER BY @2
 ----
 sort
- ├── columns: b:2 c:3  [hidden: column4:4]
- ├── ordering: +4
+ ├── columns: b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
  └── project
-      ├── columns: column4:4 b:2 c:3
+      ├── columns: column5:5 b:2 c:3
       ├── scan t
-      │    └── columns: a:1!null b:2 c:3
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
       └── projections
-           └── b:2 [as=column4:4]
+           └── b:2 [as=column5:5]
 
 build
 SELECT b, c FROM t ORDER BY @4
 ----
-error (42703): invalid column ordinal: @4
+sort
+ ├── columns: b:2 c:3  [hidden: column5:5]
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5 b:2 c:3
+      ├── scan t
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4
+      └── projections
+           └── crdb_internal_mvcc_timestamp:4 [as=column5:5]
 
 exec-ddl
 CREATE TABLE abc (
@@ -623,21 +645,24 @@ build
 SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
- ├── columns: d:4  [hidden: column5:5]
- ├── ordering: +5
+ ├── columns: d:4  [hidden: column6:6]
+ ├── ordering: +6
  └── project
-      ├── columns: column5:5 d:4
+      ├── columns: column6:6 d:4
       ├── scan abc
-      │    └── columns: a:1!null b:2!null c:3!null d:4
+      │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── lower(d:4) [as=column5:5]
+           └── lower(d:4) [as=column6:6]
 
 build
 SELECT * FROM abc ORDER BY a
 ----
-scan abc
+project
  ├── columns: a:1!null b:2!null c:3!null d:4
- └── ordering: +1
+ ├── ordering: +1
+ └── scan abc
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
+      └── ordering: +1
 
 build
 SELECT a, b FROM abc ORDER BY b, a
@@ -648,7 +673,7 @@ sort
  └── project
       ├── columns: a:1!null b:2!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null d:4
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a, b FROM abc ORDER BY b, c
@@ -659,7 +684,7 @@ sort
  └── project
       ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null d:4
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
@@ -668,10 +693,10 @@ project
  ├── columns: a:1!null b:2!null  [hidden: c:3!null]
  ├── ordering: +2,+3,-1
  └── sort
-      ├── columns: a:1!null b:2!null c:3!null d:4
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
       ├── ordering: +2,+3
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null d:4
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abc ORDER BY a DESC
@@ -680,7 +705,7 @@ project
  ├── columns: a:1!null
  ├── ordering: -1
  └── scan abc,rev
-      ├── columns: a:1!null b:2!null c:3!null d:4
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
       └── ordering: -1
 
 build
@@ -695,7 +720,7 @@ limit
  │    ├── ordering: -1
  │    ├── limit hint: 1.00
  │    └── scan abc,rev
- │         ├── columns: a:1!null b:2!null c:3!null d:4
+ │         ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
  │         ├── ordering: -1
  │         └── limit hint: 1.00
  └── 1
@@ -711,7 +736,7 @@ offset
  │    ├── columns: a:1!null
  │    ├── ordering: -1
  │    └── scan abc,rev
- │         ├── columns: a:1!null b:2!null c:3!null d:4
+ │         ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
  │         └── ordering: -1
  └── 1
 
@@ -724,9 +749,9 @@ sort
  └── project
       ├── columns: c:3!null
       └── select
-           ├── columns: a:1!null b:2!null c:3!null d:4
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            ├── scan abc
-           │    └── columns: a:1!null b:2!null c:3!null d:4
+           │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            └── filters
                 └── b:2 = 2
 
@@ -739,9 +764,9 @@ sort
  └── project
       ├── columns: c:3!null
       └── select
-           ├── columns: a:1!null b:2!null c:3!null d:4
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            ├── scan abc
-           │    └── columns: a:1!null b:2!null c:3!null d:4
+           │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            └── filters
                 └── b:2 = 2
 
@@ -755,10 +780,10 @@ project
       ├── columns: a:1!null b:2!null c:3!null
       ├── ordering: +2,+3 opt(1)
       └── select
-           ├── columns: a:1!null b:2!null c:3!null d:4
+           ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            ├── ordering: +2,+3 opt(1)
            ├── scan abc
-           │    ├── columns: a:1!null b:2!null c:3!null d:4
+           │    ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
            │    └── ordering: +2,+3 opt(1)
            └── filters
                 └── a:1 = 1
@@ -772,7 +797,7 @@ sort
  └── project
       ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null d:4
+           └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
@@ -794,8 +819,10 @@ SELECT * FROM bar ORDER BY baz, id
 sort
  ├── columns: id:1!null baz:2
  ├── ordering: +2,+1
- └── scan bar
-      └── columns: id:1!null baz:2
+ └── project
+      ├── columns: id:1!null baz:2
+      └── scan bar
+           └── columns: id:1!null baz:2 crdb_internal_mvcc_timestamp:3
 
 exec-ddl
 CREATE TABLE abcd (
@@ -815,21 +842,25 @@ build
 SELECT a+b AS r FROM (SELECT * FROM abcd ORDER BY d)
 ----
 project
- ├── columns: r:5
- ├── scan abcd
- │    └── columns: a:1!null b:2 c:3 d:4
+ ├── columns: r:6
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abcd
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── a:1 + b:2 [as=r:5]
+      └── a:1 + b:2 [as=r:6]
 
 build
 SELECT b+d AS r FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
 project
- ├── columns: r:5
- ├── scan abcd
- │    └── columns: a:1!null b:2 c:3 d:4
+ ├── columns: r:6
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abcd
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── b:2 + d:4 [as=r:5]
+      └── b:2 + d:4 [as=r:6]
 
 build
 SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
@@ -875,7 +906,7 @@ limit
  │    ├── ordering: +1,+2,+3
  │    ├── limit hint: 1.00
  │    └── scan blocks
- │         ├── columns: block_id:1!null writer_id:2!null block_num:3!null raw_bytes:4
+ │         ├── columns: block_id:1!null writer_id:2!null block_num:3!null raw_bytes:4 crdb_internal_mvcc_timestamp:5
  │         ├── ordering: +1,+2,+3
  │         └── limit hint: 1.00
  └── 1
@@ -887,7 +918,7 @@ project
  ├── columns: a:1!null
  ├── ordering: +1
  └── scan abcd
-      ├── columns: a:1!null b:2 c:3 d:4
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
       └── ordering: +1
 
 build
@@ -899,7 +930,7 @@ sort
  └── project
       ├── columns: a:1!null b:2
       └── scan abcd
-           └── columns: a:1!null b:2 c:3 d:4
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@abc
@@ -908,7 +939,7 @@ project
  ├── columns: a:1!null  [hidden: b:2 c:3]
  ├── ordering: +1,+2,+3
  └── scan abcd
-      ├── columns: a:1!null b:2 c:3 d:4
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
       └── ordering: +1
 
 build
@@ -918,7 +949,7 @@ project
  ├── columns: a:1!null  [hidden: b:2 c:3]
  ├── ordering: -1,-2,-3
  └── scan abcd,rev
-      ├── columns: a:1!null b:2 c:3 d:4
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
       └── ordering: -1
 
 build
@@ -937,8 +968,10 @@ SELECT a FROM abcd ORDER BY INDEX abcd@bcd
 sort
  ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
  ├── ordering: +2,-3,+4,+1
- └── scan abcd
-      └── columns: a:1!null b:2 c:3 d:4
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@bcd DESC
@@ -946,8 +979,10 @@ SELECT a FROM abcd ORDER BY INDEX abcd@bcd DESC
 sort
  ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
  ├── ordering: -2,+3,-4,-1
- └── scan abcd
-      └── columns: a:1!null b:2 c:3 d:4
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 
 build
@@ -961,8 +996,10 @@ SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
 sort
  ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
  ├── ordering: +2,-3,+4,+1
- └── scan t.public.abcd
-      └── columns: a:1!null b:2 c:3 d:4
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan t.public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
@@ -970,8 +1007,10 @@ SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
 sort
  ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
  ├── ordering: +2,-3,+4,+1
- └── scan t.public.abcd
-      └── columns: a:1!null b:2 c:3 d:4
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan t.public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
@@ -979,8 +1018,10 @@ SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
 sort
  ├── columns: a:1!null  [hidden: b:2 c:3 d:4]
  ├── ordering: +2,-3,+4,+1
- └── scan public.abcd
-      └── columns: a:1!null b:2 c:3 d:4
+ └── project
+      ├── columns: a:1!null b:2 c:3 d:4
+      └── scan public.abcd
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM (SELECT a FROM abcd) ORDER BY INDEX abcd@bcd
@@ -1010,7 +1051,7 @@ sort
  └── project
       ├── columns: a:1!null b:2 c:3
       └── scan abcd
-           └── columns: a:1!null b:2 c:3 d:4
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY b, c
@@ -1021,7 +1062,7 @@ sort
  └── project
       ├── columns: a:1!null b:2 c:3
       └── scan abcd
-           └── columns: a:1!null b:2 c:3 d:4
+           └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT a FROM abcd ORDER BY a, b, c
@@ -1030,18 +1071,18 @@ project
  ├── columns: a:1!null  [hidden: b:2 c:3]
  ├── ordering: +1,+2,+3
  └── scan abcd
-      ├── columns: a:1!null b:2 c:3 d:4
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
       └── ordering: +1
 
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1
 ----
 sort
- ├── columns: array:5!null
- ├── ordering: +5
+ ├── columns: array:6!null
+ ├── ordering: +6
  └── project
-      ├── columns: array:5!null
+      ├── columns: array:6!null
       ├── scan abcd
-      │    └── columns: a:1!null b:2 c:3 d:4
+      │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── ARRAY[a:1] [as=array:5]
+           └── ARRAY[a:1] [as=array:6]

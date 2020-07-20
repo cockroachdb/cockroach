@@ -33,7 +33,7 @@ EXPLAIN (OPT, VERBOSE)
   val = 1
 ----
 explain
- ├── columns: text:5
+ ├── columns: text:6
  ├── mode: opt, verbose
  └── select
       ├── columns: planet:1!null region:2!null subregion:3!null val:4!null

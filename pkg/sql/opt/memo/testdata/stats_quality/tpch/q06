@@ -32,17 +32,17 @@ WHERE
 ----
 scalar-group-by
  ├── save-table-name: q6_scalar_group_by_1
- ├── columns: revenue:18(float)
+ ├── columns: revenue:19(float)
  ├── cardinality: [1 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(18)=1, null(18)=0]
+ ├── stats: [rows=1, distinct(19)=1, null(19)=0]
  ├── key: ()
- ├── fd: ()-->(18)
+ ├── fd: ()-->(19)
  ├── project
  │    ├── save-table-name: q6_project_2
- │    ├── columns: column17:17(float!null)
+ │    ├── columns: column18:18(float!null)
  │    ├── immutable
- │    ├── stats: [rows=34745.8339, distinct(17)=34745.8339, null(17)=0]
+ │    ├── stats: [rows=34745.8339, distinct(18)=34745.8339, null(18)=0]
  │    ├── select
  │    │    ├── save-table-name: q6_select_3
  │    │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null)
@@ -68,10 +68,10 @@ scalar-group-by
  │    │         ├── (l_discount:7 >= 0.05) AND (l_discount:7 <= 0.07) [type=bool, outer=(7), constraints=(/7: [/0.05 - /0.07]; tight)]
  │    │         └── l_quantity:5 < 24.0 [type=bool, outer=(5), constraints=(/5: (/NULL - /23.999999999999996]; tight)]
  │    └── projections
- │         └── l_extendedprice:6 * l_discount:7 [as=column17:17, type=float, outer=(6,7), immutable]
+ │         └── l_extendedprice:6 * l_discount:7 [as=column18:18, type=float, outer=(6,7), immutable]
  └── aggregations
-      └── sum [as=sum:18, type=float, outer=(17)]
-           └── column17:17 [type=float]
+      └── sum [as=sum:19, type=float, outer=(18)]
+           └── column18:18 [type=float]
 
 stats table=q6_scalar_group_by_1
 ----
@@ -84,10 +84,10 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 stats table=q6_project_2
 ----
 column_names  row_count  distinct_count  null_count
-{column17}    114160     108866          0
+{column18}    114160     108866          0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column17}    34746.00       3.29 <==       34746.00            3.13 <==            0.00            1.00
+{column18}    34746.00       3.29 <==       34746.00            3.13 <==            0.00            1.00
 
 stats table=q6_select_3
 ----

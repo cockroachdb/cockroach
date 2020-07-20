@@ -17,7 +17,7 @@ SELECT a.x FROM a
 project
  ├── columns: x:1(int!null)
  └── scan a
-      └── columns: x:1(int!null) y:2(int)
+      └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
 
 # Const
 build
@@ -37,124 +37,142 @@ project
 build
 SELECT * FROM a WHERE x = $1
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── x:1 = $1 [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── x:1 = $1 [type=bool]
 
 # Tuple, Projections
 build
 SELECT (a.x, 1.5) AS r, a.y FROM a
 ----
 project
- ├── columns: r:3(tuple{int, decimal}!null) y:2(int)
+ ├── columns: r:4(tuple{int, decimal}!null) y:2(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      └── (x:1, 1.5) [as=r:3, type=tuple{int, decimal}]
+      └── (x:1, 1.5) [as=r:4, type=tuple{int, decimal}]
 
 # And, Or, Not
 build
 SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── (x:1 = 1) AND (NOT ((y:2 = 2) OR (y:2 = 3.5))) [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 = 1) AND (NOT ((y:2 = 2) OR (y:2 = 3.5))) [type=bool]
 
 # Eq, Ne
 build
 SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── (x:1 = 1) AND (x:1 != 2) [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 = 1) AND (x:1 != 2) [type=bool]
 
 # Le, Ge, Lt, Gt
 build
 SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int!null)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── (((x:1 >= 1) AND (x:1 <= 10)) AND (y:2 > 1)) AND (y:2 < 10) [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (((x:1 >= 1) AND (x:1 <= 10)) AND (y:2 > 1)) AND (y:2 < 10) [type=bool]
 
 # In, NotIn
 build
 SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── (x:1 IN (1, 2)) AND (y:2 NOT IN (3, 4)) [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 IN (1, 2)) AND (y:2 NOT IN (3, 4)) [type=bool]
 
 # Like, NotLike
 build
 SELECT * FROM b WHERE b.x LIKE '%foo%' AND b.x NOT LIKE '%bar%'
 ----
-select
+project
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan b
- │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters
-      └── (x:1 LIKE '%foo%') AND (x:1 NOT LIKE '%bar%') [type=bool]
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 LIKE '%foo%') AND (x:1 NOT LIKE '%bar%') [type=bool]
 
 # ILike, INotLike
 build
 SELECT * FROM b WHERE b.x ILIKE '%foo%' AND b.x NOT ILIKE '%bar%'
 ----
-select
+project
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan b
- │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters
-      └── (x:1 ILIKE '%foo%') AND (x:1 NOT ILIKE '%bar%') [type=bool]
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 ILIKE '%foo%') AND (x:1 NOT ILIKE '%bar%') [type=bool]
 
 # RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
 build
 SELECT * FROM b WHERE b.x ~ 'foo' AND b.x !~ 'bar' AND b.x ~* 'foo' AND b.x !~* 'bar'
 ----
-select
+project
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan b
- │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters
-      └── (((x:1 ~ 'foo') AND (x:1 !~ 'bar')) AND (x:1 ~* 'foo')) AND (x:1 !~* 'bar') [type=bool]
+ └── select
+      ├── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan b
+      │    └── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (((x:1 ~ 'foo') AND (x:1 !~ 'bar')) AND (x:1 ~* 'foo')) AND (x:1 !~* 'bar') [type=bool]
 
 # Is, IsNot
 build
 SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
- └── filters
-      └── (x:1 IS DISTINCT FROM y:2) AND (x:1 IS NULL) [type=bool]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      ├── scan a
+      │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+      └── filters
+           └── (x:1 IS DISTINCT FROM y:2) AND (x:1 IS NULL) [type=bool]
 
 # Bitand, Bitor, Bitxor
 build
 SELECT a.x & a.y AS r, a.x | a.y AS s, a.x # a.y AS t FROM a
 ----
 project
- ├── columns: r:3(int) s:4(int) t:5(int)
+ ├── columns: r:4(int) s:5(int) t:6(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── x:1 & y:2 [as=r:3, type=int]
-      ├── x:1 | y:2 [as=s:4, type=int]
-      └── x:1 # y:2 [as=t:5, type=int]
+      ├── x:1 & y:2 [as=r:4, type=int]
+      ├── x:1 | y:2 [as=s:5, type=int]
+      └── x:1 # y:2 [as=t:6, type=int]
 
 # Plus, Minus, Mult, Div, FloorDiv
 build
@@ -166,15 +184,15 @@ SELECT a.x + 1.5 AS r,
   FROM a
 ----
 project
- ├── columns: r:3(decimal!null) s:4(date!null) t:5(decimal!null) u:6(decimal) v:7(decimal!null)
+ ├── columns: r:4(decimal!null) s:5(date!null) t:6(decimal!null) u:7(decimal) v:8(decimal!null)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── x:1 + 1.5 [as=r:3, type=decimal]
-      ├── '2000-01-01' - 15 [as=s:4, type=date]
-      ├── 10.10 * x:1 [as=t:5, type=decimal]
-      ├── 1 / y:2 [as=u:6, type=decimal]
-      └── x:1 // 1.5 [as=v:7, type=decimal]
+      ├── x:1 + 1.5 [as=r:4, type=decimal]
+      ├── '2000-01-01' - 15 [as=s:5, type=date]
+      ├── 10.10 * x:1 [as=t:6, type=decimal]
+      ├── 1 / y:2 [as=u:7, type=decimal]
+      └── x:1 // 1.5 [as=v:8, type=decimal]
 
 # Mod, Pow, LShift, RShift
 build
@@ -185,14 +203,14 @@ SELECT 100.1 % a.x AS r,
   FROM a
 ----
 project
- ├── columns: r:3(decimal!null) s:4(decimal!null) t:5(int!null) u:6(int)
+ ├── columns: r:4(decimal!null) s:5(decimal!null) t:6(int!null) u:7(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── 100.1 % x:1 [as=r:3, type=decimal]
-      ├── x:1 ^ 2.5 [as=s:4, type=decimal]
-      ├── x:1 << 3 [as=t:5, type=int]
-      └── y:2 >> 2 [as=u:6, type=int]
+      ├── 100.1 % x:1 [as=r:4, type=decimal]
+      ├── x:1 ^ 2.5 [as=s:5, type=decimal]
+      ├── x:1 << 3 [as=t:6, type=int]
+      └── y:2 >> 2 [as=u:7, type=int]
 
 # FetchVal, FetchText, FetchValPath, FetchTextPath
 build
@@ -203,64 +221,64 @@ SELECT '[1, 2]'->1 AS r,
   FROM a
 ----
 project
- ├── columns: r:3(jsonb) s:4(string) t:5(jsonb) u:6(string)
+ ├── columns: r:4(jsonb) s:5(string) t:6(jsonb) u:7(string)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── '[1, 2]'->1 [as=r:3, type=jsonb]
-      ├── '[1, 2]'->>1 [as=s:4, type=string]
-      ├── '{"a": 5}'#>ARRAY['a'] [as=t:5, type=jsonb]
-      └── '{"a": 5}'#>>ARRAY['a'] [as=u:6, type=string]
+      ├── '[1, 2]'->1 [as=r:4, type=jsonb]
+      ├── '[1, 2]'->>1 [as=s:5, type=string]
+      ├── '{"a": 5}'#>ARRAY['a'] [as=t:6, type=jsonb]
+      └── '{"a": 5}'#>>ARRAY['a'] [as=u:7, type=string]
 
 # Concat
 build
 SELECT b.x || 'more' AS r FROM b
 ----
 project
- ├── columns: r:3(string!null)
+ ├── columns: r:4(string!null)
  ├── scan b
- │    └── columns: x:1(string!null) z:2(decimal!null)
+ │    └── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      └── x:1 || 'more' [as=r:3, type=string]
+      └── x:1 || 'more' [as=r:4, type=string]
 
 # UnaryMinus, UnaryComplement
 build
 SELECT -a.y AS r, ~a.x AS s FROM a
 ----
 project
- ├── columns: r:3(int) s:4(int)
+ ├── columns: r:4(int) s:5(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── -y:2 [as=r:3, type=int]
-      └── ~x:1 [as=s:4, type=int]
+      ├── -y:2 [as=r:4, type=int]
+      └── ~x:1 [as=s:5, type=int]
 
 # Array Concat
 build
 SELECT arr || arr AS r, arr || NULL AS s, NULL || arr AS t FROM unusual
 ----
 project
- ├── columns: r:3(int[]) s:4(int[]) t:5(int[])
+ ├── columns: r:4(int[]) s:5(int[]) t:6(int[])
  ├── scan unusual
- │    └── columns: x:1(int!null) arr:2(int[])
+ │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── arr:2 || arr:2 [as=r:3, type=int[]]
-      ├── arr:2 || NULL::INT8[] [as=s:4, type=int[]]
-      └── NULL::INT8[] || arr:2 [as=t:5, type=int[]]
+      ├── arr:2 || arr:2 [as=r:4, type=int[]]
+      ├── arr:2 || NULL::INT8[] [as=s:5, type=int[]]
+      └── NULL::INT8[] || arr:2 [as=t:6, type=int[]]
 
 # Array Element Concat
 build
 SELECT x || arr AS r, arr || x AS s, x || NULL AS t, NULL || x AS u FROM unusual
 ----
 project
- ├── columns: r:3(int[]) s:4(int[]) t:5(int[]) u:6(int[])
+ ├── columns: r:4(int[]) s:5(int[]) t:6(int[]) u:7(int[])
  ├── scan unusual
- │    └── columns: x:1(int!null) arr:2(int[])
+ │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── x:1 || arr:2 [as=r:3, type=int[]]
-      ├── arr:2 || x:1 [as=s:4, type=int[]]
-      ├── x:1 || NULL::INT8[] [as=t:5, type=int[]]
-      └── NULL::INT8[] || x:1 [as=u:6, type=int[]]
+      ├── x:1 || arr:2 [as=r:4, type=int[]]
+      ├── arr:2 || x:1 [as=s:5, type=int[]]
+      ├── x:1 || NULL::INT8[] [as=t:6, type=int[]]
+      └── NULL::INT8[] || x:1 [as=u:7, type=int[]]
 
 # Function with fixed return type.
 build
@@ -315,125 +333,125 @@ SELECT
 FROM b
 ----
 scalar-group-by
- ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int!null) count:10(int!null) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:22(jsonb)
+ ├── columns: array_agg:4(decimal[]) avg:5(decimal) bool_and:7(bool) bool_or:8(bool) concat_agg:9(string) count:10(int!null) count:11(int!null) max:12(string) max:13(decimal) sum_int:15(int) sum:16(decimal) sqrdiff:17(decimal) variance:18(decimal) stddev:19(decimal) xor_agg:20(int) json_agg:22(jsonb) jsonb_agg:23(jsonb)
  ├── project
- │    ├── columns: column5:5(bool!null) column13:13(int!null) column20:20(jsonb!null) x:1(string!null) z:2(decimal!null)
+ │    ├── columns: column6:6(bool!null) column14:14(int!null) column21:21(jsonb!null) x:1(string!null) z:2(decimal!null)
  │    ├── scan b
- │    │    └── columns: x:1(string!null) z:2(decimal!null)
+ │    │    └── columns: x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
  │    └── projections
- │         ├── z:2 = 0 [as=column5:5, type=bool]
- │         ├── x:1::INT8 [as=column13:13, type=int]
- │         └── x:1::JSONB [as=column20:20, type=jsonb]
+ │         ├── z:2 = 0 [as=column6:6, type=bool]
+ │         ├── x:1::INT8 [as=column14:14, type=int]
+ │         └── x:1::JSONB [as=column21:21, type=jsonb]
  └── aggregations
-      ├── array-agg [as=array_agg:3, type=decimal[]]
+      ├── array-agg [as=array_agg:4, type=decimal[]]
       │    └── z:2 [type=decimal]
-      ├── avg [as=avg:4, type=decimal]
+      ├── avg [as=avg:5, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── bool-and [as=bool_and:6, type=bool]
-      │    └── column5:5 [type=bool]
-      ├── bool-or [as=bool_or:7, type=bool]
-      │    └── column5:5 [type=bool]
-      ├── concat-agg [as=concat_agg:8, type=string]
+      ├── bool-and [as=bool_and:7, type=bool]
+      │    └── column6:6 [type=bool]
+      ├── bool-or [as=bool_or:8, type=bool]
+      │    └── column6:6 [type=bool]
+      ├── concat-agg [as=concat_agg:9, type=string]
       │    └── x:1 [type=string]
-      ├── count [as=count:9, type=int]
+      ├── count [as=count:10, type=int]
       │    └── z:2 [type=decimal]
-      ├── count-rows [as=count_rows:10, type=int]
-      ├── max [as=max:11, type=string]
+      ├── count-rows [as=count_rows:11, type=int]
+      ├── max [as=max:12, type=string]
       │    └── x:1 [type=string]
-      ├── max [as=max:12, type=decimal]
+      ├── max [as=max:13, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── sum-int [as=sum_int:14, type=int]
-      │    └── column13:13 [type=int]
-      ├── sum [as=sum:15, type=decimal]
+      ├── sum-int [as=sum_int:15, type=int]
+      │    └── column14:14 [type=int]
+      ├── sum [as=sum:16, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── sqr-diff [as=sqrdiff:16, type=decimal]
+      ├── sqr-diff [as=sqrdiff:17, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── variance [as=variance:17, type=decimal]
-      │    └── column13:13 [type=int]
-      ├── std-dev [as=stddev:18, type=decimal]
+      ├── variance [as=variance:18, type=decimal]
+      │    └── column14:14 [type=int]
+      ├── std-dev [as=stddev:19, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── xor-agg [as=xor_agg:19, type=int]
-      │    └── column13:13 [type=int]
-      ├── json-agg [as=json_agg:21, type=jsonb]
-      │    └── column20:20 [type=jsonb]
-      └── jsonb-agg [as=jsonb_agg:22, type=jsonb]
-           └── column20:20 [type=jsonb]
+      ├── xor-agg [as=xor_agg:20, type=int]
+      │    └── column14:14 [type=int]
+      ├── json-agg [as=json_agg:22, type=jsonb]
+      │    └── column21:21 [type=jsonb]
+      └── jsonb-agg [as=jsonb_agg:23, type=jsonb]
+           └── column21:21 [type=jsonb]
 
 # ConstAgg internal aggregate function.
 opt
 SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE y=z::int) > 'foo'
 ----
 project
- ├── columns: x:1(int!null) x:3(string!null) y:2(int!null)
+ ├── columns: x:1(int!null) x:4(string!null) y:2(int!null)
  ├── select
- │    ├── columns: a.x:1(int!null) y:2(int!null) max:6(string!null)
+ │    ├── columns: a.x:1(int!null) y:2(int!null) max:8(string!null)
  │    ├── group-by
- │    │    ├── columns: a.x:1(int!null) y:2(int!null) max:6(string!null)
+ │    │    ├── columns: a.x:1(int!null) y:2(int!null) max:8(string!null)
  │    │    ├── grouping columns: a.x:1(int!null)
  │    │    ├── inner-join (hash)
- │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) column7:7(int!null)
+ │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:5(string!null) column9:9(int!null)
  │    │    │    ├── scan a
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
  │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7(int!null) b.x:4(string!null)
+ │    │    │    │    ├── columns: column9:9(int!null) b.x:5(string!null)
  │    │    │    │    ├── scan b
- │    │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
+ │    │    │    │    │    └── columns: b.x:5(string!null) z:6(decimal!null)
  │    │    │    │    └── projections
- │    │    │    │         └── z:5::INT8 [as=column7:7, type=int]
+ │    │    │    │         └── z:6::INT8 [as=column9:9, type=int]
  │    │    │    └── filters
- │    │    │         └── y:2 = column7:7 [type=bool]
+ │    │    │         └── y:2 = column9:9 [type=bool]
  │    │    └── aggregations
- │    │         ├── max [as=max:6, type=string]
- │    │         │    └── b.x:4 [type=string]
+ │    │         ├── max [as=max:8, type=string]
+ │    │         │    └── b.x:5 [type=string]
  │    │         └── const-agg [as=y:2, type=int]
  │    │              └── y:2 [type=int]
  │    └── filters
- │         └── max:6 > 'foo' [type=bool]
+ │         └── max:8 > 'foo' [type=bool]
  └── projections
-      └── a.x:1::STRING [as=x:3, type=string]
+      └── a.x:1::STRING [as=x:4, type=string]
 
 # ConstNotNullAgg internal aggregate function.
 opt
 SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:6(bool!null)
+ ├── columns: exists:8(bool!null)
  ├── group-by
- │    ├── columns: true_agg:8(bool) rownum:10(int!null)
- │    ├── grouping columns: rownum:10(int!null)
+ │    ├── columns: true_agg:10(bool) rownum:12(int!null)
+ │    ├── grouping columns: rownum:12(int!null)
  │    ├── left-join (cross)
- │    │    ├── columns: expr:3(int!null) true:7(bool) rownum:10(int!null)
+ │    │    ├── columns: expr:4(int!null) true:9(bool) rownum:12(int!null)
  │    │    ├── ordinality
- │    │    │    ├── columns: expr:3(int!null) rownum:10(int!null)
+ │    │    │    ├── columns: expr:4(int!null) rownum:12(int!null)
  │    │    │    └── project
- │    │    │         ├── columns: expr:3(int!null)
+ │    │    │         ├── columns: expr:4(int!null)
  │    │    │         ├── scan a
  │    │    │         │    └── columns: x:1(int!null)
  │    │    │         └── projections
- │    │    │              └── x:1 + 1 [as=expr:3, type=int]
+ │    │    │              └── x:1 + 1 [as=expr:4, type=int]
  │    │    ├── project
- │    │    │    ├── columns: true:7(bool!null)
+ │    │    │    ├── columns: true:9(bool!null)
  │    │    │    ├── scan a
  │    │    │    └── projections
- │    │    │         └── true [as=true:7, type=bool]
+ │    │    │         └── true [as=true:9, type=bool]
  │    │    └── filters
- │    │         └── expr:3 < 0 [type=bool]
+ │    │         └── expr:4 < 0 [type=bool]
  │    └── aggregations
- │         └── const-not-null-agg [as=true_agg:8, type=bool]
- │              └── true:7 [type=bool]
+ │         └── const-not-null-agg [as=true_agg:10, type=bool]
+ │              └── true:9 [type=bool]
  └── projections
-      └── true_agg:8 IS NOT NULL [as=exists:6, type=bool]
+      └── true_agg:10 IS NOT NULL [as=exists:8, type=bool]
 
 # Cast
 build
 SELECT x::VARCHAR(2) FROM b
 ----
 project
- ├── columns: x:3(varchar!null)
+ ├── columns: x:4(varchar!null)
  ├── scan b
- │    └── columns: b.x:1(string!null) z:2(decimal!null)
+ │    └── columns: b.x:1(string!null) z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      └── b.x:1::VARCHAR(2) [as=x:3, type=varchar]
+      └── b.x:1::VARCHAR(2) [as=x:4, type=varchar]
 
 # Cast same type with different precisions.
 # See #42571.
@@ -441,10 +459,10 @@ build
 SELECT z::decimal(10, 3), z::decimal(10, 1), z::decimal(10, 4) FROM b
 ----
 project
- ├── columns: z:3(decimal!null) z:4(decimal!null) z:5(decimal!null)
+ ├── columns: z:4(decimal!null) z:5(decimal!null) z:6(decimal!null)
  ├── scan b
- │    └── columns: x:1(string!null) b.z:2(decimal!null)
+ │    └── columns: x:1(string!null) b.z:2(decimal!null) crdb_internal_mvcc_timestamp:3(decimal)
  └── projections
-      ├── b.z:2::DECIMAL(10,3) [as=z:3, type=decimal]
-      ├── b.z:2::DECIMAL(10,1) [as=z:4, type=decimal]
-      └── b.z:2::DECIMAL(10,4) [as=z:5, type=decimal]
+      ├── b.z:2::DECIMAL(10,3) [as=z:4, type=decimal]
+      ├── b.z:2::DECIMAL(10,1) [as=z:5, type=decimal]
+      └── b.z:2::DECIMAL(10,4) [as=z:6, type=decimal]

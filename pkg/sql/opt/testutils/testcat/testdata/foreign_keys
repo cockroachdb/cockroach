@@ -11,6 +11,7 @@ SHOW CREATE parent
 ----
 TABLE parent
  ├── p int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── p int not null
  └── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
@@ -21,6 +22,7 @@ SHOW CREATE child
 TABLE child
  ├── c int not null
  ├── p int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── c int not null
  ├── INDEX child_auto_index_fk_p_ref_parent
@@ -42,6 +44,7 @@ SHOW CREATE parent2
 TABLE parent2
  ├── p int
  ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INDEX parent2_p_key
@@ -55,6 +58,7 @@ SHOW CREATE child2
 TABLE child2
  ├── c int not null
  ├── p int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── c int not null
  ├── INDEX child2_auto_index_fk_p_ref_parent2
@@ -93,6 +97,7 @@ TABLE parent_multicol
  ├── p int not null
  ├── q int not null
  ├── r int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -107,6 +112,7 @@ TABLE child_multicol
  ├── p int not null
  ├── q int not null
  ├── r int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -120,6 +126,7 @@ TABLE child_multicol_full
  ├── p int not null
  ├── q int not null
  ├── r int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -135,6 +142,7 @@ SHOW CREATE parent
 ----
 TABLE parent
  ├── p int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       └── p int not null
 
@@ -149,6 +157,7 @@ TABLE parent_multicol
  ├── p int not null
  ├── q int not null
  ├── r int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -166,6 +175,7 @@ TABLE parent_multicol
  ├── p int not null
  ├── q int not null
  ├── r int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── p int not null
       ├── q int not null

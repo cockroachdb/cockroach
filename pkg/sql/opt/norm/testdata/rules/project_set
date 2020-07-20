@@ -78,16 +78,16 @@ norm expect=ConvertZipArraysToValues
 SELECT unnest(ARRAY[x,y]) FROM xy
 ----
 project
- ├── columns: unnest:4
+ ├── columns: unnest:5
  └── inner-join-apply
-      ├── columns: x:1!null y:2 unnest:4
+      ├── columns: x:1!null y:2 unnest:5
       ├── fd: (1)-->(2)
       ├── scan xy
       │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── values
-      │    ├── columns: unnest:4
+      │    ├── columns: unnest:5
       │    ├── outer: (1,2)
       │    ├── cardinality: [2 - 2]
       │    ├── (x:1,)
@@ -113,7 +113,7 @@ semi-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  ├── values
- │    ├── columns: unnest:4
+ │    ├── columns: unnest:5
  │    ├── outer: (1)
  │    ├── cardinality: [6 - 6]
  │    ├── (NULL,)
@@ -123,7 +123,7 @@ semi-join-apply
  │    ├── (5,)
  │    └── (x:1,)
  └── filters
-      └── unnest:4 = y:2 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+      └── unnest:5 = y:2 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
 
 # Case with multiple arrays of different types and different sizes, including an
 # empty array.
@@ -191,10 +191,10 @@ norm expect=ConvertZipArraysToValues
 SELECT unnest(ARRAY[x,y]), unnest(ARRAY[1,x*100]) FROM xy
 ----
 project
- ├── columns: unnest:4 unnest:5
+ ├── columns: unnest:5 unnest:6
  ├── immutable
  └── inner-join-apply
-      ├── columns: x:1!null y:2 unnest:4 unnest:5
+      ├── columns: x:1!null y:2 unnest:5 unnest:6
       ├── immutable
       ├── fd: (1)-->(2)
       ├── scan xy
@@ -202,7 +202,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── values
-      │    ├── columns: unnest:4 unnest:5
+      │    ├── columns: unnest:5 unnest:6
       │    ├── outer: (1,2)
       │    ├── cardinality: [2 - 2]
       │    ├── immutable
@@ -275,7 +275,7 @@ norm expect-not=ConvertZipArraysToValues
 SELECT unnest((SELECT array_agg(y) FROM xy))
 ----
 project-set
- ├── columns: unnest:5
+ ├── columns: unnest:6
  ├── immutable
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -285,14 +285,14 @@ project-set
       └── function: unnest [immutable, subquery]
            └── subquery
                 └── scalar-group-by
-                     ├── columns: array_agg:4
+                     ├── columns: array_agg:5
                      ├── cardinality: [1 - 1]
                      ├── key: ()
-                     ├── fd: ()-->(4)
+                     ├── fd: ()-->(5)
                      ├── scan xy
                      │    └── columns: y:2
                      └── aggregations
-                          └── array-agg [as=array_agg:4, outer=(2)]
+                          └── array-agg [as=array_agg:5, outer=(2)]
                                └── y:2
 
 # No-op case because a JSON column can only be determined at run-time.
@@ -300,10 +300,10 @@ norm expect-not=ConvertZipArraysToValues
 SELECT json_array_elements(j) FROM xy
 ----
 project
- ├── columns: json_array_elements:4
+ ├── columns: json_array_elements:5
  ├── immutable
  └── project-set
-      ├── columns: j:3 json_array_elements:4
+      ├── columns: j:3 json_array_elements:5
       ├── immutable
       ├── scan xy
       │    └── columns: j:3
