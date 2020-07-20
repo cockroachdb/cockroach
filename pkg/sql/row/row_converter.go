@@ -23,7 +23,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Given that imports can be retried and resumed, we want to
+// ensure that the default functions return the same value given
+// the same arguments, even on retries. Therfore we decide to support
+// only a limited subset of non-immutable functions, which are
+// all listed here.
 var supportedImportFunctions = map[string]struct{}{
+	// These methods can be supported given that we set the statement
+	// and transaction timestamp to be equal, i.e. the write timestamp.
 	"current_date":          {},
 	"current_timestamp":     {},
 	"localtimestamp":        {},
@@ -52,7 +59,9 @@ func (e *unsafeErrExpr) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	return nil, e.err
 }
 
-// importDefaultExprVisitor must be invoked on a typed expression.
+// importDefaultExprVisitor must be invoked on a typed expression. This
+// visitor walks the tree and ensures that any expression that's not
+// immutable are the ones we explicitly support.
 type importDefaultExprVisitor struct {
 	err error
 }
@@ -90,7 +99,7 @@ func SanitizeExprsForImport(
 	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 		ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
 	if err == nil {
-		return typedExpr.Eval(evalCtx)
+		return typedExpr, nil
 	}
 	// Now that the expressions are not immutable, we first check that they
 	// are of the correct type before checking for any unsupported functions
