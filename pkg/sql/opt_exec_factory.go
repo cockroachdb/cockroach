@@ -1514,7 +1514,6 @@ func (ef *execFactory) ConstructUpsert(
 			insertCols: ri.InsertCols,
 			tw: optTableUpserter{
 				ri:            ri,
-				alloc:         &ef.planner.alloc,
 				canaryOrdinal: int(canaryCol),
 				fkTables:      fkTables,
 				fetchCols:     fetchColDescs,
