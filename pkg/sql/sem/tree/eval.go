@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -3135,6 +3136,8 @@ type EvalContext struct {
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
 	SingleDatumAggMemAccount *mon.BoundAccount
+
+	SQLLivenessStorage sqlliveness.Storage
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

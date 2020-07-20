@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -3966,6 +3965,25 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	// Returns true iff the given sqlliveness session is not expired.
+	"crdb_internal.sql_liveness_is_alive": makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiTenancy},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"session_id", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sid := sqlliveness.SessionID(*(args[0].(*tree.DBytes)))
+				live, err := evalCtx.SQLLivenessStorage.IsAlive(evalCtx.Context, evalCtx.Txn, sid)
+				if err != nil {
+					return tree.MakeDBool(true), err
+				}
+				return tree.MakeDBool(tree.DBool(live)), nil
+			},
+			Info:       "Checks is given sqlliveness session id is not expired",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
