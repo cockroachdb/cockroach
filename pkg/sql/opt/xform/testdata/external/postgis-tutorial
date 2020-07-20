@@ -6295,17 +6295,17 @@ GROUP BY
 ORDER BY
   black_pct DESC
 ----
-memo (optimized, ~29KB, required=[presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33])
+memo (optimized, ~29KB, required=[presentation: route:29,white_pct:35,black_pct:36,popn_total:33] [ordering: -36])
  ├── G1: (project G2 G3 route sum)
- │    ├── [presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33]
+ │    ├── [presentation: route:29,white_pct:35,black_pct:36,popn_total:33] [ordering: -36]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 23087936.79
  │    └── []
  │         ├── best: (project G2 G3 route sum)
  │         └── cost: 23087934.38
- ├── G2: (group-by G4 G5 cols=(27))
+ ├── G2: (group-by G4 G5 cols=(29))
  │    └── []
- │         ├── best: (group-by G4 G5 cols=(27))
+ │         ├── best: (group-by G4 G5 cols=(29))
  │         └── cost: 23087933.71
  ├── G3: (projections G6 G7)
  ├── G4: (inner-join G8 G9 G10) (inner-join G11 G12 G13) (inner-join G9 G8 G10) (inner-join G12 G11 G13)
@@ -6319,9 +6319,9 @@ memo (optimized, ~29KB, required=[presentation: route:27,white_pct:32,black_pct:
  │    └── []
  │         ├── best: (inner-join G11 G20 G13)
  │         └── cost: 19283630.66
- ├── G9: (scan lines,cols=(27))
+ ├── G9: (scan lines,cols=(29))
  │    └── []
- │         ├── best: (scan lines,cols=(27))
+ │         ├── best: (scan lines,cols=(29))
  │         └── cost: 22.68
  ├── G10: (filters G21)
  ├── G11: (scan census,cols=(3-5,10))
@@ -6339,9 +6339,9 @@ memo (optimized, ~29KB, required=[presentation: route:27,white_pct:32,black_pct:
  ├── G17: (mult G26 G27)
  ├── G18: (variable sum)
  ├── G19: (mult G28 G27)
- ├── G20: (scan subways,cols=(21,26))
+ ├── G20: (scan subways,cols=(22,27))
  │    └── []
- │         ├── best: (scan subways,cols=(21,26))
+ │         ├── best: (scan subways,cols=(22,27))
  │         └── cost: 579.40
  ├── G21: (gt G29 G30)
  ├── G22: (function G31 st_dwithin)
@@ -6377,45 +6377,45 @@ ORDER BY
   black_pct DESC
 ----
 sort
- ├── columns: route:27 white_pct:32 black_pct:33 popn_total:30
+ ├── columns: route:29 white_pct:35 black_pct:36 popn_total:33
  ├── immutable
- ├── key: (27)
- ├── fd: (27)-->(30,32,33)
- ├── ordering: -33
+ ├── key: (29)
+ ├── fd: (29)-->(33,35,36)
+ ├── ordering: -36
  └── project
-      ├── columns: white_pct:32 black_pct:33 route:27 sum:30
+      ├── columns: white_pct:35 black_pct:36 route:29 sum:33
       ├── immutable
-      ├── key: (27)
-      ├── fd: (27)-->(30,32,33)
+      ├── key: (29)
+      ├── fd: (29)-->(33,35,36)
       ├── group-by
-      │    ├── columns: route:27 sum:29 sum:30 sum:31
-      │    ├── grouping columns: route:27
+      │    ├── columns: route:29 sum:32 sum:33 sum:34
+      │    ├── grouping columns: route:29
       │    ├── immutable
-      │    ├── key: (27)
-      │    ├── fd: (27)-->(29-31)
+      │    ├── key: (29)
+      │    ├── fd: (29)-->(32-34)
       │    ├── inner-join (cross)
-      │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10 routes:21 subways.geom:26 route:27
+      │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10 routes:22 subways.geom:27 route:29
       │    │    ├── immutable
       │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10 routes:21 subways.geom:26
+      │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10 routes:22 subways.geom:27
       │    │    │    ├── immutable
       │    │    │    ├── scan census
       │    │    │    │    └── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10
       │    │    │    ├── scan subways
-      │    │    │    │    └── columns: routes:21 subways.geom:26
+      │    │    │    │    └── columns: routes:22 subways.geom:27
       │    │    │    └── filters
-      │    │    │         └── st_dwithin(census.geom:10, subways.geom:26, 200.0) [outer=(10,26), immutable]
+      │    │    │         └── st_dwithin(census.geom:10, subways.geom:27, 200.0) [outer=(10,27), immutable]
       │    │    ├── scan lines
-      │    │    │    └── columns: route:27
+      │    │    │    └── columns: route:29
       │    │    └── filters
-      │    │         └── strpos(routes:21, route:27) > 0 [outer=(21,27), immutable]
+      │    │         └── strpos(routes:22, route:29) > 0 [outer=(22,29), immutable]
       │    └── aggregations
-      │         ├── sum [as=sum:29, outer=(4)]
+      │         ├── sum [as=sum:32, outer=(4)]
       │         │    └── popn_white:4
-      │         ├── sum [as=sum:30, outer=(3)]
+      │         ├── sum [as=sum:33, outer=(3)]
       │         │    └── popn_total:3
-      │         └── sum [as=sum:31, outer=(5)]
+      │         └── sum [as=sum:34, outer=(5)]
       │              └── popn_black:5
       └── projections
-           ├── (sum:29 * 100.0) / sum:30 [as=white_pct:32, outer=(29,30), immutable]
-           └── (sum:31 * 100.0) / sum:30 [as=black_pct:33, outer=(30,31), immutable]
+           ├── (sum:32 * 100.0) / sum:33 [as=white_pct:35, outer=(32,33), immutable]
+           └── (sum:34 * 100.0) / sum:33 [as=black_pct:36, outer=(33,34), immutable]

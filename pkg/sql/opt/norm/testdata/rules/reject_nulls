@@ -18,36 +18,36 @@ norm expect=RejectNullsRightJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
 ----
 left-join (cross)
- ├── columns: k:1!null i:2 f:3 s:4 x:5 y:6
- ├── key: (1,5)
- ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── columns: k:1!null i:2 f:3 s:4 x:6 y:7
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-4), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  ├── scan xy
- │    ├── columns: x:5!null y:6
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
+ │    ├── columns: x:6!null y:7
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  └── filters (true)
 
 norm expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
 ----
 left-join (cross)
- ├── columns: k:1 i:2 f:3 s:4 x:5!null y:6
- ├── key: (1,5)
- ├── fd: (5)-->(6), (1)-->(2-4)
+ ├── columns: k:1 i:2 f:3 s:4 x:6!null y:7
+ ├── key: (1,6)
+ ├── fd: (6)-->(7), (1)-->(2-4)
  ├── select
- │    ├── columns: x:5!null y:6
- │    ├── key: (5)
- │    ├── fd: (5)-->(6)
+ │    ├── columns: x:6!null y:7
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
  │    ├── scan xy
- │    │    ├── columns: x:5!null y:6
- │    │    ├── key: (5)
- │    │    └── fd: (5)-->(6)
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
  │    └── filters
- │         └── x:5 > 5 [outer=(5), constraints=(/5: [/6 - ]; tight)]
+ │         └── x:6 > 5 [outer=(6), constraints=(/6: [/6 - ]; tight)]
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4
  │    ├── key: (1)
@@ -62,48 +62,48 @@ INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True) AS r
 ON l.u=1 AND r.v>2
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2 f:3 s:4 u:5!null v:6 k:7!null i:8 f:9 s:10 u:11!null v:12!null
- ├── key: (1,7,11)
- ├── fd: ()-->(5,6), (1)-->(2-4), (7)-->(8-10), (11)-->(12)
+ ├── columns: k:1!null i:2 f:3 s:4 u:6!null v:7 k:9!null i:10 f:11 s:12 u:14!null v:15!null
+ ├── key: (1,9,14)
+ ├── fd: ()-->(6,7), (1)-->(2-4), (9)-->(10-12), (14)-->(15)
  ├── inner-join (cross)
- │    ├── columns: k:1!null i:2 f:3 s:4 u:5!null v:6
+ │    ├── columns: k:1!null i:2 f:3 s:4 u:6!null v:7
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    ├── key: (1)
- │    ├── fd: ()-->(5,6), (1)-->(2-4)
+ │    ├── fd: ()-->(6,7), (1)-->(2-4)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4)
  │    ├── select
- │    │    ├── columns: u:5!null v:6
+ │    │    ├── columns: u:6!null v:7
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(5,6)
+ │    │    ├── fd: ()-->(6,7)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5!null v:6
- │    │    │    ├── key: (5)
- │    │    │    └── fd: (5)-->(6)
+ │    │    │    ├── columns: u:6!null v:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
  │    │    └── filters
- │    │         └── u:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+ │    │         └── u:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
  │    └── filters (true)
  ├── inner-join (cross)
- │    ├── columns: k:7!null i:8 f:9 s:10 u:11!null v:12!null
- │    ├── key: (7,11)
- │    ├── fd: (7)-->(8-10), (11)-->(12)
+ │    ├── columns: k:9!null i:10 f:11 s:12 u:14!null v:15!null
+ │    ├── key: (9,14)
+ │    ├── fd: (9)-->(10-12), (14)-->(15)
  │    ├── scan a
- │    │    ├── columns: k:7!null i:8 f:9 s:10
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8-10)
+ │    │    ├── columns: k:9!null i:10 f:11 s:12
+ │    │    ├── key: (9)
+ │    │    └── fd: (9)-->(10-12)
  │    ├── select
- │    │    ├── columns: u:11!null v:12!null
- │    │    ├── key: (11)
- │    │    ├── fd: (11)-->(12)
+ │    │    ├── columns: u:14!null v:15!null
+ │    │    ├── key: (14)
+ │    │    ├── fd: (14)-->(15)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:11!null v:12
- │    │    │    ├── key: (11)
- │    │    │    └── fd: (11)-->(12)
+ │    │    │    ├── columns: u:14!null v:15
+ │    │    │    ├── key: (14)
+ │    │    │    └── fd: (14)-->(15)
  │    │    └── filters
- │    │         └── v:12 > 2 [outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │         └── v:15 > 2 [outer=(15), constraints=(/15: [/3 - ]; tight)]
  │    └── filters (true)
  └── filters (true)
 
@@ -112,39 +112,39 @@ norm expect=RejectNullsLeftJoin
 SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3 s:4 x:5!null y:6
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (5)
- ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  ├── scan xy
- │    ├── columns: x:5!null y:6
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
+ │    ├── columns: x:6!null y:7
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  └── filters
-      └── x:5 = k:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Full-join operator.
 norm expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2 f:3 s:4 x:5!null y:6
- ├── key: (1,5)
- ├── fd: (5)-->(6), (1)-->(2-4)
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7
+ ├── key: (1,6)
+ ├── fd: (6)-->(7), (1)-->(2-4)
  ├── select
- │    ├── columns: x:5!null y:6
- │    ├── key: (5)
- │    ├── fd: (5)-->(6)
+ │    ├── columns: x:6!null y:7
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
  │    ├── scan xy
- │    │    ├── columns: x:5!null y:6
- │    │    ├── key: (5)
- │    │    └── fd: (5)-->(6)
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
  │    └── filters
- │         └── x:5 > 5 [outer=(5), constraints=(/5: [/6 - ]; tight)]
+ │         └── x:6 > 5 [outer=(6), constraints=(/6: [/6 - ]; tight)]
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4
  │    ├── key: (1)
@@ -156,8 +156,8 @@ norm expect=RejectNullsLeftJoin
 SELECT * FROM a LEFT JOIN LATERAL (SELECT * FROM (VALUES (i), (i)) v(y)) ON y>10 WHERE i=y
 ----
 inner-join-apply
- ├── columns: k:1!null i:2!null f:3 s:4 y:5
- ├── fd: (1)-->(2-4), (2)==(5), (5)==(2)
+ ├── columns: k:1!null i:2!null f:3 s:4 y:6
+ ├── fd: (1)-->(2-4), (2)==(6), (6)==(2)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4
  │    ├── key: (1)
@@ -169,22 +169,22 @@ inner-join-apply
  │    └── filters
  │         └── i:2 > 10 [outer=(2), constraints=(/2: [/11 - ]; tight)]
  ├── values
- │    ├── columns: column1:5
+ │    ├── columns: column1:6
  │    ├── outer: (2)
  │    ├── cardinality: [2 - 2]
  │    ├── (i:2,)
  │    └── (i:2,)
  └── filters
-      └── i:2 = column1:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+      └── i:2 = column1:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Full-join operator.
 norm expect=RejectNullsRightJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE i IS NOT NULL
 ----
 left-join (cross)
- ├── columns: k:1!null i:2!null f:3 s:4 x:5 y:6
- ├── key: (1,5)
- ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── columns: k:1!null i:2!null f:3 s:4 x:6 y:7
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-4), (6)-->(7)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4
  │    ├── key: (1)
@@ -196,9 +196,9 @@ left-join (cross)
  │    └── filters
  │         └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
  ├── scan xy
- │    ├── columns: x:5!null y:6
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
+ │    ├── columns: x:6!null y:7
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  └── filters (true)
 
 # ----------------------------------------------------------
@@ -215,32 +215,32 @@ GROUP BY k
 HAVING max(x)=1
 ----
 project
- ├── columns: max:7!null
- ├── fd: ()-->(7)
+ ├── columns: max:9!null
+ ├── fd: ()-->(9)
  └── select
-      ├── columns: k:1!null max:7!null
+      ├── columns: k:1!null max:9!null
       ├── key: (1)
-      ├── fd: ()-->(7)
+      ├── fd: ()-->(9)
       ├── group-by
-      │    ├── columns: k:1!null max:7!null
+      │    ├── columns: k:1!null max:9!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7)
+      │    ├── fd: (1)-->(9)
       │    ├── inner-join (cross)
-      │    │    ├── columns: k:1!null x:5!null
-      │    │    ├── key: (1,5)
+      │    │    ├── columns: k:1!null x:6!null
+      │    │    ├── key: (1,6)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── scan xy
-      │    │    │    ├── columns: x:5!null
-      │    │    │    └── key: (5)
+      │    │    │    ├── columns: x:6!null
+      │    │    │    └── key: (6)
       │    │    └── filters (true)
       │    └── aggregations
-      │         └── max [as=max:7, outer=(5)]
-      │              └── x:5
+      │         └── max [as=max:9, outer=(6)]
+      │              └── x:6
       └── filters
-           └── max:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── max:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Aggregate function with DISTINCT.
 norm expect=RejectNullsGroupBy
@@ -252,39 +252,39 @@ GROUP BY k
 HAVING sum(DISTINCT y)=1
 ----
 project
- ├── columns: sum:7!null max:8!null
+ ├── columns: sum:9!null max:10!null
  ├── immutable
- ├── fd: ()-->(7)
+ ├── fd: ()-->(9)
  └── select
-      ├── columns: k:1!null sum:7!null max:8!null
+      ├── columns: k:1!null sum:9!null max:10!null
       ├── immutable
       ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(8)
+      ├── fd: ()-->(9), (1)-->(10)
       ├── group-by
-      │    ├── columns: k:1!null sum:7!null max:8!null
+      │    ├── columns: k:1!null sum:9!null max:10!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7,8)
+      │    ├── fd: (1)-->(9,10)
       │    ├── inner-join (cross)
-      │    │    ├── columns: k:1!null y:6!null
+      │    │    ├── columns: k:1!null y:7!null
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── select
-      │    │    │    ├── columns: y:6!null
+      │    │    │    ├── columns: y:7!null
       │    │    │    ├── scan xy
-      │    │    │    │    └── columns: y:6
+      │    │    │    │    └── columns: y:7
       │    │    │    └── filters
-      │    │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── agg-distinct [as=sum:7, outer=(6)]
+      │         ├── agg-distinct [as=sum:9, outer=(7)]
       │         │    └── sum
-      │         │         └── y:6
-      │         └── max [as=max:8, outer=(6)]
-      │              └── y:6
+      │         │         └── y:7
+      │         └── max [as=max:10, outer=(7)]
+      │              └── y:7
       └── filters
-           └── sum:7 = 1 [outer=(7), immutable, constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── sum:9 = 1 [outer=(9), immutable, constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Single max aggregate function without grouping columns.
 norm expect=RejectNullsGroupBy
@@ -295,27 +295,27 @@ ON True
 HAVING max(x)=1
 ----
 select
- ├── columns: max:7!null
+ ├── columns: max:9!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(7)
+ ├── fd: ()-->(9)
  ├── scalar-group-by
- │    ├── columns: max:7
+ │    ├── columns: max:9
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(7)
+ │    ├── fd: ()-->(9)
  │    ├── inner-join (cross)
- │    │    ├── columns: x:5!null
+ │    │    ├── columns: x:6!null
  │    │    ├── scan a
  │    │    ├── scan xy
- │    │    │    ├── columns: x:5!null
- │    │    │    └── key: (5)
+ │    │    │    ├── columns: x:6!null
+ │    │    │    └── key: (6)
  │    │    └── filters (true)
  │    └── aggregations
- │         └── max [as=max:7, outer=(5)]
- │              └── x:5
+ │         └── max [as=max:9, outer=(6)]
+ │              └── x:6
  └── filters
-      └── max:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── max:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Multiple aggregate functions on same column.
 norm expect=RejectNullsGroupBy
@@ -327,34 +327,34 @@ GROUP BY k
 HAVING min(x)=1
 ----
 project
- ├── columns: min:7!null max:8!null
- ├── fd: ()-->(7)
+ ├── columns: min:9!null max:10!null
+ ├── fd: ()-->(9)
  └── select
-      ├── columns: k:1!null min:7!null max:8!null
+      ├── columns: k:1!null min:9!null max:10!null
       ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(8)
+      ├── fd: ()-->(9), (1)-->(10)
       ├── group-by
-      │    ├── columns: k:1!null min:7!null max:8!null
+      │    ├── columns: k:1!null min:9!null max:10!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7,8)
+      │    ├── fd: (1)-->(9,10)
       │    ├── inner-join (cross)
-      │    │    ├── columns: k:1!null x:5!null
-      │    │    ├── key: (1,5)
+      │    │    ├── columns: k:1!null x:6!null
+      │    │    ├── key: (1,6)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── scan xy
-      │    │    │    ├── columns: x:5!null
-      │    │    │    └── key: (5)
+      │    │    │    ├── columns: x:6!null
+      │    │    │    └── key: (6)
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── min [as=min:7, outer=(5)]
-      │         │    └── x:5
-      │         └── max [as=max:8, outer=(5)]
-      │              └── x:5
+      │         ├── min [as=min:9, outer=(6)]
+      │         │    └── x:6
+      │         └── max [as=max:10, outer=(6)]
+      │              └── x:6
       └── filters
-           └── min:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── min:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Multiple aggregate functions on same column, some with DISTINCT.
 norm expect=RejectNullsGroupBy
@@ -366,37 +366,37 @@ GROUP BY k
 HAVING max(y)=1
 ----
 project
- ├── columns: sum:7!null max:8!null
- ├── fd: ()-->(8)
+ ├── columns: sum:9!null max:10!null
+ ├── fd: ()-->(10)
  └── select
-      ├── columns: k:1!null sum:7!null max:8!null
+      ├── columns: k:1!null sum:9!null max:10!null
       ├── key: (1)
-      ├── fd: ()-->(8), (1)-->(7)
+      ├── fd: ()-->(10), (1)-->(9)
       ├── group-by
-      │    ├── columns: k:1!null sum:7!null max:8!null
+      │    ├── columns: k:1!null sum:9!null max:10!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7,8)
+      │    ├── fd: (1)-->(9,10)
       │    ├── inner-join (cross)
-      │    │    ├── columns: k:1!null y:6!null
+      │    │    ├── columns: k:1!null y:7!null
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── select
-      │    │    │    ├── columns: y:6!null
+      │    │    │    ├── columns: y:7!null
       │    │    │    ├── scan xy
-      │    │    │    │    └── columns: y:6
+      │    │    │    │    └── columns: y:7
       │    │    │    └── filters
-      │    │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── agg-distinct [as=sum:7, outer=(6)]
+      │         ├── agg-distinct [as=sum:9, outer=(7)]
       │         │    └── sum
-      │         │         └── y:6
-      │         └── max [as=max:8, outer=(6)]
-      │              └── y:6
+      │         │         └── y:7
+      │         └── max [as=max:10, outer=(7)]
+      │              └── y:7
       └── filters
-           └── max:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+           └── max:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
 
 
 # Ignore ConstAgg aggregates on other columns.
@@ -423,37 +423,37 @@ exprnorm expect=RejectNullsGroupBy
 )
 ----
 select
- ├── columns: u:3 v:4  [hidden: sum:5!null const:6]
+ ├── columns: u:4 v:5  [hidden: sum:7!null const:8]
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
+ ├── fd: ()-->(7,8)
  ├── scalar-group-by
- │    ├── columns: sum:5 const:6
+ │    ├── columns: sum:7 const:8
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(5,6)
+ │    ├── fd: ()-->(7,8)
  │    ├── inner-join (cross)
- │    │    ├── columns: u:3!null v:4!null
- │    │    ├── fd: (3)-->(4)
+ │    │    ├── columns: u:4!null v:5!null
+ │    │    ├── fd: (4)-->(5)
  │    │    ├── scan xy
  │    │    ├── select
- │    │    │    ├── columns: u:3!null v:4!null
- │    │    │    ├── key: (3)
- │    │    │    ├── fd: (3)-->(4)
+ │    │    │    ├── columns: u:4!null v:5!null
+ │    │    │    ├── key: (4)
+ │    │    │    ├── fd: (4)-->(5)
  │    │    │    ├── scan uv
- │    │    │    │    ├── columns: u:3!null v:4
- │    │    │    │    ├── key: (3)
- │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    │    ├── columns: u:4!null v:5
+ │    │    │    │    ├── key: (4)
+ │    │    │    │    └── fd: (4)-->(5)
  │    │    │    └── filters
- │    │    │         └── v:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │    │         └── v:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
  │    │    └── filters (true)
  │    └── aggregations
- │         ├── sum [as=sum:5, outer=(4)]
- │         │    └── v:4
- │         └── const-agg [as=const:6, outer=(3)]
- │              └── u:3
+ │         ├── sum [as=sum:7, outer=(5)]
+ │         │    └── v:5
+ │         └── const-agg [as=const:8, outer=(4)]
+ │              └── u:4
  └── filters
-      └── sum:5 = 10 [outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+      └── sum:7 = 10 [outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
 
 # Don't reject nulls when multiple columns are used.
 norm expect-not=RejectNullsGroupBy
@@ -465,36 +465,36 @@ GROUP BY k
 HAVING min(x)=1
 ----
 project
- ├── columns: min:7!null max:8
- ├── fd: ()-->(7)
+ ├── columns: min:9!null max:10
+ ├── fd: ()-->(9)
  └── select
-      ├── columns: k:1!null min:7!null max:8
+      ├── columns: k:1!null min:9!null max:10
       ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(8)
+      ├── fd: ()-->(9), (1)-->(10)
       ├── group-by
-      │    ├── columns: k:1!null min:7 max:8
+      │    ├── columns: k:1!null min:9 max:10
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7,8)
+      │    ├── fd: (1)-->(9,10)
       │    ├── left-join (cross)
-      │    │    ├── columns: k:1!null x:5 y:6
-      │    │    ├── key: (1,5)
-      │    │    ├── fd: (5)-->(6)
+      │    │    ├── columns: k:1!null x:6 y:7
+      │    │    ├── key: (1,6)
+      │    │    ├── fd: (6)-->(7)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── scan xy
-      │    │    │    ├── columns: x:5!null y:6
-      │    │    │    ├── key: (5)
-      │    │    │    └── fd: (5)-->(6)
+      │    │    │    ├── columns: x:6!null y:7
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── min [as=min:7, outer=(5)]
-      │         │    └── x:5
-      │         └── max [as=max:8, outer=(6)]
-      │              └── y:6
+      │         ├── min [as=min:9, outer=(6)]
+      │         │    └── x:6
+      │         └── max [as=max:10, outer=(7)]
+      │              └── y:7
       └── filters
-           └── min:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── min:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
@@ -507,32 +507,32 @@ GROUP BY k
 HAVING count(x)=1
 ----
 project
- ├── columns: count:7!null
- ├── fd: ()-->(7)
+ ├── columns: count:9!null
+ ├── fd: ()-->(9)
  └── select
-      ├── columns: k:1!null count:7!null
+      ├── columns: k:1!null count:9!null
       ├── key: (1)
-      ├── fd: ()-->(7)
+      ├── fd: ()-->(9)
       ├── group-by
-      │    ├── columns: k:1!null count:7!null
+      │    ├── columns: k:1!null count:9!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7)
+      │    ├── fd: (1)-->(9)
       │    ├── left-join (cross)
-      │    │    ├── columns: k:1!null x:5
-      │    │    ├── key: (1,5)
+      │    │    ├── columns: k:1!null x:6
+      │    │    ├── key: (1,6)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
       │    │    ├── scan xy
-      │    │    │    ├── columns: x:5!null
-      │    │    │    └── key: (5)
+      │    │    │    ├── columns: x:6!null
+      │    │    │    └── key: (6)
       │    │    └── filters (true)
       │    └── aggregations
-      │         └── count [as=count:7, outer=(5)]
-      │              └── x:5
+      │         └── count [as=count:9, outer=(6)]
+      │              └── x:6
       └── filters
-           └── count:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── count:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
 
 # ConstNotNullAgg rejects nulls (regression test for #28810).
 # TODO(andyk): Removal of filter pushdown into apply join inputs means that this
@@ -543,51 +543,51 @@ norm
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project
- ├── columns: "?column?":17!null
- ├── fd: ()-->(17)
+ ├── columns: "?column?":20!null
+ ├── fd: ()-->(20)
  ├── left-join-apply
- │    ├── columns: ref_0.s:4 exists:16
+ │    ├── columns: ref_0.s:4 exists:19
  │    ├── scan ref_0
  │    │    └── columns: ref_0.s:4
  │    ├── project
- │    │    ├── columns: exists:16!null
+ │    │    ├── columns: exists:19!null
  │    │    ├── outer: (4)
  │    │    ├── group-by
- │    │    │    ├── columns: ref_1.k:5!null true_agg:15
- │    │    │    ├── grouping columns: ref_1.k:5!null
+ │    │    │    ├── columns: ref_1.k:6!null true_agg:18
+ │    │    │    ├── grouping columns: ref_1.k:6!null
  │    │    │    ├── outer: (4)
- │    │    │    ├── key: (5)
- │    │    │    ├── fd: (5)-->(15)
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: (6)-->(18)
  │    │    │    ├── left-join (cross)
- │    │    │    │    ├── columns: ref_1.k:5!null true:14
+ │    │    │    │    ├── columns: ref_1.k:6!null true:17
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── scan ref_1
- │    │    │    │    │    ├── columns: ref_1.k:5!null
- │    │    │    │    │    └── key: (5)
+ │    │    │    │    │    ├── columns: ref_1.k:6!null
+ │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:14!null
+ │    │    │    │    │    ├── columns: true:17!null
  │    │    │    │    │    ├── outer: (4)
- │    │    │    │    │    ├── fd: ()-->(14)
+ │    │    │    │    │    ├── fd: ()-->(17)
  │    │    │    │    │    ├── select
- │    │    │    │    │    │    ├── columns: a.s:12!null
+ │    │    │    │    │    │    ├── columns: a.s:14!null
  │    │    │    │    │    │    ├── outer: (4)
- │    │    │    │    │    │    ├── fd: ()-->(12)
+ │    │    │    │    │    │    ├── fd: ()-->(14)
  │    │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    │    └── columns: a.s:12
+ │    │    │    │    │    │    │    └── columns: a.s:14
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── a.s:12 = ref_0.s:4 [outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    │    │    │    │         └── a.s:14 = ref_0.s:4 [outer=(4,14), constraints=(/4: (/NULL - ]; /14: (/NULL - ]), fd=(4)==(14), (14)==(4)]
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── true [as=true:14]
+ │    │    │    │    │         └── true [as=true:17]
  │    │    │    │    └── filters (true)
  │    │    │    └── aggregations
- │    │    │         └── const-not-null-agg [as=true_agg:15, outer=(14)]
- │    │    │              └── true:14
+ │    │    │         └── const-not-null-agg [as=true_agg:18, outer=(17)]
+ │    │    │              └── true:17
  │    │    └── projections
- │    │         └── true_agg:15 IS NOT NULL [as=exists:16, outer=(15)]
+ │    │         └── true_agg:18 IS NOT NULL [as=exists:19, outer=(18)]
  │    └── filters
- │         └── exists:16 [outer=(16), constraints=(/16: [/true - /true]; tight), fd=()-->(16)]
+ │         └── exists:19 [outer=(19), constraints=(/19: [/true - /true]; tight), fd=()-->(19)]
  └── projections
-      └── 1 [as="?column?":17]
+      └── 1 [as="?column?":20]
 
 # Use with multi-argument aggregate function.
 norm expect=RejectNullsGroupBy
@@ -599,43 +599,43 @@ GROUP BY k
 HAVING string_agg(s, ',')='foo'
 ----
 project
- ├── columns: string_agg:8!null
- ├── fd: ()-->(8)
+ ├── columns: string_agg:10!null
+ ├── fd: ()-->(10)
  └── select
-      ├── columns: k:3!null string_agg:8!null
-      ├── key: (3)
-      ├── fd: ()-->(8)
+      ├── columns: k:4!null string_agg:10!null
+      ├── key: (4)
+      ├── fd: ()-->(10)
       ├── group-by
-      │    ├── columns: k:3!null string_agg:8!null
-      │    ├── grouping columns: k:3!null
-      │    ├── key: (3)
-      │    ├── fd: (3)-->(8)
+      │    ├── columns: k:4!null string_agg:10!null
+      │    ├── grouping columns: k:4!null
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(10)
       │    ├── project
-      │    │    ├── columns: column7:7!null k:3!null s:6!null
-      │    │    ├── fd: ()-->(7), (3)-->(6)
+      │    │    ├── columns: column9:9!null k:4!null s:7!null
+      │    │    ├── fd: ()-->(9), (4)-->(7)
       │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: k:3!null s:6!null
-      │    │    │    ├── fd: (3)-->(6)
+      │    │    │    ├── columns: k:4!null s:7!null
+      │    │    │    ├── fd: (4)-->(7)
       │    │    │    ├── scan xy
       │    │    │    ├── select
-      │    │    │    │    ├── columns: k:3!null s:6!null
-      │    │    │    │    ├── key: (3)
-      │    │    │    │    ├── fd: (3)-->(6)
+      │    │    │    │    ├── columns: k:4!null s:7!null
+      │    │    │    │    ├── key: (4)
+      │    │    │    │    ├── fd: (4)-->(7)
       │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:3!null s:6
-      │    │    │    │    │    ├── key: (3)
-      │    │    │    │    │    └── fd: (3)-->(6)
+      │    │    │    │    │    ├── columns: k:4!null s:7
+      │    │    │    │    │    ├── key: (4)
+      │    │    │    │    │    └── fd: (4)-->(7)
       │    │    │    │    └── filters
-      │    │    │    │         └── s:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │    │         └── s:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ',' [as=column7:7]
+      │    │         └── ',' [as=column9:9]
       │    └── aggregations
-      │         └── string-agg [as=string_agg:8, outer=(6,7)]
-      │              ├── s:6
-      │              └── column7:7
+      │         └── string-agg [as=string_agg:10, outer=(7,9)]
+      │              ├── s:7
+      │              └── column9:9
       └── filters
-           └── string_agg:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+           └── string_agg:10 = 'foo' [outer=(10), constraints=(/10: [/'foo' - /'foo']; tight), fd=()-->(10)]
 
 # Don't reject nulls when aggregate argument is a not a Project passthrough
 # column.
@@ -648,42 +648,42 @@ GROUP BY k
 HAVING string_agg(s || 'bar', ',')='foo'
 ----
 project
- ├── columns: string_agg:9!null
+ ├── columns: string_agg:11!null
  ├── immutable
- ├── fd: ()-->(9)
+ ├── fd: ()-->(11)
  └── select
-      ├── columns: k:3 string_agg:9!null
+      ├── columns: k:4 string_agg:11!null
       ├── immutable
-      ├── key: (3)
-      ├── fd: ()-->(9)
+      ├── key: (4)
+      ├── fd: ()-->(11)
       ├── group-by
-      │    ├── columns: k:3 string_agg:9
-      │    ├── grouping columns: k:3
+      │    ├── columns: k:4 string_agg:11
+      │    ├── grouping columns: k:4
       │    ├── immutable
-      │    ├── key: (3)
-      │    ├── fd: (3)-->(9)
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(11)
       │    ├── project
-      │    │    ├── columns: column7:7 column8:8!null k:3
+      │    │    ├── columns: column9:9 column10:10!null k:4
       │    │    ├── immutable
-      │    │    ├── fd: ()-->(8), (3)-->(7)
+      │    │    ├── fd: ()-->(10), (4)-->(9)
       │    │    ├── left-join (cross)
-      │    │    │    ├── columns: k:3 s:6
-      │    │    │    ├── fd: (3)-->(6)
+      │    │    │    ├── columns: k:4 s:7
+      │    │    │    ├── fd: (4)-->(7)
       │    │    │    ├── scan xy
       │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:3!null s:6
-      │    │    │    │    ├── key: (3)
-      │    │    │    │    └── fd: (3)-->(6)
+      │    │    │    │    ├── columns: k:4!null s:7
+      │    │    │    │    ├── key: (4)
+      │    │    │    │    └── fd: (4)-->(7)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         ├── s:6 || 'bar' [as=column7:7, outer=(6), immutable]
-      │    │         └── ',' [as=column8:8]
+      │    │         ├── s:7 || 'bar' [as=column9:9, outer=(7), immutable]
+      │    │         └── ',' [as=column10:10]
       │    └── aggregations
-      │         └── string-agg [as=string_agg:9, outer=(7,8)]
-      │              ├── column7:7
-      │              └── column8:8
+      │         └── string-agg [as=string_agg:11, outer=(9,10)]
+      │              ├── column9:9
+      │              └── column10:10
       └── filters
-           └── string_agg:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
+           └── string_agg:11 = 'foo' [outer=(11), constraints=(/11: [/'foo' - /'foo']; tight), fd=()-->(11)]
 
 # Regression test: the not-null filter can't make it all the way down to the
 # join that requested it, so ensure that we don't endlessly try to introduce
@@ -715,47 +715,47 @@ exprnorm
 )
 ----
 select
- ├── columns: sum:6!null
+ ├── columns: sum:8!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(8)
  ├── scalar-group-by
- │    ├── columns: sum:6
+ │    ├── columns: sum:8
  │    ├── cardinality: [1 - 1]
  │    ├── immutable
  │    ├── key: ()
- │    ├── fd: ()-->(6)
+ │    ├── fd: ()-->(8)
  │    ├── inner-join-apply
- │    │    ├── columns: x:1!null u:3!null z:5
+ │    │    ├── columns: x:1!null u:4!null z:7
  │    │    ├── immutable
- │    │    ├── key: (1,3)
- │    │    ├── fd: (1,3)-->(5)
+ │    │    ├── key: (1,4)
+ │    │    ├── fd: (1,4)-->(7)
  │    │    ├── scan xy
  │    │    │    ├── columns: x:1!null
  │    │    │    └── key: (1)
  │    │    ├── left-join-apply
- │    │    │    ├── columns: u:3!null z:5
+ │    │    │    ├── columns: u:4!null z:7
  │    │    │    ├── outer: (1)
  │    │    │    ├── immutable
- │    │    │    ├── key: (3)
- │    │    │    ├── fd: (3)-->(5)
+ │    │    │    ├── key: (4)
+ │    │    │    ├── fd: (4)-->(7)
  │    │    │    ├── scan uv
- │    │    │    │    ├── columns: u:3!null
- │    │    │    │    └── key: (3)
+ │    │    │    │    ├── columns: u:4!null
+ │    │    │    │    └── key: (4)
  │    │    │    ├── values
- │    │    │    │    ├── columns: z:5
- │    │    │    │    ├── outer: (1,3)
+ │    │    │    │    ├── columns: z:7
+ │    │    │    │    ├── outer: (1,4)
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── immutable
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(5)
- │    │    │    │    └── (x:1 + u:3,)
+ │    │    │    │    ├── fd: ()-->(7)
+ │    │    │    │    └── (x:1 + u:4,)
  │    │    │    └── filters
  │    │    │         └── x:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
  │    │    └── filters (true)
  │    └── aggregations
- │         └── sum [as=sum:6, outer=(5)]
- │              └── z:5
+ │         └── sum [as=sum:8, outer=(7)]
+ │              └── z:7
  └── filters
-      └── sum:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+      └── sum:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]

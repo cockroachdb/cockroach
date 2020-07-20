@@ -35,33 +35,33 @@ opt
 SELECT 1+a.y AS plus, a.x FROM a
 ----
 project
- ├── columns: plus:3 x:1!null
+ ├── columns: plus:4 x:1!null
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(3)
+ ├── fd: (1)-->(4)
  ├── scan a
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      └── y:2 + 1 [as=plus:3, outer=(2), immutable]
+      └── y:2 + 1 [as=plus:4, outer=(2), immutable]
 
 # Join operator.
 opt
 SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
 ----
 inner-join (cross)
- ├── columns: x:3 rowid:5!null y:2 x:1!null y2:2 y:4
- ├── key: (1,5)
- ├── fd: (1)-->(2), (5)-->(3,4)
+ ├── columns: x:4 rowid:6!null y:2 x:1!null y2:2 y:5
+ ├── key: (1,6)
+ ├── fd: (1)-->(2), (6)-->(4,5)
  ├── scan a
  │    ├── columns: a.x:1!null a.y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── scan b
- │    ├── columns: b.x:3 b.y:4 rowid:5!null
- │    ├── key: (5)
- │    └── fd: (5)-->(3,4)
+ │    ├── columns: b.x:4 b.y:5 rowid:6!null
+ │    ├── key: (6)
+ │    └── fd: (6)-->(4,5)
  └── filters (true)
 
 # Groupby operator.
@@ -69,18 +69,18 @@ opt
 SELECT max(y), y, y, x FROM a GROUP BY a.x, a.y
 ----
 group-by
- ├── columns: max:3 y:2 y:2 x:1!null
+ ├── columns: max:4 y:2 y:2 x:1!null
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2,4)
  ├── scan a
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── max [as=max:3, outer=(2)]
+      ├── max [as=max:4, outer=(2)]
       │    └── y:2
       └── const-agg [as=y:2, outer=(2)]
            └── y:2

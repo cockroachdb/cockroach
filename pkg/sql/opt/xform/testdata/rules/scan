@@ -348,9 +348,9 @@ CREATE TABLE abc (
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +5])
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +6])
  ├── G1: (project G2 G3 d)
- │    ├── [presentation: d:4] [ordering: +5]
+ │    ├── [presentation: d:4] [ordering: +6]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1289.36
  │    └── []
@@ -583,10 +583,10 @@ opt
 SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200
 ----
 scalar-group-by
- ├── columns: sum:5
+ ├── columns: sum:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan orders@orders_by_seq_num
  │    ├── columns: total:3!null seq_num:4!null
  │    └── constraint: /1/4/2
@@ -594,7 +594,7 @@ scalar-group-by
  │         ├── [/'us-east1'/100 - /'us-east1'/199]
  │         └── [/'us-west1'/100 - /'us-west1'/199]
  └── aggregations
-      └── sum [as=sum:5, outer=(3)]
+      └── sum [as=sum:6, outer=(3)]
            └── total:3
 
 exec-ddl

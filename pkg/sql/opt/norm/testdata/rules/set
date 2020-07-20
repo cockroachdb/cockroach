@@ -17,13 +17,13 @@ SELECT k FROM
   (SELECT k FROM b WHERE k IN ())
 ----
 project
- ├── columns: k:11!null
- ├── key: (11)
+ ├── columns: k:13!null
+ ├── key: (13)
  ├── scan b
  │    ├── columns: b.k:1!null
  │    └── key: (1)
  └── projections
-      └── b.k:1 [as=k:11, outer=(1)]
+      └── b.k:1 [as=k:13, outer=(1)]
 
 # --------------------------------------------------
 # EliminateUnionAllRight
@@ -36,13 +36,13 @@ SELECT k FROM
   (SELECT k FROM b)
 ----
 project
- ├── columns: k:11!null
- ├── key: (11)
+ ├── columns: k:13!null
+ ├── key: (13)
  ├── scan b
- │    ├── columns: b.k:6!null
- │    └── key: (6)
+ │    ├── columns: b.k:7!null
+ │    └── key: (7)
  └── projections
-      └── b.k:6 [as=k:11, outer=(6)]
+      └── b.k:7 [as=k:13, outer=(7)]
 
 norm
 SELECT k FROM
@@ -51,7 +51,7 @@ SELECT k FROM
   (SELECT k FROM b WHERE i IN ())
 ----
 values
- ├── columns: k:11!null
+ ├── columns: k:13!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(11)
+ └── fd: ()-->(13)
