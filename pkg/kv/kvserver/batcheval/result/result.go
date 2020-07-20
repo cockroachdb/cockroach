@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -63,8 +64,10 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
-	// Call maybeWatchForMerge.
-	MaybeWatchForMerge bool
+	// FreezeStart indicates the high water mark timestamp beyond which the range
+	// is guaranteed to not have served any requests. This value is only set when
+	// a range merge is in progress. If set, call maybeWatchForMerge.
+	FreezeStart hlc.Timestamp
 
 	// Metrics contains counters which are to be passed to the
 	// metrics subsystem.
@@ -84,7 +87,7 @@ func (lResult *LocalResult) IsZero() bool {
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
 		lResult.MaybeGossipNodeLiveness == nil &&
-		!lResult.MaybeWatchForMerge &&
+		lResult.FreezeStart.IsEmpty() &&
 		lResult.Metrics == nil
 }
 
@@ -97,13 +100,13 @@ func (lResult *LocalResult) String() string {
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
+		"MaybeGossipNodeLiveness:%s FreezeStart:%s",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
-		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
+		lResult.MaybeGossipNodeLiveness, lResult.FreezeStart)
 }
 
 // DetachEncounteredIntents returns (and removes) those encountered
@@ -187,10 +190,10 @@ func coalesceBool(lhs *bool, rhs *bool) {
 func (p *Result) MergeAndDestroy(q Result) error {
 	if q.Replicated.State != nil {
 		if q.Replicated.State.RaftAppliedIndex != 0 {
-			return errors.New("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify RaftApplyIndex")
 		}
 		if q.Replicated.State.LeaseAppliedIndex != 0 {
-			return errors.New("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify RaftApplyIndex")
 		}
 		if p.Replicated.State == nil {
 			p.Replicated.State = &kvserverpb.ReplicaState{}
@@ -198,21 +201,21 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		if p.Replicated.State.Desc == nil {
 			p.Replicated.State.Desc = q.Replicated.State.Desc
 		} else if q.Replicated.State.Desc != nil {
-			return errors.New("conflicting RangeDescriptor")
+			return errors.AssertionFailedf("conflicting RangeDescriptor")
 		}
 		q.Replicated.State.Desc = nil
 
 		if p.Replicated.State.Lease == nil {
 			p.Replicated.State.Lease = q.Replicated.State.Lease
 		} else if q.Replicated.State.Lease != nil {
-			return errors.New("conflicting Lease")
+			return errors.AssertionFailedf("conflicting Lease")
 		}
 		q.Replicated.State.Lease = nil
 
 		if p.Replicated.State.TruncatedState == nil {
 			p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
 		} else if q.Replicated.State.TruncatedState != nil {
-			return errors.New("conflicting TruncatedState")
+			return errors.AssertionFailedf("conflicting TruncatedState")
 		}
 		q.Replicated.State.TruncatedState = nil
 
@@ -226,7 +229,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 
 		if q.Replicated.State.Stats != nil {
-			return errors.New("must not specify Stats")
+			return errors.AssertionFailedf("must not specify Stats")
 		}
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
 			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
@@ -238,42 +241,42 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	if p.Replicated.Split == nil {
 		p.Replicated.Split = q.Replicated.Split
 	} else if q.Replicated.Split != nil {
-		return errors.New("conflicting Split")
+		return errors.AssertionFailedf("conflicting Split")
 	}
 	q.Replicated.Split = nil
 
 	if p.Replicated.Merge == nil {
 		p.Replicated.Merge = q.Replicated.Merge
 	} else if q.Replicated.Merge != nil {
-		return errors.New("conflicting Merge")
+		return errors.AssertionFailedf("conflicting Merge")
 	}
 	q.Replicated.Merge = nil
 
 	if p.Replicated.ChangeReplicas == nil {
 		p.Replicated.ChangeReplicas = q.Replicated.ChangeReplicas
 	} else if q.Replicated.ChangeReplicas != nil {
-		return errors.New("conflicting ChangeReplicas")
+		return errors.AssertionFailedf("conflicting ChangeReplicas")
 	}
 	q.Replicated.ChangeReplicas = nil
 
 	if p.Replicated.ComputeChecksum == nil {
 		p.Replicated.ComputeChecksum = q.Replicated.ComputeChecksum
 	} else if q.Replicated.ComputeChecksum != nil {
-		return errors.New("conflicting ComputeChecksum")
+		return errors.AssertionFailedf("conflicting ComputeChecksum")
 	}
 	q.Replicated.ComputeChecksum = nil
 
 	if p.Replicated.RaftLogDelta == 0 {
 		p.Replicated.RaftLogDelta = q.Replicated.RaftLogDelta
 	} else if q.Replicated.RaftLogDelta != 0 {
-		return errors.New("conflicting RaftLogDelta")
+		return errors.AssertionFailedf("conflicting RaftLogDelta")
 	}
 	q.Replicated.RaftLogDelta = 0
 
 	if p.Replicated.AddSSTable == nil {
 		p.Replicated.AddSSTable = q.Replicated.AddSSTable
 	} else if q.Replicated.AddSSTable != nil {
-		return errors.New("conflicting AddSSTable")
+		return errors.AssertionFailedf("conflicting AddSSTable")
 	}
 	q.Replicated.AddSSTable = nil
 
@@ -289,7 +292,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
 	} else if q.Replicated.PrevLeaseProposal != nil {
-		return errors.New("conflicting lease expiration")
+		return errors.AssertionFailedf("conflicting lease expiration")
 	}
 	q.Replicated.PrevLeaseProposal = nil
 
@@ -331,15 +334,21 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness
 	} else if q.Local.MaybeGossipNodeLiveness != nil {
-		return errors.New("conflicting MaybeGossipNodeLiveness")
+		return errors.AssertionFailedf("conflicting MaybeGossipNodeLiveness")
 	}
 	q.Local.MaybeGossipNodeLiveness = nil
+
+	if p.Local.FreezeStart.IsEmpty() {
+		p.Local.FreezeStart = q.Local.FreezeStart
+	} else if !q.Local.FreezeStart.IsEmpty() {
+		return errors.AssertionFailedf("conflicting FreezeStart")
+	}
+	q.Local.FreezeStart = hlc.Timestamp{}
 
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeGossipSystemConfigIfHaveFailure, &q.Local.MaybeGossipSystemConfigIfHaveFailure)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
-	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
 	if p.Local.Metrics == nil {
 		p.Local.Metrics = q.Local.Metrics

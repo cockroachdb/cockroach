@@ -338,7 +338,13 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// progress, as only the old leaseholder would have been explicitly notified
 		// of the merge. If there is a merge in progress, maybeWatchForMerge will
 		// arrange to block all traffic to this replica unless the merge aborts.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
+		// NB: If the subsumed range changes leaseholders after subsumption,
+		// `freezeStart` will be zero and we will effectively be blocking all read
+		// requests.
+		// TODO(aayush): In the future, if we permit co-operative lease transfers
+		// when a range is subsumed, it should be relatively straightforward to
+		// allow historical reads on the subsumed RHS after such lease transfers.
+		if err := r.maybeWatchForMerge(ctx, hlc.Timestamp{} /* freezeStart */); err != nil {
 			// We were unable to determine whether a merge was in progress. We cannot
 			// safely proceed.
 			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
@@ -610,8 +616,8 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	if lResult.EndTxns != nil {
 		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
 	}
-	if lResult.MaybeWatchForMerge {
-		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
+	if !lResult.FreezeStart.IsEmpty() {
+		log.Fatalf(ctx, "LocalEvalResult.FreezeStart should have been handled and reset: %s", lResult.FreezeStart)
 	}
 
 	if lResult.AcquiredLocks != nil {

@@ -59,6 +59,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
+	"golang.org/x/sync/errgroup"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -3673,6 +3674,112 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestHistoricalReadsAfterSubsume tests that a subsumed right hand side range
+// can only serve read-only traffic for timestamps that precede the subsumption
+// time, but don't contain the subsumption time in their uncertainty interval.
+func TestHistoricalReadsAfterSubsume(t *testing.T) {
+	ctx := context.Background()
+
+	var mtc multiTestContext
+	storeCfg := kvserver.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.MaxOffset = 100 * time.Millisecond
+
+	state := mergeFilterState{
+		blockMergeTrigger: make(chan hlc.Timestamp),
+		finishMergeTxn:    make(chan struct{}),
+	}
+	storeCfg.TestingKnobs.TestingRequestFilter = state.suspendMergeTrigger
+	mergeInProgressErrorCh := make(chan struct{}, 2)
+	storeCfg.TestingKnobs.TestingConcurrencyRetryFilter = func(ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error) *roachpb.Error {
+		if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok && ba.Txn != nil {
+			mergeInProgressErrorCh <- struct{}{}
+		}
+		return nil
+	}
+	mtc.storeConfig = &storeCfg
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+
+	store := mtc.Store(0)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs); err != nil {
+			return err.GoError()
+		}
+		return nil
+	})
+	defer func() {
+		// Unblock the merge so the blocked queries can continue
+		close(state.finishMergeTxn)
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	freezeStart := <-state.blockMergeTrigger
+	// We now have the right hand side range in its subsumed state.
+	send := func(name string, ts hlc.Timestamp, args roachpb.Request) error {
+		txn := roachpb.MakeTransaction(name, rhsDesc.StartKey.AsRawKey(),
+			0, ts, storeCfg.TestingKnobs.MaxOffset.Nanoseconds())
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, args); pErr != nil {
+			return pErr.GetDetail()
+		}
+		return nil
+	}
+	// Ensure that a read query for a timestamp older than MaxOffset is let
+	// through.
+	preUncertaintyTs := hlc.Timestamp{
+		WallTime: freezeStart.GoTime().Add(-storeCfg.TestingKnobs.MaxOffset).UnixNano() - 1,
+	}
+	log.Infof(ctx,
+		"sending a read query at ts: %s, which should not contain FreezeStart in its uncertainty interval",
+		preUncertaintyTs)
+	if err := send("historical read", preUncertaintyTs,
+		getArgs(rhsDesc.StartKey.AsRawKey())); err != nil {
+		t.Error(err)
+	}
+	checkRangeNotFound := func(name string, err error) error {
+		if err == nil {
+			return errors.Newf("%s: expected RangeNotFoundError, got nil", name)
+		}
+		if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+			return err
+		}
+		return nil
+	}
+	// Write queries for the same historical timestamp should block (and then
+	// eventually fail because the range no longer exists).
+	log.Infof(ctx, "sending a write query at ts: %s", preUncertaintyTs)
+	g.Go(func() error {
+		name := "test historical write"
+		err := send(name, preUncertaintyTs, putArgs(rhsDesc.StartKey.AsRawKey(), []byte(`test value`)))
+		return checkRangeNotFound(name, err)
+	})
+	// Read queries that contain the subsumption time in its uncertainty interval
+	// should block and eventually fail.
+	log.Infof(ctx, "sending a read query at FreezeStart's preceding timestamp")
+	g.Go(func() error {
+		name := "test read with uncertainty"
+		err := send(name, freezeStart.Prev(), getArgs(rhsDesc.StartKey.AsRawKey()))
+		return checkRangeNotFound(name, err)
+	})
+	blockedRequestsTimer := timeutil.NewTimer()
+	blockedRequestsTimer.Reset(20 * time.Second)
+	for count := 0; count < 2; count++ {
+		select {
+		case <-blockedRequestsTimer.C:
+			t.Fatalf("expected 2 requests to be waiting for merge, detected only %d", count)
+		case <-mergeInProgressErrorCh:
+		}
 	}
 }
 
