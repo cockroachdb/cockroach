@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -211,7 +212,7 @@ func MakeRegistry(
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan struct{}),
-		sqlInstance: sqlliveness.NewSqlLiveness(
+		sqlInstance: slinstance.NewSqlInstance(
 			context.Background(), stopper, db, ex, DefaultAdoptInterval+10*time.Duration(time.Second), time.Second,
 		),
 	}
