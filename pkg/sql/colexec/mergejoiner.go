@@ -248,30 +248,134 @@ func NewMergeJoinOp(
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
 ) (ResettableOperator, error) {
+	// Merge joiner only supports the case when the physical types in the
+	// equality columns in both inputs are the same. We, however, also need to
+	// support joining on numeric columns of different types or widths. If we
+	// encounter such mismatch, we need to cast one of the vectors to another
+	// and use the cast vector for equality check.
+
+	// Make a copy of types and orderings to be sure that we don't modify
+	// anything unwillingly.
+	actualLeftTypes, actualRightTypes := append([]*types.T{}, leftTypes...), append([]*types.T{}, rightTypes...)
+	actualLeftOrdering := make([]execinfrapb.Ordering_Column, len(leftOrdering))
+	actualRightOrdering := make([]execinfrapb.Ordering_Column, len(rightOrdering))
+	copy(actualLeftOrdering, leftOrdering)
+	copy(actualRightOrdering, rightOrdering)
+	isNumeric := func(t *types.T) bool {
+		switch t.Family() {
+		case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+			return true
+		default:
+			return false
+		}
+	}
+	// Iterate over each equality column and check whether a cast is needed. If
+	// it is needed for some column, then a cast operator is planned on top of
+	// the input from the corresponding side and the types and ordering are
+	// adjusted accordingly. We will also need to project out that temporary
+	// column, so a simple project will be planned below.
+	var needProjection bool
+	var err error
+	for i := range leftOrdering {
+		leftColIdx := leftOrdering[i].ColIdx
+		rightColIdx := rightOrdering[i].ColIdx
+		leftType := leftTypes[leftColIdx]
+		rightType := rightTypes[rightColIdx]
+		if !leftType.Identical(rightType) && isNumeric(leftType) && isNumeric(rightType) {
+			// The types are different and both are numeric, so we need to plan
+			// a cast. There is a hierarchy of valid casts:
+			//   INT2 -> INT4 -> INT8 -> FLOAT -> DECIMAL
+			// and the cast is valid if 'fromType' is mentioned before 'toType'
+			// in this chain.
+			castLeftToRight := false
+			switch leftType.Family() {
+			case types.IntFamily:
+				switch leftType.Width() {
+				case 16:
+					castLeftToRight = true
+				case 32:
+					castLeftToRight = !rightType.Identical(types.Int2)
+				default:
+					castLeftToRight = rightType.Family() != types.IntFamily
+				}
+			case types.FloatFamily:
+				castLeftToRight = rightType.Family() == types.DecimalFamily
+			}
+			if castLeftToRight {
+				castColumnIdx := len(actualLeftTypes)
+				left, err = GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
+				if err != nil {
+					return nil, err
+				}
+				actualLeftTypes = append(actualLeftTypes, rightType)
+				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
+			} else {
+				castColumnIdx := len(actualRightTypes)
+				right, err = GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
+				if err != nil {
+					return nil, err
+				}
+				actualRightTypes = append(actualRightTypes, leftType)
+				actualRightOrdering[i].ColIdx = uint32(castColumnIdx)
+			}
+			needProjection = true
+		}
+	}
 	base, err := newMergeJoinBase(
-		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType,
-		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
+		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType, left, right,
+		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc,
 	)
+	if err != nil {
+		return nil, err
+	}
+	var mergeJoinerOp ResettableOperator
 	switch joinType {
 	case sqlbase.InnerJoin:
-		return &mergeJoinInnerOp{base}, err
+		mergeJoinerOp = &mergeJoinInnerOp{base}
 	case sqlbase.LeftOuterJoin:
-		return &mergeJoinLeftOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftOuterOp{base}
 	case sqlbase.RightOuterJoin:
-		return &mergeJoinRightOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinRightOuterOp{base}
 	case sqlbase.FullOuterJoin:
-		return &mergeJoinFullOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinFullOuterOp{base}
 	case sqlbase.LeftSemiJoin:
-		return &mergeJoinLeftSemiOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftSemiOp{base}
 	case sqlbase.LeftAntiJoin:
-		return &mergeJoinLeftAntiOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftAntiOp{base}
 	case sqlbase.IntersectAllJoin:
-		return &mergeJoinIntersectAllOp{base}, err
+		mergeJoinerOp = &mergeJoinIntersectAllOp{base}
 	case sqlbase.ExceptAllJoin:
-		return &mergeJoinExceptAllOp{base}, err
+		mergeJoinerOp = &mergeJoinExceptAllOp{base}
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
+	if !needProjection {
+		// We didn't add any cast operators, so we can just return the operator
+		// right away.
+		return mergeJoinerOp, nil
+	}
+	// We need to add a projection to remove all the cast columns we have added
+	// above. Note that all extra columns were appended to the corresponding
+	// types slices, so we simply need to include first len(leftTypes) from the
+	// left and first len(rightTypes) from the right (the latter are included
+	// depending on the join type).
+	numRightTypes := len(rightTypes)
+	if !joinType.ShouldIncludeRightColsInOutput() {
+		numRightTypes = 0
+	}
+	projection := make([]uint32, 0, len(leftTypes)+numRightTypes)
+	for i := range leftTypes {
+		projection = append(projection, uint32(i))
+	}
+	for i := 0; i < numRightTypes; i++ {
+		// Merge joiner outputs all columns from both sides, and the columns
+		// from the right have indices in [len(actualLeftTypes),
+		// len(actualLeftTypes) + len(actualRightColumns)) range.
+		projection = append(projection, uint32(len(actualLeftTypes)+i))
+	}
+	return NewSimpleProjectOp(
+		mergeJoinerOp, len(actualLeftTypes)+len(actualRightTypes), projection,
+	).(ResettableOperator), nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -397,20 +501,6 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
-	scratch      struct {
-		// tempVecs are temporary vectors that can be used during a cast
-		// operation in the probing phase. These vectors should *not* be
-		// exposed outside of the merge joiner.
-		tempVecs []coldata.Vec
-		// lBufferedGroupBatch and rBufferedGroupBatch are scratch batches that are
-		// used to select out the tuples that belong to the buffered batch before
-		// enqueueing them into corresponding mjBufferedGroups. These are lazily
-		// instantiated.
-		// TODO(yuzefovich): uncomment when spillingQueue actually copies the
-		// enqueued batches when those are kept in memory.
-		//lBufferedGroupBatch coldata.Batch
-		//rBufferedGroupBatch coldata.Batch
-	}
 
 	diskAcc *mon.BoundAccount
 }

@@ -21,9 +21,8 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	OneInputNode
+	oneInputCloserHelper
 	NonExplainable
-	closerHelper
 
 	projection []uint32
 	batches    map[coldata.Batch]*projectingBatch
@@ -34,6 +33,7 @@ type simpleProjectOp struct {
 }
 
 var _ closableOperator = &simpleProjectOp{}
+var _ ResettableOperator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
 // underlying batch, discarding all columns but the ones in its projection
@@ -106,7 +106,7 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		OneInputNode:               NewOneInputNode(input),
+		oneInputCloserHelper:       makeOneInputCloserHelper(input),
 		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,
@@ -122,6 +122,9 @@ func (d *simpleProjectOp) Init() {
 
 func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
 	projBatch, found := d.batches[batch]
 	if !found {
 		projBatch = newProjectionBatch(d.projection)
@@ -137,17 +140,8 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	return projBatch
 }
 
-// Close closes the simpleProjectOp's input.
-// TODO(asubiotto): Remove this method. It only exists so that we can call Close
-//  from some runTests subtests when not draining the input fully. The test
-//  should pass in the testing.T object used so that the caller can decide to
-//  explicitly close the input after checking the test.
-func (d *simpleProjectOp) Close(ctx context.Context) error {
-	if !d.close() {
-		return nil
+func (d *simpleProjectOp) reset(ctx context.Context) {
+	if r, ok := d.input.(resetter); ok {
+		r.reset(ctx)
 	}
-	if c, ok := d.input.(Closer); ok {
-		return c.Close(ctx)
-	}
-	return nil
 }

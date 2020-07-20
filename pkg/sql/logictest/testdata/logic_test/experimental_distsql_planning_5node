@@ -73,7 +73,7 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 │
 ├ Node 1
 │ └ *colexec.isNullSelOp
-│   └ *colexec.castOp
+│   └ *colexec.castInt64Int64Op
 │     └ *colexec.ParallelUnorderedSynchronizer
 │       ├ *colfetcher.colBatchScan
 │       ├ *colrpc.Inbox
@@ -103,7 +103,7 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 │
 └ Node 1
   └ *colexec.isNullSelOp
-    └ *colexec.castOp
+    └ *colexec.castInt64Int64Op
       └ *colfetcher.colBatchScan
 
 statement ok
@@ -116,7 +116,7 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ----
 │
 ├ Node 1
-│ └ *colexec.castOp
+│ └ *colexec.castInt64Int64Op
 │   └ *colexec.ParallelUnorderedSynchronizer
 │     ├ *colfetcher.colBatchScan
 │     ├ *colrpc.Inbox
@@ -172,7 +172,7 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ----
 │
 └ Node 1
-  └ *colexec.castOp
+  └ *colexec.castInt64Int64Op
     └ *colfetcher.colBatchScan
 
 statement ok
