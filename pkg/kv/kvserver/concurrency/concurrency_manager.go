@@ -246,7 +246,7 @@ func (m *managerImpl) FinishReq(g *Guard) {
 
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
+	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *roachpb.WriteIntentError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
 		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
@@ -259,7 +259,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
 		if err != nil {
 			log.Fatal(ctx, errors.HandleAsAssertionFailure(err))
 		}
@@ -335,10 +335,10 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseUpdated(isLeaseholder bool) {
+func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
-		m.lt.Enable()
-		m.twq.Enable()
+		m.lt.Enable(seq)
+		m.twq.Enable(seq)
 	} else {
 		// Disable all queues - the concurrency manager will no longer be
 		// informed about all state transitions to locks and transactions.

@@ -19,6 +19,9 @@ type BatchEvalTestingKnobs struct {
 	// TestingEvalFilter is called before evaluating each command.
 	TestingEvalFilter ReplicaCommandFilter
 
+	// TestingPostEvalFilter is called after evaluating each command.
+	TestingPostEvalFilter ReplicaCommandFilter
+
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64

@@ -260,7 +260,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
-			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
+			if g, pErr = r.handleWriteIntentError(ctx, ba, g, status.Lease, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 		case *roachpb.TransactionPushError:
@@ -331,6 +331,7 @@ func (r *Replica) handleWriteIntentError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
 	g *concurrency.Guard,
+	lease roachpb.Lease,
 	pErr *roachpb.Error,
 	t *roachpb.WriteIntentError,
 ) (*concurrency.Guard, *roachpb.Error) {
@@ -338,7 +339,7 @@ func (r *Replica) handleWriteIntentError(
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
-	return r.concMgr.HandleWriterIntentError(ctx, g, t)
+	return r.concMgr.HandleWriterIntentError(ctx, g, lease.Sequence, t)
 }
 
 func (r *Replica) handleTransactionPushError(

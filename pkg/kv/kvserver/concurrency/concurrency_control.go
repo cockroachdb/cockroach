@@ -192,12 +192,12 @@ type ContentionHandler interface {
 	// HandleWriterIntentError consumes a WriteIntentError by informing the
 	// concurrency manager about the replicated write intent that was missing
 	// from its lock table which was found during request evaluation (while
-	// holding latches). After doing so, it enqueues the request that hit the
-	// error in the lock's wait-queue (but does not wait) and releases the
-	// guard's latches. It returns an updated guard reflecting this change.
-	// After the method returns, the original guard should no longer be used.
-	// If an error is returned then the provided guard will be released and no
-	// guard will be returned.
+	// holding latches) under the provided lease sequence. After doing so, it
+	// enqueues the request that hit the error in the lock's wait-queue (but
+	// does not wait) and releases the guard's latches. It returns an updated
+	// guard reflecting this change. After the method returns, the original
+	// guard should no longer be used. If an error is returned then the provided
+	// guard will be released and no guard will be returned.
 	//
 	// Example usage: Txn A scans the lock table and does not see an intent on
 	// key K from txn B because the intent is not being tracked in the lock
@@ -206,7 +206,9 @@ type ContentionHandler interface {
 	// method before txn A retries its scan. During the retry, txn A scans the
 	// lock table and observes the lock on key K, so it enters the lock's
 	// wait-queue and waits for it to be resolved.
-	HandleWriterIntentError(context.Context, *Guard, *roachpb.WriteIntentError) (*Guard, *Error)
+	HandleWriterIntentError(
+		context.Context, *Guard, roachpb.LeaseSequence, *roachpb.WriteIntentError,
+	) (*Guard, *Error)
 
 	// HandleTransactionPushError consumes a TransactionPushError thrown by a
 	// PushTxnRequest by informing the concurrency manager about a transaction
@@ -263,7 +265,7 @@ type RangeStateListener interface {
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
-	OnRangeLeaseUpdated(isLeaseholder bool)
+	OnRangeLeaseUpdated(_ roachpb.LeaseSequence, isLeaseholder bool)
 
 	// OnRangeSplit informs the concurrency manager that its range has split off
 	// a new range to its RHS.
@@ -464,8 +466,9 @@ type lockTable interface {
 	// require latches to be held.
 	Dequeue(lockTableGuard)
 
-	// AddDiscoveredLock informs the lockTable of a lock that was discovered
-	// during evaluation which the lockTable wasn't previously tracking.
+	// AddDiscoveredLock informs the lockTable of a lock which is wasn't
+	// previously tracking that was discovered during evaluation under the
+	// provided lease sequence.
 	//
 	// The method is called when an exclusive replicated lock held by a
 	// different transaction is discovered when reading the MVCC keys during
@@ -474,13 +477,19 @@ type lockTable interface {
 	// locks before acquiring its own locks, since the request needs to repeat
 	// ScanAndEnqueue.
 	//
+	// The lease sequence is used to detect lease changes between the when
+	// request that found the lock started evaluating and when the discovered
+	// lock is added to the lockTable. If there has been a lease change between
+	// these times, information about the discovered lock may be stale, so it is
+	// ignored.
+	//
 	// A latch consistent with the access desired by the guard must be held on
 	// the span containing the discovered lock's key.
 	//
 	// The method returns a boolean indicating whether the discovered lock was
 	// added to the lockTable (true) or whether it was ignored because the
 	// lockTable is currently disabled (false).
-	AddDiscoveredLock(*roachpb.Intent, lockTableGuard) (bool, error)
+	AddDiscoveredLock(*roachpb.Intent, roachpb.LeaseSequence, lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.
@@ -799,7 +808,9 @@ type txnWaitQueue interface {
 // requestQueuer queues requests until some condition is met.
 type requestQueuer interface {
 	// Enable allows requests to be queued. The method is idempotent.
-	Enable()
+	// The lease sequence is used to avoid mixing incompatible requests
+	// or other state from different leasing periods.
+	Enable(roachpb.LeaseSequence)
 
 	// Clear empties the queue(s) and causes all waiting requests to
 	// return. If disable is true, future requests must not be enqueued.

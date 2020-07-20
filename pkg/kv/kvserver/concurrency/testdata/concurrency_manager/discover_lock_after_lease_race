@@ -1,0 +1,200 @@
+# -------------------------------------------------------------
+# The following sequence of events used to trigger an assertion
+# in lock-table that a lock was acquired by a different
+# transaction than the current lock holder. This was due to an
+# a scan discovering an intent but not informing the lock-table
+# about this until after the range lease had been transferred
+# away and returned. If the intent was replaced (resolved and
+# rewritten by another transaction) during the time that the
+# lease was held by a different node, it would be possible for
+# the original scan's discovery of the old intent to trigger
+# the incorrect transaction assertion.
+#
+# Setup: txn1 writes intent on key k
+#        
+# Test:  txn2 sequences and begins evaluating
+#        txn2 hits intent, stalls before informing lock-table
+#
+#        lease is transferred away from node
+#        (other node) txn1's intent is resolved
+#        (other node) txn2 writes intent on key k
+#
+#        lease is transferred back to node
+#        txn4 sequences and begins evaluating
+#        txn4 hits new intent, informs lock-table
+#        txn2 unpauses, informs lock-table of txn1's intent [*]
+#        txn3 commits
+#        txn2 and txn4 proceed
+#
+# [*] This used to panic. The fix for this was to keep track of the
+#     lease epoch that intents are discovered within and to only add
+#     those intents to the lock-table if they are from the currently
+#     active lease.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10 epoch=0
+----
+
+new-txn name=txn2 ts=10 epoch=0
+----
+
+new-txn name=txn3 ts=10 epoch=0
+----
+
+new-txn name=txn4 ts=10 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10
+  get key=k
+----
+
+new-request name=req3 txn=txn3 ts=10
+  put key=k value=v2
+----
+
+new-request name=req4 txn=txn4 ts=10
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# NOTE: replicated locks are not immediately stored in the lock-table.
+on-lock-acquired req=req1 key=k dur=r
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+# req2 begins evaluating and hits the replicated intent. However, before
+# handle-write-intent-error, it pauses.
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+# Replica loses lease.
+on-lease-updated leaseholder=false lease-seq=2
+----
+[-] transfer lease: released
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+# The following series of events takes place on the new leaseholder.
+#
+# on-txn-updated txn=txn1 status=aborted
+# ----
+# [-] update txn: aborting txn1
+# 
+# sequence req=req3
+# ----
+# 
+# on-lock-acquired req=req3 key=k dur=r
+# ----
+# 
+# finish req=req3
+# ----
+
+# Replica acquires lease.
+on-lease-updated leaseholder=true lease-seq=3
+----
+[-] transfer lease: acquired
+
+sequence req=req4
+----
+[3] sequence req4: sequencing request
+[3] sequence req4: acquiring latches
+[3] sequence req4: scanning lock table for conflicting locks
+[3] sequence req4: sequencing complete, returned guard
+
+handle-write-intent-error req=req4 lease-seq=3
+  intent txn=txn3 key=k
+----
+[4] handle write intent error req4: handled conflicting intents on "k", released latches
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req4
+----
+[5] sequence req4: re-sequencing request
+[5] sequence req4: acquiring latches
+[5] sequence req4: scanning lock table for conflicting locks
+[5] sequence req4: waiting in lock wait-queues
+[5] sequence req4: pushing timestamp of txn 00000003 above 0.000000010,0
+[5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+handle-write-intent-error req=req2 lease-seq=1
+  intent txn=txn1 key=k
+----
+[6] handle write intent error req2: handled conflicting intents on "k", released latches
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,0, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 3, txn: 00000004-0000-0000-0000-000000000000
+   distinguished req: 3
+local: num=0
+
+sequence req=req2
+----
+[7] sequence req2: re-sequencing request
+[7] sequence req2: acquiring latches
+[7] sequence req2: scanning lock table for conflicting locks
+[7] sequence req2: waiting in lock wait-queues
+[7] sequence req2: pushing timestamp of txn 00000003 above 0.000000010,0
+[7] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+[5] sequence req4: resolving intent "k" for txn 00000003 with COMMITTED status
+[5] sequence req4: acquiring latches
+[5] sequence req4: scanning lock table for conflicting locks
+[5] sequence req4: sequencing complete, returned guard
+[7] sequence req2: resolving intent "k" for txn 00000003 with COMMITTED status
+[7] sequence req2: acquiring latches
+[7] sequence req2: scanning lock table for conflicting locks
+[7] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+reset
+----

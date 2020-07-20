@@ -50,6 +50,7 @@ type FilterArgs struct {
 	Sid   roachpb.StoreID
 	Req   roachpb.Request
 	Hdr   roachpb.Header
+	Err   error // only used for TestingPostEvalFilter
 }
 
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.

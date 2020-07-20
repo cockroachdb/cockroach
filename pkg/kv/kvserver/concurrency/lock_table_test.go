@@ -82,7 +82,7 @@ update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seq
 
  Updates locks for the named transaction.
 
-add-discovered r=<name> k=<key> txn=<name>
+add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>]
 ----
 <error string>
 
@@ -108,7 +108,7 @@ should-wait r=<name>
 
  Calls lockTableGuard.ShouldWait.
 
-enable
+enable [lease-seq=<seq>]
 ----
 
  Calls lockTable.Enable.
@@ -141,8 +141,9 @@ func TestLockTableBasic(t *testing.T) {
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = &lockTableImpl{
-					enabled:  true,
-					maxLocks: int64(maxLocks),
+					enabled:    true,
+					enabledSeq: 1,
+					maxLocks:   int64(maxLocks),
 				}
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
@@ -333,7 +334,12 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
-				if _, err := lt.AddDiscoveredLock(&intent, g); err != nil {
+				seq := int(1)
+				if d.HasArg("lease-seq") {
+					d.ScanArgs(t, "lease-seq", &seq)
+				}
+				leaseSeq := roachpb.LeaseSequence(seq)
+				if _, err := lt.AddDiscoveredLock(&intent, leaseSeq, g); err != nil {
 					return err.Error()
 				}
 				return lt.(*lockTableImpl).String()
@@ -406,7 +412,11 @@ func TestLockTableBasic(t *testing.T) {
 					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
 
 			case "enable":
-				lt.Enable()
+				seq := int(1)
+				if d.HasArg("lease-seq") {
+					d.ScanArgs(t, "lease-seq", &seq)
+				}
+				lt.Enable(roachpb.LeaseSequence(seq))
 				return ""
 
 			case "clear":
