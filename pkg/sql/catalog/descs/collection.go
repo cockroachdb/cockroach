@@ -776,7 +776,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			typeLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
 				if dbDesc == nil {
@@ -798,7 +798,11 @@ func (tc *Collection) GetAllDescriptors(
 			for i := range descs {
 				desc := descs[i]
 				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
-					if err := sqlbase.HydrateTypesInTableDescriptor(tblDesc.TableDesc(), typeLookup); err != nil {
+					if err := sqlbase.HydrateTypesInTableDescriptor(
+						ctx,
+						tblDesc.TableDesc(),
+						sqlbase.TypeLookupFunc(typeLookup),
+					); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
 						// uses of GetAllDescriptors, just log the error.
