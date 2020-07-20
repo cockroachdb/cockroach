@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -266,37 +267,45 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			return err
 		}
 
-		cache.InvalidateTableStats(ctx, tableID)
-		tableStats, err := cache.GetTableStats(ctx, tableID)
-		if err != nil {
-			return err
-		}
-
+		cache.RefreshTableStats(ctx, tableID)
 		for i := range testData {
 			stat := &testData[i]
 			if stat.TableID != tableID {
-				cache.InvalidateTableStats(ctx, stat.TableID)
-				stats, err := cache.GetTableStats(ctx, stat.TableID)
-				if err != nil {
-					return err
-				}
-				// No stats from other tables should be deleted.
-				if err := findStat(
-					stats, stat.TableID, stat.StatisticID, false, /* expectDeleted */
-				); err != nil {
-					return err
-				}
-				continue
-			}
-
-			// Check whether this stat should have been deleted.
-			_, expectDeleted := expectDeleted[stat.StatisticID]
-			if err := findStat(tableStats, tableID, stat.StatisticID, expectDeleted); err != nil {
-				return err
+				cache.RefreshTableStats(ctx, stat.TableID)
 			}
 		}
 
-		return nil
+		return testutils.SucceedsSoonError(func() error {
+			tableStats, err := cache.GetTableStats(ctx, tableID)
+			if err != nil {
+				return err
+			}
+
+			for i := range testData {
+				stat := &testData[i]
+				if stat.TableID != tableID {
+					stats, err := cache.GetTableStats(ctx, stat.TableID)
+					if err != nil {
+						return err
+					}
+					// No stats from other tables should be deleted.
+					if err := findStat(
+						stats, stat.TableID, stat.StatisticID, false, /* expectDeleted */
+					); err != nil {
+						return err
+					}
+					continue
+				}
+
+				// Check whether this stat should have been deleted.
+				_, expectDeleted := expectDeleted[stat.StatisticID]
+				if err := findStat(tableStats, tableID, stat.StatisticID, expectDeleted); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
 	}
 
 	expectDeleted := make(map[uint64]struct{}, len(testData))

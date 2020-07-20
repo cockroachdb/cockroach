@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -144,41 +145,45 @@ func TestAverageRefreshTime(t *testing.T) {
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
-		cache.InvalidateTableStats(ctx, tableID)
-		stats, err := cache.GetTableStats(ctx, tableID)
-		if err != nil {
-			return err
-		}
-		if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
-			return fmt.Errorf("expected avgRefreshTime %s but found %s",
-				expected.String(), actual.String())
-		}
-		return nil
+		cache.RefreshTableStats(ctx, tableID)
+		return testutils.SucceedsSoonError(func() error {
+			stats, err := cache.GetTableStats(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
+				return fmt.Errorf("expected avgRefreshTime %s but found %s",
+					expected.String(), actual.String())
+			}
+			return nil
+		})
 	}
 
 	// Checks that the most recent statistic was created less than (greater than)
 	// expectedAge time ago if lessThan is true (false).
 	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
-		cache.InvalidateTableStats(ctx, tableID)
-		stats, err := cache.GetTableStats(ctx, tableID)
-		if err != nil {
-			return err
-		}
-		stat := mostRecentAutomaticStat(stats)
-		if stat == nil {
-			return fmt.Errorf("no recent automatic statistic found")
-		}
-		if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
-			return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
-				expectedAge, stat.CreatedAt, timeutil.Now(),
-			)
-		}
-		if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
-			return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
-				expectedAge, stat.CreatedAt, timeutil.Now(),
-			)
-		}
-		return nil
+		cache.RefreshTableStats(ctx, tableID)
+		return testutils.SucceedsSoonError(func() error {
+			stats, err := cache.GetTableStats(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			stat := mostRecentAutomaticStat(stats)
+			if stat == nil {
+				return fmt.Errorf("no recent automatic statistic found")
+			}
+			if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
+				return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
+					expectedAge, stat.CreatedAt, timeutil.Now(),
+				)
+			}
+			if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
+				return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
+					expectedAge, stat.CreatedAt, timeutil.Now(),
+				)
+			}
+			return nil
+		})
 	}
 
 	// Since there are no stats yet, avgRefreshTime should return the default
@@ -487,13 +492,15 @@ func TestDefaultColumns(t *testing.T) {
 func checkStatsCount(
 	ctx context.Context, cache *TableStatisticsCache, tableID sqlbase.ID, expected int,
 ) error {
-	cache.InvalidateTableStats(ctx, tableID)
-	stats, err := cache.GetTableStats(ctx, tableID)
-	if err != nil {
-		return err
-	}
-	if len(stats) != expected {
-		return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
-	}
-	return nil
+	cache.RefreshTableStats(ctx, tableID)
+	return testutils.SucceedsSoonError(func() error {
+		stats, err := cache.GetTableStats(ctx, tableID)
+		if err != nil {
+			return err
+		}
+		if len(stats) != expected {
+			return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
+		}
+		return nil
+	})
 }
