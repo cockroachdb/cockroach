@@ -346,7 +346,9 @@ func (ru *Updater) UpdateRow(
 		// exists in ignoreIndexesForDel and ignoreIndexesForPut, respectively.
 		// Index IDs in these sets indicate that old and new values for the row
 		// do not satisfy a partial index's predicate expression.
-		if !pm.IgnoreForDel.Contains(int(index.ID)) {
+		if pm.IgnoreForDel.Contains(int(index.ID)) {
+			ru.oldIndexEntries[i] = nil
+		} else {
 			ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
 				ru.Helper.Codec,
 				ru.Helper.TableDesc.TableDesc(),
@@ -359,7 +361,9 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if !pm.IgnoreForPut.Contains(int(index.ID)) {
+		if pm.IgnoreForPut.Contains(int(index.ID)) {
+			ru.newIndexEntries[i] = nil
+		} else {
 			ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
 				ru.Helper.Codec,
 				ru.Helper.TableDesc.TableDesc(),
