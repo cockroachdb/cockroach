@@ -58,27 +58,22 @@ CREATE TABLE u (b string)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
-·                             distribution  local                  ·                                         ·
-·                             vectorized    true                   ·                                         ·
-render                        ·             ·                      (a, b, generate_series, generate_series)  ·
- │                            render 0      a                      ·                                         ·
- │                            render 1      b                      ·                                         ·
- │                            render 2      generate_series        ·                                         ·
- │                            render 3      generate_series        ·                                         ·
- └── cross-join               ·             ·                      (b, generate_series, generate_series, a)  ·
-      │                       type          cross                  ·                                         ·
-      ├── cross-join          ·             ·                      (b, generate_series, generate_series)     ·
-      │    │                  type          cross                  ·                                         ·
-      │    ├── scan           ·             ·                      (b)                                       ·
-      │    │                  table         u@primary              ·                                         ·
-      │    │                  spans         FULL SCAN              ·                                         ·
-      │    └── project set    ·             ·                      (generate_series, generate_series)        ·
-      │         │             render 0      generate_series(1, 2)  ·                                         ·
-      │         │             render 1      generate_series(3, 4)  ·                                         ·
-      │         └── emptyrow  ·             ·                      ()                                        ·
-      └── scan                ·             ·                      (a)                                       ·
-·                             table         t@primary              ·                                         ·
-·                             spans         FULL SCAN              ·                                         ·
+·                   distribution  local                  ·                                         ·
+·                   vectorized    true                   ·                                         ·
+cross-join          ·             ·                      (a, b, generate_series, generate_series)  ·
+ │                  type          cross                  ·                                         ·
+ ├── cross-join     ·             ·                      (a, b)                                    ·
+ │    │             type          cross                  ·                                         ·
+ │    ├── scan      ·             ·                      (a)                                       ·
+ │    │             table         t@primary              ·                                         ·
+ │    │             spans         FULL SCAN              ·                                         ·
+ │    └── scan      ·             ·                      (b)                                       ·
+ │                  table         u@primary              ·                                         ·
+ │                  spans         FULL SCAN              ·                                         ·
+ └── project set    ·             ·                      (generate_series, generate_series)        ·
+      │             render 0      generate_series(1, 2)  ·                                         ·
+      │             render 1      generate_series(3, 4)  ·                                         ·
+      └── emptyrow  ·             ·                      ()                                        ·
 
 subtest correlated_SRFs
 

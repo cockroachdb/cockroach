@@ -172,6 +172,46 @@ func TestFuncDeps_InClosureOf(t *testing.T) {
 	}
 }
 
+func TestFuncDepSet_AreColsEquiv(t *testing.T) {
+	fd := &props.FuncDepSet{}
+
+	// (a) == (b)
+	// (b) == (c)
+	// (d) == (e)
+	// (a) --> (f)
+	// (e) == (g)
+	fd.AddEquivalency(1, 2)
+	fd.AddEquivalency(2, 3)
+	fd.AddEquivalency(4, 5)
+	fd.AddSynthesizedCol(c(1), 6)
+
+	testcases := []struct {
+		col1, col2 opt.ColumnID
+		expected   bool
+	}{
+		{col1: 1, col2: 2, expected: true},
+		{col1: 2, col2: 3, expected: true},
+		{col1: 2, col2: 1, expected: true},
+		{col1: 1, col2: 3, expected: true},
+		{col1: 3, col2: 2, expected: true},
+		{col1: 1, col2: 4, expected: false},
+		{col1: 1, col2: 6, expected: false},
+	}
+
+	for _, tc := range testcases {
+		col1 := tc.col1
+		col2 := tc.col2
+		actual := fd.AreColsEquiv(col1, col2)
+		if actual != tc.expected {
+			if tc.expected {
+				t.Errorf("expected %v to be equal to %v", col1, col2)
+			} else {
+				t.Errorf("expected %v to not be equal to %v", col1, col2)
+			}
+		}
+	}
+}
+
 func TestFuncDeps_ComputeEquivClosure(t *testing.T) {
 	// (a)==(b,d)
 	// (b)==(a,c)

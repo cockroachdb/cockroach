@@ -91,8 +91,8 @@ limit
  │         │    │    ├── save-table-name: q21_inner_join_5
  │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) n_nationkey:33(int!null) n_name:34(char!null)
  │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │    │    ├── stats: [rows=17924.776, distinct(1)=8350.92287, null(1)=0, distinct(2)=8389.30056, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=17713.0676, null(8)=0, distinct(10)=8350.92287, null(10)=0, distinct(19)=2464.51974, null(19)=0, distinct(20)=2552.02044, null(20)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
- │         │    │    ├── fd: ()-->(34), (1)-->(2,4), (1)==(10), (10)==(1), (4)==(33), (33)==(4)
+ │         │    │    ├── stats: [rows=17924.776, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=17569.066, null(8)=0, distinct(10)=399.934613, null(10)=0, distinct(19)=2464.2819, null(19)=0, distinct(20)=2551.71413, null(20)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
+ │         │    │    ├── fd: ()-->(34), (1)-->(2,4), (4)==(33), (33)==(4), (1)==(10), (10)==(1)
  │         │    │    ├── semi-join (hash)
  │         │    │    │    ├── save-table-name: q21_semi_join_6
  │         │    │    │    ├── columns: l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null)
@@ -269,15 +269,15 @@ column_names     row_count  distinct_count  null_count
 {s_suppkey}      8357       411             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_commitdate}   17925.00       2.14 <==       2465.00             1.05                0.00            1.00
-{l_orderkey}     17925.00       2.14 <==       17713.00            2.12 <==            0.00            1.00
+{l_commitdate}   17925.00       2.14 <==       2464.00             1.05                0.00            1.00
+{l_orderkey}     17925.00       2.14 <==       17569.00            2.11 <==            0.00            1.00
 {l_receiptdate}  17925.00       2.14 <==       2552.00             1.07                0.00            1.00
-{l_suppkey}      17925.00       2.14 <==       8351.00             20.32 <==           0.00            1.00
+{l_suppkey}      17925.00       2.14 <==       400.00              1.03                0.00            1.00
 {n_name}         17925.00       2.14 <==       1.00                1.00                0.00            1.00
 {n_nationkey}    17925.00       2.14 <==       1.00                1.00                0.00            1.00
-{s_name}         17925.00       2.14 <==       8389.00             20.41 <==           0.00            1.00
+{s_name}         17925.00       2.14 <==       400.00              1.03                0.00            1.00
 {s_nationkey}    17925.00       2.14 <==       1.00                1.00                0.00            1.00
-{s_suppkey}      17925.00       2.14 <==       8351.00             20.32 <==           0.00            1.00
+{s_suppkey}      17925.00       2.14 <==       400.00              1.03                0.00            1.00
 
 stats table=q21_semi_join_6
 ----

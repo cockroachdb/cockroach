@@ -34,3 +34,9 @@ further information, and in some cases proofs, can be found.
 [7] Ahmed, Rafi & W. Lee, Allison & Witkowski, Andrew & Das, Dinesh & Su, Hong & Zaït, Mohamed & Cruanes, Thierry. (2006).
     Cost-Based Query Transformation in Oracle.. 1026-1036.
     https://www.researchgate.net/publication/221311318_Cost-Based_Query_Transformation_in_Oracle z
+
+[8] Moerkotte, Guido & Fender, Pit & Eich, Marius. (2013). 
+    On the correct and complete enumeration of the core search space. 
+    Proceedings of the ACM SIGMOD International Conference on Management of Data. 
+    493-504. 10.1145/2463676.2465314. 
+    https://www.researchgate.net/publication/262216932_On_the_correct_and_complete_enumeration_of_the_core_search_space

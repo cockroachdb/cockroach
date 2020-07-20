@@ -125,7 +125,7 @@ CREATE TABLE grandchild (
 ----
 
 # Regression test for 36225.
-exploretrace join-limit=4 rule=AssociateJoin skip-no-op format=hide-all
+exploretrace join-limit=3 rule=ReorderJoins skip-no-op format=hide-all
 SELECT * FROM
   grandchild
   JOIN child USING (pid, cid)
@@ -134,7 +134,7 @@ ORDER BY pid
 ----
 ----
 ================================================================================
-AssociateJoin
+ReorderJoins
 ================================================================================
 Source expression:
   sort
@@ -148,7 +148,7 @@ Source expression:
              └── filters
                   └── grandchild.pid = parent.pid
 
-New expression 1 of 1:
+New expression 1 of 2:
   sort
    └── project
         └── inner-join (hash)
@@ -162,22 +162,7 @@ New expression 1 of 1:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-================================================================================
-AssociateJoin
-================================================================================
-Source expression:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── inner-join (merge)
-             │    ├── scan grandchild
-             │    ├── scan child
-             │    └── filters (true)
-             ├── scan parent
-             └── filters
-                  └── grandchild.pid = parent.pid
-
-New expression 1 of 1:
+New expression 2 of 2:
   sort
    └── project
         └── inner-join (hash)
@@ -190,92 +175,5 @@ New expression 1 of 1:
              └── filters
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
-
-================================================================================
-AssociateJoin
-================================================================================
-Source expression:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── inner-join (merge)
-             │    ├── scan child
-             │    ├── scan parent
-             │    └── filters (true)
-             ├── scan grandchild
-             └── filters
-                  ├── grandchild.pid = child.pid
-                  └── grandchild.cid = child.cid
-
-New expression 1 of 1:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── scan child
-             ├── inner-join (merge)
-             │    ├── scan grandchild
-             │    ├── scan parent
-             │    └── filters (true)
-             └── filters
-                  ├── grandchild.cid = child.cid
-                  └── child.pid = grandchild.pid
-
-================================================================================
-AssociateJoin
-================================================================================
-Source expression:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── inner-join (merge)
-             │    ├── scan child
-             │    ├── scan parent
-             │    └── filters (true)
-             ├── scan grandchild
-             └── filters
-                  ├── grandchild.pid = child.pid
-                  └── grandchild.cid = child.cid
-
-New expression 1 of 1:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── scan parent
-             ├── inner-join (merge)
-             │    ├── scan grandchild
-             │    ├── scan child
-             │    └── filters (true)
-             └── filters
-                  └── child.pid = parent.pid
-
-================================================================================
-AssociateJoin
-================================================================================
-Source expression:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── inner-join (merge)
-             │    ├── scan grandchild
-             │    ├── scan parent
-             │    └── filters (true)
-             ├── scan child
-             └── filters
-                  ├── grandchild.cid = child.cid
-                  └── child.pid = grandchild.pid
-
-New expression 1 of 1:
-  sort
-   └── project
-        └── inner-join (hash)
-             ├── scan parent
-             ├── inner-join (hash)
-             │    ├── scan grandchild
-             │    ├── scan child
-             │    └── filters
-             │         ├── grandchild.cid = child.cid
-             │         └── child.pid = grandchild.pid
-             └── filters
-                  └── grandchild.pid = parent.pid
 ----
 ----

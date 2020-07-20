@@ -2,6 +2,25 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
+# ReorderJoins matches the first expression of an inner join group and adds to
+# the memo all valid join orderings that do not introduce cross joins.
+# Currently, ReorderJoins can only reorder InnerJoins. If the join has join
+# hints or the size of the join tree exceeds ReorderJoinsLimit, the join tree is
+# not reordered. For more information, see the comment in join_order_builder.go.
+#
+# Citations: [8]
+[ReorderJoins, Explore]
+(InnerJoin
+    *
+    *
+    *
+    $joinPrivate:* &
+        (NoJoinHints $joinPrivate) &
+        (ShouldReorderJoins (Root))
+)
+=>
+(ReorderJoins)
+
 # CommuteJoin creates a Join with the left and right inputs swapped. This is
 # useful for other rules that convert joins to other operators (like merge
 # join).
@@ -197,47 +216,6 @@
     $scanPrivate
     (ConcatFilters $on $filters)
     $private
-)
-
-# AssociateJoin applies the rule of join associativity. It converts an
-# expression like:
-#   (A JOIN B ON A.y = B.y) JOIN C ON B.x = C.x
-# to the logically equivalent expression:
-#   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
-#
-# If any of the joins contains a hint, we do not rearrange the joins.
-[AssociateJoin, Explore]
-(InnerJoin
-    $left:(InnerJoin
-        $innerLeft:*
-        $innerRight:*
-        $innerOn:*
-        $innerPrivate:* & (NoJoinHints $innerPrivate)
-    )
-    $right:* & (ShouldReorderJoins (Root))
-    $on:*
-    $private:* & (NoJoinHints $private)
-)
-=>
-(InnerJoin
-    $innerLeft
-    (InnerJoin
-        $innerRight
-        $right
-        (SortFilters
-            (ExtractBoundConditions
-                $newOn:(MapJoinOpEqualities
-                    (ConcatFilters $on $innerOn)
-                    (OutputCols $innerLeft)
-                    $cols:(OutputCols2 $innerRight $right)
-                )
-                $cols
-            )
-        )
-        (EmptyJoinPrivate)
-    )
-    (SortFilters (ExtractUnboundConditions $newOn $cols))
-    (EmptyJoinPrivate)
 )
 
 # PushJoinIntoIndexJoin pushes an InnerJoin into an IndexJoin. The IndexJoin is

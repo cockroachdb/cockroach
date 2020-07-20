@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -127,8 +126,8 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 // the provided transaction. If not, the function will return an error. If so,
 // the function may modify the provided transaction.
 func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) error {
-	// Provide the transaction's minimum timestamp. The transaction could not
-	// have written a transaction record previously with a timestamp below this.
+	// The transaction could not have written a transaction record previously
+	// with a timestamp below txn.MinTimestamp.
 	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
@@ -159,54 +158,36 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 // information would cause a partial rollback, if any, to be reverted
 // and yield inconsistent data.
 func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
-	// Determine whether the transaction record could ever actually be written
-	// in the future.
-	txnMinTS := txn.MinTimestamp
-	if txnMinTS.IsEmpty() {
-		// If the transaction metadata's min timestamp is empty then provide its
-		// provisional commit timestamp to CanCreateTxnRecord. If this timestamp
-		// is larger than the transaction's real minimum timestamp then
-		// CanCreateTxnRecord may return false positives (i.e. it determines
-		// that the record could eventually be created when it actually
-		// couldn't) but will never return false negatives (i.e. it will never
-		// determine that the record could not be created when it actually
-		// could). This is important, because it means that we may end up
-		// failing to push a finalized transaction but will never determine that
-		// a transaction is finalized when it still could end up committing.
-		//
-		// TODO(nvanbenschoten): This case is only possible for intents that
-		// were written by a transaction coordinator before v19.2, which means
-		// that we can remove it in v20.1 and replace it with:
-		//
-		//  synthTxnRecord.Status = roachpb.ABORTED
-		//
-		txnMinTS = txn.WriteTimestamp
-
-		// If we don't need to worry about compatibility, disallow this case.
-		if util.RaceEnabled {
-			log.Fatalf(context.TODO(), "no minimum transaction timestamp provided: %v", txn)
-		}
-	}
-
-	// Construct the transaction object.
-	synthTxnRecord := roachpb.TransactionRecord{
+	synth := roachpb.TransactionRecord{
 		TxnMeta: txn,
 		Status:  roachpb.PENDING,
 		// Set the LastHeartbeat timestamp to the transactions's MinTimestamp. We
 		// use this as an indication of client activity. Note that we cannot use
 		// txn.WriteTimestamp for that purpose, as the WriteTimestamp could have
 		// been bumped by other pushers.
-		LastHeartbeat: txnMinTS,
+		LastHeartbeat: txn.MinTimestamp,
 	}
 
-	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txnMinTS)
+	// If the transaction metadata's min timestamp is empty this intent must
+	// have been written by a transaction coordinator before v19.2. We can just
+	// consider the transaction to be aborted, because its coordinator must now
+	// be dead.
+	if txn.MinTimestamp.IsEmpty() {
+		synth.Status = roachpb.ABORTED
+		return synth.AsTransaction()
+	}
+
+	// Determine whether the record could ever be allowed to be written in the
+	// future. The transaction could not have written a transaction record
+	// previously with a timestamp below txn.MinTimestamp.
+	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
 		// the transaction would be able to create a transaction record at.
-		synthTxnRecord.WriteTimestamp.Forward(minCommitTS)
+		synth.WriteTimestamp.Forward(minCommitTS)
 	} else {
 		// Mark the transaction as ABORTED because it is uncommittable.
-		synthTxnRecord.Status = roachpb.ABORTED
+		synth.Status = roachpb.ABORTED
 	}
-	return synthTxnRecord.AsTransaction()
+	return synth.AsTransaction()
 }

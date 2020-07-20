@@ -6295,7 +6295,7 @@ GROUP BY
 ORDER BY
   black_pct DESC
 ----
-memo (optimized, ~32KB, required=[presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33])
+memo (optimized, ~29KB, required=[presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33])
  ├── G1: (project G2 G3 route sum)
  │    ├── [presentation: route:27,white_pct:32,black_pct:33,popn_total:30] [ordering: -33]
  │    │    ├── best: (sort G1)
@@ -6308,64 +6308,58 @@ memo (optimized, ~32KB, required=[presentation: route:27,white_pct:32,black_pct:
  │         ├── best: (group-by G4 G5 cols=(27))
  │         └── cost: 23087933.71
  ├── G3: (projections G6 G7)
- ├── G4: (inner-join G8 G9 G10) (inner-join G9 G8 G10) (inner-join G11 G12 G13) (inner-join G14 G15 G16) (inner-join G12 G11 G13) (inner-join G15 G14 G16)
+ ├── G4: (inner-join G8 G9 G10) (inner-join G11 G12 G13) (inner-join G9 G8 G10) (inner-join G12 G11 G13)
  │    └── []
  │         ├── best: (inner-join G8 G9 G10)
  │         └── cost: 20759862.43
- ├── G5: (aggregations G17 G18 G19)
- ├── G6: (div G20 G21)
- ├── G7: (div G22 G21)
- ├── G8: (inner-join G11 G14 G13) (inner-join G14 G11 G13)
+ ├── G5: (aggregations G14 G15 G16)
+ ├── G6: (div G17 G18)
+ ├── G7: (div G19 G18)
+ ├── G8: (inner-join G11 G20 G13) (inner-join G20 G11 G13)
  │    └── []
- │         ├── best: (inner-join G11 G14 G13)
+ │         ├── best: (inner-join G11 G20 G13)
  │         └── cost: 19283630.66
  ├── G9: (scan lines,cols=(27))
  │    └── []
  │         ├── best: (scan lines,cols=(27))
  │         └── cost: 22.68
- ├── G10: (filters G23)
+ ├── G10: (filters G21)
  ├── G11: (scan census,cols=(3-5,10))
  │    └── []
  │         ├── best: (scan census,cols=(3-5,10))
  │         └── cost: 44225.18
- ├── G12: (inner-join G14 G9 G10) (inner-join G9 G14 G10)
+ ├── G12: (inner-join G20 G9 G10) (inner-join G9 G20 G10)
  │    └── []
- │         ├── best: (inner-join G14 G9 G10)
+ │         ├── best: (inner-join G20 G9 G10)
  │         └── cost: 716.64
- ├── G13: (filters G24)
- ├── G14: (scan subways,cols=(21,26))
+ ├── G13: (filters G22)
+ ├── G14: (sum G23)
+ ├── G15: (sum G24)
+ ├── G16: (sum G25)
+ ├── G17: (mult G26 G27)
+ ├── G18: (variable sum)
+ ├── G19: (mult G28 G27)
+ ├── G20: (scan subways,cols=(21,26))
  │    └── []
  │         ├── best: (scan subways,cols=(21,26))
  │         └── cost: 579.40
- ├── G15: (inner-join G11 G9 G25) (inner-join G9 G11 G25)
- │    └── []
- │         ├── best: (inner-join G11 G9 G25)
- │         └── cost: 53267.86
- ├── G16: (filters G24 G23)
- ├── G17: (sum G26)
- ├── G18: (sum G27)
- ├── G19: (sum G28)
- ├── G20: (mult G29 G30)
- ├── G21: (variable sum)
- ├── G22: (mult G31 G30)
- ├── G23: (gt G32 G33)
- ├── G24: (function G34 st_dwithin)
- ├── G25: (filters)
- ├── G26: (variable popn_white)
- ├── G27: (variable popn_total)
- ├── G28: (variable popn_black)
- ├── G29: (variable sum)
- ├── G30: (const 100.0)
- ├── G31: (variable sum)
- ├── G32: (function G35 strpos)
- ├── G33: (const 0)
- ├── G34: (scalar-list G36 G37 G38)
- ├── G35: (scalar-list G39 G40)
- ├── G36: (variable census.geom)
- ├── G37: (variable subways.geom)
- ├── G38: (const 200.0)
- ├── G39: (variable routes)
- └── G40: (variable route)
+ ├── G21: (gt G29 G30)
+ ├── G22: (function G31 st_dwithin)
+ ├── G23: (variable popn_white)
+ ├── G24: (variable popn_total)
+ ├── G25: (variable popn_black)
+ ├── G26: (variable sum)
+ ├── G27: (const 100.0)
+ ├── G28: (variable sum)
+ ├── G29: (function G32 strpos)
+ ├── G30: (const 0)
+ ├── G31: (scalar-list G33 G34 G35)
+ ├── G32: (scalar-list G36 G37)
+ ├── G33: (variable census.geom)
+ ├── G34: (variable subways.geom)
+ ├── G35: (const 200.0)
+ ├── G36: (variable routes)
+ └── G37: (variable route)
 
 opt
 SELECT

@@ -656,6 +656,21 @@ func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// AreColsEquiv returns true if the two given columns are equivalent.
+func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
+	for i := range f.deps {
+		fd := &f.deps[i]
+
+		if fd.equiv && fd.strict {
+			if (fd.from.Contains(col1) && fd.to.Contains(col2)) ||
+				(fd.from.Contains(col2) && fd.to.Contains(col1)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ComputeEquivClosure returns the equivalence closure of the given columns. The
 // closure includes the input columns plus all columns that are equivalent to
 // any of these columns, either directly or indirectly. For example:
@@ -672,7 +687,7 @@ func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 	// Don't need to get transitive closure, because equivalence closures are
 	// already maintained for every column.
 	cols = cols.Copy()
-	for i := 0; i < len(f.deps); i++ {
+	for i := range f.deps {
 		fd := &f.deps[i]
 		if fd.equiv && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
 			cols.UnionWith(fd.to)
