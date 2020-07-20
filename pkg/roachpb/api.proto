@@ -1429,6 +1429,20 @@ message ExportRequest {
   // size of all versions of a single key. If TargetFileSize is non-positive
   // then there is no limit.
   int64 target_file_size = 10;
+
+  // FailOnIntents causes the request to return a TransactionRetryError if it
+  // encounters an intent, instead of the usual WriteIntentError. This has the
+  // effect of skipping usual behavior of the store that is handling the request
+  // doing a blocking resolution of the intent before retrying the request, all
+  // while the sender is waiting and unaware of what is going on. Instead with
+  // this flag it just tells the sender it should retry. This is useful in
+  // workloads like BACKUP where the sender often has many other ranges it also
+  // needs to export so if it is informed that there is an intent in this range,
+  // it can move on to attempt those other ranges first and then come back to
+  // this range later, by which point intent may have been resolved on its own.
+  bool fail_on_intents = 11;
+
+  // NEXT ID: 12
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
