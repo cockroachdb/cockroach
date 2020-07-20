@@ -1545,6 +1545,11 @@ message AdminScatterResponse {
   message Range {
     Span span = 1 [(gogoproto.nullable) = false];
     reserved 2;
+    // DestinationNodeID is the range's leaseholder after the scattering.
+    int32 destination_node_id = 3 [
+       (gogoproto.customname) = "DestinationNodeID",
+       (gogoproto.casttype) = "NodeID"
+     ];
   }
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }

@@ -2377,6 +2377,8 @@ func (r *Replica) adminScatter(
 		re.Reset()
 	}
 
+	lease, _ /* nextLease */ := r.GetLease()
+	destinationNodeID := lease.Replica.NodeID
 	// If we've been asked to randomize the leases beyond what the replicate
 	// queue would do on its own (#17341), do so after the replicate queue is
 	// done by transferring the lease to any of the given N replicas with
@@ -2387,10 +2389,14 @@ func (r *Replica) adminScatter(
 		// so only consider the `Voters` replicas.
 		voterReplicas := desc.Replicas().Voters()
 		newLeaseholderIdx := rand.Intn(len(voterReplicas))
-		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
+		newLeaseholder := voterReplicas[newLeaseholderIdx]
+		targetStoreID := newLeaseholder.StoreID
 		if targetStoreID != r.store.StoreID() {
 			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
 				log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+			} else {
+				// If the lease was successfully transferred, update the destination.
+				destinationNodeID = newLeaseholder.NodeID
 			}
 		}
 	}
@@ -2402,6 +2408,7 @@ func (r *Replica) adminScatter(
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
 			},
+			DestinationNodeID: destinationNodeID,
 		}},
 	}, nil
 }

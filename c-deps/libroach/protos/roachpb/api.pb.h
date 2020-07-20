@@ -12549,11 +12549,17 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
   ::cockroach::roachpb::Span* mutable_span();
   void set_allocated_span(::cockroach::roachpb::Span* span);
 
+  void clear_destination_node_id();
+  static const int kDestinationNodeIdFieldNumber = 3;
+  ::google::protobuf::int32 destination_node_id() const;
+  void set_destination_node_id(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.AdminScatterResponse.Range)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::Span* span_;
+  ::google::protobuf::int32 destination_node_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -28679,6 +28685,19 @@ inline void AdminScatterResponse_Range::set_allocated_span(::cockroach::roachpb:
   }
   span_ = span;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminScatterResponse.Range.span)
+}
+
+inline void AdminScatterResponse_Range::clear_destination_node_id() {
+  destination_node_id_ = 0;
+}
+inline ::google::protobuf::int32 AdminScatterResponse_Range::destination_node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.Range.destination_node_id)
+  return destination_node_id_;
+}
+inline void AdminScatterResponse_Range::set_destination_node_id(::google::protobuf::int32 value) {
+  
+  destination_node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.AdminScatterResponse.Range.destination_node_id)
 }
 
 // -------------------------------------------------------------------
