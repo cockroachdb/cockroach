@@ -83,29 +83,6 @@ func (ib infoBuilder) String() string {
 	return sb.String()
 }
 
-// geometryFromText is the builtin for ST_GeomFromText/ST_GeometryFromText.
-var geometryFromText = makeBuiltin(
-	defProps(),
-	geomFromWKTOverload,
-	tree.Overload{
-		Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
-		ReturnType: tree.FixedReturnType(types.Geometry),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			s := string(tree.MustBeDString(args[0]))
-			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDGeometry(g), nil
-		},
-		Info: infoBuilder{
-			info: `Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
-		}.String(),
-		Volatility: tree.VolatilityImmutable,
-	},
-)
-
 // geomFromWKTOverload converts an (E)WKT string to its Geometry form.
 var geomFromWKTOverload = stringOverload1(
 	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -235,82 +212,6 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 	)
 }
 
-// geographyFromText is the builtin for ST_GeomFromText/ST_GeographyFromText.
-var geographyFromText = makeBuiltin(
-	defProps(),
-	stringOverload1(
-		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDGeography(g), nil
-		},
-		types.Geography,
-		infoBuilder{info: "Returns the Geography from a WKT or EWKT representation."}.String(),
-		tree.VolatilityImmutable,
-	),
-	tree.Overload{
-		Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
-		ReturnType: tree.FixedReturnType(types.Geography),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			s := string(tree.MustBeDString(args[0]))
-			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
-			if err != nil {
-				return nil, err
-			}
-			return tree.NewDGeography(g), nil
-		},
-		Info: infoBuilder{
-			info: `Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
-		}.String(),
-		Volatility: tree.VolatilityImmutable,
-	},
-)
-
-var pointCoordsToGeomOverload = tree.Overload{
-	Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
-	ReturnType: tree.FixedReturnType(types.Geometry),
-	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		x := float64(*args[0].(*tree.DFloat))
-		y := float64(*args[1].(*tree.DFloat))
-		g, err := geo.NewGeometryFromPointCoords(x, y)
-		if err != nil {
-			return nil, err
-		}
-		return tree.NewDGeometry(g), nil
-	},
-	Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
-	Volatility: tree.VolatilityImmutable,
-}
-
-var numInteriorRingsBuiltin = makeBuiltin(
-	defProps(),
-	geometryOverload1(
-		func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-			t, err := g.Geometry.AsGeomT()
-			if err != nil {
-				return nil, err
-			}
-			switch t := t.(type) {
-			case *geom.Polygon:
-				numRings := t.NumLinearRings()
-				if numRings <= 1 {
-					return tree.NewDInt(0), nil
-				}
-				return tree.NewDInt(tree.DInt(numRings - 1)), nil
-			}
-			return tree.DNull, nil
-		},
-		types.Int,
-		infoBuilder{
-			info: "Returns the number of interior rings in a Polygon Geometry. Returns NULL if the shape is not a Polygon.",
-		},
-		tree.VolatilityImmutable,
-	),
-)
-
 var areaOverloadGeometry1 = geometryOverload1(
 	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
 		ret, err := geomfn.Area(g.Geometry)
@@ -321,7 +222,43 @@ var areaOverloadGeometry1 = geometryOverload1(
 	},
 	types.Float,
 	infoBuilder{
-		info:         "Returns the area of the given geometry.",
+		info:         "Returns the area of the given geometry in units^2.",
+		libraryUsage: usesGEOS,
+	},
+	tree.VolatilityImmutable,
+)
+
+var lengthOverloadGeometry1 = geometryOverload1(
+	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+		ret, err := geomfn.Length(g.Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDFloat(tree.DFloat(ret)), nil
+	},
+	types.Float,
+	infoBuilder{
+		info: `Returns the length of the given geometry in units.
+
+Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
+		libraryUsage: usesGEOS,
+	},
+	tree.VolatilityImmutable,
+)
+
+var perimeterOverloadGeometry1 = geometryOverload1(
+	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+		ret, err := geomfn.Perimeter(g.Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDFloat(tree.DFloat(ret)), nil
+	},
+	types.Float,
+	infoBuilder{
+		info: `Returns the perimeter of the given geometry in meters.
+
+Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		libraryUsage: usesGEOS,
 	},
 	tree.VolatilityImmutable,
@@ -437,8 +374,27 @@ var geoBuiltins = map[string]builtinDefinition{
 	// Input (Geometry)
 	//
 
-	"st_geomfromtext":     geometryFromText,
-	"st_geometryfromtext": geometryFromText,
+	"st_geometryfromtext": makeBuiltin(
+		defProps(),
+		geomFromWKTOverload,
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				srid := geopb.SRID(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_geomfromewkt": makeBuiltin(
 		defProps(),
 		stringOverload1(
@@ -606,8 +562,39 @@ var geoBuiltins = map[string]builtinDefinition{
 	// Input (Geography)
 	//
 
-	"st_geogfromtext":      geographyFromText,
-	"st_geographyfromtext": geographyFromText,
+	"st_geographyfromtext": makeBuiltin(
+		defProps(),
+		stringOverload1(
+			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(g), nil
+			},
+			types.Geography,
+			infoBuilder{info: "Returns the Geography from a WKT or EWKT representation."}.String(),
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				srid := geopb.SRID(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(g), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"st_geogfromewkt": makeBuiltin(
 		defProps(),
 		stringOverload1(
@@ -705,8 +692,24 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
-	"st_point":     makeBuiltin(defProps(), pointCoordsToGeomOverload),
-	"st_makepoint": makeBuiltin(defProps(), pointCoordsToGeomOverload),
+	"st_point": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := float64(*args[0].(*tree.DFloat))
+				y := float64(*args[1].(*tree.DFloat))
+				g, err := geo.NewGeometryFromPointCoords(x, y)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Output
@@ -1547,8 +1550,31 @@ Flags shown square brackets after the geometry type have the following meaning:
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
-	"st_numinteriorring":  numInteriorRingsBuiltin,
-	"st_numinteriorrings": numInteriorRingsBuiltin,
+	"st_numinteriorrings": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				t, err := g.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch t := t.(type) {
+				case *geom.Polygon:
+					numRings := t.NumLinearRings()
+					if numRings <= 1 {
+						return tree.NewDInt(0), nil
+					}
+					return tree.NewDInt(tree.DInt(numRings - 1)), nil
+				}
+				return tree.DNull, nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of interior rings in a Polygon Geometry. Returns NULL if the shape is not a Polygon.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_nrings": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -1715,24 +1741,12 @@ Flags shown square brackets after the geometry type have the following meaning:
 				},
 				tree.VolatilityImmutable,
 			),
-			geometryOverload1(
-				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-					ret, err := geomfn.Length(g.Geometry)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDFloat(tree.DFloat(ret)), nil
-				},
-				types.Float,
-				infoBuilder{
-					info: `Returns the length of the given geometry.
-
-Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
-					libraryUsage: usesGEOS,
-				},
-				tree.VolatilityImmutable,
-			),
+			lengthOverloadGeometry1,
 		)...,
+	),
+	"st_length2d": makeBuiltin(
+		defProps(),
+		lengthOverloadGeometry1,
 	),
 	"st_perimeter": makeBuiltin(
 		defProps(),
@@ -1751,24 +1765,12 @@ Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
 				},
 				tree.VolatilityImmutable,
 			),
-			geometryOverload1(
-				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-					ret, err := geomfn.Perimeter(g.Geometry)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDFloat(tree.DFloat(ret)), nil
-				},
-				types.Float,
-				infoBuilder{
-					info: `Returns the perimeter of the given geometry in meters.
-
-Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
-					libraryUsage: usesGEOS,
-				},
-				tree.VolatilityImmutable,
-			),
+			perimeterOverloadGeometry1,
 		)...,
+	),
+	"st_perimeter2d": makeBuiltin(
+		defProps(),
+		perimeterOverloadGeometry1,
 	),
 	"st_srid": makeBuiltin(
 		defProps(),
@@ -3476,6 +3478,25 @@ func toUseSphereOrSpheroid(useSpheroid *tree.DBool) geogfn.UseSphereOrSpheroid {
 }
 
 func initGeoBuiltins() {
+	// Some functions have exactly the same definition - in which case,
+	// we can just copy them.
+	for _, alias := range []struct {
+		alias       string
+		builtinName string
+	}{
+		{"st_geogfromtext", "st_geographyfromtext"},
+		{"st_geomfromtext", "st_geometryfromtext"},
+		{"st_numinteriorring", "st_numinteriorrings"},
+		{"st_makepoint", "st_point"},
+	} {
+		if _, ok := geoBuiltins[alias.builtinName]; !ok {
+			panic("expected builtin definition for alias: " + alias.builtinName)
+		}
+		geoBuiltins[alias.alias] = geoBuiltins[alias.builtinName]
+	}
+
+	// Indexed functions have an alternative version with an underscore prepended
+	// to the name, which tells the optimizer to not utilize the index.
 	for indexBuiltinName := range geoindex.RelationshipMap {
 		builtin, exists := geoBuiltins[indexBuiltinName]
 		if !exists {

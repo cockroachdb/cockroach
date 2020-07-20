@@ -809,10 +809,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
-<tr><td><a name="st_area"></a><code>st_area(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
+<tr><td><a name="st_area"></a><code>st_area(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry in units^2.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
-<tr><td><a name="st_area2d"></a><code>st_area2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
+<tr><td><a name="st_area2d"></a><code>st_area2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry in units^2.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_asbinary"></a><code>st_asbinary(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geography.</p>
@@ -1121,7 +1121,11 @@ given Geometry.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
-<tr><td><a name="st_length"></a><code>st_length(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
+<tr><td><a name="st_length"></a><code>st_length(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry in units.</p>
+<p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_length2d"></a><code>st_length2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry in units.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -1253,6 +1257,10 @@ given Geometry.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
 <tr><td><a name="st_perimeter"></a><code>st_perimeter(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry in meters.</p>
+<p>Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_perimeter2d"></a><code>st_perimeter2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry in meters.</p>
 <p>Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
