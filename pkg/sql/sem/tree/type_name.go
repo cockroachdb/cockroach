@@ -96,7 +96,9 @@ func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
-// *types.T's.
+// *types.T's. Implementers of TypeReferenceResolver should also implement
+// sqlbase.TypeDescriptorResolver is sqlbase.TypeDescriptorInterface is the
+// underlying representation of a user defined type.
 type TypeReferenceResolver interface {
 	ResolveType(ctx context.Context, name *UnresolvedObjectName) (*types.T, error)
 	ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error)
