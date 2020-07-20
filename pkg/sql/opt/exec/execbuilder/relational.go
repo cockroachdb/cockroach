@@ -457,6 +457,10 @@ func (b *Builder) scanParams(
 		var err error
 		if idx.IsInverted() {
 			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.Name())
+		} else if _, isPartial := idx.Predicate(); isPartial {
+			err = fmt.Errorf(
+				"index \"%s\" is a partial index that does not contain all the rows needed to execute this query",
+				idx.Name())
 		} else {
 			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
