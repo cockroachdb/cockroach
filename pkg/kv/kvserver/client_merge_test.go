@@ -124,7 +124,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 	// The LHS has been split once and merged once, so it should have received
 	// two generation bumps.
-	if e, a := int64(2), lhsRepl.Desc().Generation; e != a {
+	if e, a := roachpb.RangeGeneration(2), lhsRepl.Desc().Generation; e != a {
 		t.Fatalf("expected LHS to have generation %d, but got %d", e, a)
 	}
 }

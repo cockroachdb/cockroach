@@ -981,7 +981,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:     roachpb.RKeyMax,
 		Generation: 1,
 	}
-	curGeneration := int64(1)
+	curGeneration := roachpb.RangeGeneration(1)
 	require.True(t, clearOlderOverlapping(ctx, cache, minToBDesc))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), &kvbase.RangeCacheEntry{Desc: *minToBDesc})
 	if desc := cache.GetCached(roachpb.RKey("b"), false); desc != nil {
