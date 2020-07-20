@@ -48,8 +48,10 @@ CREATE TABLE partial_indexes (
     a INT PRIMARY KEY,
     b INT,
     c STRING,
-    INDEX (b) WHERE c = 'foo',
-    INDEX (c) WHERE a > b AND c = 'bar'
+    FAMILY(a),
+    FAMILY(b),
+    FAMILY(c),
+    INDEX (c) WHERE b > 1
 )
 ----
 
@@ -1938,38 +1940,50 @@ delete a
 
 # Do not prune columns that are required for evaluating partial index
 # predicates.
-norm expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
-UPDATE partial_indexes SET c = 'bar' RETURNING a
+# norm expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
+norm
+UPDATE partial_indexes SET b = b + 1 WHERE a = 1
 ----
 update partial_indexes
- ├── columns: a:1!null
+ ├── columns: <none>
  ├── fetch columns: a:4 b:5 c:6
  ├── update-mapping:
- │    └── c_new:9 => c:3
- ├── partial index put columns: partial_index_put1:10 partial_index_put2:11
- ├── partial index del columns: partial_index_del1:7 partial_index_del2:8
+ │    └── b_new:8 => b:2
+ ├── partial index put columns: partial_index_put1:9
+ ├── partial index del columns: partial_index_del1:7
+ ├── cardinality: [0 - 0]
  ├── volatile, mutations
- ├── key: (1)
  └── project
-      ├── columns: partial_index_put1:10!null partial_index_put2:11 c_new:9!null partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
-      ├── key: (4)
-      ├── fd: ()-->(9,10), (4)-->(5,6,8,11), (6)-->(7)
-      ├── scan partial_indexes
-      │    ├── columns: a:4!null b:5 c:6
-      │    ├── partial index predicates
-      │    │    ├── secondary: filters
-      │    │    │    └── c:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-      │    │    └── secondary: filters
-      │    │         ├── a:4 > b:5 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ])]
-      │    │         └── c:6 = 'bar' [outer=(6), constraints=(/6: [/'bar' - /'bar']; tight), fd=()-->(6)]
-      │    ├── key: (4)
-      │    └── fd: (4)-->(5,6)
+      ├── columns: partial_index_put1:9 a:4!null b:5 c:6 partial_index_del1:7 b_new:8
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(4-9)
+      ├── project
+      │    ├── columns: b_new:8 partial_index_del1:7 a:4!null b:5 c:6
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(4-8)
+      │    ├── select
+      │    │    ├── columns: a:4!null b:5 c:6
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(4-6)
+      │    │    ├── scan partial_indexes
+      │    │    │    ├── columns: a:4!null b:5 c:6
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         └── b:5 > 1 [outer=(5), constraints=(/5: [/2 - ]; tight)]
+      │    │    │    ├── key: (4)
+      │    │    │    └── fd: (4)-->(5,6)
+      │    │    └── filters
+      │    │         └── a:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      │    └── projections
+      │         ├── b:5 + 1 [as=b_new:8, outer=(5), immutable]
+      │         └── b:5 > 1 [as=partial_index_del1:7, outer=(5)]
       └── projections
-           ├── false [as=partial_index_put1:10]
-           ├── a:4 > b:5 [as=partial_index_put2:11, outer=(4,5)]
-           ├── 'bar' [as=c_new:9]
-           ├── c:6 = 'foo' [as=partial_index_del1:7, outer=(6)]
-           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8, outer=(4-6)]
+           └── b_new:8 > 1 [as=partial_index_put1:9, outer=(8)]
 
 # Prune secondary family column not needed for the update.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)

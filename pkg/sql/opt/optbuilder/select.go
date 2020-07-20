@@ -719,17 +719,10 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 		filter := b.factory.ConstructFiltersItem(scalar)
 
 		// Expressions with non-immutable operators are not supported as partial
-		// index predicates, so add a replacement expression of False. This is
-		// done for two reasons:
-		//
-		//   1. TableMeta.PartialIndexPredicates is a source of truth within the
-		//      optimizer for determining which indexes are partial. It is safer
-		//      to use a False predicate than no predicate so that the optimizer
-		//      won't incorrectly assume that the index is a full index.
-		//   2. A partial index with a False predicate will never be used to
-		//      satisfy a query, effectively making these non-immutable partial
-		//      index predicates not possible to use.
-		//
+		// index predicates, so add a replacement expression of False. A partial
+		// index with a False predicate will never be used to satisfy a query.
+		// It is safer to use a False predicate than no predicate so that the
+		// optimizer won't incorrectly assume that the index is a full index.
 		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
 			fals := memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}
 			tabMeta.AddPartialIndexPredicate(indexOrd, &fals)

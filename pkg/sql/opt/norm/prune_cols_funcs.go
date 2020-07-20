@@ -150,7 +150,8 @@ func neededMutationFetchCols(
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			indexCols := tabMeta.IndexColumns(i)
-			if !indexCols.Intersects(updateCols) {
+			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
+			if !indexCols.Intersects(updateCols) && !isPartialIndex {
 				// This index is not being updated.
 				continue
 			}
