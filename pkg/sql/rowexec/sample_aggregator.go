@@ -388,7 +388,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		return err
 	}
 
-	// Gossip invalidation of the stat caches for this table.
+	// Gossip refresh of the stat caches for this table.
 	return stats.GossipTableStatAdded(s.FlowCtx.Cfg.Gossip, s.tableID)
 }
 

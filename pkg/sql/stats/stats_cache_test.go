@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -248,8 +249,43 @@ func TestCacheBasic(t *testing.T) {
 		}
 	}
 
-	// After invalidation Table ID 2 should be gone.
+	// Insert a new stat for Table ID 2.
 	tableID := sqlbase.ID(102)
+	stat := TableStatisticProto{
+		TableID:       tableID,
+		StatisticID:   35,
+		Name:          "table2",
+		ColumnIDs:     []sqlbase.ColumnID{1, 2, 3},
+		CreatedAt:     time.Date(2001, 1, 10, 5, 26, 34, 0, time.UTC),
+		RowCount:      10,
+		DistinctCount: 10,
+		NullCount:     0,
+	}
+	if err := insertTableStat(ctx, db, ex, &stat); err != nil {
+		t.Fatal(err)
+	}
+
+	// After refreshing, Table ID 2 should be available immediately in the cache
+	// for querying, and eventually should contain the updated stat.
+	sc.RefreshTableStats(ctx, tableID)
+	if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
+		t.Fatalf("expected lookup of refreshed key %d to succeed", tableID)
+	}
+	expected := append([]*TableStatisticProto{&stat}, expectedStats[tableID]...)
+	testutils.SucceedsSoon(t, func() error {
+		statsList, ok := lookupTableStats(ctx, sc, tableID)
+		if !ok {
+			return errors.Errorf("expected lookup of refreshed key %d to succeed", tableID)
+		}
+		if !checkStats(statsList, expected) {
+			return errors.Errorf(
+				"for lookup of key %d, expected stats %s but found %s", tableID, expected, statsList,
+			)
+		}
+		return nil
+	})
+
+	// After invalidation Table ID 2 should be gone.
 	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
@@ -290,7 +326,7 @@ func TestCacheWait(t *testing.T) {
 		before := sc.mu.numInternalQueries
 
 		id := tableIDs[rand.Intn(len(tableIDs))]
-		sc.InvalidateTableStats(ctx, id)
+		sc.RefreshTableStats(ctx, id)
 		// Run GetTableStats multiple times in parallel.
 		var wg sync.WaitGroup
 		for n := 0; n < 10; n++ {
