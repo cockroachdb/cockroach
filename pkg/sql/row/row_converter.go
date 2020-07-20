@@ -492,17 +492,12 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	for i := range c.cols {
 		col := &c.cols[i]
 		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
-			switch expr := c.defaultCache[i].(type) {
-			case tree.Datum:
-				c.Datums[i] = expr
-			default:
-				datum, err := expr.Eval(c.EvalCtx)
-				if err != nil {
-					return errors.Wrapf(
-						err, "error evaluating default expression %q", col.DefaultExprStr())
-				}
-				c.Datums[i] = datum
+			datum, err := c.defaultCache[i].Eval(c.EvalCtx)
+			if err != nil {
+				return errors.Wrapf(
+					err, "error evaluating default expression %q", col.DefaultExprStr())
 			}
+			c.Datums[i] = datum
 		}
 	}
 
