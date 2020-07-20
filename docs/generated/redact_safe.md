@@ -8,6 +8,7 @@ pkg/roachpb/metadata.go | `NodeID`
 pkg/roachpb/metadata.go | `StoreID`
 pkg/roachpb/metadata.go | `RangeID`
 pkg/roachpb/metadata.go | `ReplicaID`
+pkg/roachpb/metadata.go | `RangeGeneration`
 pkg/roachpb/metadata.go | `ReplicaType`
 pkg/util/hlc/timestamp.go | `Timestamp`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`

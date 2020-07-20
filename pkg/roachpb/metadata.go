@@ -112,6 +112,21 @@ func (a Attributes) String() string {
 	return strings.Join(a.Attrs, ",")
 }
 
+// RangeGeneration is a custom type for a range generation. Range generation
+// counters are incremented on every split, merge, and every replica change,
+// i.e., whenever the span of the range or replica set changes.
+//
+// See the comment on RangeDescriptor.Generation for more.
+type RangeGeneration int64
+
+// String implements the fmt.Stringer interface.
+func (g RangeGeneration) String() string {
+	return strconv.FormatInt(int64(g), 10)
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (g RangeGeneration) SafeValue() {}
+
 // NewRangeDescriptor returns a RangeDescriptor populated from the input.
 func NewRangeDescriptor(
 	rangeID RangeID, start, end RKey, replicas ReplicaDescriptors,
