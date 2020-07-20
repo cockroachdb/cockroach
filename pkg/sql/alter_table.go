@@ -1052,11 +1052,10 @@ func injectTableStats(
 		}
 	}
 
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
+	// Refresh the local cache.
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.RefreshTableStats(params.ctx, desc.ID)
 
+	// Use Gossip to refresh the caches on other nodes.
 	if g, ok := params.extendedEvalCtx.ExecCfg.Gossip.Optional(47925); ok {
 		return stats.GossipTableStatAdded(g, desc.ID)
 	}

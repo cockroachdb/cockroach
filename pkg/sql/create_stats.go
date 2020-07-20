@@ -300,7 +300,7 @@ func createStatsDefaultColumns(
 			break
 		}
 
-		colIDs := desc.PrimaryIndex.ColumnIDs[: i+1 : i+1]
+		colIDs := desc.PrimaryIndex.ColumnIDs[:i+1 : i+1]
 
 		// Remember the requested stats so we don't request duplicates.
 		key := makeColStatKey(colIDs)
@@ -319,7 +319,7 @@ func createStatsDefaultColumns(
 				break
 			}
 
-			colIDs := desc.Indexes[i].ColumnIDs[: j+1 : j+1]
+			colIDs := desc.Indexes[i].ColumnIDs[:j+1 : j+1]
 
 			// Check for existing stats and remember the requested stats.
 			key := makeColStatKey(colIDs)
@@ -470,10 +470,8 @@ func (r *createStatsResumer) Resume(
 		return err
 	}
 
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
+	// Refresh the local cache.
+	evalCtx.ExecCfg.TableStatsCache.RefreshTableStats(ctx, r.tableID)
 
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
