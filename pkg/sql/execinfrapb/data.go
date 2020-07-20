@@ -93,7 +93,7 @@ func (tr *DistSQLTypeResolver) ResolveType(
 func makeTypeLookupFunc(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	return func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
 	}
 }
@@ -103,11 +103,11 @@ func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (
 	// TODO (rohany): This should eventually look into the set of cached type
 	//  descriptors before attempting to access it here.
 	lookup := makeTypeLookupFunc(ctx, tr.EvalContext.Txn, tr.EvalContext.Codec)
-	name, typDesc, err := lookup(sqlbase.ID(id))
+	name, typDesc, err := lookup(ctx, sqlbase.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	return typDesc.MakeTypesT(name, lookup)
+	return typDesc.MakeTypesT(ctx, name, lookup)
 }
 
 // HydrateTypeSlice hydrates all user defined types in an input slice of types.
@@ -117,11 +117,11 @@ func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
 	lookup := makeTypeLookupFunc(evalCtx.Context, evalCtx.Txn, evalCtx.Codec)
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, typDesc, err := lookup(sqlbase.ID(t.StableTypeID()))
+			name, typDesc, err := lookup(evalCtx.Context, sqlbase.ID(t.StableTypeID()))
 			if err != nil {
 				return err
 			}
-			if err := typDesc.HydrateTypeInfoWithName(t, name, lookup); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(evalCtx.Context, t, name, lookup); err != nil {
 				return err
 			}
 		}
