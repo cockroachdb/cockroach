@@ -260,6 +260,11 @@ type Replica struct {
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
 		mergeComplete chan struct{}
+		// freezeStart indicates the subsumption time of this range when it is the
+		// right-hand range in an ongoing merge. This range will allow read-only
+		// traffic below this timestamp, while blocking everything else, until the
+		// merge completes.
+		freezeStart hlc.Timestamp
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
 		// Last index/term persisted to the raft log (not necessarily
@@ -899,6 +904,12 @@ func (r *Replica) mergeInProgressRLocked() bool {
 	return r.mu.mergeComplete != nil
 }
 
+func (r *Replica) getFreezeStart() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.freezeStart
+}
+
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -1100,10 +1111,10 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // The method accepts a concurrency Guard and a LeaseStatus parameter. These are
 // used to indicate whether the caller has acquired latches and checked the
 // Range lease. The method will only check for a pending merge if both of these
-// conditions are true. If either !g.HoldingLatches() or st == nil then the
-// method will not check for a pending merge. Callers might be ok with this if
-// they know that they will end up checking for a pending merge at some later
-// time.
+// conditions are true. If either !g.HoldingLatches() or st.State !=
+// LeaseState_VALID then the method will not check for a pending merge. Callers
+// might be ok with this if they know that they will end up checking for a
+// pending merge at some later time.
 func (r *Replica) checkExecutionCanProceed(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
 ) error {
@@ -1121,7 +1132,7 @@ func (r *Replica) checkExecutionCanProceed(
 		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
 	); err != nil {
 		return err
-	} else if g.HoldingLatches() && st != nil {
+	} else if g.HoldingLatches() && st.State == kvserverpb.LeaseState_VALID {
 		// Only check for a pending merge if latches are held and the Range
 		// lease is held by this Replica. Without both of these conditions,
 		// checkForPendingMergeRLocked could return false negatives.
@@ -1196,9 +1207,47 @@ func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
 	if ba.IsSingleSubsumeRequest() {
 		return nil
 	}
-	// The replica is being merged into its left-hand neighbor. This request
-	// cannot proceed until the merge completes, signaled by the closing of the
-	// channel.
+
+	// The range is being merged into its left-hand neighbor.
+	if ba.IsReadOnly() {
+		freezeStart := r.getFreezeStart()
+		ts := ba.Timestamp
+		if ba.Txn != nil {
+			ts.Forward(ba.Txn.MaxTimestamp)
+		}
+		if ts.Less(freezeStart) {
+			// When the max timestamp of a read request is less than the subsumption
+			// time recorded by this Range (freezeStart), we're guaranteed that none
+			// of the writes accepted by the leaseholder for the keyspan (which could
+			// be a part of the subsuming range if the merge succeeded, or part of
+			// this range if it didn't) for timestamps after the subsumption timestamp
+			// could have causally preceded the current request. Letting such requests
+			// go through does not violate any of the invariants guaranteed by
+			// Subsume().
+			//
+			// NB: It would be incorrect to serve this read request if freezeStart
+			// were in its uncertainty window. For the sake of contradiction, consider
+			// the following scenario, if such a request were allowed to proceed:
+			// 1. This range gets subsumed, `maybeWatchForMerge` is called and the
+			// `mergeCompleteCh` channel is set up.
+			// 2. A read request *that succeeds the subsumption in real time* comes in
+			// for a timestamp that contains `freezeStart` in its uncertainty interval
+			// before the `mergeCompleteCh` channel is removed. Let's say the read
+			// timestamp of this request is X (with X <= freezeStart), and let's
+			// denote its uncertainty interval by [X, Y).
+			// 3. By the time this request reaches `checkForPendingMergeRLocked`, the
+			// merge has committed so all subsequent requests are directed to the
+			// leaseholder of the (subsuming) left-hand range but this pre-merge range
+			// hasn't been destroyed yet.
+			// 4. If the (post-merge) left-hand side leaseholder had accepted any new
+			// writes with timestamps in the window [freezeStart, Y), we would
+			// potentially have a stale read, as any of the writes in this window could
+			// have causally preceded the aforementioned read.
+			return nil
+		}
+	}
+	// This request cannot proceed until the merge completes, signaled by the
+	// closing of the channel.
 	//
 	// It is very important that this check occur after we have acquired latches
 	// from the spanlatch manager. Only after we release these latches are we
@@ -1341,9 +1390,10 @@ func (ec *endCmds) done(
 }
 
 // maybeWatchForMerge checks whether a merge of this replica into its left
-// neighbor is in its critical phase and, if so, arranges to block all requests
-// until the merge completes.
-func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+// neighbor is in its critical phase and, if so, arranges to block all requests,
+// except for read-only requests that are older than `freezeStart`, until the
+// merge completes.
+func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timestamp) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
@@ -1375,6 +1425,12 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
+	// Note that if the merge txn retries for any reason (for example, if the
+	// left-hand side range undergoes a lease transfer before the merge
+	// completes), the right-hand side range will get re-subsumed. This will
+	// lead to `freezeStart` being overwritten with the new subsumption time.
+	// This is fine.
+	r.mu.freezeStart = freezeStart
 	r.mu.mergeComplete = mergeCompleteCh
 	// The RHS of a merge is not permitted to quiesce while a mergeComplete
 	// channel is installed. (If the RHS is quiescent when the merge commits, any
@@ -1492,6 +1548,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
 		// error. If the merge aborted, the requests will be handled normally.
+		r.mu.freezeStart = hlc.Timestamp{}
 		r.mu.mergeComplete = nil
 		close(mergeCompleteCh)
 		r.mu.Unlock()

@@ -43,6 +43,10 @@ type StoreTestingKnobs struct {
 	// be evaluated.
 	TestingLatchFilter kvserverbase.ReplicaRequestFilter
 
+	// TestingConcurrencyRetryFilter is called before a concurrency retry error is
+	// handled and the batch is retried.
+	TestingConcurrencyRetryFilter kvserverbase.ReplicaConcurrencyRetryFilter
+
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
 
