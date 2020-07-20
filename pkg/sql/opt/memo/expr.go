@@ -585,8 +585,8 @@ func (s *ScanPrivate) IsLocking() bool {
 // UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
 // partial index.
 func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
-	tabMeta := md.TableMeta(s.Table)
-	return IsPartialIndex(tabMeta, s.Index)
+	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
+	return isPartialIndex
 }
 
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
@@ -831,17 +831,13 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	return false
 }
 
-// IsPartialIndex returns true if the table's index at the given ordinal is
-// a partial index.
-func IsPartialIndex(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) bool {
-	_, isPartial := tabMeta.PartialIndexPredicates[ord]
-	return isPartial
-}
-
 // PartialIndexPredicate returns the FiltersExpr representing the partial index
 // predicate at the given index ordinal. If the index at the ordinal is not a
-// partial index, this function panics. IsPartialIndex should be used first to
-// determine if the index is a partial index.
+// partial index, this function panics. cat.Index.Predicate should be used first
+// to determine if the index is a partial index.
+//
+// Note that TableMeta.PartialIndexPredicates is not initialized for mutation
+// queries. This function will panic in the context of a mutation.
 func PartialIndexPredicate(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) FiltersExpr {
 	p := tabMeta.PartialIndexPredicates[ord]
 	return *p.(*FiltersExpr)
