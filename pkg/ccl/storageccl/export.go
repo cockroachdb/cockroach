@@ -156,6 +156,11 @@ func evalExport(
 		data, summary, resume, err := e.ExportToSst(start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, io)
 		if err != nil {
+			if err, ok := err.(*roachpb.WriteIntentError); ok && args.FailOnIntents {
+				wrapped := &roachpb.UnhandledRetryableError{}
+				wrapped.PErr.SetDetail(err)
+				return result.Result{}, wrapped
+			}
 			return result.Result{}, err
 		}
 

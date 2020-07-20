@@ -4358,3 +4358,35 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant20.CheckQueryResults(t, `select * from foo.qux`, tenant20.QueryStr(t, `select * from foo.qux`))
 	})
 }
+
+func TestBackupDoesNotHangOnIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	ctx, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '100ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_retry_delay = '10ms'")
+
+	// start a txn that we'll hold open while we try to backup.
+	tx, err := sqlDB.DB.(*gosql.DB).BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// observe commit time to ensure it sees the client restart error below when
+	// the backup aborts it.
+	tx.Exec("SELECT cluster_logical_timestamp()")
+
+	// lay down an intent that out backup will hit.
+	tx.Exec("UPDATE data.bank SET balance = 0 WHERE id = 5 OR id = 8")
+
+	// backup the table in which we have our intent.
+	_, err = sqlDB.DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/intent'")
+	require.NoError(t, err)
+
+	// observe that the backup aborted our txn.
+	require.Error(t, tx.Commit())
+}
