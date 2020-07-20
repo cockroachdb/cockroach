@@ -67,9 +67,6 @@ type optTableUpserter struct {
 	// collectRows is set, counted separately otherwise.
 	resultCount int
 
-	// Contains all the rows to be inserted.
-	insertRows rowcontainer.RowContainer
-
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
 	// existing values for updates.
@@ -110,10 +107,6 @@ func (tu *optTableUpserter) init(
 ) error {
 	tu.tableWriterBase.init(txn)
 
-	tu.insertRows.Init(
-		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0, /* rowCapacity */
-	)
-
 	// collectRows, set upon initialization, indicates whether or not we want
 	// rows returned from the operation.
 	if tu.collectRows {
@@ -153,7 +146,6 @@ func (tu *optTableUpserter) init(
 
 // flushAndStartNewBatch is part of the tableWriter interface.
 func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
-	tu.insertRows.Clear(ctx)
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
@@ -171,11 +163,8 @@ func (tu *optTableUpserter) batchedValues(rowIdx int) tree.Datums {
 	return tu.rowsUpserted.At(rowIdx)
 }
 
-func (tu *optTableUpserter) curBatchSize() int { return tu.insertRows.Len() }
-
 // close is part of the tableWriter interface.
 func (tu *optTableUpserter) close(ctx context.Context) {
-	tu.insertRows.Close(ctx)
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
 	}
