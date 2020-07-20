@@ -1208,6 +1208,10 @@ from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_length2d"></a><code>st_length2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
+<p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not LineString, NULL is returned.</p>
@@ -1338,7 +1342,11 @@ from the given Geometry.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
-<tr><td><a name="st_perimeter"></a><code>st_perimeter(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry in meters.</p>
+<tr><td><a name="st_perimeter"></a><code>st_perimeter(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry.</p>
+<p>Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_perimeter2d"></a><code>st_perimeter2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry.</p>
 <p>Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
