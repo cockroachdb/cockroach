@@ -115,11 +115,7 @@ func filepathAbs(path string) (string, error) {
 	return path, nil
 }
 
-func findBinary(binary, defValue string) (string, error) {
-	if binary == "" {
-		binary = defValue
-	}
-
+func findBinary(binary string) (abspath string, err error) {
 	// Check to see if binary exists and is a regular file and executable.
 	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
 		return filepathAbs(binary)
@@ -173,19 +169,19 @@ func initBinaries() {
 		cockroachDefault = "cockroach-linux-2.6.32-gnu-amd64"
 	}
 	var err error
-	cockroach, err = findBinary(cockroach, cockroachDefault)
+	cockroach, err = findBinary(cockroachDefault)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
 
-	workload, err = findBinary(workload, "workload")
+	workload, err = findBinary("workload")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
 
-	roachprod, err = findBinary(roachprod, "roachprod")
+	roachprod, err = findBinary("roachprod")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
