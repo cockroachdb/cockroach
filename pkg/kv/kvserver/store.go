@@ -76,8 +76,7 @@ import (
 
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
-	rangeIDAllocCount                 = 10
-	defaultRaftHeartbeatIntervalTicks = 5
+	rangeIDAllocCount = 10
 
 	// defaultRaftEntryCacheSize is the default size in bytes for a
 	// store's Raft log entry cache.
@@ -179,7 +178,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
-		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
@@ -189,6 +187,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
+	sc.RaftHeartbeatIntervalTicks = 1
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
@@ -662,9 +661,6 @@ type StoreConfig struct {
 	// the quiesce cadence.
 	CoalescedHeartbeatsInterval time.Duration
 
-	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
-	RaftHeartbeatIntervalTicks int
-
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
 
@@ -750,9 +746,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
-	}
-	if sc.RaftHeartbeatIntervalTicks == 0 {
-		sc.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
