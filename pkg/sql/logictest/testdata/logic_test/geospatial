@@ -2042,6 +2042,26 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            212F11FF2  false
 Square overlapping left and right square  Square overlapping left and right square  2FFF1FFF2  false
 
+# ST_Envelope
+query TT
+SELECT
+  a.dsc,
+  ST_AsEWKT(a.geom)
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
+Empty LineString                          LINESTRING EMPTY
+Empty Point                               POINT EMPTY
+Faraway point                             POINT (5 5)
+Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL
+Point middle of Left Square               POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)
+Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square overlapping left and right square  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+
 # basic metadata
 query TTTIII
 SELECT
