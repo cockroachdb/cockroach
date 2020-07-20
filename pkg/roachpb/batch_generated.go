@@ -1252,3 +1252,99 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	}
 	return br
 }
+
+// CreateRequest creates an empty Request for each of the Method types.
+func CreateRequest(method Method) Request {
+	switch method {
+	case Get:
+		return &GetRequest{}
+	case Put:
+		return &PutRequest{}
+	case ConditionalPut:
+		return &ConditionalPutRequest{}
+	case Increment:
+		return &IncrementRequest{}
+	case Delete:
+		return &DeleteRequest{}
+	case DeleteRange:
+		return &DeleteRangeRequest{}
+	case ClearRange:
+		return &ClearRangeRequest{}
+	case RevertRange:
+		return &RevertRangeRequest{}
+	case Scan:
+		return &ScanRequest{}
+	case EndTxn:
+		return &EndTxnRequest{}
+	case AdminSplit:
+		return &AdminSplitRequest{}
+	case AdminUnsplit:
+		return &AdminUnsplitRequest{}
+	case AdminMerge:
+		return &AdminMergeRequest{}
+	case AdminTransferLease:
+		return &AdminTransferLeaseRequest{}
+	case AdminChangeReplicas:
+		return &AdminChangeReplicasRequest{}
+	case AdminRelocateRange:
+		return &AdminRelocateRangeRequest{}
+	case HeartbeatTxn:
+		return &HeartbeatTxnRequest{}
+	case GC:
+		return &GCRequest{}
+	case PushTxn:
+		return &PushTxnRequest{}
+	case RecoverTxn:
+		return &RecoverTxnRequest{}
+	case ResolveIntent:
+		return &ResolveIntentRequest{}
+	case ResolveIntentRange:
+		return &ResolveIntentRangeRequest{}
+	case Merge:
+		return &MergeRequest{}
+	case TruncateLog:
+		return &TruncateLogRequest{}
+	case RequestLease:
+		return &RequestLeaseRequest{}
+	case ReverseScan:
+		return &ReverseScanRequest{}
+	case ComputeChecksum:
+		return &ComputeChecksumRequest{}
+	case CheckConsistency:
+		return &CheckConsistencyRequest{}
+	case InitPut:
+		return &InitPutRequest{}
+	case TransferLease:
+		return &TransferLeaseRequest{}
+	case LeaseInfo:
+		return &LeaseInfoRequest{}
+	case WriteBatch:
+		return &WriteBatchRequest{}
+	case Export:
+		return &ExportRequest{}
+	case Import:
+		return &ImportRequest{}
+	case QueryTxn:
+		return &QueryTxnRequest{}
+	case QueryIntent:
+		return &QueryIntentRequest{}
+	case AdminScatter:
+		return &AdminScatterRequest{}
+	case AddSSTable:
+		return &AddSSTableRequest{}
+	case RecomputeStats:
+		return &RecomputeStatsRequest{}
+	case Refresh:
+		return &RefreshRequest{}
+	case RefreshRange:
+		return &RefreshRangeRequest{}
+	case Subsume:
+		return &SubsumeRequest{}
+	case RangeStats:
+		return &RangeStatsRequest{}
+	case AdminVerifyProtectedTimestamp:
+		return &AdminVerifyProtectedTimestampRequest{}
+	default:
+		panic(fmt.Sprintf("unsupported method: %+v", method))
+	}
+}
