@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,12 +83,6 @@ var fullClusterSystemTables = []string{
 	sqlbase.JobsTable.Name,
 	// Table statistics are backed up in the backup descriptor for now.
 }
-
-var useTBI = settings.RegisterBoolSetting(
-	"kv.bulk_io_write.experimental_incremental_export_enabled",
-	"use experimental time-bound file filter when exporting in BACKUP",
-	true,
-)
 
 type tableAndIndex struct {
 	tableID descpb.ID
