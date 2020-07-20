@@ -27,6 +27,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,18 +53,19 @@ const (
 )
 
 var (
-	local        bool
-	cockroach    string
-	cloud                     = gce
-	encrypt      encryptValue = "false"
-	instanceType string
-	workload     string
-	roachprod    string
-	buildTag     string
-	clusterName  string
-	clusterWipe  bool
-	zonesF       string
-	teamCity     bool
+	local            bool
+	cockroach        string
+	libraryFilePaths []string
+	cloud                         = gce
+	encrypt          encryptValue = "false"
+	instanceType     string
+	workload         string
+	roachprod        string
+	buildTag         string
+	clusterName      string
+	clusterWipe      bool
+	zonesF           string
+	teamCity         bool
 )
 
 type encryptValue string
@@ -124,44 +126,64 @@ func findBinary(binary, defValue string) (string, error) {
 	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
 		return filepathAbs(binary)
 	}
+	return findBinaryOrLibrary("bin", binary)
+}
 
+func findLibrary(libraryName string) (string, error) {
+	suffix := ".so"
+	if local {
+		switch runtime.GOOS {
+		case "linux":
+		case "windows":
+			suffix = ".dll"
+		case "darwin":
+			suffix = ".dylib"
+		default:
+			return "", errors.Newf("failed to find suffix for runtime %s", runtime.GOOS)
+		}
+	}
+	return findBinaryOrLibrary("lib", libraryName+suffix)
+}
+
+func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 	// Find the binary to run and translate it to an absolute path. First, look
 	// for the binary in PATH.
-	path, err := exec.LookPath(binary)
+	path, err := exec.LookPath(name)
 	if err != nil {
-		if strings.HasPrefix(binary, "/") {
+		if strings.HasPrefix(name, "/") {
 			return "", errors.WithStack(err)
 		}
-		// We're unable to find the binary in PATH and "binary" is a relative path:
+
+		// We're unable to find the name in PATH and "name" is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
 			gopath = filepath.Join(os.Getenv("HOME"), "go")
 		}
 
-		var binSuffix string
+		var suffix string
 		if !local {
-			binSuffix = ".docker_amd64"
+			suffix = ".docker_amd64"
 		}
 		dirs := []string{
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/bin"+binSuffix),
-			filepath.Join(os.ExpandEnv("$PWD"), "bin"+binSuffix),
+			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib+suffix),
+			filepath.Join(os.ExpandEnv("$PWD"), binOrLib+suffix),
 		}
 		for _, dir := range dirs {
-			path = filepath.Join(dir, binary)
+			path = filepath.Join(dir, name)
 			var err2 error
 			path, err2 = exec.LookPath(path)
 			if err2 == nil {
 				return filepathAbs(path)
 			}
 		}
-		return "", fmt.Errorf("failed to find %q in $PATH or any of %s", binary, dirs)
+		return "", fmt.Errorf("failed to find %q in $PATH or any of %s", name, dirs)
 	}
 	return filepathAbs(path)
 }
 
-func initBinaries() {
+func initBinariesAndLibraries() {
 	// If we're running against an existing "local" cluster, force the local flag
 	// to true in order to get the "local" test configurations.
 	if clusterName == "local" {
@@ -189,6 +211,16 @@ func initBinaries() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
+	}
+
+	// In v20.2 or higher, optionally expect certain library files to exist.
+	// Since they may not be found in older versions, do not hard error if they are not found.
+	for _, libraryName := range []string{"libgeos", "libgeos_c"} {
+		if libraryFilePath, err := findLibrary(libraryName); err != nil {
+			fmt.Fprintf(os.Stderr, "error finding library %s, ignoring: %+v\n", libraryName, err)
+		} else {
+			libraryFilePaths = append(libraryFilePaths, libraryFilePath)
+		}
 	}
 }
 
@@ -1834,12 +1866,39 @@ func (c *cluster) PutE(ctx context.Context, l *logger, src, dest string, opts ..
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
 
-	c.status("uploading binary")
+	c.status("uploading file")
 	defer c.status("")
 
 	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
 		return errors.Wrap(err, "cluster.Put")
+	}
+	return nil
+}
+
+// PutLibraries inserts all available library files into all nodes on the cluster
+// at the specified location.
+func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Put")
+	}
+
+	c.status("uploading library files")
+	defer c.status("")
+
+	if err := c.RunE(ctx, c.All(), "mkdir", "-p", libraryDir); err != nil {
+		return err
+	}
+	for _, libraryFilePath := range libraryFilePaths {
+		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
+		if err := c.PutE(
+			ctx,
+			c.l,
+			libraryFilePath,
+			putPath,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }

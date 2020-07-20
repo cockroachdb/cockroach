@@ -1562,10 +1562,10 @@ docs/generated/redact_safe.md:
 	@(echo "The following types are considered always safe for reporting:"; echo; \
 	  echo "File | Type"; echo "--|--") >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@git grep -n '^func \(.*\) SafeValue\(\)' | \
-	  grep -v '^pkg/util/redact' | \
+	  grep -v '^vendor/github.com/cockroachdb/redact' | \
 	  sed -E -e 's/^([^:]*):[0-9]+:func \(([^ ]* )?(.*)\) SafeValue.*$$/\1 | \`\3\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
 	@git grep -n 'redact\.RegisterSafeType' | \
-	  grep -v '^pkg/util/redact' | \
+	  grep -v '^vendor/github.com/cockroachdb/redact' | \
 	  sed -E -e 's/^([^:]*):[0-9]+:.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 

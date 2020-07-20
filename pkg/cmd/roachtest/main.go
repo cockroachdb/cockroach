@@ -63,7 +63,7 @@ func main() {
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
-				initBinaries()
+				initBinariesAndLibraries()
 			}
 			return nil
 		},
