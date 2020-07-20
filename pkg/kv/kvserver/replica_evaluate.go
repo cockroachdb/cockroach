@@ -490,6 +490,25 @@ func evaluateCommand(
 		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
 	}
 
+	if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
+		filterArgs := kvserverbase.FilterArgs{
+			Ctx:   ctx,
+			CmdID: raftCmdID,
+			Index: index,
+			Sid:   rec.StoreID(),
+			Req:   args,
+			Hdr:   h,
+			Err:   err,
+		}
+		if pErr := filter(filterArgs); pErr != nil {
+			if pErr.GetTxn() == nil {
+				pErr.SetTxn(h.Txn)
+			}
+			log.Infof(ctx, "test injecting error: %s", pErr)
+			return result.Result{}, pErr
+		}
+	}
+
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error
 	if err != nil {

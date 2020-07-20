@@ -20,7 +20,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn1 key=k
 ----
 [2] handle write intent error req1: handled conflicting intents on "k", released latches
@@ -72,7 +72,7 @@ new-request name=req1 txn=txn2 ts=12,1
   get key=k
 ----
 
-on-lease-updated leaseholder=false
+on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 
@@ -83,7 +83,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=2
   intent txn=txn1 key=k
 ----
 [2] handle write intent error req1: pushing timestamp of txn 00000001 above 0.000000012,1
@@ -130,7 +130,7 @@ new-request name=req1 txn=txn2 ts=12,1
   put key=k value=v
 ----
 
-on-lease-updated leaseholder=false
+on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 
@@ -141,7 +141,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=2
   intent txn=txn1 key=k
 ----
 [2] handle write intent error req1: pushing txn 00000001 to abort
@@ -189,7 +189,7 @@ new-request name=req1 txn=txn2 ts=12,1
   get key=k
 ----
 
-on-lease-updated leaseholder=false
+on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 
@@ -200,7 +200,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=2
   intent txn=txn1 key=k
 ----
 [2] handle write intent error req1: pushing timestamp of txn 00000001 above 0.000000012,1
