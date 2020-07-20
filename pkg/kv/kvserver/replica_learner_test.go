@@ -742,7 +742,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`, testingTargetDuration)
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, closeFraction)
+	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, testingCloseFraction)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)

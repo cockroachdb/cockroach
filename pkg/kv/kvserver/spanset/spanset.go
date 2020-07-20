@@ -196,6 +196,25 @@ func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
 	return maxTS
 }
 
+// Intersects returns true iff the span set denoted by `other` has any
+// overlapping spans with `s`, and that those spans overlap in access type. Note
+// that timestamps associated with the spans in the spanset are not considered,
+// only the span boundaries are checked.
+func (s *SpanSet) Intersects(other *SpanSet) bool {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			otherSpans := other.GetSpans(sa, ss)
+			for _, span := range otherSpans {
+				// If access is allowed, we must have an overlap.
+				if err := s.CheckAllowed(sa, span.Span); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.

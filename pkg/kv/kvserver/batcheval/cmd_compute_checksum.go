@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -27,11 +28,22 @@ func init() {
 }
 
 func declareKeysComputeChecksum(
-	_ *roachpb.RangeDescriptor, _ roachpb.Header, _ roachpb.Request, _, _ *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor,
+	_ roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
-	// Intentionally declare no keys, as ComputeChecksum does not need to be
-	// serialized with any other commands. It simply needs to be committed into
-	// the Raft log.
+	// The correctness of range merges depends on the lease applied index of a
+	// range not being bumped while the RHS is subsumed. ComputeChecksum bumps a
+	// range's LAI and thus needs to be serialized with Subsume requests, in order
+	// prevent a rare a closed timestamp violation due to writes on the
+	// post-merged range that violate a closed timestamp spuriously reported by
+	// the pre-merged range. This can, in turn, lead to a serializability
+	// violation. See comment at the end of Subsume() in cmd_subsume.go for
+	// details. Thus, it must declare access over at least one key. We choose to
+	// declare read-only access to the range descriptor key.
+	rdKey := keys.RangeDescriptorKey(desc.StartKey)
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
 }
 
 // Version numbers for Replica checksum computation. Requests silently no-op
