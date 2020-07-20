@@ -92,7 +92,7 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 		tu.rowsUpserted = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
-			tu.insertRows.Len(),
+			0, /* rowCapacity */
 		)
 	}
 
@@ -159,6 +159,11 @@ func (tu *optTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error 
 	// Nothing to do, because the row method does everything.
 	return nil
 }
+
+// curBatchSize is part of the extendedTableWriter interface. Note that we need
+// to override tableUpserterBase.curBatchSize because the optimizer-driven
+// UPSERTs do not store the insert rows in insertRows row container.
+func (tu *optTableUpserter) curBatchSize() int { return tu.batchSize }
 
 // insertNonConflictingRow inserts the given source row into the table when
 // there was no conflict. If the RETURNING clause was specified, then the
