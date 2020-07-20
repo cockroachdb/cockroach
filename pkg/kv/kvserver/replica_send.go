@@ -312,6 +312,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// error. It must have also handed back ownership of the concurrency
 		// guard without having already released the guard's latches.
 		g.AssertLatches()
+		if filter := r.store.cfg.TestingKnobs.TestingConcurrencyRetryFilter; filter != nil {
+			filter(ctx, *ba, pErr)
+		}
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
