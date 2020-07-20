@@ -587,27 +587,29 @@ Square (right)                            1
 Square overlapping left and right square  1.1
 
 # Unary operators
-query TRRRR
+query TRRRRRR
 SELECT
   a.dsc,
   ST_Area(a.geom),
   ST_Area2D(a.geom),
   ST_Length(a.geom),
-  ST_Perimeter(a.geom)
+  ST_Length2D(a.geom),
+  ST_Perimeter(a.geom),
+  ST_Perimeter2D(a.geom)
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  0     0     0     0
-Empty LineString                          0     0     0     0
-Empty Point                               0     0     0     0
-Faraway point                             0     0     0     0
-Line going through left and right square  0     0     1     0
-NULL                                      NULL  NULL  NULL  NULL
-Point middle of Left Square               0     0     0     0
-Point middle of Right Square              0     0     0     0
-Square (left)                             1     1     0     4
-Square (right)                            1     1     0     4
-Square overlapping left and right square  1.1   1.1   0     4.2
+Empty GeometryCollection                  0     0     0     0     0     0
+Empty LineString                          0     0     0     0     0     0
+Empty Point                               0     0     0     0     0     0
+Faraway point                             0     0     0     0     0     0
+Line going through left and right square  0     0     1     1     0     0
+NULL                                      NULL  NULL  NULL  NULL  NULL  NULL
+Point middle of Left Square               0     0     0     0     0     0
+Point middle of Right Square              0     0     0     0     0     0
+Square (left)                             1     1     0     0     4     4
+Square (right)                            1     1     0     0     4     4
+Square overlapping left and right square  1.1   1.1   0     0     4.2   4.2
 
 # Topology operators.
 
