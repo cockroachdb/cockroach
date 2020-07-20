@@ -812,6 +812,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_area"></a><code>st_area(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_area"></a><code>st_area(geometry_str: <a href="string.html">string</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_area2d"></a><code>st_area2d(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -834,6 +838,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geometry. A maximum of 15 decimal digits is used.</p>
 </span></td></tr>
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geometry. A maximum of 15 decimal digits is used.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of 9 decimal digits.</p>
 </span></td></tr>
@@ -863,6 +873,23 @@ has no relationship with the commit order of concurrent transactions.</p>
 <li>8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)</li>
 </ul>
 </span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>, options: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.</p>
+<p>Options is a flag that can be bitmasked. The options are:</p>
+<ul>
+<li>0: no option</li>
+<li>1: GeoJSON BBOX</li>
+<li>2: GeoJSON Short CRS (e.g EPSG:4326)</li>
+<li>4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)</li>
+<li>8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)</li>
+</ul>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography.</p>
 </span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography, xdr_or_ndr: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography. This variant has a second argument denoting the encoding - <code>xdr</code> for big endian and <code>ndr</code> for little endian.</p>
@@ -879,6 +906,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_askml"></a><code>st_askml(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_askml"></a><code>st_askml(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
@@ -887,12 +917,22 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 </span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. A maximum of 15 decimal digits is used.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geographies, or NULL if the two points are coincident. It is solved using the Inverse geodesic problem.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="decimal.html">decimal</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
+from the given Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
 from the given Geometry.</p>
@@ -915,30 +955,19 @@ given Geometry.</p>
 <p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
-<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
 from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
-<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
-given Geometry.</p>
-<p>This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:</p>
-<ul>
-<li>quad_segs=&lt;int&gt;, default 8</li>
-<li>endcap=&lt;round|flat|butt|square&gt;, default round</li>
-<li>join=&lt;round|mitre|miter|bevel&gt;, default round</li>
-<li>side=&lt;both|left|right&gt;, default both</li>
-<li>mitre_limit=&lt;float&gt;, default 5.0</li>
-</ul>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
+from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
-</span></td></tr>
-<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="decimal.html">decimal</a>, quad_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
-given Geometry.</p>
-<p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
-<p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
 from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
 given Geometry.</p>
@@ -951,11 +980,18 @@ given Geometry.</p>
 <li>mitre_limit=&lt;float&gt;, default 5.0</li>
 </ul>
 <p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>, quad_segs: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
 given Geometry.</p>
 <p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
 <p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geometry_str: <a href="string.html">string</a>, distance: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
+from the given Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_centroid"></a><code>st_centroid(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the centroid of given geography. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -967,8 +1003,9 @@ given Geometry.</p>
 <tr><td><a name="st_centroid"></a><code>st_centroid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
-<tr><td><a name="st_centroid"></a><code>st_centroid(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given string, which will be parsed as a geometry object.</p>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geometry_str: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -990,6 +1027,11 @@ given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_coveredby"></a><code>st_coveredby(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_a is outside geometry_b</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This function variant will attempt to utilize any available geospatial index.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_covers"></a><code>st_covers(geography_a: geography, geography_b: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geography_b is outside geography_a.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
@@ -997,6 +1039,11 @@ given Geometry.</p>
 <tr><td><a name="st_covers"></a><code>st_covers(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_b is outside geometry_a.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_covers"></a><code>st_covers(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_b is outside geometry_a.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This function variant will attempt to utilize any available geospatial index.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_crosses"></a><code>st_crosses(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a has some - but not all - interior points in common with geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -1016,6 +1063,9 @@ given Geometry.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
 <tr><td><a name="st_distance"></a><code>st_distance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between the given geometries.</p>
+</span></td></tr>
+<tr><td><a name="st_distance"></a><code>st_distance(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between the given geometries.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_distancesphere"></a><code>st_distancesphere(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
@@ -1037,6 +1087,10 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_dwithin"></a><code>st_dwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b.</p>
+<p>This function variant will attempt to utilize any available geospatial index.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
@@ -1116,6 +1170,12 @@ given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_intersects"></a><code>st_intersects(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a shares any portion of space with geometry_b.</p>
+<p>The calculations performed are have a precision of 1cm.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This function variant will attempt to utilize any available geospatial index.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
 <tr><td><a name="st_isvalid"></a><code>st_isvalid(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is valid as defined by the OGC spec.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -1142,6 +1202,11 @@ given Geometry.</p>
 <tr><td><a name="st_length"></a><code>st_length(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_length"></a><code>st_length(geometry_str: <a href="string.html">string</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
+<p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
