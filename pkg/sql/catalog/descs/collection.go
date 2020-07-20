@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,6 +75,8 @@ func NewCollection(leaseMgr *lease.Manager, settings *cluster.Settings) *Collect
 // collection is cleared using ReleaseAll() which is called at the
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
+// The descriptor collection always returns TableDescriptors that have user
+// defined type metadata installed already.
 type Collection struct {
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *lease.Manager
@@ -148,12 +151,9 @@ func isSupportedSchemaName(n tree.Name) bool {
 	return n == tree.PublicSchemaName || strings.HasPrefix(string(n), "pg_temp")
 }
 
-// GetMutableTableDescriptor returns a mutable table descriptor.
-//
-// If flags.required is false, GetMutableTableDescriptor() will gracefully
-// return a nil descriptor and no error if the table does not exist.
-//
-func (tc *Collection) GetMutableTableDescriptor(
+// getMutableTableDescriptorImpl performs the logic of acquiring a
+// MutableTableDescriptor by name.
+func (tc *Collection) getMutableTableDescriptorImpl(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	if log.V(2) {
@@ -221,6 +221,69 @@ func (tc *Collection) GetMutableTableDescriptor(
 	return mutDesc, nil
 }
 
+// GetMutableTableDescriptor returns a mutable table descriptor.
+//
+// If flags.required is false, GetMutableTableDescriptor() will gracefully
+// return a nil descriptor and no error if the table does not exist.
+//
+func (tc *Collection) GetMutableTableDescriptor(
+	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+) (*sqlbase.MutableTableDescriptor, error) {
+	desc, err := tc.getMutableTableDescriptorImpl(ctx, txn, tn, flags)
+	if err != nil {
+		return nil, err
+	}
+	// If we found a descriptor, then attempt to hydrate the types in it.
+	if desc != nil {
+		hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, desc)
+		if err != nil {
+			return nil, err
+		}
+		desc = hydrated.(*sqlbase.MutableTableDescriptor)
+	}
+	return desc, nil
+}
+
+// hydrateTypesInTableDesc installs user defined type metadata in all types.T
+// present in the input TableDescriptor. It always returns the same type of
+// TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
+// are not modified during the process of metadata installation.
+func (tc *Collection) hydrateTypesInTableDesc(
+	ctx context.Context, txn *kv.Txn, desc sqlbase.TableDescriptorInterface,
+) (sqlbase.TableDescriptorInterface, error) {
+	getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		// TODO (rohany): Use the collection here.
+		return resolver.ResolveTypeDescByID(ctx, txn, tc.codec(), id, tree.ObjectLookupFlags{})
+	}
+	switch t := desc.(type) {
+	case *sqlbase.MutableTableDescriptor:
+		// It is safe to hydrate directly into MutableTableDescriptor since it is
+		// not shared.
+		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
+	case *sqlbase.ImmutableTableDescriptor:
+		// ImmutableTableDescriptors need to be copied before hydration, because
+		// they are potentially read by multiple threads. If there aren't any user
+		// defined types in the descriptor, then return early.
+		if !t.ContainsUserDefinedTypes() {
+			return desc, nil
+		}
+
+		// TODO (rohany, ajwerner): Here we would look into the cached set of
+		//  hydrated table descriptors and potentially return without having to
+		//  make a copy. However, we could avoid hitting the cache if any of the
+		//  user defined types have been modified in this transaction.
+
+		// Make a copy of the underlying descriptor before hydration.
+		descBase := protoutil.Clone(t.TableDesc()).(*sqlbase.TableDescriptor)
+		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, descBase, sqlbase.TypeLookupFunc(getType)); err != nil {
+			return nil, err
+		}
+		return sqlbase.NewImmutableTableDescriptor(*descBase), nil
+	default:
+		return desc, nil
+	}
+}
+
 // ResolveSchemaID attempts to lookup the schema from the schemaCache if it exists,
 // otherwise falling back to a database lookup.
 func (tc *Collection) ResolveSchemaID(
@@ -251,18 +314,8 @@ func (tc *Collection) ResolveSchemaID(
 	return exists, schemaID, err
 }
 
-// GetTableVersion returns a table descriptor with a version suitable for
-// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
-// The table must be released by calling tc.ReleaseAll().
-//
-// If flags.required is false, GetTableVersion() will gracefully
-// return a nil descriptor and no error if the table does not exist.
-//
-// It might also add a transaction deadline to the transaction that is
-// enforced at the KV layer to ensure that the transaction doesn't violate
-// the validity window of the table descriptor version returned.
-//
-func (tc *Collection) GetTableVersion(
+// getTableVersionImpl performs the main logic of GetTableVersion.
+func (tc *Collection) getTableVersionImpl(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
@@ -403,8 +456,36 @@ func (tc *Collection) GetTableVersion(
 	return table, nil
 }
 
-// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
-func (tc *Collection) GetTableVersionByID(
+// GetTableVersion returns a table descriptor with a version suitable for
+// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
+// The table must be released by calling tc.ReleaseAll().
+//
+// If flags.required is false, GetTableVersion() will gracefully
+// return a nil descriptor and no error if the table does not exist.
+//
+// It might also add a transaction deadline to the transaction that is
+// enforced at the KV layer to ensure that the transaction doesn't violate
+// the validity window of the table descriptor version returned.
+//
+func (tc *Collection) GetTableVersion(
+	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	desc, err := tc.getTableVersionImpl(ctx, txn, tn, flags)
+	if err != nil {
+		return nil, err
+	}
+	if desc != nil {
+		hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, desc)
+		if err != nil {
+			return nil, err
+		}
+		desc = hydrated.(*sqlbase.ImmutableTableDescriptor)
+	}
+	return desc, nil
+}
+
+// getTableVersionByID performs the main logic of getTableVersionByID.
+func (tc *Collection) getTableVersionByIDImpl(
 	ctx context.Context, txn *kv.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
@@ -474,6 +555,24 @@ func (tc *Collection) GetTableVersionByID(
 	return table, nil
 }
 
+// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
+func (tc *Collection) GetTableVersionByID(
+	ctx context.Context, txn *kv.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	desc, err := tc.getTableVersionByIDImpl(ctx, txn, tableID, flags)
+	if err != nil {
+		return nil, err
+	}
+	if desc != nil {
+		hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, desc)
+		if err != nil {
+			return nil, err
+		}
+		desc = hydrated.(*sqlbase.ImmutableTableDescriptor)
+	}
+	return desc, nil
+}
+
 // GetMutableTableVersionByID is a variant of sqlbase.GetTableDescFromID which returns a mutable
 // table descriptor of the table modified in the same transaction.
 func (tc *Collection) GetMutableTableVersionByID(
@@ -485,7 +584,19 @@ func (tc *Collection) GetMutableTableVersionByID(
 		log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 		return table, nil
 	}
-	return sqlbase.GetMutableTableDescFromID(ctx, txn, tc.codec(), tableID)
+	desc, err := sqlbase.GetMutableTableDescFromID(ctx, txn, tc.codec(), tableID)
+	if err != nil {
+		return nil, err
+	}
+	// If we found a descriptor, then attempt to hydrate the types in it.
+	if desc != nil {
+		hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, desc)
+		if err != nil {
+			return nil, err
+		}
+		desc = hydrated.(*sqlbase.MutableTableDescriptor)
+	}
+	return desc, nil
 }
 
 // ReleaseTableLeases releases the leases for the tables with ids in
