@@ -12,7 +12,6 @@ package cloudimpl
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"net/url"
@@ -80,7 +79,7 @@ func makeFileTableStorage(
 // interact with the underlying FileToTableSystem. It only supports a subset of
 // methods compared to the internal SQL connection backed FileTableStorage.
 func MakeSQLConnFileTableStorage(
-	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn driver.QueryerContext,
+	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn cloud.SQLConnI,
 ) (cloud.ExternalStorage, error) {
 	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, executor,
@@ -215,7 +214,7 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 	for _, match := range matches {
 		// If there is no glob pattern, then the user wishes to list all the uploaded
 		// files stored in the userfile table storage.
-		if f.prefix == "" {
+		if pattern == "" {
 			match = strings.TrimPrefix(match, "/")
 			unescapedURI, err := url.PathUnescape(makeUserFileURIWithQualifiedName(f.cfg.
 				QualifiedTableName, match))
