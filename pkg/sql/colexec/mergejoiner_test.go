@@ -1609,6 +1609,30 @@ var mjTestCases = []*joinTestCase{
 		rightEqCols:  []uint32{0},
 		expected:     tuples{{nil}, {true}, {true}},
 	},
+	{
+		description: "FULL OUTER join on mixed-type equality columns",
+		joinType:    sqlbase.FullOuterJoin,
+		leftTuples: tuples{
+			{8398534516657654136},
+			{932352552525192296},
+		},
+		leftTypes:   []*types.T{types.Int},
+		leftOutCols: []uint32{0},
+		leftEqCols:  []uint32{0},
+		rightTuples: tuples{
+			{-20041},
+			{23918},
+		},
+		rightTypes:   []*types.T{types.Int2},
+		rightOutCols: []uint32{0},
+		rightEqCols:  []uint32{0},
+		expected: tuples{
+			{8398534516657654136, nil},
+			{932352552525192296, nil},
+			{nil, -20041},
+			{nil, 23918},
+		},
+	},
 }
 
 func TestMergeJoiner(t *testing.T) {
@@ -1647,7 +1671,7 @@ func TestMergeJoiner(t *testing.T) {
 					output.input.Init()
 				}
 				verify := output.Verify
-				if _, isFullOuter := output.input.(*mergeJoinFullOuterOp); isFullOuter {
+				if tc.joinType == sqlbase.FullOuterJoin {
 					// FULL OUTER JOIN doesn't guarantee any ordering on its output (since
 					// it is ambiguous), so we're comparing the outputs as sets.
 					verify = output.VerifyAnyOrder

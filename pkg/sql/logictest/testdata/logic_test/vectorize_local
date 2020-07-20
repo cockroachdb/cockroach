@@ -180,13 +180,13 @@ EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 │
 └ Node 1
   └ *colexec.projMultInt64Int64Op
-    └ *colexec.castOp
-      └ *colexec.castOp
+    └ *colexec.castInt16Int64Op
+      └ *colexec.castInt16Int64Op
         └ *colexec.selEQInt64Int64Op
           └ *colexec.projPlusInt64Int64ConstOp
             └ *colexec.projPlusInt64Int64Op
-              └ *colexec.castOp
-                └ *colexec.castOp
+              └ *colexec.castInt32Int64Op
+                └ *colexec.castInt32Int64Op
                   └ *colfetcher.colBatchScan
 
 query I

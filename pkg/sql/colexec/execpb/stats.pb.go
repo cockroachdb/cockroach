@@ -27,10 +27,14 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // VectorizedStats represents the stats collected from an operator.
 type VectorizedStats struct {
-	ID         int32         `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	NumBatches int64         `protobuf:"varint,2,opt,name=num_batches,json=numBatches,proto3" json:"num_batches,omitempty"`
-	NumTuples  int64         `protobuf:"varint,3,opt,name=num_tuples,json=numTuples,proto3" json:"num_tuples,omitempty"`
-	Time       time.Duration `protobuf:"bytes,4,opt,name=time,proto3,stdduration" json:"time"`
+	ID int32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	// num_batches is the number of batches that this stats collector observed its
+	// operator to output.
+	NumBatches int64 `protobuf:"varint,2,opt,name=num_batches,json=numBatches,proto3" json:"num_batches,omitempty"`
+	// num_tuples is the number of tuples that this stats collector received
+	// from its input.
+	NumTuples int64         `protobuf:"varint,3,opt,name=num_tuples,json=numTuples,proto3" json:"num_tuples,omitempty"`
+	Time      time.Duration `protobuf:"bytes,4,opt,name=time,proto3,stdduration" json:"time"`
 	// stall indicates whether stall time or execution time is being tracked.
 	Stall            bool  `protobuf:"varint,5,opt,name=stall,proto3" json:"stall,omitempty"`
 	MaxAllocatedMem  int64 `protobuf:"varint,6,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
@@ -41,7 +45,7 @@ func (m *VectorizedStats) Reset()         { *m = VectorizedStats{} }
 func (m *VectorizedStats) String() string { return proto.CompactTextString(m) }
 func (*VectorizedStats) ProtoMessage()    {}
 func (*VectorizedStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_fe732b30c56248d9, []int{0}
+	return fileDescriptor_stats_74d7c56ee15c9a92, []int{0}
 }
 func (m *VectorizedStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -482,10 +486,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/colexec/execpb/stats.proto", fileDescriptor_stats_fe732b30c56248d9)
+	proto.RegisterFile("sql/colexec/execpb/stats.proto", fileDescriptor_stats_74d7c56ee15c9a92)
 }
 
-var fileDescriptor_stats_fe732b30c56248d9 = []byte{
+var fileDescriptor_stats_74d7c56ee15c9a92 = []byte{
 	// 349 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x90, 0x41, 0x6b, 0xdb, 0x30,
 	0x18, 0x86, 0x2d, 0x27, 0xf1, 0x32, 0xe5, 0x90, 0x4d, 0x84, 0xe1, 0x05, 0x26, 0x9b, 0x9d, 0xcc,
