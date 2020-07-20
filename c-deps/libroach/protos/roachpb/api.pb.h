@@ -87,9 +87,9 @@ extern AdminScatterRequestDefaultTypeInternal _AdminScatterRequest_default_insta
 class AdminScatterResponse;
 class AdminScatterResponseDefaultTypeInternal;
 extern AdminScatterResponseDefaultTypeInternal _AdminScatterResponse_default_instance_;
-class AdminScatterResponse_Range;
-class AdminScatterResponse_RangeDefaultTypeInternal;
-extern AdminScatterResponse_RangeDefaultTypeInternal _AdminScatterResponse_Range_default_instance_;
+class AdminScatterResponse_DeprecatedRange;
+class AdminScatterResponse_DeprecatedRangeDefaultTypeInternal;
+extern AdminScatterResponse_DeprecatedRangeDefaultTypeInternal _AdminScatterResponse_DeprecatedRange_default_instance_;
 class AdminSplitRequest;
 class AdminSplitRequestDefaultTypeInternal;
 extern AdminSplitRequestDefaultTypeInternal _AdminSplitRequest_default_instance_;
@@ -440,7 +440,7 @@ template<> ::cockroach::roachpb::AdminRelocateRangeRequest* Arena::CreateMaybeMe
 template<> ::cockroach::roachpb::AdminRelocateRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminRelocateRangeResponse>(Arena*);
 template<> ::cockroach::roachpb::AdminScatterRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminScatterRequest>(Arena*);
 template<> ::cockroach::roachpb::AdminScatterResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminScatterResponse>(Arena*);
-template<> ::cockroach::roachpb::AdminScatterResponse_Range* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminScatterResponse_Range>(Arena*);
+template<> ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminScatterResponse_DeprecatedRange>(Arena*);
 template<> ::cockroach::roachpb::AdminSplitRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminSplitRequest>(Arena*);
 template<> ::cockroach::roachpb::AdminSplitResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminSplitResponse>(Arena*);
 template<> ::cockroach::roachpb::AdminTransferLeaseRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::AdminTransferLeaseRequest>(Arena*);
@@ -12453,24 +12453,24 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
 };
 // -------------------------------------------------------------------
 
-class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.AdminScatterResponse.Range) */ {
+class AdminScatterResponse_DeprecatedRange : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.AdminScatterResponse.DeprecatedRange) */ {
  public:
-  AdminScatterResponse_Range();
-  virtual ~AdminScatterResponse_Range();
+  AdminScatterResponse_DeprecatedRange();
+  virtual ~AdminScatterResponse_DeprecatedRange();
 
-  AdminScatterResponse_Range(const AdminScatterResponse_Range& from);
+  AdminScatterResponse_DeprecatedRange(const AdminScatterResponse_DeprecatedRange& from);
 
-  inline AdminScatterResponse_Range& operator=(const AdminScatterResponse_Range& from) {
+  inline AdminScatterResponse_DeprecatedRange& operator=(const AdminScatterResponse_DeprecatedRange& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  AdminScatterResponse_Range(AdminScatterResponse_Range&& from) noexcept
-    : AdminScatterResponse_Range() {
+  AdminScatterResponse_DeprecatedRange(AdminScatterResponse_DeprecatedRange&& from) noexcept
+    : AdminScatterResponse_DeprecatedRange() {
     *this = ::std::move(from);
   }
 
-  inline AdminScatterResponse_Range& operator=(AdminScatterResponse_Range&& from) noexcept {
+  inline AdminScatterResponse_DeprecatedRange& operator=(AdminScatterResponse_DeprecatedRange&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -12479,34 +12479,34 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
     return *this;
   }
   #endif
-  static const AdminScatterResponse_Range& default_instance();
+  static const AdminScatterResponse_DeprecatedRange& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const AdminScatterResponse_Range* internal_default_instance() {
-    return reinterpret_cast<const AdminScatterResponse_Range*>(
-               &_AdminScatterResponse_Range_default_instance_);
+  static inline const AdminScatterResponse_DeprecatedRange* internal_default_instance() {
+    return reinterpret_cast<const AdminScatterResponse_DeprecatedRange*>(
+               &_AdminScatterResponse_DeprecatedRange_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     94;
 
-  void Swap(AdminScatterResponse_Range* other);
-  friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
+  void Swap(AdminScatterResponse_DeprecatedRange* other);
+  friend void swap(AdminScatterResponse_DeprecatedRange& a, AdminScatterResponse_DeprecatedRange& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline AdminScatterResponse_Range* New() const final {
-    return CreateMaybeMessage<AdminScatterResponse_Range>(NULL);
+  inline AdminScatterResponse_DeprecatedRange* New() const final {
+    return CreateMaybeMessage<AdminScatterResponse_DeprecatedRange>(NULL);
   }
 
-  AdminScatterResponse_Range* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<AdminScatterResponse_Range>(arena);
+  AdminScatterResponse_DeprecatedRange* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<AdminScatterResponse_DeprecatedRange>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const AdminScatterResponse_Range& from);
-  void MergeFrom(const AdminScatterResponse_Range& from);
+  void CopyFrom(const AdminScatterResponse_DeprecatedRange& from);
+  void MergeFrom(const AdminScatterResponse_DeprecatedRange& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -12522,7 +12522,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(AdminScatterResponse_Range* other);
+  void InternalSwap(AdminScatterResponse_DeprecatedRange* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -12549,7 +12549,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
   ::cockroach::roachpb::Span* mutable_span();
   void set_allocated_span(::cockroach::roachpb::Span* span);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -12642,20 +12642,31 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
 
   // nested types ----------------------------------------------------
 
-  typedef AdminScatterResponse_Range Range;
+  typedef AdminScatterResponse_DeprecatedRange DeprecatedRange;
 
   // accessors -------------------------------------------------------
 
-  int ranges_size() const;
-  void clear_ranges();
-  static const int kRangesFieldNumber = 2;
-  ::cockroach::roachpb::AdminScatterResponse_Range* mutable_ranges(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >*
-      mutable_ranges();
-  const ::cockroach::roachpb::AdminScatterResponse_Range& ranges(int index) const;
-  ::cockroach::roachpb::AdminScatterResponse_Range* add_ranges();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >&
-      ranges() const;
+  int deprecated_ranges_size() const;
+  void clear_deprecated_ranges();
+  static const int kDeprecatedRangesFieldNumber = 2;
+  ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* mutable_deprecated_ranges(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >*
+      mutable_deprecated_ranges();
+  const ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange& deprecated_ranges(int index) const;
+  ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* add_deprecated_ranges();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >&
+      deprecated_ranges() const;
+
+  int range_infos_size() const;
+  void clear_range_infos();
+  static const int kRangeInfosFieldNumber = 3;
+  ::cockroach::roachpb::RangeInfo* mutable_range_infos(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+      mutable_range_infos();
+  const ::cockroach::roachpb::RangeInfo& range_infos(int index) const;
+  ::cockroach::roachpb::RangeInfo* add_range_infos();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+      range_infos() const;
 
   bool has_header() const;
   void clear_header();
@@ -12672,7 +12683,8 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range > ranges_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange > deprecated_ranges_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > range_infos_;
   ::cockroach::roachpb::ResponseHeader* header_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -28632,37 +28644,37 @@ inline void AdminScatterRequest::set_randomize_leases(bool value) {
 
 // -------------------------------------------------------------------
 
-// AdminScatterResponse_Range
+// AdminScatterResponse_DeprecatedRange
 
-inline bool AdminScatterResponse_Range::has_span() const {
+inline bool AdminScatterResponse_DeprecatedRange::has_span() const {
   return this != internal_default_instance() && span_ != NULL;
 }
-inline const ::cockroach::roachpb::Span& AdminScatterResponse_Range::_internal_span() const {
+inline const ::cockroach::roachpb::Span& AdminScatterResponse_DeprecatedRange::_internal_span() const {
   return *span_;
 }
-inline const ::cockroach::roachpb::Span& AdminScatterResponse_Range::span() const {
+inline const ::cockroach::roachpb::Span& AdminScatterResponse_DeprecatedRange::span() const {
   const ::cockroach::roachpb::Span* p = span_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.Range.span)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.DeprecatedRange.span)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Span*>(
       &::cockroach::roachpb::_Span_default_instance_);
 }
-inline ::cockroach::roachpb::Span* AdminScatterResponse_Range::release_span() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.AdminScatterResponse.Range.span)
+inline ::cockroach::roachpb::Span* AdminScatterResponse_DeprecatedRange::release_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AdminScatterResponse.DeprecatedRange.span)
   
   ::cockroach::roachpb::Span* temp = span_;
   span_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::Span* AdminScatterResponse_Range::mutable_span() {
+inline ::cockroach::roachpb::Span* AdminScatterResponse_DeprecatedRange::mutable_span() {
   
   if (span_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::roachpb::Span>(GetArenaNoVirtual());
     span_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.Range.span)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.DeprecatedRange.span)
   return span_;
 }
-inline void AdminScatterResponse_Range::set_allocated_span(::cockroach::roachpb::Span* span) {
+inline void AdminScatterResponse_DeprecatedRange::set_allocated_span(::cockroach::roachpb::Span* span) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete reinterpret_cast< ::google::protobuf::MessageLite*>(span_);
@@ -28678,7 +28690,7 @@ inline void AdminScatterResponse_Range::set_allocated_span(::cockroach::roachpb:
     
   }
   span_ = span;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminScatterResponse.Range.span)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminScatterResponse.DeprecatedRange.span)
 }
 
 // -------------------------------------------------------------------
@@ -28738,33 +28750,59 @@ inline void AdminScatterResponse::set_allocated_header(::cockroach::roachpb::Res
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminScatterResponse.header)
 }
 
-inline int AdminScatterResponse::ranges_size() const {
-  return ranges_.size();
+inline int AdminScatterResponse::deprecated_ranges_size() const {
+  return deprecated_ranges_.size();
 }
-inline void AdminScatterResponse::clear_ranges() {
-  ranges_.Clear();
+inline void AdminScatterResponse::clear_deprecated_ranges() {
+  deprecated_ranges_.Clear();
 }
-inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::mutable_ranges(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Mutable(index);
+inline ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* AdminScatterResponse::mutable_deprecated_ranges(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >*
-AdminScatterResponse::mutable_ranges() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.ranges)
-  return &ranges_;
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >*
+AdminScatterResponse::mutable_deprecated_ranges() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return &deprecated_ranges_;
 }
-inline const ::cockroach::roachpb::AdminScatterResponse_Range& AdminScatterResponse::ranges(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Get(index);
+inline const ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange& AdminScatterResponse::deprecated_ranges(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Get(index);
 }
-inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::add_ranges() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Add();
+inline ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* AdminScatterResponse::add_deprecated_ranges() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >&
-AdminScatterResponse::ranges() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_;
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >&
+AdminScatterResponse::deprecated_ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_;
+}
+
+inline int AdminScatterResponse::range_infos_size() const {
+  return range_infos_.size();
+}
+inline ::cockroach::roachpb::RangeInfo* AdminScatterResponse::mutable_range_infos(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+AdminScatterResponse::mutable_range_infos() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return &range_infos_;
+}
+inline const ::cockroach::roachpb::RangeInfo& AdminScatterResponse::range_infos(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Get(index);
+}
+inline ::cockroach::roachpb::RangeInfo* AdminScatterResponse::add_range_infos() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+AdminScatterResponse::range_infos() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_;
 }
 
 // -------------------------------------------------------------------

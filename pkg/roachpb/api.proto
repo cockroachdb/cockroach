@@ -1542,11 +1542,14 @@ message AdminScatterRequest {
 message AdminScatterResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  message Range {
+
+  message DeprecatedRange {
     Span span = 1 [(gogoproto.nullable) = false];
     reserved 2;
   }
-  repeated Range ranges = 2 [(gogoproto.nullable) = false];
+  // This field is deprecated in 20.2 in favor of RangeInfos.
+  repeated DeprecatedRange deprecated_ranges = 2 [(gogoproto.nullable) = false];
+  repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the

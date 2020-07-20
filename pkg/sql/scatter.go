@@ -122,7 +122,7 @@ type scatterRun struct {
 	span roachpb.Span
 
 	rangeIdx int
-	ranges   []roachpb.AdminScatterResponse_Range
+	ranges   []roachpb.AdminScatterResponse_DeprecatedRange
 }
 
 func (n *scatterNode) startExec(params runParams) error {
@@ -135,8 +135,24 @@ func (n *scatterNode) startExec(params runParams) error {
 	if pErr != nil {
 		return pErr.GoError()
 	}
+	scatterRes := res.(*roachpb.AdminScatterResponse)
 	n.run.rangeIdx = -1
-	n.run.ranges = res.(*roachpb.AdminScatterResponse).Ranges
+	if scatterRes.RangeInfos != nil {
+		// TODO(pbardea): In 21.1, remove all references to DeprecatedRange.
+		// RangeInfos should also not be nullable then.
+		n.run.ranges = make([]roachpb.AdminScatterResponse_DeprecatedRange, len(scatterRes.RangeInfos))
+		for i, rangeInfo := range scatterRes.RangeInfos {
+			n.run.ranges[i] = roachpb.AdminScatterResponse_DeprecatedRange{
+				Span: roachpb.Span{
+					Key:    rangeInfo.Desc.StartKey.AsRawKey(),
+					EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
+				},
+			}
+		}
+	} else {
+		// For compatibility with 20.1.
+		n.run.ranges = scatterRes.DeprecatedRanges
+	}
 	return nil
 }
 

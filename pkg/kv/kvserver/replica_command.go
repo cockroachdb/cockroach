@@ -2395,14 +2395,23 @@ func (r *Replica) adminScatter(
 		}
 	}
 
-	desc := r.Desc()
+	desc, lease := r.GetDescAndLease(ctx)
 	return roachpb.AdminScatterResponse{
-		Ranges: []roachpb.AdminScatterResponse_Range{{
-			Span: roachpb.Span{
-				Key:    desc.StartKey.AsRawKey(),
-				EndKey: desc.EndKey.AsRawKey(),
+		// TODO(pbardea): This is here for compatibility with 20.1, remove in 21.1.
+		DeprecatedRanges: []roachpb.AdminScatterResponse_DeprecatedRange{
+			{
+				Span: roachpb.Span{
+					Key:    desc.StartKey.AsRawKey(),
+					EndKey: desc.EndKey.AsRawKey(),
+				},
 			},
-		}},
+		},
+		RangeInfos: []roachpb.RangeInfo{
+			{
+				Desc:  desc,
+				Lease: lease,
+			},
+		},
 	}, nil
 }
 

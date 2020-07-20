@@ -34,7 +34,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminMergeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminRelocateRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminScatterRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminScatterResponse_Range;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminScatterResponse_DeprecatedRange;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminSplitResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminTransferLeaseRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminTransferLeaseResponse;
@@ -81,7 +81,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AddSSTableRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminChangeReplicasResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminRelocateRangeRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminScatterResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminSplitRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminVerifyProtectedTimestampRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminVerifyProtectedTimestampResponse;
@@ -114,6 +113,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_SubsumeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_TransferLeaseRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_WriteBatchRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_AdminScatterResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_GCRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_Header;
@@ -637,11 +637,11 @@ class AdminScatterRequestDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<AdminScatterRequest>
       _instance;
 } _AdminScatterRequest_default_instance_;
-class AdminScatterResponse_RangeDefaultTypeInternal {
+class AdminScatterResponse_DeprecatedRangeDefaultTypeInternal {
  public:
-  ::google::protobuf::internal::ExplicitlyConstructed<AdminScatterResponse_Range>
+  ::google::protobuf::internal::ExplicitlyConstructed<AdminScatterResponse_DeprecatedRange>
       _instance;
-} _AdminScatterResponse_Range_default_instance_;
+} _AdminScatterResponse_DeprecatedRange_default_instance_;
 class AdminScatterResponseDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<AdminScatterResponse>
@@ -2334,19 +2334,19 @@ static void InitDefaultsAdminScatterRequest() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAdminScatterRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
 
-static void InitDefaultsAdminScatterResponse_Range() {
+static void InitDefaultsAdminScatterResponse_DeprecatedRange() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   {
-    void* ptr = &::cockroach::roachpb::_AdminScatterResponse_Range_default_instance_;
-    new (ptr) ::cockroach::roachpb::AdminScatterResponse_Range();
+    void* ptr = &::cockroach::roachpb::_AdminScatterResponse_DeprecatedRange_default_instance_;
+    new (ptr) ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange();
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
-  ::cockroach::roachpb::AdminScatterResponse_Range::InitAsDefaultInstance();
+  ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_AdminScatterResponse_Range =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAdminScatterResponse_Range}, {
+::google::protobuf::internal::SCCInfo<1> scc_info_AdminScatterResponse_DeprecatedRange =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAdminScatterResponse_DeprecatedRange}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
 
 static void InitDefaultsAdminScatterResponse() {
@@ -2360,10 +2360,11 @@ static void InitDefaultsAdminScatterResponse() {
   ::cockroach::roachpb::AdminScatterResponse::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_AdminScatterResponse =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsAdminScatterResponse}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_AdminScatterResponse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsAdminScatterResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_Range.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_DeprecatedRange.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsAdminVerifyProtectedTimestampRequest() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2972,7 +2973,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ImportRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ImportResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterRequest.base);
-  ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterResponse_Range.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterResponse_DeprecatedRange.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminVerifyProtectedTimestampRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminVerifyProtectedTimestampResponse.base);
@@ -27225,28 +27226,28 @@ void AdminScatterRequest::InternalSwap(AdminScatterRequest* other) {
 
 // ===================================================================
 
-void AdminScatterResponse_Range::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_AdminScatterResponse_Range_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
+void AdminScatterResponse_DeprecatedRange::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_AdminScatterResponse_DeprecatedRange_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
       ::cockroach::roachpb::Span::internal_default_instance());
 }
-void AdminScatterResponse_Range::clear_span() {
+void AdminScatterResponse_DeprecatedRange::clear_span() {
   if (GetArenaNoVirtual() == NULL && span_ != NULL) {
     delete span_;
   }
   span_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int AdminScatterResponse_Range::kSpanFieldNumber;
+const int AdminScatterResponse_DeprecatedRange::kSpanFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
-AdminScatterResponse_Range::AdminScatterResponse_Range()
+AdminScatterResponse_DeprecatedRange::AdminScatterResponse_DeprecatedRange()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
   ::google::protobuf::internal::InitSCC(
-      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_Range.base);
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_DeprecatedRange.base);
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
 }
-AdminScatterResponse_Range::AdminScatterResponse_Range(const AdminScatterResponse_Range& from)
+AdminScatterResponse_DeprecatedRange::AdminScatterResponse_DeprecatedRange(const AdminScatterResponse_DeprecatedRange& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
@@ -27255,33 +27256,33 @@ AdminScatterResponse_Range::AdminScatterResponse_Range(const AdminScatterRespons
   } else {
     span_ = NULL;
   }
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
 }
 
-void AdminScatterResponse_Range::SharedCtor() {
+void AdminScatterResponse_DeprecatedRange::SharedCtor() {
   span_ = NULL;
 }
 
-AdminScatterResponse_Range::~AdminScatterResponse_Range() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.AdminScatterResponse.Range)
+AdminScatterResponse_DeprecatedRange::~AdminScatterResponse_DeprecatedRange() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   SharedDtor();
 }
 
-void AdminScatterResponse_Range::SharedDtor() {
+void AdminScatterResponse_DeprecatedRange::SharedDtor() {
   if (this != internal_default_instance()) delete span_;
 }
 
-void AdminScatterResponse_Range::SetCachedSize(int size) const {
+void AdminScatterResponse_DeprecatedRange::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
-const AdminScatterResponse_Range& AdminScatterResponse_Range::default_instance() {
-  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_Range.base);
+const AdminScatterResponse_DeprecatedRange& AdminScatterResponse_DeprecatedRange::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_DeprecatedRange.base);
   return *internal_default_instance();
 }
 
 
-void AdminScatterResponse_Range::Clear() {
-// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AdminScatterResponse.Range)
+void AdminScatterResponse_DeprecatedRange::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   ::google::protobuf::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
@@ -27293,7 +27294,7 @@ void AdminScatterResponse_Range::Clear() {
   _internal_metadata_.Clear();
 }
 
-bool AdminScatterResponse_Range::MergePartialFromCodedStream(
+bool AdminScatterResponse_DeprecatedRange::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
@@ -27303,7 +27304,7 @@ bool AdminScatterResponse_Range::MergePartialFromCodedStream(
       unknown_fields_setter.buffer());
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_output, false);
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   for (;;) {
     ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
@@ -27332,17 +27333,17 @@ bool AdminScatterResponse_Range::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   return false;
 #undef DO_
 }
 
-void AdminScatterResponse_Range::SerializeWithCachedSizes(
+void AdminScatterResponse_DeprecatedRange::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
@@ -27353,11 +27354,11 @@ void AdminScatterResponse_Range::SerializeWithCachedSizes(
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AdminScatterResponse.Range)
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
 }
 
-size_t AdminScatterResponse_Range::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AdminScatterResponse.Range)
+size_t AdminScatterResponse_DeprecatedRange::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
@@ -27373,13 +27374,13 @@ size_t AdminScatterResponse_Range::ByteSizeLong() const {
   return total_size;
 }
 
-void AdminScatterResponse_Range::CheckTypeAndMergeFrom(
+void AdminScatterResponse_DeprecatedRange::CheckTypeAndMergeFrom(
     const ::google::protobuf::MessageLite& from) {
-  MergeFrom(*::google::protobuf::down_cast<const AdminScatterResponse_Range*>(&from));
+  MergeFrom(*::google::protobuf::down_cast<const AdminScatterResponse_DeprecatedRange*>(&from));
 }
 
-void AdminScatterResponse_Range::MergeFrom(const AdminScatterResponse_Range& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AdminScatterResponse.Range)
+void AdminScatterResponse_DeprecatedRange::MergeFrom(const AdminScatterResponse_DeprecatedRange& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::google::protobuf::uint32 cached_has_bits = 0;
@@ -27390,29 +27391,29 @@ void AdminScatterResponse_Range::MergeFrom(const AdminScatterResponse_Range& fro
   }
 }
 
-void AdminScatterResponse_Range::CopyFrom(const AdminScatterResponse_Range& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AdminScatterResponse.Range)
+void AdminScatterResponse_DeprecatedRange::CopyFrom(const AdminScatterResponse_DeprecatedRange& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AdminScatterResponse.DeprecatedRange)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool AdminScatterResponse_Range::IsInitialized() const {
+bool AdminScatterResponse_DeprecatedRange::IsInitialized() const {
   return true;
 }
 
-void AdminScatterResponse_Range::Swap(AdminScatterResponse_Range* other) {
+void AdminScatterResponse_DeprecatedRange::Swap(AdminScatterResponse_DeprecatedRange* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void AdminScatterResponse_Range::InternalSwap(AdminScatterResponse_Range* other) {
+void AdminScatterResponse_DeprecatedRange::InternalSwap(AdminScatterResponse_DeprecatedRange* other) {
   using std::swap;
   swap(span_, other->span_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
-::std::string AdminScatterResponse_Range::GetTypeName() const {
-  return "cockroach.roachpb.AdminScatterResponse.Range";
+::std::string AdminScatterResponse_DeprecatedRange::GetTypeName() const {
+  return "cockroach.roachpb.AdminScatterResponse.DeprecatedRange";
 }
 
 
@@ -27422,9 +27423,13 @@ void AdminScatterResponse::InitAsDefaultInstance() {
   ::cockroach::roachpb::_AdminScatterResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
 }
+void AdminScatterResponse::clear_range_infos() {
+  range_infos_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminScatterResponse::kHeaderFieldNumber;
-const int AdminScatterResponse::kRangesFieldNumber;
+const int AdminScatterResponse::kDeprecatedRangesFieldNumber;
+const int AdminScatterResponse::kRangeInfosFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminScatterResponse::AdminScatterResponse()
@@ -27437,7 +27442,8 @@ AdminScatterResponse::AdminScatterResponse()
 AdminScatterResponse::AdminScatterResponse(const AdminScatterResponse& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      ranges_(from.ranges_) {
+      deprecated_ranges_(from.deprecated_ranges_),
+      range_infos_(from.range_infos_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::ResponseHeader(*from.header_);
@@ -27475,7 +27481,8 @@ void AdminScatterResponse::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ranges_.Clear();
+  deprecated_ranges_.Clear();
+  range_infos_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -27514,7 +27521,18 @@ bool AdminScatterResponse::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_ranges()));
+                input, add_deprecated_ranges()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_range_infos()));
         } else {
           goto handle_unusual;
         }
@@ -27553,10 +27571,18 @@ void AdminScatterResponse::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->ranges_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->deprecated_ranges_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2,
-      this->ranges(static_cast<int>(i)),
+      this->deprecated_ranges(static_cast<int>(i)),
+      output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->range_infos_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3,
+      this->range_infos(static_cast<int>(i)),
       output);
   }
 
@@ -27572,12 +27598,22 @@ size_t AdminScatterResponse::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->ranges_size());
+    unsigned int count = static_cast<unsigned int>(this->deprecated_ranges_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->ranges(static_cast<int>(i)));
+          this->deprecated_ranges(static_cast<int>(i)));
+    }
+  }
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->range_infos_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->range_infos(static_cast<int>(i)));
     }
   }
 
@@ -27604,7 +27640,8 @@ void AdminScatterResponse::MergeFrom(const AdminScatterResponse& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  ranges_.MergeFrom(from.ranges_);
+  deprecated_ranges_.MergeFrom(from.deprecated_ranges_);
+  range_infos_.MergeFrom(from.range_infos_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
   }
@@ -27627,7 +27664,8 @@ void AdminScatterResponse::Swap(AdminScatterResponse* other) {
 }
 void AdminScatterResponse::InternalSwap(AdminScatterResponse* other) {
   using std::swap;
-  CastToBase(&ranges_)->InternalSwap(CastToBase(&other->ranges_));
+  CastToBase(&deprecated_ranges_)->InternalSwap(CastToBase(&other->deprecated_ranges_));
+  CastToBase(&range_infos_)->InternalSwap(CastToBase(&other->range_infos_));
   swap(header_, other->header_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
@@ -39605,8 +39643,8 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ImportRespon
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatterRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminScatterRequest >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AdminScatterRequest >(arena);
 }
-template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatterResponse_Range* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminScatterResponse_Range >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::roachpb::AdminScatterResponse_Range >(arena);
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::AdminScatterResponse_DeprecatedRange >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatterResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminScatterResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AdminScatterResponse >(arena);

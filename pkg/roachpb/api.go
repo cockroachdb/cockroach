@@ -402,7 +402,9 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
 			return err
 		}
-		r.Ranges = append(r.Ranges, otherR.Ranges...)
+		// TODO(pbardea): This is here for compatibility with 20.1, remove in 21.1.
+		r.DeprecatedRanges = append(r.DeprecatedRanges, otherR.DeprecatedRanges...)
+		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
 	}
 	return nil
 }
