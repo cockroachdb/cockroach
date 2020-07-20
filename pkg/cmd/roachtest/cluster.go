@@ -115,7 +115,7 @@ func filepathAbs(path string) (string, error) {
 	return path, nil
 }
 
-func findBinary(binary, defValue string) (string, error) {
+func findBinary(binary, defValue string) (abspath string, err error) {
 	if binary == "" {
 		binary = defValue
 	}
