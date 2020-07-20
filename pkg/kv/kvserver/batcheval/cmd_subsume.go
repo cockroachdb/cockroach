@@ -173,6 +173,6 @@ func Subsume(
 	reply.FreezeStart = cArgs.EvalCtx.Clock().Now()
 
 	return result.Result{
-		Local: result.LocalResult{MaybeWatchForMerge: true},
+		Local: result.LocalResult{FreezeStart: reply.FreezeStart},
 	}, nil
 }
