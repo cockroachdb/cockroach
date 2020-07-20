@@ -81,6 +81,9 @@ func registerSQLSmith(r *testRegistry) {
 		c.l.Printf("seed: %d", seed)
 
 		c.Put(ctx, cockroach, "./cockroach")
+		if err := c.PutLibraries(ctx, "./lib"); err != nil {
+			t.Fatalf("could not initialize libraries: %v", err)
+		}
 		c.Start(ctx, t)
 
 		setupFunc, ok := setups[setupName]
