@@ -1541,6 +1541,15 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr></tbody>
 </table>
 
+### Multi-tenancy functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.sql_liveness_is_alive"></a><code>crdb_internal.sql_liveness_is_alive(session_id: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks is given sqlliveness session id is not expired</p>
+</span></td></tr></tbody>
+</table>
+
 ### Sequence functions
 
 <table>
