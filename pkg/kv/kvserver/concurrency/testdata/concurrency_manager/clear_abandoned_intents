@@ -19,7 +19,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=a
   intent txn=txn2 key=b
   intent txn=txn2 key=c
@@ -151,7 +151,7 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=a
 ----
 [2] handle write intent error req1: handled conflicting intents on "a", released latches
@@ -182,7 +182,7 @@ on-txn-updated txn=txn2 status=committed
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=b
 ----
 [4] handle write intent error req1: handled conflicting intents on "b", released latches
@@ -210,7 +210,7 @@ sequence req=req1
 [5] sequence req1: scanning lock table for conflicting locks
 [5] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1
+handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=c
 ----
 [6] handle write intent error req1: handled conflicting intents on "c", released latches

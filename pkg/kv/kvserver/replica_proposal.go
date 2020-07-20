@@ -439,7 +439,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	}
 
 	// Inform the concurrency manager that the lease holder has been updated.
-	r.concMgr.OnRangeLeaseUpdated(iAmTheLeaseHolder)
+	r.concMgr.OnRangeLeaseUpdated(newLease.Sequence, iAmTheLeaseHolder)
 
 	// Potentially re-gossip if the range contains system data (e.g. system
 	// config or node liveness). We need to perform this gossip at startup as

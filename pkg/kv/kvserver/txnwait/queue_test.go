@@ -189,7 +189,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	cfg := makeConfig(nil)
 	defer cfg.Stopper.Stop(context.Background())
 	q := NewQueue(cfg)
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	waitingRes := make(chan *roachpb.Error)
@@ -231,7 +231,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	})
 	defer cfg.Stopper.Stop(context.Background())
 	q := NewQueue(cfg)
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	// Set an extremely high transaction liveness threshold so that the pushee
 	// is only queried once per pusher.
