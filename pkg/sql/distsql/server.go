@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	slstorage "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -323,6 +324,7 @@ func (ds *ServerImpl) setupFlow(
 			Tenant:             &sqlbase.DummyTenantOperator{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
+			SQLLivenessStorage: slstorage.NewStorage(ds.DB, ie),
 		}
 		// Since we are constructing an EvalContext on a remote node, outfit it
 		// with a DistSQLTypeResolver.

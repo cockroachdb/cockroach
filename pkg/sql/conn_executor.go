@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	slstorage "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sltorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -2001,6 +2002,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 			TypeResolver:       p,
+			SQLLivenessStorage: slstorage.NewStorage(ex.server.cfg.DB, &ie),
 		},
 		SessionMutator:       ex.dataMutator,
 		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
