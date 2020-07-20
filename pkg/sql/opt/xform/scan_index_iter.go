@@ -144,7 +144,7 @@ func (it *scanIndexIter) Next() bool {
 		}
 
 		if it.hasRejectFlag(rejectPartialIndexes | rejectNonPartialIndexes) {
-			isPartialIndex := memo.IsPartialIndex(it.tabMeta, it.indexOrd)
+			_, isPartialIndex := it.currIndex.Predicate()
 
 			// Skip over partial indexes if rejectPartialIndexes is set.
 			if it.hasRejectFlag(rejectPartialIndexes) && isPartialIndex {
