@@ -53,6 +53,11 @@ func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 	}
 }
 
+// GetBytesRead returns the number of bytes read by this fetcher.
+func (f *KVFetcher) GetBytesRead() int64 {
+	return f.bytesRead
+}
+
 // NextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, and any errors that may have
 // occurred.
