@@ -1429,6 +1429,19 @@ message ExportRequest {
   // size of all versions of a single key. If TargetFileSize is non-positive
   // then there is no limit.
   int64 target_file_size = 10;
+
+  // FailOnIntents causes the request to return a UnhandledRetryableError if it
+  // encounters an intent, instead of the usual WriteIntentError. This has the
+  // effect of informing the request's *sender* of the intent, rather than the
+  // usual behavior of the recipient store resolving it and retrying while the
+  // sender is waiting. This is useful in workloads like BACKUP where the sender
+  // often has many other ranges it also needs to export and can move on to them
+  // instead of blocking, waiting for the intent on this one to resolve, and
+  // them come back to this range later and hope the intent has been resolved in
+  // the meantime.
+  bool fail_on_intents = 11;
+
+  // NEXT ID: 12
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -28,6 +29,18 @@ import (
 )
 
 var backupOutputTypes = []*types.T{}
+
+var useTBI = settings.RegisterBoolSetting(
+	"kv.bulk_io_write.experimental_incremental_export_enabled",
+	"use experimental time-bound file filter when exporting in BACKUP",
+	true,
+)
+
+var normPriorityAttempts = settings.RegisterPositiveIntSetting(
+	"kv.bulk_io_read.backup_priority_attempt_limit",
+	"number of reads BACKUP should attempt before using high priority",
+	3,
+)
 
 // TODO(pbardea): It would be nice if we could add some DistSQL processor tests
 // we would probably want to have a mock cloudStorage object that we could
@@ -93,6 +106,7 @@ func (cp *backupDataProcessor) Run(ctx context.Context) {
 type spanAndTime struct {
 	span       roachpb.Span
 	start, end hlc.Timestamp
+	attempts   int64
 }
 
 func runBackupProcessor(
@@ -149,9 +163,28 @@ func runBackupProcessor(
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
 				}
-				log.Infof(ctx, "sending ExportRequest for span %s", span.span)
+				if span.attempts < normPriorityAttempts.Get(&settings.SV) {
+					// On the initial attempts to export this span, we set FailOnIntents
+					// so that the export will return a TransactionRetry error instead of
+					// a WriteIntent error that its store would block on resolving. That
+					// way we can see here that that span is not ready to export yet and
+					// can potentially move on to another span for now.
+					req.FailOnIntents = true
+				} else {
+					// If we've already tried to export this span at normal priority and
+					// reached the limit of attempts, instead of disabling the usual
+					// blocking intent-resolution, we'll instead set high priority so that
+					// that resolution occurs promptly and in our favor.
+					header.UserPriority = roachpb.MaxUserPriority
+				}
+				log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %d)", span.span, span.attempts+1, header.UserPriority.String())
 				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
 				if pErr != nil {
+					if err := pErr.Detail.GetTransactionRetry(); err != nil && err.Reason == roachpb.RETRY_REASON_UNKNOWN {
+						span.attempts++
+						todo <- span
+						continue
+					}
 					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
