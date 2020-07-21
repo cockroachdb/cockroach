@@ -45,6 +45,16 @@ const (
 	jrEmittingRows
 )
 
+// joinReaderType represents the type of join being used.
+type joinReaderType int
+
+const (
+	// lookupJoinReaderType means we are performing a lookup join.
+	lookupJoinReaderType joinReaderType = iota
+	// indexJoinReaderType means we are performing an index join.
+	indexJoinReaderType
+)
+
 // joinReader performs a lookup join between `input` and the specified `index`.
 // `lookupCols` specifies the input columns which will be used for the index
 // lookup.
@@ -69,6 +79,7 @@ type joinReader struct {
 	alloc              sqlbase.DatumAlloc
 	rowAlloc           sqlbase.EncDatumRowAlloc
 	shouldLimitBatches bool
+	readerType         joinReaderType
 
 	input      execinfra.RowSource
 	inputTypes []*types.T
@@ -99,12 +110,30 @@ func newJoinReader(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
+	readerType joinReaderType,
 ) (execinfra.RowSourcedProcessor, error) {
+	if spec.IndexIdx != 0 && readerType == indexJoinReaderType {
+		return nil, errors.AssertionFailedf("index join must be against primary index")
+	}
+
+	var lookupCols []uint32
+	switch readerType {
+	case indexJoinReaderType:
+		pkIDs := spec.Table.PrimaryIndex.ColumnIDs
+		lookupCols = make([]uint32, len(pkIDs))
+		for i := range pkIDs {
+			lookupCols[i] = uint32(i)
+		}
+	case lookupJoinReaderType:
+		lookupCols = spec.LookupColumns
+	default:
+		return nil, errors.Errorf("unsupported joinReaderType")
+	}
 	jr := &joinReader{
 		desc:       spec.Table,
 		input:      input,
 		inputTypes: input.OutputTypes(),
-		lookupCols: spec.LookupColumns,
+		lookupCols: lookupCols,
 	}
 
 	var err error
@@ -123,6 +152,11 @@ func newJoinReader(
 		indexCols[i] = uint32(columnID)
 	}
 
+	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
+	// should parallelize the key lookups it performs.
+	jr.shouldLimitBatches = !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType
+	jr.readerType = readerType
+
 	// Add all requested system columns to the output.
 	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&jr.desc, spec.SystemColumns)
 	if err != nil {
@@ -133,19 +167,28 @@ func newJoinReader(
 		jr.colIdxMap[sysColDescs[i].ID] = len(jr.colIdxMap)
 	}
 
-	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
-	// should parallelize the key lookups it performs.
-	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
+	var leftTypes []*types.T
+	var leftEqCols []uint32
+	switch readerType {
+	case indexJoinReaderType:
+		leftTypes = columnTypes
+		leftEqCols = indexCols
+	case lookupJoinReaderType:
+		leftTypes = input.OutputTypes()
+		leftEqCols = jr.lookupCols
+	default:
+		return nil, errors.Errorf("unsupported joinReaderType")
+	}
 
 	if err := jr.joinerBase.init(
 		jr,
 		flowCtx,
 		processorID,
-		input.OutputTypes(),
+		leftTypes,
 		columnTypes,
 		spec.Type,
 		spec.OnExpr,
-		jr.lookupCols,
+		leftEqCols,
 		indexCols,
 		0, /* numMergedColumns */
 		post,
@@ -172,10 +215,21 @@ func newJoinReader(
 	}
 
 	var fetcher row.Fetcher
+	var rightCols util.FastIntSet
+	switch readerType {
+	case indexJoinReaderType:
+		rightCols = jr.Out.NeededColumns()
+	case lookupJoinReaderType:
+		rightCols = neededRightCols
+	default:
+		return nil, errors.Errorf("unsupported joinReaderType")
+	}
+
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength, sysColDescs,
+		rightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength, sysColDescs,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +241,7 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering)
+	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), spec.MaintainOrdering, rightCols, readerType)
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -195,10 +249,15 @@ func newJoinReader(
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx, typs []*types.T, numKeyCols int, maintainOrdering bool,
+	flowCtx *execinfra.FlowCtx,
+	typs []*types.T,
+	numKeyCols int,
+	maintainOrdering bool,
+	neededRightCols util.FastIntSet,
+	readerType joinReaderType,
 ) {
 	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(jr.neededRightCols())
+	spanBuilder.SetNeededColumns(neededRightCols)
 
 	spanGenerator := defaultSpanGenerator{
 		spanBuilder:          spanBuilder,
@@ -206,6 +265,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 		numKeyCols:           numKeyCols,
 		lookupCols:           jr.lookupCols,
 	}
+	if readerType == indexJoinReaderType {
+		jr.strategy = &joinReaderIndexJoinStrategy{
+			joinerBase:           &jr.joinerBase,
+			defaultSpanGenerator: spanGenerator,
+		}
+		return
+	}
+
 	if !maintainOrdering {
 		jr.strategy = &joinReaderNoOrderingStrategy{
 			joinerBase:           &jr.joinerBase,
@@ -371,11 +438,14 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		// All of the input rows were filtered out. Skip the index lookup.
 		return jrEmittingRows, nil
 	}
-	// Sort the spans so that we can rely upon the fetcher to limit the number of
-	// results per batch. It's safe to reorder the spans here because we already
-	// restore the original order of the output during the output collection
-	// phase.
-	sort.Sort(spans)
+
+	if jr.readerType == lookupJoinReaderType {
+		// Sort the spans so that we can rely upon the fetcher to limit the number of
+		// results per batch. It's safe to reorder the spans here because we already
+		// restore the original order of the output during the output collection
+		// phase.
+		sort.Sort(spans)
+	}
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
