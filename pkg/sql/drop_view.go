@@ -187,7 +187,7 @@ func (p *planner) dropViewImpl(
 
 	// Remove back-references from the tables/views this view depends on.
 	for _, depID := range viewDesc.DependsOn {
-		dependencyDesc, err := p.Tables().GetMutableTableVersionByID(ctx, depID, p.txn)
+		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
 		if err != nil {
 			return cascadeDroppedViews,
 				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
@@ -239,7 +239,7 @@ func (p *planner) getViewDescForCascade(
 	parentID, viewID sqlbase.ID,
 	behavior tree.DropBehavior,
 ) (*sqlbase.MutableTableDescriptor, error) {
-	viewDesc, err := p.Tables().GetMutableTableVersionByID(ctx, viewID, p.txn)
+	viewDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, viewID, p.txn)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)

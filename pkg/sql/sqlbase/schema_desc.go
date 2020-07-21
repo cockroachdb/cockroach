@@ -120,6 +120,26 @@ func (desc *ImmutableSchemaDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
+// Adding implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Adding() bool {
+	return false
+}
+
+// Dropped implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Dropped() bool {
+	return false
+}
+
+// Offline implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Offline() bool {
+	return false
+}
+
+// GetOfflineReason implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) GetOfflineReason() string {
+	return ""
+}
+
 // DescriptorProto wraps a SchemaDescriptor in a Descriptor.
 func (desc *ImmutableSchemaDescriptor) DescriptorProto() *Descriptor {
 	return &Descriptor{
@@ -135,11 +155,35 @@ func (desc *ImmutableSchemaDescriptor) NameResolutionResult() {}
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableSchemaDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
 	}
 	desc.Version++
 	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) OriginalName() string {
+	if desc.ClusterVersion == nil {
+		return ""
+	}
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) OriginalID() ID {
+	if desc.ClusterVersion == nil {
+		return InvalidID
+	}
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) OriginalVersion() DescriptorVersion {
+	if desc.ClusterVersion == nil {
+		return 0
+	}
+	return desc.ClusterVersion.Version
 }
 
 // Immutable implements the MutableDescriptor interface.
@@ -147,4 +191,9 @@ func (desc *MutableSchemaDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*SchemaDescriptor))
+}
+
+// IsNew implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) IsNew() bool {
+	return desc.ClusterVersion == nil
 }

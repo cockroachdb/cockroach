@@ -248,7 +248,7 @@ func (p *planner) writeTableDescToBatch(
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
-	if tableDesc.IsNewTable() {
+	if tableDesc.IsNew() {
 		if err := runSchemaChangesInTxn(
 			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		); err != nil {
@@ -263,7 +263,7 @@ func (p *planner) writeTableDescToBatch(
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
-	if err := p.Tables().AddUncommittedTable(*tableDesc); err != nil {
+	if err := p.Descriptors().AddUncommittedDescriptor(tableDesc); err != nil {
 		return err
 	}
 

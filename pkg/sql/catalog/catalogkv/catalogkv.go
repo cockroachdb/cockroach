@@ -160,7 +160,7 @@ func unwrapDescriptorMutable(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
+		if err := table.ValidateTable(); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewMutableExistingTableDescriptor(*table), nil

@@ -621,52 +621,6 @@ func ConditionalGetTableDescFromTxn(
 	return existingKV.Value.TagAndDataBytes(), nil
 }
 
-// FilterTableState inspects the state of a given table and returns an error if
-// the state is anything but PUBLIC. The error describes the state of the table.
-func FilterTableState(tableDesc *TableDescriptor) error {
-	switch tableDesc.State {
-	case TableDescriptor_DROP:
-		return &inactiveTableError{ErrTableDropped}
-	case TableDescriptor_OFFLINE:
-		err := errors.Errorf("table %q is offline", tableDesc.Name)
-		if tableDesc.OfflineReason != "" {
-			err = errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
-		}
-		return &inactiveTableError{err}
-	case TableDescriptor_ADD:
-		return errTableAdding
-	case TableDescriptor_PUBLIC:
-		return nil
-	default:
-		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
-	}
-}
-
-var errTableAdding = errors.New("table is being added")
-
-// ErrTableDropped is returned when the state of the table is
-// TableDescriptor_DROP.
-var ErrTableDropped = errors.New("table is being dropped")
-
-type inactiveTableError struct {
-	cause error
-}
-
-func (i *inactiveTableError) Error() string { return i.cause.Error() }
-
-func (i *inactiveTableError) Unwrap() error { return i.cause }
-
-// HasAddingTableError returns true if the error contains an addingTableError.
-func HasAddingTableError(err error) bool {
-	return errors.Is(err, errTableAdding)
-}
-
-// HasInactiveTableError returns true if the error contains an
-// inactiveTableError.
-func HasInactiveTableError(err error) bool {
-	return errors.HasType(err, (*inactiveTableError)(nil))
-}
-
 // InitTableDescriptor returns a blank TableDescriptor.
 func InitTableDescriptor(
 	id, parentID, parentSchemaID ID,
