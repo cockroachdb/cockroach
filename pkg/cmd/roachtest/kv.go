@@ -463,20 +463,22 @@ func registerKVSplits(r *testRegistry) {
 		quiesce bool
 		splits  int
 		timeout time.Duration
+		skip    string
 	}{
 		// NB: with 500000 splits, this test sometimes fails since it's pushing
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300000, 2 * time.Hour},
+		{true, 300000, 2 * time.Hour, "https://github.com/cockroachdb/cockroach/issues/50865"},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30000, 2 * time.Hour},
+		{false, 30000, 2 * time.Hour, "https://github.com/cockroachdb/cockroach/issues/51034"},
 	} {
 		item := item // for use in closure below
 		r.Add(testSpec{
+			Skip:    item.skip,
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
 			Owner:   OwnerKV,
 			Timeout: item.timeout,
