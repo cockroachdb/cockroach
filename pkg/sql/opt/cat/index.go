@@ -54,7 +54,9 @@ type Index interface {
 
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
-	// clause), as well as implicitly added primary key columns.
+	// clause), as well as implicitly added primary key columns. It also contains
+	// implicit system columns, which are placed after all physical columns in
+	// the table.
 	ColumnCount() int
 
 	// Predicate returns the partial index predicate expression and true if the

@@ -55,17 +55,17 @@ opt
 SELECT * FROM (SELECT * FROM t OFFSET 5) WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: x:1!null y:2 z:3 ordinality:4!null
- ├── internal-ordering: +4
+ ├── columns: x:1!null y:2 z:3 ordinality:5!null
+ ├── internal-ordering: +5
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (4)-->(1-3)
- ├── ordering: +4
+ ├── fd: (1)-->(2,3,5), (5)-->(1-3)
+ ├── ordering: +5
  ├── ordinality
- │    ├── columns: x:1!null y:2 z:3 ordinality:4!null
+ │    ├── columns: x:1!null y:2 z:3 ordinality:5!null
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (4)-->(1-3)
- │    ├── ordering: +4
+ │    ├── fd: (1)-->(2,3,5), (5)-->(1-3)
+ │    ├── ordering: +5
  │    ├── limit hint: 10.00
  │    └── offset
  │         ├── columns: x:1!null y:2 z:3
@@ -89,14 +89,14 @@ opt
 SELECT * FROM (SELECT * FROM t UNION SELECT * from t) LIMIT 10
 ----
 limit
- ├── columns: x:7!null y:8 z:9
+ ├── columns: x:9!null y:10 z:11
  ├── cardinality: [0 - 10]
- ├── key: (7-9)
+ ├── key: (9-11)
  ├── union
- │    ├── columns: x:7!null y:8 z:9
+ │    ├── columns: x:9!null y:10 z:11
  │    ├── left columns: t.x:1 t.y:2 t.z:3
- │    ├── right columns: t.x:4 t.y:5 t.z:6
- │    ├── key: (7-9)
+ │    ├── right columns: t.x:5 t.y:6 t.z:7
+ │    ├── key: (9-11)
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: t.x:1!null t.y:2 t.z:3
@@ -104,9 +104,9 @@ limit
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── scan t
- │         ├── columns: t.x:4!null t.y:5 t.z:6
- │         ├── key: (4)
- │         ├── fd: (4)-->(5,6)
+ │         ├── columns: t.x:5!null t.y:6 t.z:7
+ │         ├── key: (5)
+ │         ├── fd: (5)-->(6,7)
  │         └── limit hint: 10.00
  └── 10
 
@@ -114,12 +114,12 @@ opt
 SELECT * FROM (SELECT * FROM t UNION ALL SELECT * from t) LIMIT 10
 ----
 limit
- ├── columns: x:7!null y:8 z:9
+ ├── columns: x:9!null y:10 z:11
  ├── cardinality: [0 - 10]
  ├── union-all
- │    ├── columns: x:7!null y:8 z:9
+ │    ├── columns: x:9!null y:10 z:11
  │    ├── left columns: t.x:1 t.y:2 t.z:3
- │    ├── right columns: t.x:4 t.y:5 t.z:6
+ │    ├── right columns: t.x:5 t.y:6 t.z:7
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: t.x:1!null t.y:2 t.z:3
@@ -127,9 +127,9 @@ limit
  │    │    ├── fd: (1)-->(2,3)
  │    │    └── limit hint: 10.00
  │    └── scan t
- │         ├── columns: t.x:4!null t.y:5 t.z:6
- │         ├── key: (4)
- │         ├── fd: (4)-->(5,6)
+ │         ├── columns: t.x:5!null t.y:6 t.z:7
+ │         ├── key: (5)
+ │         ├── fd: (5)-->(6,7)
  │         └── limit hint: 10.00
  └── 10
 
@@ -143,14 +143,14 @@ limit
  ├── intersect
  │    ├── columns: z:3
  │    ├── left columns: z:3
- │    ├── right columns: y:5
+ │    ├── right columns: y:6
  │    ├── key: (3)
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5
+ │         ├── columns: y:6
  │         └── limit hint: 10.00
  └── 10
 
@@ -163,13 +163,13 @@ limit
  ├── intersect-all
  │    ├── columns: z:3
  │    ├── left columns: z:3
- │    ├── right columns: y:5
+ │    ├── right columns: y:6
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5
+ │         ├── columns: y:6
  │         └── limit hint: 10.00
  └── 10
 
@@ -183,14 +183,14 @@ limit
  ├── except
  │    ├── columns: z:3
  │    ├── left columns: z:3
- │    ├── right columns: y:5
+ │    ├── right columns: y:6
  │    ├── key: (3)
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5
+ │         ├── columns: y:6
  │         └── limit hint: 10.00
  └── 10
 
@@ -203,13 +203,13 @@ limit
  ├── except-all
  │    ├── columns: z:3
  │    ├── left columns: z:3
- │    ├── right columns: y:5
+ │    ├── right columns: y:6
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: z:3
  │    │    └── limit hint: 10.00
  │    └── scan t@y_idx
- │         ├── columns: y:5
+ │         ├── columns: y:6
  │         └── limit hint: 10.00
  └── 10
 
@@ -307,17 +307,17 @@ opt
 SELECT z FROM t@y_idx WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: z:3  [hidden: ordinality:4!null]
- ├── internal-ordering: +4
+ ├── columns: z:3  [hidden: ordinality:5!null]
+ ├── internal-ordering: +5
  ├── cardinality: [0 - 10]
- ├── key: (4)
- ├── fd: (4)-->(3)
- ├── ordering: +4
+ ├── key: (5)
+ ├── fd: (5)-->(3)
+ ├── ordering: +5
  ├── ordinality
- │    ├── columns: z:3 ordinality:4!null
- │    ├── key: (4)
- │    ├── fd: (4)-->(3)
- │    ├── ordering: +4
+ │    ├── columns: z:3 ordinality:5!null
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(3)
+ │    ├── ordering: +5
  │    ├── limit hint: 10.00
  │    └── index-join t
  │         ├── columns: z:3
@@ -334,17 +334,17 @@ opt
 SELECT * FROM t WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: x:1!null y:2 z:3 ordinality:4!null
- ├── internal-ordering: +4
+ ├── columns: x:1!null y:2 z:3 ordinality:5!null
+ ├── internal-ordering: +5
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-4), (4)-->(1-3)
- ├── ordering: +4
+ ├── fd: (1)-->(2,3,5), (5)-->(1-3)
+ ├── ordering: +5
  ├── ordinality
- │    ├── columns: x:1!null y:2 z:3 ordinality:4!null
+ │    ├── columns: x:1!null y:2 z:3 ordinality:5!null
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (4)-->(1-3)
- │    ├── ordering: +4
+ │    ├── fd: (1)-->(2,3,5), (5)-->(1-3)
+ │    ├── ordering: +5
  │    ├── limit hint: 10.00
  │    └── scan t
  │         ├── columns: x:1!null y:2 z:3
@@ -358,26 +358,26 @@ opt
 SELECT * FROM (SELECT 1 FROM t) WITH ORDINALITY ORDER BY ordinality LIMIT 10
 ----
 limit
- ├── columns: "?column?":4!null ordinality:5!null
- ├── internal-ordering: +5 opt(4)
+ ├── columns: "?column?":5!null ordinality:6!null
+ ├── internal-ordering: +6 opt(5)
  ├── cardinality: [0 - 10]
- ├── key: (5)
- ├── fd: ()-->(4)
- ├── ordering: +5 opt(4) [actual: +5]
+ ├── key: (6)
+ ├── fd: ()-->(5)
+ ├── ordering: +6 opt(5) [actual: +6]
  ├── ordinality
- │    ├── columns: "?column?":4!null ordinality:5!null
- │    ├── key: (5)
- │    ├── fd: ()-->(4)
- │    ├── ordering: +5 opt(4) [actual: +5]
+ │    ├── columns: "?column?":5!null ordinality:6!null
+ │    ├── key: (6)
+ │    ├── fd: ()-->(5)
+ │    ├── ordering: +6 opt(5) [actual: +6]
  │    ├── limit hint: 10.00
  │    └── project
- │         ├── columns: "?column?":4!null
- │         ├── fd: ()-->(4)
+ │         ├── columns: "?column?":5!null
+ │         ├── fd: ()-->(5)
  │         ├── limit hint: 10.00
  │         ├── scan t@y_idx
  │         │    └── limit hint: 10.00
  │         └── projections
- │              └── 1 [as="?column?":4]
+ │              └── 1 [as="?column?":5]
  └── 10
 
 # ProjectSet operator.
@@ -385,12 +385,12 @@ opt
 SELECT *, generate_series(1, t.x) FROM t LIMIT 10
 ----
 limit
- ├── columns: x:1!null y:2 z:3 generate_series:4
+ ├── columns: x:1!null y:2 z:3 generate_series:5
  ├── cardinality: [0 - 10]
  ├── immutable
  ├── fd: (1)-->(2,3)
  ├── project-set
- │    ├── columns: x:1!null y:2 z:3 generate_series:4
+ │    ├── columns: x:1!null y:2 z:3 generate_series:5
  │    ├── immutable
  │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 10.00
@@ -443,23 +443,23 @@ opt
 SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 6003
 ----
 limit
- ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 6003]
- ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
- │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
- │    ├── key columns: [6] = [1]
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
+ │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
- │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 6003.00
  │    ├── select
- │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── columns: x:6!null z:7!null
  │    │    ├── limit hint: 6100.00
  │    │    ├── scan b
- │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    ├── columns: x:6 z:7!null
  │    │    │    └── limit hint: 6100.00
  │    │    └── filters
- │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5)]
+ │    │         └── (x:6 > 0) AND (x:6 <= 5000) [outer=(6)]
  │    └── filters (true)
  └── 6003
 
@@ -468,23 +468,23 @@ opt
 SELECT * FROM a JOIN b ON k=z WHERE x > 0 AND x <= 5000 LIMIT 3
 ----
 limit
- ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
+ ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 3]
- ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
- │    ├── columns: k:1!null i:2 s:3 d:4!null x:5!null z:6!null
- │    ├── key columns: [6] = [1]
+ │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
+ │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
- │    ├── fd: (1)-->(2-4), (1)==(6), (6)==(1)
+ │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 3.00
  │    ├── select
- │    │    ├── columns: x:5!null z:6!null
+ │    │    ├── columns: x:6!null z:7!null
  │    │    ├── limit hint: 100.00
  │    │    ├── scan b
- │    │    │    ├── columns: x:5 z:6!null
+ │    │    │    ├── columns: x:6 z:7!null
  │    │    │    └── limit hint: 100.00
  │    │    └── filters
- │    │         └── (x:5 > 0) AND (x:5 <= 5000) [outer=(5)]
+ │    │         └── (x:6 > 0) AND (x:6 <= 5000) [outer=(6)]
  │    └── filters (true)
  └── 3
 
@@ -552,41 +552,41 @@ opt
 SELECT * FROM v0, t0 NATURAL JOIN t1 LIMIT -1
 ----
 project
- ├── columns: c0:3!null c0:4!null
+ ├── columns: c0:4!null c0:5!null
  ├── cardinality: [0 - 0]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(3,4)
+ ├── fd: ()-->(4,5)
  └── limit
-      ├── columns: "?column?":3!null t0.c0:4!null t1.c0:6!null
+      ├── columns: "?column?":4!null t0.c0:5!null t1.c0:8!null
       ├── cardinality: [0 - 0]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(3,4,6)
+      ├── fd: ()-->(4,5,8)
       ├── inner-join (cross)
-      │    ├── columns: "?column?":3!null t0.c0:4!null t1.c0:6!null
+      │    ├── columns: "?column?":4!null t0.c0:5!null t1.c0:8!null
       │    ├── cardinality: [0 - 0]
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    ├── immutable
-      │    ├── fd: ()-->(3), (4)==(6), (6)==(4)
+      │    ├── fd: ()-->(4), (5)==(8), (8)==(5)
       │    ├── limit hint: 1.00
       │    ├── inner-join (hash)
-      │    │    ├── columns: t0.c0:4!null t1.c0:6!null
+      │    │    ├── columns: t0.c0:5!null t1.c0:8!null
       │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: (4)==(6), (6)==(4)
+      │    │    ├── fd: (5)==(8), (8)==(5)
       │    │    ├── scan t0
-      │    │    │    ├── columns: t0.c0:4
-      │    │    │    └── lax-key: (4)
+      │    │    │    ├── columns: t0.c0:5
+      │    │    │    └── lax-key: (5)
       │    │    ├── scan t1
-      │    │    │    └── columns: t1.c0:6
+      │    │    │    └── columns: t1.c0:8
       │    │    └── filters
-      │    │         └── t0.c0:4 = t1.c0:6 [outer=(4,6), fd=(4)==(6), (6)==(4)]
+      │    │         └── t0.c0:5 = t1.c0:8 [outer=(5,8), fd=(5)==(8), (8)==(5)]
       │    ├── project
-      │    │    ├── columns: "?column?":3!null
+      │    │    ├── columns: "?column?":4!null
       │    │    ├── cardinality: [0 - 0]
       │    │    ├── immutable
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(3)
+      │    │    ├── fd: ()-->(4)
       │    │    ├── limit
       │    │    │    ├── cardinality: [0 - 0]
       │    │    │    ├── immutable
@@ -595,6 +595,6 @@ project
       │    │    │    │    └── limit hint: 1.00
       │    │    │    └── -1
       │    │    └── projections
-      │    │         └── 0 [as="?column?":3]
+      │    │         └── 0 [as="?column?":4]
       │    └── filters (true)
       └── -1

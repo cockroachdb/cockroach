@@ -83,6 +83,9 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
+	// Check if any system columns are requested, as they need special handling.
+	scan.systemColumns, scan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+
 	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
@@ -511,6 +514,9 @@ func (ef *execFactory) ConstructIndexJoin(
 	colDescs := makeColDescList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
+
+	// Check if any system columns are requested, as they need special handling.
+	tableScan.systemColumns, tableScan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
 
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err

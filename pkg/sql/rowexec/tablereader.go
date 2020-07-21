@@ -89,12 +89,23 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	resultTypes := spec.Table.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	// Add all requested system columns to the output.
+	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&spec.Table, spec.SystemColumns)
+	if err != nil {
+		return nil, err
+	}
+	resultTypes = append(resultTypes, sysColTypes...)
+	for i := range sysColDescs {
+		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+	}
+
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
 		tr,
 		post,
-		types,
+		resultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -114,10 +125,19 @@ func newTableReader(
 	neededColumns := tr.Out.NeededColumns()
 
 	var fetcher row.Fetcher
-	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility, spec.LockingStrength,
+		flowCtx,
+		&fetcher,
+		&spec.Table,
+		int(spec.IndexIdx),
+		columnIdxMap,
+		spec.Reverse,
+		neededColumns,
+		spec.IsCheck,
+		&tr.alloc,
+		spec.Visibility,
+		spec.LockingStrength,
+		sysColDescs,
 	); err != nil {
 		return nil, err
 	}

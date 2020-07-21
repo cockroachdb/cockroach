@@ -101,117 +101,137 @@ build
 SELECT *, x FROM a UNION SELECT *, rowid FROM b
 ----
 union
- ├── columns: x:8(int) y:9(int) s:10(string) x:11(int!null)
+ ├── columns: x:10(int) y:11(int) s:12(string) x:13(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
- ├── right columns: b.x:4(int) z:5(int) b.s:6(string) rowid:7(int)
- ├── stats: [rows=15000, distinct(8-11)=15000, null(8-11)=0]
- ├── key: (8-11)
- ├── scan a
+ ├── right columns: b.x:5(int) z:6(int) b.s:7(string) rowid:8(int)
+ ├── stats: [rows=15000, distinct(10-13)=15000, null(10-13)=0]
+ ├── key: (10-13)
+ ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(1-3)=5000, null(1-3)=0]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- └── scan b
-      ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-      ├── stats: [rows=10000, distinct(4-7)=10000, null(4-7)=0]
-      ├── key: (7)
-      └── fd: (7)-->(4-6)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan a
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
+ │         ├── stats: [rows=5000, distinct(1-3)=5000, null(1-3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-4)
+ └── project
+      ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null)
+      ├── stats: [rows=10000, distinct(5-8)=10000, null(5-8)=0]
+      ├── key: (8)
+      ├── fd: (8)-->(5-7)
+      └── scan b
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(5-8)=10000, null(5-8)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT *, x FROM a UNION ALL SELECT *, rowid FROM b
 ----
 union-all
- ├── columns: x:8(int) y:9(int) s:10(string) x:11(int!null)
+ ├── columns: x:10(int) y:11(int) s:12(string) x:13(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
- ├── right columns: b.x:4(int) z:5(int) b.s:6(string) rowid:7(int)
+ ├── right columns: b.x:5(int) z:6(int) b.s:7(string) rowid:8(int)
  ├── stats: [rows=15000]
- ├── scan a
+ ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- └── scan b
-      ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan a
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-4)
+ └── project
+      ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null)
       ├── stats: [rows=10000]
-      ├── key: (7)
-      └── fd: (7)-->(4-6)
+      ├── key: (8)
+      ├── fd: (8)-->(5-7)
+      └── scan b
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a UNION SELECT z, s FROM c
 ----
 union
- ├── columns: y:8(int) s:9(string)
+ ├── columns: y:10(int) s:11(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: z:5(int) c.s:6(string)
- ├── stats: [rows=2000, distinct(8,9)=2000, null(8,9)=0]
- ├── key: (8,9)
+ ├── right columns: z:6(int) c.s:7(string)
+ ├── stats: [rows=2000, distinct(10,11)=2000, null(10,11)=0]
+ ├── key: (10,11)
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) c.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
+      ├── columns: z:6(int!null) c.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
       └── scan c
-           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: c.x:5(int) z:6(int!null) c.s:7(string) rowid:8(int!null) c.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a UNION SELECT z, s FROM b
 ----
 union
- ├── columns: y:8(int) s:9(string)
+ ├── columns: y:10(int) s:11(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
- ├── stats: [rows=1200, distinct(8,9)=1200, null(8,9)=0]
- ├── key: (8,9)
+ ├── right columns: z:6(int) b.s:7(string)
+ ├── stats: [rows=1200, distinct(10,11)=1200, null(10,11)=0]
+ ├── key: (10,11)
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
+      ├── columns: z:6(int!null) b.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a UNION ALL SELECT z, s FROM b
 ----
 union-all
- ├── columns: y:8(int) s:9(string)
+ ├── columns: y:10(int) s:11(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
+ ├── right columns: z:6(int) b.s:7(string)
  ├── stats: [rows=15000]
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
+      ├── columns: z:6(int!null) b.s:7(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
            ├── stats: [rows=10000]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -219,7 +239,7 @@ SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b 
 intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
- ├── right columns: z:5(int) b.x:4(int) rowid:7(int)
+ ├── right columns: z:6(int) b.x:5(int) rowid:8(int)
  ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0]
  ├── key: (1,2)
  ├── project
@@ -228,27 +248,32 @@ intersect
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
-      ├── stats: [rows=2, distinct(4,5,7)=2, null(4,5,7)=0]
-      ├── key: (7)
-      ├── fd: ()-->(4), (7)-->(5)
-      └── select
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=2, distinct(4)=1, null(4)=0, distinct(4,5,7)=2, null(4,5,7)=0]
-           ├── key: (7)
-           ├── fd: ()-->(4), (7)-->(5,6)
-           ├── scan b
-           │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           │    ├── stats: [rows=10000, distinct(4)=5000, null(4)=0, distinct(5)=100, null(5)=0, distinct(7)=10000, null(7)=0, distinct(4,5,7)=10000, null(4,5,7)=0]
-           │    ├── key: (7)
-           │    └── fd: (7)-->(4-6)
-           └── filters
-                └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      ├── columns: b.x:5(int!null) z:6(int!null) rowid:8(int!null)
+      ├── stats: [rows=2, distinct(5,6,8)=2, null(5,6,8)=0]
+      ├── key: (8)
+      ├── fd: ()-->(5), (8)-->(6)
+      └── project
+           ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null)
+           ├── stats: [rows=2, distinct(5,6,8)=2, null(5,6,8)=0]
+           ├── key: (8)
+           ├── fd: ()-->(5), (8)-->(6,7)
+           └── select
+                ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                ├── stats: [rows=2, distinct(5)=1, null(5)=0, distinct(5,6,8)=2, null(5,6,8)=0]
+                ├── key: (8)
+                ├── fd: ()-->(5), (8)-->(6,7,9)
+                ├── scan b
+                │    ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                │    ├── stats: [rows=10000, distinct(5)=5000, null(5)=0, distinct(6)=100, null(6)=0, distinct(8)=10000, null(8)=0, distinct(5,6,8)=10000, null(5,6,8)=0]
+                │    ├── key: (8)
+                │    └── fd: (8)-->(5-7,9)
+                └── filters
+                     └── b.x:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
 
 build
 SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -256,7 +281,7 @@ SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FRO
 intersect-all
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
- ├── right columns: z:5(int) b.x:4(int) rowid:7(int)
+ ├── right columns: z:6(int) b.x:5(int) rowid:8(int)
  ├── stats: [rows=2]
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
@@ -264,27 +289,32 @@ intersect-all
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
+      ├── columns: b.x:5(int!null) z:6(int!null) rowid:8(int!null)
       ├── stats: [rows=2]
-      ├── key: (7)
-      ├── fd: ()-->(4), (7)-->(5)
-      └── select
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=2, distinct(4)=1, null(4)=0]
-           ├── key: (7)
-           ├── fd: ()-->(4), (7)-->(5,6)
-           ├── scan b
-           │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           │    ├── stats: [rows=10000, distinct(4)=5000, null(4)=0, distinct(5)=100, null(5)=0, distinct(7)=10000, null(7)=0]
-           │    ├── key: (7)
-           │    └── fd: (7)-->(4-6)
-           └── filters
-                └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      ├── key: (8)
+      ├── fd: ()-->(5), (8)-->(6)
+      └── project
+           ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null)
+           ├── stats: [rows=2]
+           ├── key: (8)
+           ├── fd: ()-->(5), (8)-->(6,7)
+           └── select
+                ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                ├── stats: [rows=2, distinct(5)=1, null(5)=0]
+                ├── key: (8)
+                ├── fd: ()-->(5), (8)-->(6,7,9)
+                ├── scan b
+                │    ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                │    ├── stats: [rows=10000, distinct(5)=5000, null(5)=0, distinct(6)=100, null(6)=0, distinct(8)=10000, null(8)=0]
+                │    ├── key: (8)
+                │    └── fd: (8)-->(5-7,9)
+                └── filters
+                     └── b.x:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM c
@@ -292,25 +322,25 @@ SELECT y, s FROM a INTERSECT SELECT z, s FROM c
 intersect
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) c.s:6(string)
+ ├── right columns: z:6(int) c.s:7(string)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) c.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
+      ├── columns: z:6(int!null) c.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
       └── scan c
-           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: c.x:5(int) z:6(int!null) c.s:7(string) rowid:8(int!null) c.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM b
@@ -318,25 +348,25 @@ SELECT y, s FROM a INTERSECT SELECT z, s FROM b
 intersect
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
+ ├── right columns: z:6(int) b.s:7(string)
  ├── stats: [rows=200, distinct(2,3)=200, null(2,3)=0]
  ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
+      ├── columns: z:6(int!null) b.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a INTERSECT ALL SELECT z, s FROM b
@@ -344,24 +374,24 @@ SELECT y, s FROM a INTERSECT ALL SELECT z, s FROM b
 intersect-all
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
+ ├── right columns: z:6(int) b.s:7(string)
  ├── stats: [rows=5000]
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
+      ├── columns: z:6(int!null) b.s:7(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
            ├── stats: [rows=10000]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -369,7 +399,7 @@ SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
 except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
- ├── right columns: b.x:4(int) z:5(int) z:5(int)
+ ├── right columns: b.x:5(int) z:6(int) z:6(int)
  ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
  ├── key: (1,2)
  ├── project
@@ -378,30 +408,30 @@ except
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: b.x:4(int!null) z:5(int!null)
-      ├── stats: [rows=2, distinct(4,5)=2, null(4,5)=0]
-      ├── fd: ()-->(4)
+      ├── columns: b.x:5(int!null) z:6(int!null)
+      ├── stats: [rows=2, distinct(5,6)=2, null(5,6)=0]
+      ├── fd: ()-->(5)
       └── project
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
-           ├── stats: [rows=2, distinct(4,5)=2, null(4,5)=0]
-           ├── fd: ()-->(4)
+           ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string)
+           ├── stats: [rows=2, distinct(5,6)=2, null(5,6)=0]
+           ├── fd: ()-->(5)
            └── select
-                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                ├── stats: [rows=2, distinct(4)=1, null(4)=0, distinct(4,5)=2, null(4,5)=0]
-                ├── key: (7)
-                ├── fd: ()-->(4), (7)-->(5,6)
+                ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                ├── stats: [rows=2, distinct(5)=1, null(5)=0, distinct(5,6)=2, null(5,6)=0]
+                ├── key: (8)
+                ├── fd: ()-->(5), (8)-->(6,7,9)
                 ├── scan b
-                │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                │    ├── stats: [rows=10000, distinct(4)=5000, null(4)=0, distinct(5)=100, null(5)=0, distinct(7)=10000, null(7)=0, distinct(4,5)=10000, null(4,5)=0]
-                │    ├── key: (7)
-                │    └── fd: (7)-->(4-6)
+                │    ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                │    ├── stats: [rows=10000, distinct(5)=5000, null(5)=0, distinct(6)=100, null(6)=0, distinct(8)=10000, null(8)=0, distinct(5,6)=10000, null(5,6)=0]
+                │    ├── key: (8)
+                │    └── fd: (8)-->(5-7,9)
                 └── filters
-                     └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                     └── b.x:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
 
 build
 SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -409,7 +439,7 @@ SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=
 except-all
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
- ├── right columns: b.x:4(int) z:5(int) z:5(int)
+ ├── right columns: b.x:5(int) z:6(int) z:6(int)
  ├── stats: [rows=5000]
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
@@ -417,30 +447,30 @@ except-all
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: b.x:4(int!null) z:5(int!null)
+      ├── columns: b.x:5(int!null) z:6(int!null)
       ├── stats: [rows=2]
-      ├── fd: ()-->(4)
+      ├── fd: ()-->(5)
       └── project
-           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
+           ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string)
            ├── stats: [rows=2]
-           ├── fd: ()-->(4)
+           ├── fd: ()-->(5)
            └── select
-                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                ├── stats: [rows=2, distinct(4)=1, null(4)=0]
-                ├── key: (7)
-                ├── fd: ()-->(4), (7)-->(5,6)
+                ├── columns: b.x:5(int!null) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                ├── stats: [rows=2, distinct(5)=1, null(5)=0]
+                ├── key: (8)
+                ├── fd: ()-->(5), (8)-->(6,7,9)
                 ├── scan b
-                │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-                │    ├── stats: [rows=10000, distinct(4)=5000, null(4)=0, distinct(5)=100, null(5)=0, distinct(7)=10000, null(7)=0]
-                │    ├── key: (7)
-                │    └── fd: (7)-->(4-6)
+                │    ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+                │    ├── stats: [rows=10000, distinct(5)=5000, null(5)=0, distinct(6)=100, null(6)=0, distinct(8)=10000, null(8)=0]
+                │    ├── key: (8)
+                │    └── fd: (8)-->(5-7,9)
                 └── filters
-                     └── b.x:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                     └── b.x:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM c
@@ -448,25 +478,25 @@ SELECT y, s FROM a EXCEPT SELECT z, s FROM c
 except
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) c.s:6(string)
+ ├── right columns: z:6(int) c.s:7(string)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) c.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
+      ├── columns: z:6(int!null) c.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
       └── scan c
-           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=1000, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: c.x:5(int) z:6(int!null) c.s:7(string) rowid:8(int!null) c.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=1000, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM b
@@ -474,25 +504,25 @@ SELECT y, s FROM a EXCEPT SELECT z, s FROM b
 except
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
+ ├── right columns: z:6(int) b.s:7(string)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
  ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
-      ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
+      ├── columns: z:6(int!null) b.s:7(string)
+      ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
-           ├── stats: [rows=10000, distinct(5,6)=200, null(5,6)=0]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+           ├── stats: [rows=10000, distinct(6,7)=200, null(6,7)=0]
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b
@@ -500,24 +530,24 @@ SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b
 except-all
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
- ├── right columns: z:5(int) b.s:6(string)
+ ├── right columns: z:6(int) b.s:7(string)
  ├── stats: [rows=5000]
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │         ├── stats: [rows=5000]
  │         ├── key: (1)
- │         └── fd: (1)-->(2,3)
+ │         └── fd: (1)-->(2-4)
  └── project
-      ├── columns: z:5(int!null) b.s:6(string)
+      ├── columns: z:6(int!null) b.s:7(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
+           ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
            ├── stats: [rows=10000]
-           ├── key: (7)
-           └── fd: (7)-->(4-6)
+           ├── key: (8)
+           └── fd: (8)-->(5-7,9)
 
 build
 SELECT * FROM (SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b) WHERE y = 5
@@ -529,24 +559,24 @@ select
  ├── except-all
  │    ├── columns: y:2(int) a.s:3(string)
  │    ├── left columns: y:2(int) a.s:3(string)
- │    ├── right columns: z:5(int) b.s:6(string)
+ │    ├── right columns: z:6(int) b.s:7(string)
  │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0]
  │    ├── project
  │    │    ├── columns: y:2(int) a.s:3(string)
  │    │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0]
  │    │    └── scan a
- │    │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
+ │    │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal)
  │    │         ├── stats: [rows=5000, distinct(2)=400, null(2)=0]
  │    │         ├── key: (1)
- │    │         └── fd: (1)-->(2,3)
+ │    │         └── fd: (1)-->(2-4)
  │    └── project
- │         ├── columns: z:5(int!null) b.s:6(string)
- │         ├── stats: [rows=10000, distinct(5)=100, null(5)=0]
+ │         ├── columns: z:6(int!null) b.s:7(string)
+ │         ├── stats: [rows=10000, distinct(6)=100, null(6)=0]
  │         └── scan b
- │              ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
- │              ├── stats: [rows=10000, distinct(5)=100, null(5)=0]
- │              ├── key: (7)
- │              └── fd: (7)-->(4-6)
+ │              ├── columns: b.x:5(int) z:6(int!null) b.s:7(string) rowid:8(int!null) b.crdb_internal_mvcc_timestamp:9(decimal)
+ │              ├── stats: [rows=10000, distinct(6)=100, null(6)=0]
+ │              ├── key: (8)
+ │              └── fd: (8)-->(5-7,9)
  └── filters
       └── y:2 = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
 
@@ -607,31 +637,31 @@ ALTER TABLE c INJECT STATISTICS '[
 ]'
 ----
 
-build colstat=9 colstat=10 colstat=(9,10)
+build colstat=11 colstat=12 colstat=(11,12)
 SELECT x,s FROM b UNION SELECT x,s FROM c
 ----
 union
- ├── columns: x:9(int) s:10(string)
+ ├── columns: x:11(int) s:12(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
- ├── stats: [rows=20000, distinct(9)=10000, null(9)=1, distinct(10)=20, null(10)=1, distinct(9,10)=20000, null(9,10)=1]
- ├── key: (9,10)
+ ├── right columns: c.x:6(int) c.s:8(string)
+ ├── stats: [rows=20000, distinct(11)=10000, null(11)=1, distinct(12)=20, null(12)=1, distinct(11,12)=20000, null(11,12)=1]
+ ├── key: (11,12)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build colstat=1 colstat=3 colstat=(1,3)
 SELECT x,s FROM b INTERSECT SELECT x,s FROM c
@@ -639,25 +669,25 @@ SELECT x,s FROM b INTERSECT SELECT x,s FROM c
 intersect
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
+ ├── right columns: c.x:6(int) c.s:8(string)
  ├── stats: [rows=10000, distinct(1)=5000, null(1)=1, distinct(3)=10, null(3)=1, distinct(1,3)=10000, null(1,3)=1]
  ├── key: (1,3)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build colstat=1 colstat=3 colstat=(1,3)
 SELECT x,s FROM b EXCEPT SELECT x,s FROM c
@@ -665,51 +695,51 @@ SELECT x,s FROM b EXCEPT SELECT x,s FROM c
 except
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
+ ├── right columns: c.x:6(int) c.s:8(string)
  ├── stats: [rows=10000, distinct(1)=5000, null(1)=0, distinct(3)=10, null(3)=0, distinct(1,3)=10000, null(1,3)=0]
  ├── key: (1,3)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build
 SELECT x FROM b UNION SELECT x FROM c
 ----
 union
- ├── columns: x:9(int)
+ ├── columns: x:11(int)
  ├── left columns: b.x:1(int)
- ├── right columns: c.x:5(int)
- ├── stats: [rows=10000, distinct(9)=10000, null(9)=1]
- ├── key: (9)
+ ├── right columns: c.x:6(int)
+ ├── stats: [rows=10000, distinct(11)=10000, null(11)=1]
+ ├── key: (11)
  ├── project
  │    ├── columns: b.x:1(int)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
+      ├── columns: c.x:6(int)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build
 SELECT x FROM b INTERSECT SELECT x FROM c
@@ -717,25 +747,25 @@ SELECT x FROM b INTERSECT SELECT x FROM c
 intersect
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
- ├── right columns: c.x:5(int)
+ ├── right columns: c.x:6(int)
  ├── stats: [rows=5000, distinct(1)=5000, null(1)=1]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
+      ├── columns: c.x:6(int)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build
 SELECT x FROM b EXCEPT SELECT x FROM c
@@ -743,50 +773,50 @@ SELECT x FROM b EXCEPT SELECT x FROM c
 except
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
- ├── right columns: c.x:5(int)
+ ├── right columns: c.x:6(int)
  ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
+      ├── columns: c.x:6(int)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
-build colstat=9 colstat=10 colstat=(9,10)
+build colstat=11 colstat=12 colstat=(11,12)
 SELECT x,s FROM b UNION ALL SELECT x,s FROM c
 ----
 union-all
- ├── columns: x:9(int) s:10(string)
+ ├── columns: x:11(int) s:12(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
- ├── stats: [rows=20000, distinct(9)=10000, null(9)=3500, distinct(10)=20, null(10)=12500, distinct(9,10)=20000, null(9,10)=2000]
+ ├── right columns: c.x:6(int) c.s:8(string)
+ ├── stats: [rows=20000, distinct(11)=10000, null(11)=3500, distinct(12)=20, null(12)=12500, distinct(11,12)=20000, null(11,12)=2000]
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build colstat=1 colstat=3 colstat=(1,3)
 SELECT x,s FROM b INTERSECT ALL SELECT x,s FROM c
@@ -794,24 +824,24 @@ SELECT x,s FROM b INTERSECT ALL SELECT x,s FROM c
 intersect-all
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
+ ├── right columns: c.x:6(int) c.s:8(string)
  ├── stats: [rows=10000, distinct(1)=5000, null(1)=1000, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=750]
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 build colstat=1 colstat=3 colstat=(1,3)
 SELECT x,s FROM b EXCEPT ALL SELECT x,s FROM c
@@ -819,24 +849,24 @@ SELECT x,s FROM b EXCEPT ALL SELECT x,s FROM c
 except-all
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
- ├── right columns: c.x:5(int) c.s:7(string)
+ ├── right columns: c.x:6(int) c.s:8(string)
  ├── stats: [rows=10000, distinct(1)=5000, null(1)=1500, distinct(3)=10, null(3)=0, distinct(1,3)=10000, null(1,3)=500]
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │    └── scan b
- │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null)
+ │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=1250]
  │         ├── key: (4)
- │         └── fd: (4)-->(1-3)
+ │         └── fd: (4)-->(1-3,5)
  └── project
-      ├── columns: c.x:5(int) c.s:7(string)
-      ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
+      ├── columns: c.x:6(int) c.s:8(string)
+      ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
       └── scan c
-           ├── columns: c.x:5(int) c.z:6(int!null) c.s:7(string) c.rowid:8(int!null)
-           ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=750]
-           ├── key: (8)
-           └── fd: (8)-->(5-7)
+           ├── columns: c.x:6(int) c.z:7(int!null) c.s:8(string) c.rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal)
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=1000, distinct(8)=10, null(8)=7500, distinct(6,8)=10000, null(6,8)=750]
+           ├── key: (9)
+           └── fd: (9)-->(6-8,10)
 
 # Regression test for #35715.
 opt colstat=(5,2)

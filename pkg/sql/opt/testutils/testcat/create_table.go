@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -112,6 +113,15 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			}
 		}
 	}
+
+	// Add the MVCC timestamp system column.
+	tab.SystemColumns = append(tab.SystemColumns, &Column{
+		Ordinal:  len(tab.Columns),
+		Name:     sqlbase.MVCCTimestampColumnName,
+		Type:     sqlbase.MVCCTimestampColumnType,
+		Nullable: true,
+		Hidden:   true,
+	})
 
 	// Add the primary index.
 	if hasPrimaryIndex {

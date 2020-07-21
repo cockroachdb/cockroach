@@ -79,10 +79,23 @@ func newIndexJoiner(
 		batchSize: indexJoinerBatchSize,
 	}
 	needMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
+
+	colIdxMap := ij.desc.ColumnIdxMapWithMutations(needMutations)
+	resultTypes := ij.desc.ColumnTypesWithMutations(needMutations)
+	// Add all requested system columns to the output.
+	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&ij.desc, spec.SystemColumns)
+	if err != nil {
+		return nil, err
+	}
+	resultTypes = append(resultTypes, sysColTypes...)
+	for i := range sysColDescs {
+		colIdxMap[sysColDescs[i].ID] = len(colIdxMap)
+	}
+
 	if err := ij.Init(
 		ij,
 		post,
-		ij.desc.ColumnTypesWithMutations(needMutations),
+		resultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -102,14 +115,15 @@ func newIndexJoiner(
 		flowCtx,
 		&fetcher,
 		&ij.desc,
-		0, /* primary index */
-		ij.desc.ColumnIdxMapWithMutations(needMutations),
+		0, /* indexIdx */
+		colIdxMap,
 		false, /* reverse */
 		ij.Out.NeededColumns(),
 		false, /* isCheck */
 		&ij.alloc,
 		spec.Visibility,
 		spec.LockingStrength,
+		sysColDescs,
 	); err != nil {
 		return nil, err
 	}

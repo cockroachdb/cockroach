@@ -85,24 +85,24 @@ norm expect=EliminateJoinUnderProjectLeft
 SELECT 1+b.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":10!null
  ├── immutable
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
  └── projections
-      └── b.x:1 + 1 [as="?column?":8, outer=(1), immutable]
+      └── b.x:1 + 1 [as="?column?":10, outer=(1), immutable]
 
 # Case with no references to the left side.
 norm expect=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":10!null
+ ├── fd: ()-->(10)
  ├── scan b
  └── projections
-      └── 1 [as="?column?":8]
+      └── 1 [as="?column?":10]
 
 # SemiJoin case.
 norm expect=EliminateJoinUnderProjectLeft
@@ -116,40 +116,40 @@ norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":10!null
+ ├── fd: ()-->(10)
  ├── left-join (cross)
  │    ├── scan b
  │    ├── scan a
  │    └── filters (true)
  └── projections
-      └── 1 [as="?column?":8]
+      └── 1 [as="?column?":10]
 
 # No-op case with a projection that references the right input.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT b.x, b.z, 1+a.x FROM b LEFT JOIN a ON b.x = a.x
 ----
 project
- ├── columns: x:1!null z:2 "?column?":8
+ ├── columns: x:1!null z:2 "?column?":10
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,8)
+ ├── fd: (1)-->(2,10)
  ├── left-join (hash)
- │    ├── columns: b.x:1!null z:2 a.x:4
+ │    ├── columns: b.x:1!null z:2 a.x:5
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,4)
+ │    ├── fd: (1)-->(2,5)
  │    ├── scan b
  │    │    ├── columns: b.x:1!null z:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: a.x:4!null
- │    │    └── key: (4)
+ │    │    ├── columns: a.x:5!null
+ │    │    └── key: (5)
  │    └── filters
- │         └── b.x:1 = a.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── b.x:1 = a.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── a.x:4 + 1 [as="?column?":8, outer=(4), immutable]
+      └── a.x:5 + 1 [as="?column?":10, outer=(5), immutable]
 
 # No-op case because r2 is nullable, and therefore rows may not match despite
 # the fact that it is a foreign key.
@@ -161,19 +161,19 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inner-join (hash)
-      ├── columns: k:1!null v:2 r2:5!null x:6!null
+      ├── columns: k:1!null v:2 r2:5!null x:7!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── key: (1)
-      ├── fd: (1)-->(2,5), (5)==(6), (6)==(5)
+      ├── fd: (1)-->(2,5), (5)==(7), (7)==(5)
       ├── scan fks
       │    ├── columns: k:1!null v:2 r2:5
       │    ├── key: (1)
       │    └── fd: (1)-->(2,5)
       ├── scan a
-      │    ├── columns: x:6!null
-      │    └── key: (6)
+      │    ├── columns: x:7!null
+      │    └── key: (7)
       └── filters
-           └── r2:5 = x:6 [outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+           └── r2:5 = x:7 [outer=(5,7), constraints=(/5: (/NULL - ]; /7: (/NULL - ]), fd=(5)==(7), (7)==(5)]
 
 # No-op case because r1 is not unique.
 # InnerJoin case with not-null foreign key.
@@ -184,17 +184,17 @@ project
  ├── columns: x:1!null y:2
  ├── fd: (1)-->(2)
  └── inner-join (hash)
-      ├── columns: x:1!null y:2 r1:8!null
+      ├── columns: x:1!null y:2 r1:9!null
       ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+      ├── fd: (1)-->(2), (1)==(9), (9)==(1)
       ├── scan a
       │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── scan fks
-      │    └── columns: r1:8!null
+      │    └── columns: r1:9!null
       └── filters
-           └── x:1 = r1:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── x:1 = r1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 # No-op case because r1 is not unique.
 # LeftJoin case with not-null foreign key.
@@ -205,7 +205,7 @@ project
  ├── columns: x:1!null y:2
  ├── fd: (1)-->(2)
  └── left-join (hash)
-      ├── columns: x:1!null y:2 r1:8
+      ├── columns: x:1!null y:2 r1:9
       ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       ├── fd: (1)-->(2)
       ├── scan a
@@ -213,9 +213,9 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── scan fks
-      │    └── columns: r1:8!null
+      │    └── columns: r1:9!null
       └── filters
-           └── x:1 = r1:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── x:1 = r1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 # --------------------------------------------------
 # EliminateJoinUnderProjectRight
@@ -226,18 +226,18 @@ norm expect=EliminateJoinUnderProjectRight
 SELECT b1.x, b1.z FROM b INNER JOIN b AS b1 ON b.x = b1.x
 ----
 scan b1
- ├── columns: x:4!null z:5
- ├── key: (4)
- └── fd: (4)-->(5)
+ ├── columns: x:5!null z:6
+ ├── key: (5)
+ └── fd: (5)-->(6)
 
 # InnerJoin case with not-null foreign key.
 norm expect=EliminateJoinUnderProjectRight
 SELECT k, v FROM a INNER JOIN fks ON r1 = x
 ----
 scan fks
- ├── columns: k:5!null v:6
- ├── key: (5)
- └── fd: (5)-->(6)
+ ├── columns: k:6!null v:7
+ ├── key: (6)
+ └── fd: (6)-->(7)
 
 # No-op case because columns from the right side of a LeftJoin are being
 # projected.
@@ -245,18 +245,18 @@ norm expect-not=EliminateJoinUnderProjectRight
 SELECT b.x, b1.x FROM b LEFT JOIN b AS b1 ON b.x = b1.x
 ----
 inner-join (hash)
- ├── columns: x:1!null x:4!null
+ ├── columns: x:1!null x:5!null
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── key: (4)
- ├── fd: (1)==(4), (4)==(1)
+ ├── key: (5)
+ ├── fd: (1)==(5), (5)==(1)
  ├── scan b
  │    ├── columns: b.x:1!null
  │    └── key: (1)
  ├── scan b1
- │    ├── columns: b1.x:4!null
- │    └── key: (4)
+ │    ├── columns: b1.x:5!null
+ │    └── key: (5)
  └── filters
-      └── b.x:1 = b1.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── b.x:1 = b1.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # --------------------------------------------------
 # EliminateProject
@@ -294,15 +294,15 @@ norm expect-not=EliminateProject
 SELECT *, 1 r FROM a
 ----
 project
- ├── columns: x:1!null y:2 f:3 s:4 r:5!null
+ ├── columns: x:1!null y:2 f:3 s:4 r:6!null
  ├── key: (1)
- ├── fd: ()-->(5), (1)-->(2-4)
+ ├── fd: ()-->(6), (1)-->(2-4)
  ├── scan a
  │    ├── columns: x:1!null y:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections
-      └── 1 [as=r:5]
+      └── 1 [as=r:6]
 
 # --------------------------------------------------
 # MergeProjects
@@ -313,95 +313,95 @@ norm expect=MergeProjects
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
- ├── columns: r:8
+ ├── columns: r:10
  ├── immutable
  ├── inner-join (hash)
- │    ├── columns: a.x:1!null y:2 b.x:5!null
+ │    ├── columns: a.x:1!null y:2 b.x:6!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- │    ├── key: (5)
- │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2), (1)==(6), (6)==(1)
  │    ├── scan a
  │    │    ├── columns: a.x:1!null y:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan b
- │    │    ├── columns: b.x:5!null
- │    │    └── key: (5)
+ │    │    ├── columns: b.x:6!null
+ │    │    └── key: (6)
  │    └── filters
- │         └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── a.x:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── projections
-      └── y:2 + 1 [as=r:8, outer=(2), immutable]
+      └── y:2 + 1 [as=r:10, outer=(2), immutable]
 
 # Outer and inner projections have synthesized columns.
 norm expect=MergeProjects
 SELECT y1, f+1 FROM (SELECT y+1 AS y1, f FROM a)
 ----
 project
- ├── columns: y1:5 "?column?":6
+ ├── columns: y1:6 "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: y:2 f:3
  └── projections
-      ├── f:3 + 1.0 [as="?column?":6, outer=(3), immutable]
-      └── y:2 + 1 [as=y1:5, outer=(2), immutable]
+      ├── f:3 + 1.0 [as="?column?":7, outer=(3), immutable]
+      └── y:2 + 1 [as=y1:6, outer=(2), immutable]
 
 # Multiple synthesized columns in both outer and inner projections.
 norm expect=MergeProjects
 SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
 ----
 project
- ├── columns: y1:5 "?column?":7 x2:6!null "?column?":8
+ ├── columns: y1:6 "?column?":8 x2:7!null "?column?":9
  ├── immutable
  ├── scan a
  │    ├── columns: x:1!null y:2 f:3 s:4
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections
-      ├── f:3 + 1.0 [as="?column?":7, outer=(3), immutable]
-      ├── s:4 || 'foo' [as="?column?":8, outer=(4), immutable]
-      ├── y:2 + 1 [as=y1:5, outer=(2), immutable]
-      └── x:1 * 2 [as=x2:6, outer=(1), immutable]
+      ├── f:3 + 1.0 [as="?column?":8, outer=(3), immutable]
+      ├── s:4 || 'foo' [as="?column?":9, outer=(4), immutable]
+      ├── y:2 + 1 [as=y1:6, outer=(2), immutable]
+      └── x:1 * 2 [as=x2:7, outer=(1), immutable]
 
 # Outer project selects subset of inner columns.
 norm expect=MergeProjects
 SELECT y1 FROM (SELECT y+1 AS y1, f*2 AS f2 FROM a)
 ----
 project
- ├── columns: y1:5
+ ├── columns: y1:6
  ├── immutable
  ├── scan a
  │    └── columns: y:2
  └── projections
-      └── y:2 + 1 [as=y1:5, outer=(2), immutable]
+      └── y:2 + 1 [as=y1:6, outer=(2), immutable]
 
 # Don't merge, since outer depends on inner.
 norm expect-not=MergeProjects
 SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
 ----
 project
- ├── columns: "?column?":6 "?column?":7
+ ├── columns: "?column?":7 "?column?":8
  ├── immutable
  ├── project
- │    ├── columns: y1:5
+ │    ├── columns: y1:6
  │    ├── immutable
  │    ├── scan a
  │    │    └── columns: y:2
  │    └── projections
- │         └── y:2 + 1 [as=y1:5, outer=(2), immutable]
+ │         └── y:2 + 1 [as=y1:6, outer=(2), immutable]
  └── projections
-      ├── y1:5 * 2 [as="?column?":6, outer=(5), immutable]
-      └── y1:5 / 2 [as="?column?":7, outer=(5)]
+      ├── y1:6 * 2 [as="?column?":7, outer=(6), immutable]
+      └── y1:6 / 2 [as="?column?":8, outer=(6)]
 
 # Discard all inner columns.
 norm expect=MergeProjects
 SELECT 1 r FROM (SELECT y+1, x FROM a) a
 ----
 project
- ├── columns: r:6!null
- ├── fd: ()-->(6)
+ ├── columns: r:7!null
+ ├── fd: ()-->(7)
  ├── scan a
  └── projections
-      └── 1 [as=r:6]
+      └── 1 [as=r:7]
 
 # --------------------------------------------------
 # MergeProjectWithValues
@@ -537,47 +537,47 @@ norm expect=FoldTupleAccessIntoValues
 SELECT (SELECT (tup).@1 * x FROM b) FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── cardinality: [1 - ]
  ├── immutable
  ├── ensure-distinct-on
- │    ├── columns: "?column?":5 rownum:9!null
- │    ├── grouping columns: rownum:9!null
+ │    ├── columns: "?column?":6 rownum:10!null
+ │    ├── grouping columns: rownum:10!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── cardinality: [1 - ]
  │    ├── immutable
- │    ├── key: (9)
- │    ├── fd: (9)-->(5)
+ │    ├── key: (10)
+ │    ├── fd: (10)-->(6)
  │    ├── left-join-apply
- │    │    ├── columns: "?column?":5 column1_1:7!null rownum:9!null
+ │    │    ├── columns: "?column?":6 column1_1:8!null rownum:10!null
  │    │    ├── cardinality: [2 - ]
  │    │    ├── immutable
- │    │    ├── fd: (9)-->(7)
+ │    │    ├── fd: (10)-->(8)
  │    │    ├── ordinality
- │    │    │    ├── columns: column1_1:7!null rownum:9!null
+ │    │    │    ├── columns: column1_1:8!null rownum:10!null
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── key: (9)
- │    │    │    ├── fd: (9)-->(7)
+ │    │    │    ├── key: (10)
+ │    │    │    ├── fd: (10)-->(8)
  │    │    │    └── values
- │    │    │         ├── columns: column1_1:7!null
+ │    │    │         ├── columns: column1_1:8!null
  │    │    │         ├── cardinality: [2 - 2]
  │    │    │         ├── (1,)
  │    │    │         └── (3,)
  │    │    ├── project
- │    │    │    ├── columns: "?column?":5
- │    │    │    ├── outer: (7)
+ │    │    │    ├── columns: "?column?":6
+ │    │    │    ├── outer: (8)
  │    │    │    ├── immutable
  │    │    │    ├── scan b
  │    │    │    │    ├── columns: x:2!null
  │    │    │    │    └── key: (2)
  │    │    │    └── projections
- │    │    │         └── x:2 * column1_1:7 [as="?column?":5, outer=(2,7), immutable]
+ │    │    │         └── x:2 * column1_1:8 [as="?column?":6, outer=(2,8), immutable]
  │    │    └── filters (true)
  │    └── aggregations
- │         └── const-agg [as="?column?":5, outer=(5)]
- │              └── "?column?":5
+ │         └── const-agg [as="?column?":6, outer=(6)]
+ │              └── "?column?":6
  └── projections
-      └── "?column?":5 [as="?column?":6, outer=(5)]
+      └── "?column?":6 [as="?column?":7, outer=(6)]
 
 # Case where columns are unnested and then pruned away because the surrounding
 # project only references an outer column.
@@ -707,31 +707,31 @@ norm expect-not=FoldTupleAccessIntoValues
 SELECT (tup).@1, (tup).@2 FROM (VALUES ((3,4)), ((SELECT (x, z) FROM b))) AS v(tup)
 ----
 project
- ├── columns: "?column?":6 "?column?":7
+ ├── columns: "?column?":7 "?column?":8
  ├── cardinality: [2 - 2]
  ├── values
- │    ├── columns: column1:5
+ │    ├── columns: column1:6
  │    ├── cardinality: [2 - 2]
  │    ├── ((3, 4),)
  │    └── tuple
  │         └── subquery
  │              └── max1-row
- │                   ├── columns: "?column?":4
+ │                   ├── columns: "?column?":5
  │                   ├── error: "more than one row returned by a subquery used as an expression"
  │                   ├── cardinality: [0 - 1]
  │                   ├── key: ()
- │                   ├── fd: ()-->(4)
+ │                   ├── fd: ()-->(5)
  │                   └── project
- │                        ├── columns: "?column?":4
+ │                        ├── columns: "?column?":5
  │                        ├── scan b
  │                        │    ├── columns: x:1!null z:2
  │                        │    ├── key: (1)
  │                        │    └── fd: (1)-->(2)
  │                        └── projections
- │                             └── (x:1, z:2) [as="?column?":4, outer=(1,2)]
+ │                             └── (x:1, z:2) [as="?column?":5, outer=(1,2)]
  └── projections
-      ├── (column1:5).@1 [as="?column?":6, outer=(5)]
-      └── (column1:5).@2 [as="?column?":7, outer=(5)]
+      ├── (column1:6).@1 [as="?column?":7, outer=(6)]
+      └── (column1:6).@2 [as="?column?":8, outer=(6)]
 
 # No-op case because the tuple itself is referenced rather than just its fields.
 norm expect-not=FoldTupleAccessIntoValues
@@ -830,7 +830,7 @@ norm expect=PushColumnRemappingIntoValues
 WITH a AS (SELECT v FROM (VALUES (1), ((SELECT z FROM b WHERE z=1))) f(v)) SELECT v FROM a
 ----
 values
- ├── columns: v:5
+ ├── columns: v:6
  ├── cardinality: [2 - 2]
  ├── (1,)
  └── tuple
@@ -997,13 +997,13 @@ norm expect-not=PushColumnRemappingIntoValues
 WITH t AS (SELECT * FROM a) SELECT x FROM t
 ----
 project
- ├── columns: x:5!null
- ├── key: (5)
+ ├── columns: x:6!null
+ ├── key: (6)
  ├── scan a
  │    ├── columns: a.x:1!null
  │    └── key: (1)
  └── projections
-      └── a.x:1 [as=x:5, outer=(1)]
+      └── a.x:1 [as=x:6, outer=(1)]
 
 # No-op case with no projections on the Project surrounding the Values operator.
 # A Project with no projections is created when PruneUnionAllCols fires, and is
@@ -1151,11 +1151,11 @@ INNER JOIN LATERAL
 ON True
 ----
 project
- ├── columns: x:1!null z:2 j:3 x:5 "?column?":6!null
+ ├── columns: x:1!null z:2 j:3 x:6 "?column?":7!null
  ├── immutable
- ├── fd: (1)-->(2,3), (3)-->(5)
+ ├── fd: (1)-->(2,3), (3)-->(6)
  ├── inner-join (cross)
- │    ├── columns: b.x:1!null z:2 j:3 "?column?":6!null
+ │    ├── columns: b.x:1!null z:2 j:3 "?column?":7!null
  │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── fd: (1)-->(2,3)
  │    ├── scan b
@@ -1163,13 +1163,13 @@ project
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    ├── values
- │    │    ├── columns: "?column?":6!null
+ │    │    ├── columns: "?column?":7!null
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── ('"zero"',)
  │    │    └── ('"one"',)
  │    └── filters (true)
  └── projections
-      └── j:3->'x' [as=x:5, outer=(3), immutable]
+      └── j:3->'x' [as=x:6, outer=(3), immutable]
 
 # Rule fires harmlessly when none of the JSON fields are accessed; the columns
 # are later pruned away by PruneValuesCols.
@@ -1186,19 +1186,19 @@ SELECT
 FROM b
 ----
 project
- ├── columns: "?column?":7
+ ├── columns: "?column?":8
  ├── immutable
  ├── ensure-distinct-on
- │    ├── columns: x:1!null "?column?":5
+ │    ├── columns: x:1!null "?column?":6
  │    ├── grouping columns: x:1!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(5)
+ │    ├── fd: (1)-->(6)
  │    ├── project
- │    │    ├── columns: "?column?":5 x:1!null
+ │    │    ├── columns: "?column?":6 x:1!null
  │    │    ├── immutable
- │    │    ├── fd: (1)-->(5)
+ │    │    ├── fd: (1)-->(6)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1!null j:3
  │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -1213,12 +1213,12 @@ project
  │    │    │    │    └── ()
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         └── j:3->'x' [as="?column?":5, outer=(3), immutable]
+ │    │         └── j:3->'x' [as="?column?":6, outer=(3), immutable]
  │    └── aggregations
- │         └── const-agg [as="?column?":5, outer=(5)]
- │              └── "?column?":5
+ │         └── const-agg [as="?column?":6, outer=(6)]
+ │              └── "?column?":6
  └── projections
-      └── "?column?":5 [as="?column?":7, outer=(5)]
+      └── "?column?":6 [as="?column?":8, outer=(6)]
 
 # No-op case because the Values column contains strings, not JSON expressions.
 norm expect-not=FoldJSONAccessIntoValues
@@ -1343,11 +1343,11 @@ FROM
 ) v(j)
 ----
 project
- ├── columns: x:5
+ ├── columns: x:6
  ├── cardinality: [2 - 2]
  ├── immutable
  ├── values
- │    ├── columns: column1:4
+ │    ├── columns: column1:5
  │    ├── cardinality: [2 - 2]
  │    ├── ('{"x": "one"}',)
  │    └── tuple
@@ -1361,7 +1361,7 @@ project
  │                   └── scan b
  │                        └── columns: j:3
  └── projections
-      └── column1:4->'x' [as=x:5, outer=(4), immutable]
+      └── column1:5->'x' [as=x:6, outer=(5), immutable]
 
 # No-op case because the key being used to access JSON fields is not a constant
 # string.
@@ -1378,20 +1378,20 @@ SELECT
 FROM a
 ----
 project
- ├── columns: "?column?":7
+ ├── columns: "?column?":8
  ├── immutable
  ├── ensure-distinct-on
- │    ├── columns: x:1!null "?column?":6
+ │    ├── columns: x:1!null "?column?":7
  │    ├── grouping columns: x:1!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(6)
+ │    ├── fd: (1)-->(7)
  │    ├── project
- │    │    ├── columns: "?column?":6 x:1!null
+ │    │    ├── columns: "?column?":7 x:1!null
  │    │    ├── immutable
  │    │    ├── inner-join (cross)
- │    │    │    ├── columns: x:1!null s:4 column1:5!null
+ │    │    │    ├── columns: x:1!null s:4 column1:6!null
  │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    ├── fd: (1)-->(4)
  │    │    │    ├── scan a
@@ -1399,18 +1399,18 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(4)
  │    │    │    ├── values
- │    │    │    │    ├── columns: column1:5!null
+ │    │    │    │    ├── columns: column1:6!null
  │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    ├── ('{"x": "one"}',)
  │    │    │    │    └── ('{"x": "two"}',)
  │    │    │    └── filters (true)
  │    │    └── projections
- │    │         └── column1:5->s:4 [as="?column?":6, outer=(4,5), immutable]
+ │    │         └── column1:6->s:4 [as="?column?":7, outer=(4,6), immutable]
  │    └── aggregations
- │         └── const-agg [as="?column?":6, outer=(6)]
- │              └── "?column?":6
+ │         └── const-agg [as="?column?":7, outer=(7)]
+ │              └── "?column?":7
  └── projections
-      └── "?column?":6 [as="?column?":7, outer=(6)]
+      └── "?column?":7 [as="?column?":8, outer=(7)]
 
 # No-op case because one of the projections attempts to access a key that is not
 # in any of the rows.

@@ -11,6 +11,7 @@ SHOW CREATE kv
 TABLE kv
  ├── k int not null
  ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       └── k int not null
 
@@ -36,6 +37,7 @@ TABLE abcdef
  ├── e int as (a) stored
  ├── f int
  ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── CHECK (f > 2)
  └── INDEX primary
       └── rowid int not null default (unique_rowid()) [hidden]
@@ -64,6 +66,7 @@ TABLE uvwxy
  ├── w int
  ├── x int
  ├── y int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY family1 (u, v, w)
  ├── FAMILY family2 (x)
  ├── FAMILY family3 (y)
@@ -81,6 +84,7 @@ SHOW CREATE a
 TABLE a
  ├── a int
  ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── INDEX a_a_key
@@ -101,6 +105,7 @@ SHOW CREATE part1
 TABLE part1
  ├── a int not null
  ├── b int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── partition by list prefixes
@@ -133,6 +138,7 @@ TABLE part2
  ├── a string not null
  ├── b string not null
  ├── c int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── a string not null
  │    ├── b string not null
