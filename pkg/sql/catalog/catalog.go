@@ -23,7 +23,7 @@ type Descriptor = sqlbase.DescriptorInterface
 type MutableDescriptor interface {
 	Descriptor
 	// MaybeIncrementVersion sets the version of the descriptor to
-	// ClusterVersion.Version + 1.
+	// OriginalVersion()+1.
 	// TODO (lucy): It's not a good idea to have callers handle incrementing the
 	// version manually. Find a better API for this. Maybe creating a new mutable
 	// descriptor should increment the version on the mutable copy from the
@@ -31,6 +31,11 @@ type MutableDescriptor interface {
 	MaybeIncrementVersion()
 	// SetDrainingNames sets the draining names for the descriptor.
 	SetDrainingNames([]sqlbase.NameInfo)
+
+	// Accessors for the original state of the descriptor prior to the mutations.
+	OriginalName() string
+	OriginalID() sqlbase.ID
+	OriginalVersion() sqlbase.DescriptorVersion
 	// Immutable returns an immutable copy of this descriptor.
 	Immutable() Descriptor
 	// IsNew returns whether the descriptor was created in this transaction.
