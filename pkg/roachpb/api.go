@@ -1250,6 +1250,13 @@ func (b *ExternalStorage_S3) Keys() *aws.Config {
 	}
 }
 
+// Keys returns credentials in an AWS KMS config.
+func (b *KMS_AWSKMS) Keys() *aws.Config {
+	return &aws.Config{
+		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, b.TempToken),
+	}
+}
+
 // BulkOpSummaryID returns the key within a BulkOpSummary's EntryCounts map for
 // the given table and index ID. This logic is mirrored in c++ in rowcounter.cc.
 func BulkOpSummaryID(tableID, indexID uint64) uint64 {

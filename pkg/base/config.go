@@ -540,6 +540,19 @@ type ExternalIODirConfig struct {
 	DisableImplicitCredentials bool
 }
 
+// KMSConfig describes various configuration options pertaining
+// to kms implementations.
+type KMSConfig struct {
+	// Disables the use of external HTTP endpoints. This turns off any custom
+	// endpoints cloud storage implementations.
+	DisableHTTP bool
+	// Disables the use of implicit credentials when accessing external services.
+	// Implicit credentials are obtained from the system environment.
+	// This turns off implicit credentials, and requires the user to provide
+	// necessary access keys.
+	DisableImplicitCredentials bool
+}
+
 // TempStorageConfigFromEnv creates a TempStorageConfig.
 // If parentDir is not specified and the specified store is in-memory,
 // then the temp storage will also be in-memory.

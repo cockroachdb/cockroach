@@ -28,6 +28,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_Workload;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ImportRequest_TableRekey;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_KMS_AWSKMS;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RequestHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminMergeRequest;
@@ -527,6 +528,16 @@ class ComputeChecksumResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ComputeChecksumResponse>
       _instance;
 } _ComputeChecksumResponse_default_instance_;
+class KMS_AWSKMSDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<KMS_AWSKMS>
+      _instance;
+} _KMS_AWSKMS_default_instance_;
+class KMSDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<KMS>
+      _instance;
+} _KMS_default_instance_;
 class ExternalStorage_LocalFilePathDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<ExternalStorage_LocalFilePath>
@@ -1996,6 +2007,35 @@ static void InitDefaultsComputeChecksumResponse() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComputeChecksumResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
 
+static void InitDefaultsKMS_AWSKMS() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_KMS_AWSKMS_default_instance_;
+    new (ptr) ::cockroach::roachpb::KMS_AWSKMS();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::KMS_AWSKMS::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_KMS_AWSKMS =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsKMS_AWSKMS}, {}};
+
+static void InitDefaultsKMS() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_KMS_default_instance_;
+    new (ptr) ::cockroach::roachpb::KMS();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::KMS::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_KMS =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsKMS}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_KMS_AWSKMS.base,}};
+
 static void InitDefaultsExternalStorage_LocalFilePath() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2950,6 +2990,8 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_RequestLeaseResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComputeChecksumRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComputeChecksumResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_KMS_AWSKMS.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_KMS.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExternalStorage_LocalFilePath.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExternalStorage_Http.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExternalStorage_S3.base);
@@ -3083,6 +3125,16 @@ bool PushTxnType_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool KMSProvider_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
       return true;
     default:
       return false;
@@ -20822,6 +20874,708 @@ void ComputeChecksumResponse::InternalSwap(ComputeChecksumResponse* other) {
 
 ::std::string ComputeChecksumResponse::GetTypeName() const {
   return "cockroach.roachpb.ComputeChecksumResponse";
+}
+
+
+// ===================================================================
+
+void KMS_AWSKMS::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int KMS_AWSKMS::kAuthFieldNumber;
+const int KMS_AWSKMS::kAccessKeyFieldNumber;
+const int KMS_AWSKMS::kSecretFieldNumber;
+const int KMS_AWSKMS::kTempTokenFieldNumber;
+const int KMS_AWSKMS::kEndpointFieldNumber;
+const int KMS_AWSKMS::kRegionFieldNumber;
+const int KMS_AWSKMS::kKeyIDFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+KMS_AWSKMS::KMS_AWSKMS()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_KMS_AWSKMS.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.KMS.AWSKMS)
+}
+KMS_AWSKMS::KMS_AWSKMS(const KMS_AWSKMS& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  auth_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.auth().size() > 0) {
+    auth_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.auth_);
+  }
+  access_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.access_key().size() > 0) {
+    access_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.access_key_);
+  }
+  secret_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.secret().size() > 0) {
+    secret_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.secret_);
+  }
+  temp_token_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.temp_token().size() > 0) {
+    temp_token_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.temp_token_);
+  }
+  endpoint_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.endpoint().size() > 0) {
+    endpoint_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.endpoint_);
+  }
+  region_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.region().size() > 0) {
+    region_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.region_);
+  }
+  keyid_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.keyid().size() > 0) {
+    keyid_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.keyid_);
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.KMS.AWSKMS)
+}
+
+void KMS_AWSKMS::SharedCtor() {
+  auth_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  access_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  secret_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  temp_token_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  endpoint_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  region_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  keyid_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+KMS_AWSKMS::~KMS_AWSKMS() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.KMS.AWSKMS)
+  SharedDtor();
+}
+
+void KMS_AWSKMS::SharedDtor() {
+  auth_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  access_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  secret_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  temp_token_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  endpoint_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  region_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  keyid_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void KMS_AWSKMS::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const KMS_AWSKMS& KMS_AWSKMS::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_KMS_AWSKMS.base);
+  return *internal_default_instance();
+}
+
+
+void KMS_AWSKMS::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.KMS.AWSKMS)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  auth_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  access_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  secret_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  temp_token_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  endpoint_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  region_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  keyid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _internal_metadata_.Clear();
+}
+
+bool KMS_AWSKMS::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.KMS.AWSKMS)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // string auth = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_auth()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->auth().data(), static_cast<int>(this->auth().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.auth"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string access_key = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_access_key()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->access_key().data(), static_cast<int>(this->access_key().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.access_key"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string secret = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_secret()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->secret().data(), static_cast<int>(this->secret().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.secret"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string temp_token = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_temp_token()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->temp_token().data(), static_cast<int>(this->temp_token().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.temp_token"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string endpoint = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_endpoint()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->endpoint().data(), static_cast<int>(this->endpoint().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.endpoint"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string region = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_region()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->region().data(), static_cast<int>(this->region().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.region"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string keyID = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_keyid()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->keyid().data(), static_cast<int>(this->keyid().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.KMS.AWSKMS.keyID"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.KMS.AWSKMS)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.KMS.AWSKMS)
+  return false;
+#undef DO_
+}
+
+void KMS_AWSKMS::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.KMS.AWSKMS)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // string auth = 1;
+  if (this->auth().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->auth().data(), static_cast<int>(this->auth().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.auth");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->auth(), output);
+  }
+
+  // string access_key = 2;
+  if (this->access_key().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->access_key().data(), static_cast<int>(this->access_key().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.access_key");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      2, this->access_key(), output);
+  }
+
+  // string secret = 3;
+  if (this->secret().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->secret().data(), static_cast<int>(this->secret().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.secret");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      3, this->secret(), output);
+  }
+
+  // string temp_token = 4;
+  if (this->temp_token().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->temp_token().data(), static_cast<int>(this->temp_token().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.temp_token");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      4, this->temp_token(), output);
+  }
+
+  // string endpoint = 5;
+  if (this->endpoint().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->endpoint().data(), static_cast<int>(this->endpoint().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.endpoint");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      5, this->endpoint(), output);
+  }
+
+  // string region = 6;
+  if (this->region().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->region().data(), static_cast<int>(this->region().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.region");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      6, this->region(), output);
+  }
+
+  // string keyID = 7;
+  if (this->keyid().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->keyid().data(), static_cast<int>(this->keyid().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.KMS.AWSKMS.keyID");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      7, this->keyid(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.KMS.AWSKMS)
+}
+
+size_t KMS_AWSKMS::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.KMS.AWSKMS)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // string auth = 1;
+  if (this->auth().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->auth());
+  }
+
+  // string access_key = 2;
+  if (this->access_key().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->access_key());
+  }
+
+  // string secret = 3;
+  if (this->secret().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->secret());
+  }
+
+  // string temp_token = 4;
+  if (this->temp_token().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->temp_token());
+  }
+
+  // string endpoint = 5;
+  if (this->endpoint().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->endpoint());
+  }
+
+  // string region = 6;
+  if (this->region().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->region());
+  }
+
+  // string keyID = 7;
+  if (this->keyid().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->keyid());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void KMS_AWSKMS::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const KMS_AWSKMS*>(&from));
+}
+
+void KMS_AWSKMS::MergeFrom(const KMS_AWSKMS& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.KMS.AWSKMS)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.auth().size() > 0) {
+
+    auth_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.auth_);
+  }
+  if (from.access_key().size() > 0) {
+
+    access_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.access_key_);
+  }
+  if (from.secret().size() > 0) {
+
+    secret_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.secret_);
+  }
+  if (from.temp_token().size() > 0) {
+
+    temp_token_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.temp_token_);
+  }
+  if (from.endpoint().size() > 0) {
+
+    endpoint_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.endpoint_);
+  }
+  if (from.region().size() > 0) {
+
+    region_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.region_);
+  }
+  if (from.keyid().size() > 0) {
+
+    keyid_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.keyid_);
+  }
+}
+
+void KMS_AWSKMS::CopyFrom(const KMS_AWSKMS& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.KMS.AWSKMS)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool KMS_AWSKMS::IsInitialized() const {
+  return true;
+}
+
+void KMS_AWSKMS::Swap(KMS_AWSKMS* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void KMS_AWSKMS::InternalSwap(KMS_AWSKMS* other) {
+  using std::swap;
+  auth_.Swap(&other->auth_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  access_key_.Swap(&other->access_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  secret_.Swap(&other->secret_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  temp_token_.Swap(&other->temp_token_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  endpoint_.Swap(&other->endpoint_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  region_.Swap(&other->region_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  keyid_.Swap(&other->keyid_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string KMS_AWSKMS::GetTypeName() const {
+  return "cockroach.roachpb.KMS.AWSKMS";
+}
+
+
+// ===================================================================
+
+void KMS::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_KMS_default_instance_._instance.get_mutable()->awskmsconfig_ = const_cast< ::cockroach::roachpb::KMS_AWSKMS*>(
+      ::cockroach::roachpb::KMS_AWSKMS::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int KMS::kProviderFieldNumber;
+const int KMS::kAWSKMSConfigFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+KMS::KMS()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_KMS.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.KMS)
+}
+KMS::KMS(const KMS& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_awskmsconfig()) {
+    awskmsconfig_ = new ::cockroach::roachpb::KMS_AWSKMS(*from.awskmsconfig_);
+  } else {
+    awskmsconfig_ = NULL;
+  }
+  provider_ = from.provider_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.KMS)
+}
+
+void KMS::SharedCtor() {
+  ::memset(&awskmsconfig_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&provider_) -
+      reinterpret_cast<char*>(&awskmsconfig_)) + sizeof(provider_));
+}
+
+KMS::~KMS() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.KMS)
+  SharedDtor();
+}
+
+void KMS::SharedDtor() {
+  if (this != internal_default_instance()) delete awskmsconfig_;
+}
+
+void KMS::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const KMS& KMS::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_KMS.base);
+  return *internal_default_instance();
+}
+
+
+void KMS::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.KMS)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && awskmsconfig_ != NULL) {
+    delete awskmsconfig_;
+  }
+  awskmsconfig_ = NULL;
+  provider_ = 0;
+  _internal_metadata_.Clear();
+}
+
+bool KMS::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.KMS)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // .cockroach.roachpb.KMSProvider provider = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_provider(static_cast< ::cockroach::roachpb::KMSProvider >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // .cockroach.roachpb.KMS.AWSKMS AWSKMSConfig = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_awskmsconfig()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.KMS)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.KMS)
+  return false;
+#undef DO_
+}
+
+void KMS::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.KMS)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // .cockroach.roachpb.KMSProvider provider = 1;
+  if (this->provider() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      1, this->provider(), output);
+  }
+
+  // .cockroach.roachpb.KMS.AWSKMS AWSKMSConfig = 2;
+  if (this->has_awskmsconfig()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_awskmsconfig(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.KMS)
+}
+
+size_t KMS::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.KMS)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // .cockroach.roachpb.KMS.AWSKMS AWSKMSConfig = 2;
+  if (this->has_awskmsconfig()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *awskmsconfig_);
+  }
+
+  // .cockroach.roachpb.KMSProvider provider = 1;
+  if (this->provider() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->provider());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void KMS::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const KMS*>(&from));
+}
+
+void KMS::MergeFrom(const KMS& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.KMS)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_awskmsconfig()) {
+    mutable_awskmsconfig()->::cockroach::roachpb::KMS_AWSKMS::MergeFrom(from.awskmsconfig());
+  }
+  if (from.provider() != 0) {
+    set_provider(from.provider());
+  }
+}
+
+void KMS::CopyFrom(const KMS& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.KMS)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool KMS::IsInitialized() const {
+  return true;
+}
+
+void KMS::Swap(KMS* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void KMS::InternalSwap(KMS* other) {
+  using std::swap;
+  swap(awskmsconfig_, other->awskmsconfig_);
+  swap(provider_, other->provider_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string KMS::GetTypeName() const {
+  return "cockroach.roachpb.KMS";
 }
 
 
@@ -39538,6 +40292,12 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ComputeCheck
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ComputeChecksumResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::ComputeChecksumResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ComputeChecksumResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::KMS_AWSKMS* Arena::CreateMaybeMessage< ::cockroach::roachpb::KMS_AWSKMS >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::KMS_AWSKMS >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::KMS* Arena::CreateMaybeMessage< ::cockroach::roachpb::KMS >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::KMS >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ExternalStorage_LocalFilePath* Arena::CreateMaybeMessage< ::cockroach::roachpb::ExternalStorage_LocalFilePath >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ExternalStorage_LocalFilePath >(arena);

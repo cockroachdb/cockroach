@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[123];
+  static const ::google::protobuf::internal::ParseTable schema[125];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -267,6 +267,12 @@ extern InitPutRequestDefaultTypeInternal _InitPutRequest_default_instance_;
 class InitPutResponse;
 class InitPutResponseDefaultTypeInternal;
 extern InitPutResponseDefaultTypeInternal _InitPutResponse_default_instance_;
+class KMS;
+class KMSDefaultTypeInternal;
+extern KMSDefaultTypeInternal _KMS_default_instance_;
+class KMS_AWSKMS;
+class KMS_AWSKMSDefaultTypeInternal;
+extern KMS_AWSKMSDefaultTypeInternal _KMS_AWSKMS_default_instance_;
 class LeaseInfoRequest;
 class LeaseInfoRequestDefaultTypeInternal;
 extern LeaseInfoRequestDefaultTypeInternal _LeaseInfoRequest_default_instance_;
@@ -500,6 +506,8 @@ template<> ::cockroach::roachpb::IncrementRequest* Arena::CreateMaybeMessage<::c
 template<> ::cockroach::roachpb::IncrementResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::IncrementResponse>(Arena*);
 template<> ::cockroach::roachpb::InitPutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::InitPutRequest>(Arena*);
 template<> ::cockroach::roachpb::InitPutResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::InitPutResponse>(Arena*);
+template<> ::cockroach::roachpb::KMS* Arena::CreateMaybeMessage<::cockroach::roachpb::KMS>(Arena*);
+template<> ::cockroach::roachpb::KMS_AWSKMS* Arena::CreateMaybeMessage<::cockroach::roachpb::KMS_AWSKMS>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoRequest>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoResponse>(Arena*);
 template<> ::cockroach::roachpb::MergeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeRequest>(Arena*);
@@ -629,6 +637,17 @@ bool PushTxnType_IsValid(int value);
 const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
 const PushTxnType PushTxnType_MAX = PUSH_TOUCH;
 const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
+
+enum KMSProvider {
+  UnknownKMS = 0,
+  AWSKMS = 1,
+  KMSProvider_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  KMSProvider_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool KMSProvider_IsValid(int value);
+const KMSProvider KMSProvider_MIN = UnknownKMS;
+const KMSProvider KMSProvider_MAX = AWSKMS;
+const int KMSProvider_ARRAYSIZE = KMSProvider_MAX + 1;
 
 enum ExternalStorageProvider {
   Unknown = 0,
@@ -9497,6 +9516,321 @@ class ComputeChecksumResponse : public ::google::protobuf::MessageLite /* @@prot
 };
 // -------------------------------------------------------------------
 
+class KMS_AWSKMS : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.KMS.AWSKMS) */ {
+ public:
+  KMS_AWSKMS();
+  virtual ~KMS_AWSKMS();
+
+  KMS_AWSKMS(const KMS_AWSKMS& from);
+
+  inline KMS_AWSKMS& operator=(const KMS_AWSKMS& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  KMS_AWSKMS(KMS_AWSKMS&& from) noexcept
+    : KMS_AWSKMS() {
+    *this = ::std::move(from);
+  }
+
+  inline KMS_AWSKMS& operator=(KMS_AWSKMS&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const KMS_AWSKMS& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const KMS_AWSKMS* internal_default_instance() {
+    return reinterpret_cast<const KMS_AWSKMS*>(
+               &_KMS_AWSKMS_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    72;
+
+  void Swap(KMS_AWSKMS* other);
+  friend void swap(KMS_AWSKMS& a, KMS_AWSKMS& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline KMS_AWSKMS* New() const final {
+    return CreateMaybeMessage<KMS_AWSKMS>(NULL);
+  }
+
+  KMS_AWSKMS* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<KMS_AWSKMS>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const KMS_AWSKMS& from);
+  void MergeFrom(const KMS_AWSKMS& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(KMS_AWSKMS* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string auth = 1;
+  void clear_auth();
+  static const int kAuthFieldNumber = 1;
+  const ::std::string& auth() const;
+  void set_auth(const ::std::string& value);
+  #if LANG_CXX11
+  void set_auth(::std::string&& value);
+  #endif
+  void set_auth(const char* value);
+  void set_auth(const char* value, size_t size);
+  ::std::string* mutable_auth();
+  ::std::string* release_auth();
+  void set_allocated_auth(::std::string* auth);
+
+  // string access_key = 2;
+  void clear_access_key();
+  static const int kAccessKeyFieldNumber = 2;
+  const ::std::string& access_key() const;
+  void set_access_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_access_key(::std::string&& value);
+  #endif
+  void set_access_key(const char* value);
+  void set_access_key(const char* value, size_t size);
+  ::std::string* mutable_access_key();
+  ::std::string* release_access_key();
+  void set_allocated_access_key(::std::string* access_key);
+
+  // string secret = 3;
+  void clear_secret();
+  static const int kSecretFieldNumber = 3;
+  const ::std::string& secret() const;
+  void set_secret(const ::std::string& value);
+  #if LANG_CXX11
+  void set_secret(::std::string&& value);
+  #endif
+  void set_secret(const char* value);
+  void set_secret(const char* value, size_t size);
+  ::std::string* mutable_secret();
+  ::std::string* release_secret();
+  void set_allocated_secret(::std::string* secret);
+
+  // string temp_token = 4;
+  void clear_temp_token();
+  static const int kTempTokenFieldNumber = 4;
+  const ::std::string& temp_token() const;
+  void set_temp_token(const ::std::string& value);
+  #if LANG_CXX11
+  void set_temp_token(::std::string&& value);
+  #endif
+  void set_temp_token(const char* value);
+  void set_temp_token(const char* value, size_t size);
+  ::std::string* mutable_temp_token();
+  ::std::string* release_temp_token();
+  void set_allocated_temp_token(::std::string* temp_token);
+
+  // string endpoint = 5;
+  void clear_endpoint();
+  static const int kEndpointFieldNumber = 5;
+  const ::std::string& endpoint() const;
+  void set_endpoint(const ::std::string& value);
+  #if LANG_CXX11
+  void set_endpoint(::std::string&& value);
+  #endif
+  void set_endpoint(const char* value);
+  void set_endpoint(const char* value, size_t size);
+  ::std::string* mutable_endpoint();
+  ::std::string* release_endpoint();
+  void set_allocated_endpoint(::std::string* endpoint);
+
+  // string region = 6;
+  void clear_region();
+  static const int kRegionFieldNumber = 6;
+  const ::std::string& region() const;
+  void set_region(const ::std::string& value);
+  #if LANG_CXX11
+  void set_region(::std::string&& value);
+  #endif
+  void set_region(const char* value);
+  void set_region(const char* value, size_t size);
+  ::std::string* mutable_region();
+  ::std::string* release_region();
+  void set_allocated_region(::std::string* region);
+
+  // string keyID = 7;
+  void clear_keyid();
+  static const int kKeyIDFieldNumber = 7;
+  const ::std::string& keyid() const;
+  void set_keyid(const ::std::string& value);
+  #if LANG_CXX11
+  void set_keyid(::std::string&& value);
+  #endif
+  void set_keyid(const char* value);
+  void set_keyid(const char* value, size_t size);
+  ::std::string* mutable_keyid();
+  ::std::string* release_keyid();
+  void set_allocated_keyid(::std::string* keyid);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.KMS.AWSKMS)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr auth_;
+  ::google::protobuf::internal::ArenaStringPtr access_key_;
+  ::google::protobuf::internal::ArenaStringPtr secret_;
+  ::google::protobuf::internal::ArenaStringPtr temp_token_;
+  ::google::protobuf::internal::ArenaStringPtr endpoint_;
+  ::google::protobuf::internal::ArenaStringPtr region_;
+  ::google::protobuf::internal::ArenaStringPtr keyid_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class KMS : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.KMS) */ {
+ public:
+  KMS();
+  virtual ~KMS();
+
+  KMS(const KMS& from);
+
+  inline KMS& operator=(const KMS& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  KMS(KMS&& from) noexcept
+    : KMS() {
+    *this = ::std::move(from);
+  }
+
+  inline KMS& operator=(KMS&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const KMS& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const KMS* internal_default_instance() {
+    return reinterpret_cast<const KMS*>(
+               &_KMS_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    73;
+
+  void Swap(KMS* other);
+  friend void swap(KMS& a, KMS& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline KMS* New() const final {
+    return CreateMaybeMessage<KMS>(NULL);
+  }
+
+  KMS* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<KMS>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const KMS& from);
+  void MergeFrom(const KMS& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(KMS* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  typedef KMS_AWSKMS AWSKMS;
+
+  // accessors -------------------------------------------------------
+
+  // .cockroach.roachpb.KMS.AWSKMS AWSKMSConfig = 2;
+  bool has_awskmsconfig() const;
+  void clear_awskmsconfig();
+  static const int kAWSKMSConfigFieldNumber = 2;
+  private:
+  const ::cockroach::roachpb::KMS_AWSKMS& _internal_awskmsconfig() const;
+  public:
+  const ::cockroach::roachpb::KMS_AWSKMS& awskmsconfig() const;
+  ::cockroach::roachpb::KMS_AWSKMS* release_awskmsconfig();
+  ::cockroach::roachpb::KMS_AWSKMS* mutable_awskmsconfig();
+  void set_allocated_awskmsconfig(::cockroach::roachpb::KMS_AWSKMS* awskmsconfig);
+
+  // .cockroach.roachpb.KMSProvider provider = 1;
+  void clear_provider();
+  static const int kProviderFieldNumber = 1;
+  ::cockroach::roachpb::KMSProvider provider() const;
+  void set_provider(::cockroach::roachpb::KMSProvider value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.KMS)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::KMS_AWSKMS* awskmsconfig_;
+  int provider_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class ExternalStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.LocalFilePath) */ {
  public:
   ExternalStorage_LocalFilePath();
@@ -9531,7 +9865,7 @@ class ExternalStorage_LocalFilePath : public ::google::protobuf::MessageLite /* 
                &_ExternalStorage_LocalFilePath_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    72;
+    74;
 
   void Swap(ExternalStorage_LocalFilePath* other);
   friend void swap(ExternalStorage_LocalFilePath& a, ExternalStorage_LocalFilePath& b) {
@@ -9646,7 +9980,7 @@ class ExternalStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_
                &_ExternalStorage_Http_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    73;
+    75;
 
   void Swap(ExternalStorage_Http* other);
   friend void swap(ExternalStorage_Http& a, ExternalStorage_Http& b) {
@@ -9755,7 +10089,7 @@ class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ExternalStorage_S3_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    74;
+    76;
 
   void Swap(ExternalStorage_S3* other);
   friend void swap(ExternalStorage_S3& a, ExternalStorage_S3& b) {
@@ -9969,7 +10303,7 @@ class ExternalStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExternalStorage_GCS_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    75;
+    77;
 
   void Swap(ExternalStorage_GCS* other);
   friend void swap(ExternalStorage_GCS& a, ExternalStorage_GCS& b) {
@@ -10138,7 +10472,7 @@ class ExternalStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc
                &_ExternalStorage_Azure_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    76;
+    78;
 
   void Swap(ExternalStorage_Azure* other);
   friend void swap(ExternalStorage_Azure& a, ExternalStorage_Azure& b) {
@@ -10292,7 +10626,7 @@ class ExternalStorage_Workload : public ::google::protobuf::MessageLite /* @@pro
                &_ExternalStorage_Workload_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    77;
+    79;
 
   void Swap(ExternalStorage_Workload* other);
   friend void swap(ExternalStorage_Workload& a, ExternalStorage_Workload& b) {
@@ -10483,7 +10817,7 @@ class ExternalStorage_FileTable : public ::google::protobuf::MessageLite /* @@pr
                &_ExternalStorage_FileTable_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    78;
+    80;
 
   void Swap(ExternalStorage_FileTable* other);
   friend void swap(ExternalStorage_FileTable& a, ExternalStorage_FileTable& b) {
@@ -10622,7 +10956,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ExternalStorage_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    79;
+    81;
 
   void Swap(ExternalStorage* other);
   friend void swap(ExternalStorage& a, ExternalStorage& b) {
@@ -10819,7 +11153,7 @@ class WriteBatchRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_WriteBatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    80;
+    82;
 
   void Swap(WriteBatchRequest* other);
   friend void swap(WriteBatchRequest& a, WriteBatchRequest& b) {
@@ -10952,7 +11286,7 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_WriteBatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    81;
+    83;
 
   void Swap(WriteBatchResponse* other);
   friend void swap(WriteBatchResponse& a, WriteBatchResponse& b) {
@@ -11058,7 +11392,7 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
                &_FileEncryptionOptions_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    82;
+    84;
 
   void Swap(FileEncryptionOptions* other);
   friend void swap(FileEncryptionOptions& a, FileEncryptionOptions& b) {
@@ -11186,7 +11520,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ExportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    84;
+    86;
 
   void Swap(ExportRequest* other);
   friend void swap(ExportRequest& a, ExportRequest& b) {
@@ -11396,7 +11730,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    88;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11527,7 +11861,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    89;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11703,7 +12037,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    90;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11835,7 +12169,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    91;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -11971,7 +12305,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    92;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -12086,7 +12420,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    93;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12256,7 +12590,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    94;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12374,7 +12708,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    95;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12487,7 +12821,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    96;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12593,7 +12927,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    97;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12713,7 +13047,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    98;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12857,7 +13191,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    99;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -12982,7 +13316,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    100;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -13129,7 +13463,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    101;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13235,7 +13569,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    102;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13353,7 +13687,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    103;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13459,7 +13793,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    104;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13577,7 +13911,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    105;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13683,7 +14017,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    106;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13813,7 +14147,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    107;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13950,7 +14284,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    108;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -14056,7 +14390,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    109;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14242,7 +14576,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    110;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -15009,7 +15343,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    111;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15715,7 +16049,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    112;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15913,7 +16247,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    113;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16031,7 +16365,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    114;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16199,7 +16533,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    115;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16319,7 +16653,7 @@ class RangeLookupRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeLookupRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    116;
 
   void Swap(RangeLookupRequest* other);
   friend void swap(RangeLookupRequest& a, RangeLookupRequest& b) {
@@ -16448,7 +16782,7 @@ class RangeLookupResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeLookupResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    117;
 
   void Swap(RangeLookupResponse* other);
   friend void swap(RangeLookupResponse& a, RangeLookupResponse& b) {
@@ -16579,7 +16913,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    118;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16704,7 +17038,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    119;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16836,7 +17170,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    120;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16954,7 +17288,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    119;
+    121;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -17060,7 +17394,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    120;
+    122;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -17193,7 +17527,7 @@ class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@pr
                &_GossipSubscriptionRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    121;
+    123;
 
   void Swap(GossipSubscriptionRequest* other);
   friend void swap(GossipSubscriptionRequest& a, GossipSubscriptionRequest& b) {
@@ -17310,7 +17644,7 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
                &_GossipSubscriptionEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    122;
+    124;
 
   void Swap(GossipSubscriptionEvent* other);
   friend void swap(GossipSubscriptionEvent& a, GossipSubscriptionEvent& b) {
@@ -24960,6 +25294,453 @@ inline void ComputeChecksumResponse::set_allocated_checksum_id(::std::string* ch
   }
   checksum_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum_id);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ComputeChecksumResponse.checksum_id)
+}
+
+// -------------------------------------------------------------------
+
+// KMS_AWSKMS
+
+// string auth = 1;
+inline void KMS_AWSKMS::clear_auth() {
+  auth_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::auth() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.auth)
+  return auth_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_auth(const ::std::string& value) {
+  
+  auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.auth)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_auth(::std::string&& value) {
+  
+  auth_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.auth)
+}
+#endif
+inline void KMS_AWSKMS::set_auth(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.auth)
+}
+inline void KMS_AWSKMS::set_auth(const char* value, size_t size) {
+  
+  auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.auth)
+}
+inline ::std::string* KMS_AWSKMS::mutable_auth() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.auth)
+  return auth_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_auth() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.auth)
+  
+  return auth_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_auth(::std::string* auth) {
+  if (auth != NULL) {
+    
+  } else {
+    
+  }
+  auth_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), auth);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.auth)
+}
+
+// string access_key = 2;
+inline void KMS_AWSKMS::clear_access_key() {
+  access_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::access_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.access_key)
+  return access_key_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_access_key(const ::std::string& value) {
+  
+  access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.access_key)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_access_key(::std::string&& value) {
+  
+  access_key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.access_key)
+}
+#endif
+inline void KMS_AWSKMS::set_access_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.access_key)
+}
+inline void KMS_AWSKMS::set_access_key(const char* value, size_t size) {
+  
+  access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.access_key)
+}
+inline ::std::string* KMS_AWSKMS::mutable_access_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.access_key)
+  return access_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_access_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.access_key)
+  
+  return access_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_access_key(::std::string* access_key) {
+  if (access_key != NULL) {
+    
+  } else {
+    
+  }
+  access_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), access_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.access_key)
+}
+
+// string secret = 3;
+inline void KMS_AWSKMS::clear_secret() {
+  secret_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::secret() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.secret)
+  return secret_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_secret(const ::std::string& value) {
+  
+  secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.secret)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_secret(::std::string&& value) {
+  
+  secret_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.secret)
+}
+#endif
+inline void KMS_AWSKMS::set_secret(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.secret)
+}
+inline void KMS_AWSKMS::set_secret(const char* value, size_t size) {
+  
+  secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.secret)
+}
+inline ::std::string* KMS_AWSKMS::mutable_secret() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.secret)
+  return secret_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_secret() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.secret)
+  
+  return secret_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_secret(::std::string* secret) {
+  if (secret != NULL) {
+    
+  } else {
+    
+  }
+  secret_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), secret);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.secret)
+}
+
+// string temp_token = 4;
+inline void KMS_AWSKMS::clear_temp_token() {
+  temp_token_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::temp_token() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.temp_token)
+  return temp_token_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_temp_token(const ::std::string& value) {
+  
+  temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.temp_token)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_temp_token(::std::string&& value) {
+  
+  temp_token_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.temp_token)
+}
+#endif
+inline void KMS_AWSKMS::set_temp_token(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.temp_token)
+}
+inline void KMS_AWSKMS::set_temp_token(const char* value, size_t size) {
+  
+  temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.temp_token)
+}
+inline ::std::string* KMS_AWSKMS::mutable_temp_token() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.temp_token)
+  return temp_token_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_temp_token() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.temp_token)
+  
+  return temp_token_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_temp_token(::std::string* temp_token) {
+  if (temp_token != NULL) {
+    
+  } else {
+    
+  }
+  temp_token_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), temp_token);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.temp_token)
+}
+
+// string endpoint = 5;
+inline void KMS_AWSKMS::clear_endpoint() {
+  endpoint_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::endpoint() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.endpoint)
+  return endpoint_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_endpoint(const ::std::string& value) {
+  
+  endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.endpoint)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_endpoint(::std::string&& value) {
+  
+  endpoint_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.endpoint)
+}
+#endif
+inline void KMS_AWSKMS::set_endpoint(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.endpoint)
+}
+inline void KMS_AWSKMS::set_endpoint(const char* value, size_t size) {
+  
+  endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.endpoint)
+}
+inline ::std::string* KMS_AWSKMS::mutable_endpoint() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.endpoint)
+  return endpoint_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_endpoint() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.endpoint)
+  
+  return endpoint_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_endpoint(::std::string* endpoint) {
+  if (endpoint != NULL) {
+    
+  } else {
+    
+  }
+  endpoint_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), endpoint);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.endpoint)
+}
+
+// string region = 6;
+inline void KMS_AWSKMS::clear_region() {
+  region_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::region() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.region)
+  return region_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_region(const ::std::string& value) {
+  
+  region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.region)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_region(::std::string&& value) {
+  
+  region_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.region)
+}
+#endif
+inline void KMS_AWSKMS::set_region(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.region)
+}
+inline void KMS_AWSKMS::set_region(const char* value, size_t size) {
+  
+  region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.region)
+}
+inline ::std::string* KMS_AWSKMS::mutable_region() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.region)
+  return region_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_region() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.region)
+  
+  return region_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_region(::std::string* region) {
+  if (region != NULL) {
+    
+  } else {
+    
+  }
+  region_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), region);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.region)
+}
+
+// string keyID = 7;
+inline void KMS_AWSKMS::clear_keyid() {
+  keyid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& KMS_AWSKMS::keyid() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMS.keyID)
+  return keyid_.GetNoArena();
+}
+inline void KMS_AWSKMS::set_keyid(const ::std::string& value) {
+  
+  keyid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.AWSKMS.keyID)
+}
+#if LANG_CXX11
+inline void KMS_AWSKMS::set_keyid(::std::string&& value) {
+  
+  keyid_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KMS.AWSKMS.keyID)
+}
+#endif
+inline void KMS_AWSKMS::set_keyid(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  keyid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KMS.AWSKMS.keyID)
+}
+inline void KMS_AWSKMS::set_keyid(const char* value, size_t size) {
+  
+  keyid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KMS.AWSKMS.keyID)
+}
+inline ::std::string* KMS_AWSKMS::mutable_keyid() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMS.keyID)
+  return keyid_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* KMS_AWSKMS::release_keyid() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMS.keyID)
+  
+  return keyid_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void KMS_AWSKMS::set_allocated_keyid(::std::string* keyid) {
+  if (keyid != NULL) {
+    
+  } else {
+    
+  }
+  keyid_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), keyid);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMS.keyID)
+}
+
+// -------------------------------------------------------------------
+
+// KMS
+
+// .cockroach.roachpb.KMSProvider provider = 1;
+inline void KMS::clear_provider() {
+  provider_ = 0;
+}
+inline ::cockroach::roachpb::KMSProvider KMS::provider() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.provider)
+  return static_cast< ::cockroach::roachpb::KMSProvider >(provider_);
+}
+inline void KMS::set_provider(::cockroach::roachpb::KMSProvider value) {
+  
+  provider_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.KMS.provider)
+}
+
+// .cockroach.roachpb.KMS.AWSKMS AWSKMSConfig = 2;
+inline bool KMS::has_awskmsconfig() const {
+  return this != internal_default_instance() && awskmsconfig_ != NULL;
+}
+inline void KMS::clear_awskmsconfig() {
+  if (GetArenaNoVirtual() == NULL && awskmsconfig_ != NULL) {
+    delete awskmsconfig_;
+  }
+  awskmsconfig_ = NULL;
+}
+inline const ::cockroach::roachpb::KMS_AWSKMS& KMS::_internal_awskmsconfig() const {
+  return *awskmsconfig_;
+}
+inline const ::cockroach::roachpb::KMS_AWSKMS& KMS::awskmsconfig() const {
+  const ::cockroach::roachpb::KMS_AWSKMS* p = awskmsconfig_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.KMS.AWSKMSConfig)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::KMS_AWSKMS*>(
+      &::cockroach::roachpb::_KMS_AWSKMS_default_instance_);
+}
+inline ::cockroach::roachpb::KMS_AWSKMS* KMS::release_awskmsconfig() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.KMS.AWSKMSConfig)
+  
+  ::cockroach::roachpb::KMS_AWSKMS* temp = awskmsconfig_;
+  awskmsconfig_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::KMS_AWSKMS* KMS::mutable_awskmsconfig() {
+  
+  if (awskmsconfig_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::KMS_AWSKMS>(GetArenaNoVirtual());
+    awskmsconfig_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KMS.AWSKMSConfig)
+  return awskmsconfig_;
+}
+inline void KMS::set_allocated_awskmsconfig(::cockroach::roachpb::KMS_AWSKMS* awskmsconfig) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete awskmsconfig_;
+  }
+  if (awskmsconfig) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      awskmsconfig = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, awskmsconfig, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  awskmsconfig_ = awskmsconfig;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KMS.AWSKMSConfig)
 }
 
 // -------------------------------------------------------------------
@@ -36035,6 +36816,10 @@ inline void GossipSubscriptionEvent::set_allocated_error(::cockroach::roachpb::E
 
 // -------------------------------------------------------------------
 
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 
 // @@protoc_insertion_point(namespace_scope)
 
@@ -36050,6 +36835,7 @@ template <> struct is_proto_enum< ::cockroach::roachpb::ReadConsistencyType> : :
 template <> struct is_proto_enum< ::cockroach::roachpb::ScanFormat> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::ChecksumMode> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::PushTxnType> : ::std::true_type {};
+template <> struct is_proto_enum< ::cockroach::roachpb::KMSProvider> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::ExternalStorageProvider> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::MVCCFilter> : ::std::true_type {};
 

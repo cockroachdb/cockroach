@@ -1259,6 +1259,36 @@ message ComputeChecksumResponse {
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
+enum KMSProvider {
+  UnknownKMS = 0;
+  AWSKMS = 1;
+}
+
+message KMS {
+  option (gogoproto.equal) = true;
+
+  KMSProvider provider = 1;
+
+  message AWSKMS {
+    option (gogoproto.equal) = true;
+
+    string auth = 1;
+    string access_key = 2;
+    string secret = 3;
+    string temp_token = 4;
+    string endpoint = 5;
+    string region = 6;
+
+    // This identifies the Customer Master Key associated with the KMS. It can
+    // be a KeyARN, KeyID, AliasARN or Alias.
+    // Refer to https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#encrypt_context
+    // for details.
+    string keyID = 7;
+  }
+
+  AWSKMS AWSKMSConfig = 2;
+}
+
 enum ExternalStorageProvider {
   Unknown = 0;
   LocalFile = 1;
