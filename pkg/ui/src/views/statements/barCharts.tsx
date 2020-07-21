@@ -21,6 +21,7 @@ import classNames from "classnames/bind";
 import styles from "./barCharts.module.styl";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type NumericStat = protos.cockroach.sql.INumericStat;
 
 const cx = classNames.bind(styles);
 
@@ -225,6 +226,40 @@ export function rowsBreakdown(s: StatementStatistics) {
       }
     },
   };
+}
+
+
+export function genericBarChart(s: NumericStat, count: number | Long) {
+    const mean = s.mean;
+    const sd = stdDevLong(s, count);
+
+    const max = mean + sd;
+    const scale = d3.scale.linear()
+      .domain([0, max])
+      .range([0, 100]);
+    return function MakeGenericBarChart() {
+      const width = scale(clamp(mean - sd));
+      const right = scale(mean);
+      const spread = scale(sd + (sd > mean ? mean : sd));
+      const title = renderNumericStatLegend(count, mean, sd, d3.format(".2f"));
+      return (
+        <ToolTipWrapper text={ title } short>
+          <div className={cx("bar-chart", "bar-chart--breakdown")}>
+            <div className={cx("bar-chart__label")}>{ mean }</div>
+            <div className={cx("bar-chart__multiplebars")}>
+              <div
+                className={cx("bar-chart__parse", "bar-chart__bar")}
+                style={{ width: right + "%", position: "absolute", left: 0 }}
+              />
+              <div
+                className={cx("bar-chart__parse-dev", "bar-chart__bar", "bar-chart__bar--dev")}
+                style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+              />
+            </div>
+          </div>
+        </ToolTipWrapper>
+      );
+    }
 }
 
 export function latencyBreakdown(s: StatementStatistics) {
