@@ -1390,7 +1390,7 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.Tables(), planner.EvalContext(), immutDesc, traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.Descriptors(), planner.EvalContext(), immutDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
@@ -1412,7 +1412,7 @@ func runSchemaChangesInTxn(
 					if selfReference {
 						referencedTableDesc = tableDesc
 					} else {
-						lookup, err := planner.Tables().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+						lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
 						if err != nil {
 							return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
 						}
@@ -1451,7 +1451,7 @@ func runSchemaChangesInTxn(
 					break
 				}
 				if err := columnBackfillInTxn(
-					ctx, planner.Txn(), planner.Tables(), planner.EvalContext(), immutDesc, traceKV,
+					ctx, planner.Txn(), planner.Descriptors(), planner.EvalContext(), immutDesc, traceKV,
 				); err != nil {
 					return err
 				}
@@ -1520,7 +1520,7 @@ func runSchemaChangesInTxn(
 				}
 				if len(oldIndex.Interleave.Ancestors) != 0 {
 					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-					ancestor, err := planner.Tables().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
@@ -1560,7 +1560,7 @@ func runSchemaChangesInTxn(
 		switch c.ConstraintType {
 		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 			if err := validateCheckInTxn(
-				ctx, planner.Tables().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
+				ctx, planner.Descriptors().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
 			); err != nil {
 				return err
 			}

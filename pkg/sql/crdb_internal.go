@@ -245,7 +245,7 @@ CREATE TABLE crdb_internal.tables (
 	generator: func(ctx context.Context, p *planner, dbDesc *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
-			descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 			if err != nil {
 				return err
 			}
@@ -352,7 +352,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -2188,7 +2188,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
-		descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return nil, nil, err
 		}
