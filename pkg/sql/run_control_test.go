@@ -365,3 +365,64 @@ func isClientsideQueryCanceledErr(err error) bool {
 	}
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
 }
+
+func TestIdleInSessionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	var err error
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `SET idle_in_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	// Make sure executing BEGIN resets the idle timer.
+	// BEGIN is the only statement that is not run by execStmtInOpenState.
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}

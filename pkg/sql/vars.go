@@ -955,13 +955,25 @@ var varGen = map[string]sessionVar{
 	`row_security`: makeCompatBoolVar(`row_security`, false, true /* anyAllowed */),
 
 	`statement_timeout`: {
-		GetStringVal: stmtTimeoutVarGetStringVal,
+		GetStringVal: makeTimeoutVarGetter(`statement_timeout`),
 		Set:          stmtTimeoutVarSet,
 		Get: func(evalCtx *extendedEvalContext) string {
 			ms := evalCtx.SessionData.StmtTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10)
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "0" },
+	},
+
+	`idle_in_session_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`idle_in_session_timeout`),
+		Set:          idleInSessionTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext) string {
+			ms := evalCtx.SessionData.StmtTimeout.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterIdleInSessionTimeout.String(sv)
+		},
 	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
