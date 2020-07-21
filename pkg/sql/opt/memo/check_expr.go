@@ -180,10 +180,11 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		// Ensure that insert columns include all columns except for delete-only
 		// mutation columns (which do not need to be part of INSERT).
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if tab.ColumnKind(i) != cat.DeleteOnly && t.InsertCols[i] == 0 {
+			kind := tab.ColumnKind(i)
+			if kind != cat.DeleteOnly && kind != cat.System && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
-			if cat.IsSystemColumn(tab, i) && t.InsertCols[i] != 0 {
+			if kind == cat.System && t.InsertCols[i] != 0 {
 				panic(errors.AssertionFailedf("system column found in insertion columns"))
 			}
 		}
