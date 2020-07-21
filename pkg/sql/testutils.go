@@ -39,6 +39,7 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
+	params := runParams{ctx: ctx}
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
 		desc, err := MakeTableDesc(
@@ -65,7 +66,7 @@ func CreateTestTableDescriptor(
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			false, /* temporary */
-			nil,   /* params */
+			&params,
 		)
 		return &desc, err
 	default:

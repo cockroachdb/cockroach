@@ -637,9 +637,40 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
+		{`column "baz" does not exist, referenced in "baz > 1"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar", Type: types.Int},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: IndexDescriptor{
+					ID: 1, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					Partitioning: PartitioningDescriptor{
+						NumColumns: 1,
+					},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "foo_bar_baz_gt_1_idx",
+						ColumnIDs:        []ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+						Predicate:        "baz > 1",
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+			}},
 	}
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(); err == nil {
+		if err := d.desc.ValidateTable(context.Background()); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)

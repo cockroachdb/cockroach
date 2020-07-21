@@ -207,8 +207,8 @@ func MakeIndexDescriptor(
 			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 		}
 
-		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
-		expr, err := idxValidator.Validate(n.Predicate)
+		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, tableDesc, &params.p.semaCtx)
+		expr, err := idxValidator.ValidateAndDequalify(n.Predicate, &n.Table)
 		if err != nil {
 			return nil, err
 		}

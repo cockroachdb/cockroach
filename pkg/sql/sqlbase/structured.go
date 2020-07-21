@@ -1425,7 +1425,7 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(context.Background())
 	desc.ID = savedID
 	return err
 }
@@ -1755,7 +1755,7 @@ func (desc *MutableTableDescriptor) OriginalVersion() DescriptorVersion {
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(ctx)
 	if err != nil {
 		return err
 	}
@@ -1950,7 +1950,7 @@ func (desc *TableDescriptor) ValidateIndexNameIsUnique(indexName string) error {
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func (desc *TableDescriptor) ValidateTable() error {
+func (desc *TableDescriptor) ValidateTable(ctx context.Context) error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -2086,7 +2086,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return err
 		}
 
-		if err := desc.validateTableIndexes(columnNames); err != nil {
+		if err := desc.validateTableIndexes(ctx, columnNames); err != nil {
 			return err
 		}
 		if err := desc.validatePartitioning(); err != nil {
@@ -2221,12 +2221,18 @@ func (desc *TableDescriptor) validateColumnFamilies(columnIDs map[ColumnID]strin
 	return nil
 }
 
+// SchemaExprPartialIndexPredicateValidateHook is a work-around for an import
+// cycle between sqlbase and schemaexpr.
+var SchemaExprPartialIndexPredicateValidateHook func(context.Context, TableDescriptorInterface, tree.Expr, *tree.SemaContext) (tree.Expr, error)
+
 // validateTableIndexes validates that indexes are well formed. Checks include
 // validating the columns involved in the index, verifying the index names and
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnID) error {
+func (desc *TableDescriptor) validateTableIndexes(
+	ctx context.Context, columnNames map[string]ColumnID,
+) error {
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
@@ -2300,6 +2306,23 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 			if _, exists := columnNames[index.Sharded.Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
 					index.Name, index.Sharded.Name)
+			}
+		}
+
+		if index.IsPartial() && SchemaExprPartialIndexPredicateValidateHook != nil {
+			expr, err := parser.ParseExpr(index.Predicate)
+			if err != nil {
+				return err
+			}
+
+			immutableDesc := NewImmutableTableDescriptor(*desc)
+			// TODO(mgartner): Set a TypeResolver in semaCtx to support user
+			// defined types in partial index predicates.
+			semaCtx := tree.MakeSemaContext()
+
+			_, err = SchemaExprPartialIndexPredicateValidateHook(ctx, immutableDesc, expr, &semaCtx)
+			if err != nil {
+				return err
 			}
 		}
 	}

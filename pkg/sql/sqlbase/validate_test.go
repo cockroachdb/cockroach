@@ -145,9 +145,7 @@ var validationMap = []struct {
 			"Sharded":           {status: iSolemnlySwearThisFieldIsValidated},
 			"Disabled":          {status: thisFieldReferencesNoObjects},
 			"GeoConfig":         {status: thisFieldReferencesNoObjects},
-			"Predicate": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(mgartner): add validation"},
+			"Predicate":         {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

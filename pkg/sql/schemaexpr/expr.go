@@ -49,11 +49,31 @@ func DeserializeTableDescExpr(
 	return typed, nil
 }
 
-// DequalifyAndValidateExpr takes an expr de-qualifies the column names and
-// validates that expression is valid, has the correct type and
-// has no impure functions if allowImpure is false.
-// Returns the type-checked and constant-folded expression.
-func DequalifyAndValidateExpr(
+// DequalifyExpr dequalifies the column names in the given expression, removing
+// database and table prefixes.
+func DequalifyExpr(
+	ctx context.Context, desc sqlbase.TableDescriptorInterface, expr tree.Expr, tn *tree.TableName,
+) (tree.Expr, error) {
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		*tn, sqlbase.ResultColumnsFromColDescs(
+			desc.GetID(),
+			desc.TableDesc().AllNonDropColumns(),
+		),
+	)
+
+	expr, err := DequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	return expr, nil
+}
+
+// ValidateExprTypeAndVolatility validates that an expression has the given type
+// and contains no functions with a volalitity greater than maxVolatility. The
+// type-checked and constant-folded expression and the set of column IDs within
+// the expression are returned, if valid.
+func ValidateExprTypeAndVolatility(
 	ctx context.Context,
 	desc sqlbase.TableDescriptorInterface,
 	expr tree.Expr,
@@ -61,19 +81,8 @@ func DequalifyAndValidateExpr(
 	op string,
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
-	tn *tree.TableName,
 ) (tree.TypedExpr, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tn, sqlbase.ResultColumnsFromColDescs(
-			desc.GetID(),
-			desc.TableDesc().AllNonDropColumns(),
-		),
-	)
-	expr, err := DequalifyColumnRefs(ctx, sourceInfo, expr)
-	if err != nil {
-		return nil, colIDs, err
-	}
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.

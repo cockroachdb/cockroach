@@ -237,16 +237,21 @@ func alterColumnTypeGeneral(
 	// will fail until the old column is dropped.
 	var inverseExpr string
 	if using != nil {
+		// Dequalify the columns in the expression.
+		expr, err := schemaexpr.DequalifyExpr(ctx, tableDesc, using, tn)
+		if err != nil {
+			return err
+		}
+
 		// Validate the provided using expr and ensure it has the correct type.
-		typedExpr, _, err := schemaexpr.DequalifyAndValidateExpr(
+		typedExpr, _, err := schemaexpr.ValidateExprTypeAndVolatility(
 			ctx,
 			tableDesc,
-			using,
+			expr,
 			toType,
 			"ALTER COLUMN TYPE USING EXPRESSION",
 			&params.p.semaCtx,
 			tree.VolatilityVolatile,
-			tn,
 		)
 
 		if err != nil {

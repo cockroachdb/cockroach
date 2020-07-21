@@ -20,9 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func TestValidateExpr(t *testing.T) {
+func TestDequalifyExpr(t *testing.T) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
 
 	// Trick to get the init() for the builtins package to run.
 	_ = builtins.AllBuiltinNames
@@ -38,19 +37,64 @@ func TestValidateExpr(t *testing.T) {
 	)
 
 	testData := []struct {
+		expr         string
+		expectedExpr string
+	}{
+		// De-qualify column names.
+		{"bar.a", "a"},
+		{"foo.bar.a", "a"},
+		{"bar.b = 0", "b = 0"},
+		{"foo.bar.b = 0", "b = 0"},
+		{"bar.a AND foo.bar.b = 0", "a AND (b = 0)"},
+	}
+
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			expr, err = DequalifyExpr(
+				ctx,
+				&desc,
+				expr,
+				&tn,
+			)
+
+			if err != nil {
+				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
+			}
+
+			s := tree.Serialize(expr)
+			if s != d.expectedExpr {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
+			}
+		})
+	}
+}
+
+func TestValidateExprTypeAndVolatility(t *testing.T) {
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+
+	// Trick to get the init() for the builtins package to run.
+	_ = builtins.AllBuiltinNames
+
+	table := tree.Name("bar")
+	desc := testTableDesc(
+		string(table),
+		[]testCol{{"a", types.Bool}, {"b", types.Int}},
+		[]testCol{{"c", types.String}},
+	)
+
+	testData := []struct {
 		expr          string
 		expectedValid bool
 		expectedExpr  string
 		typ           *types.T
 		maxVolatility tree.Volatility
 	}{
-		// De-qualify column names.
-		{"bar.a", true, "a", types.Bool, tree.VolatilityImmutable},
-		{"foo.bar.a", true, "a", types.Bool, tree.VolatilityImmutable},
-		{"bar.b = 0", true, "b = 0:::INT8", types.Bool, tree.VolatilityImmutable},
-		{"foo.bar.b = 0", true, "b = 0:::INT8", types.Bool, tree.VolatilityImmutable},
-		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)", types.Bool, tree.VolatilityImmutable},
-
 		// Validates the type of the expression.
 		{"concat(c, c)", true, "concat(c, c)", types.String, tree.VolatilityImmutable},
 		{"concat(c, c)", false, "", types.Int, tree.VolatilityImmutable},
@@ -76,7 +120,7 @@ func TestValidateExpr(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			expr, _, err = DequalifyAndValidateExpr(
+			expr, _, err = ValidateExprTypeAndVolatility(
 				ctx,
 				&desc,
 				expr,
@@ -84,7 +128,6 @@ func TestValidateExpr(t *testing.T) {
 				"test-validate-expr",
 				&semaCtx,
 				d.maxVolatility,
-				&tn,
 			)
 
 			if !d.expectedValid {

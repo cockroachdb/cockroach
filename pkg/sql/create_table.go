@@ -1390,7 +1390,7 @@ func MakeTableDesc(
 		}
 		return nil
 	}
-	idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
+	idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1441,7 +1441,7 @@ func MakeTableDesc(
 					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 				}
 
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := idxValidator.ValidateAndDequalify(d.Predicate, &n.Table)
 				if err != nil {
 					return desc, err
 				}
@@ -1487,7 +1487,7 @@ func MakeTableDesc(
 					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 				}
 
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := idxValidator.ValidateAndDequalify(d.Predicate, &n.Table)
 				if err != nil {
 					return desc, err
 				}
