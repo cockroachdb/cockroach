@@ -97,3 +97,37 @@ func DequalifyAndValidateExpr(
 
 	return typedExpr, colIDs, nil
 }
+
+// ExtractColumnIDs returns the set of column IDs within the given expression.
+func ExtractColumnIDs(
+	desc sqlbase.TableDescriptorInterface, rootExpr tree.Expr,
+) (sqlbase.TableColSet, error) {
+	var colIDs sqlbase.TableColSet
+
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		col, _, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil {
+			return false, nil, err
+		}
+
+		colIDs.Add(col.ID)
+		return false, expr, nil
+	})
+
+	return colIDs, err
+}

@@ -32,7 +32,8 @@ func testTableDesc(
 		cols[i] = sqlbase.ColumnDescriptor{
 			Name: columns[i].name,
 			Type: columns[i].typ,
-			ID:   sqlbase.ColumnID(i),
+			// Column IDs start at 1 to mimic "real" table descriptors.
+			ID: sqlbase.ColumnID(i + 1),
 		}
 	}
 
@@ -43,7 +44,7 @@ func testTableDesc(
 				Column: &sqlbase.ColumnDescriptor{
 					Name: mutationColumns[i].name,
 					Type: mutationColumns[i].typ,
-					ID:   sqlbase.ColumnID(len(columns) + i),
+					ID:   sqlbase.ColumnID(len(columns) + i + 1),
 				},
 			},
 			Direction: sqlbase.DescriptorMutation_ADD,
