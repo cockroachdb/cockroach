@@ -18,34 +18,59 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+func init() {
+	// This is a work-around for an import cycle between sqlbase and schemaexpr.
+	sqlbase.SchemaExprPartialIndexPredicateValidateHook =
+		func(ctx context.Context, desc sqlbase.TableDescriptorInterface, expr tree.Expr, semaCtx *tree.SemaContext) (tree.Expr, error) {
+			idxValidator := NewIndexPredicateValidator(ctx, desc, semaCtx)
+
+			// Validate is used instead of ValidateAndDequalify because there is
+			// no need to dequalify the columns. They are dequalified when the
+			// index is created.
+			return idxValidator.Validate(expr)
+		}
+}
+
 // IndexPredicateValidator validates that an expression is a valid partial index
 // predicate. See Validate for more details.
 type IndexPredicateValidator struct {
-	ctx       context.Context
-	tableName tree.TableName
-	desc      *sqlbase.MutableTableDescriptor
-	semaCtx   *tree.SemaContext
+	ctx     context.Context
+	desc    sqlbase.TableDescriptorInterface
+	semaCtx *tree.SemaContext
 }
 
 // NewIndexPredicateValidator returns an IndexPredicateValidator struct that can
 // be used to validate partial index predicates. See Validate for more details.
 func NewIndexPredicateValidator(
-	ctx context.Context,
-	tableName tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
-	semaCtx *tree.SemaContext,
+	ctx context.Context, desc sqlbase.TableDescriptorInterface, semaCtx *tree.SemaContext,
 ) IndexPredicateValidator {
 	return IndexPredicateValidator{
-		ctx:       ctx,
-		tableName: tableName,
-		desc:      desc,
-		semaCtx:   semaCtx,
+		ctx:     ctx,
+		desc:    desc,
+		semaCtx: semaCtx,
 	}
 }
 
+// ValidateAndDequalify verifies that an expression is a valid partial index
+// predicate. If the expression is valid, it returns an expression with the
+// columns dequalified so that database and table prefixes are not part of the
+// column names.
+//
+// See Validate for more details on what qualifies as a "valid" partial index
+// predicate expression.
+func (v *IndexPredicateValidator) ValidateAndDequalify(
+	expr tree.Expr, tn *tree.TableName,
+) (tree.Expr, error) {
+	expr, err := DequalifyExpr(v.ctx, v.desc, expr, tn)
+	if err != nil {
+		return nil, err
+	}
+
+	return v.Validate(expr)
+}
+
 // Validate verifies that an expression is a valid partial index predicate. If
-// the expression is valid, it returns an expression with the columns
-// dequalified.
+// the expression is valid, it returns the type-check expression.
 //
 // A predicate expression is valid if all of the following are true:
 //
@@ -56,7 +81,7 @@ func NewIndexPredicateValidator(
 //     functions.
 //
 func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
-	expr, _, err := DequalifyAndValidateExpr(
+	expr, _, err := ValidateExprTypeAndVolatility(
 		v.ctx,
 		v.desc,
 		expr,
@@ -64,7 +89,6 @@ func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
 		"index predicate",
 		v.semaCtx,
 		tree.VolatilityImmutable,
-		&v.tableName,
 	)
 	if err != nil {
 		return nil, err

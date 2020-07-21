@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func TestIndexPredicateValidator_Validate(t *testing.T) {
+func TestIndexPredicateValidator_ValidateAndDequalify(t *testing.T) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 
@@ -37,7 +37,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	validator := NewIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
+	validator := NewIndexPredicateValidator(ctx, &desc, &semaCtx)
 
 	testData := []struct {
 		expr          string
@@ -81,6 +81,88 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		{"bar.b = 0", true, "b = 0:::INT8"},
 		{"foo.bar.b = 0", true, "b = 0:::INT8"},
 		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)"},
+	}
+
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			r, err := validator.ValidateAndDequalify(expr, &tn)
+
+			if !d.expectedValid {
+				if err == nil {
+					t.Fatalf("%s: expected invalid expression, but was valid", d.expr)
+				}
+				// The input expression is invalid so there is no need to check
+				// the output expression r.
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
+			}
+
+			s := tree.Serialize(r)
+			if s != d.expectedExpr {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
+			}
+		})
+	}
+}
+
+func TestIndexPredicateValidator_Validate(t *testing.T) {
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+
+	// Trick to get the init() for the builtins package to run.
+	_ = builtins.AllBuiltinNames
+
+	table := tree.Name("bar")
+	desc := testTableDesc(
+		string(table),
+		[]testCol{{"a", types.Bool}, {"b", types.Int}},
+		[]testCol{{"c", types.String}},
+	)
+
+	validator := NewIndexPredicateValidator(ctx, &desc, &semaCtx)
+
+	testData := []struct {
+		expr          string
+		expectedValid bool
+		expectedExpr  string
+	}{
+		// Allow expressions that result in a bool.
+		{"a", true, "a"},
+		{"b = 0", true, "b = 0:::INT8"},
+		{"a AND b = 0", true, "a AND (b = 0:::INT8)"},
+		{"a IS NULL", true, "a IS NULL"},
+		{"b IN (1, 2)", true, "b IN (1:::INT8, 2:::INT8)"},
+
+		// Allow immutable functions.
+		{"abs(b) > 0", true, "abs(b) > 0:::INT8"},
+		{"c || c = 'foofoo'", true, "(c || c) = 'foofoo':::STRING"},
+		{"lower(c) = 'bar'", true, "lower(c) = 'bar':::STRING"},
+
+		// Disallow references to columns not in the table.
+		{"d", false, ""},
+
+		// Disallow expressions that do not result in a bool.
+		{"b", false, ""},
+		{"abs(b)", false, ""},
+		{"lower(c)", false, ""},
+
+		// Disallow subqueries.
+		{"exists(select 1)", false, ""},
+		{"b IN (select 1)", false, ""},
+
+		// Disallow mutable, aggregate, window, and set returning functions.
+		{"b > random()", false, ""},
+		{"sum(b) > 10", false, ""},
+		{"row_number() OVER () > 1", false, ""},
+		{"generate_series(1, 1) > 2", false, ""},
 	}
 
 	for _, d := range testData {

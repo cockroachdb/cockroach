@@ -113,18 +113,23 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		return err
 	}
 
+	// Dequalify the columns in the expression.
+	expr, err := DequalifyExpr(v.ctx, v.desc, d.Computed.Expr, v.tableName)
+	if err != nil {
+		return err
+	}
+
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	typedExpr, _, err := DequalifyAndValidateExpr(
+	typedExpr, _, err := ValidateExprTypeAndVolatility(
 		v.ctx,
 		v.desc,
-		d.Computed.Expr,
+		expr,
 		defType,
 		"computed column",
 		v.semaCtx,
 		tree.VolatilityImmutable,
-		v.tableName,
 	)
 	if err != nil {
 		return err

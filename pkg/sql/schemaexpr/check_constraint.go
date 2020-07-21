@@ -86,17 +86,22 @@ func (b *CheckConstraintBuilder) Build(
 		}
 	}
 
+	// Dequalify the columns in the expression.
+	expr, err := DequalifyExpr(b.ctx, b.desc, c.Expr, &b.tableName)
+	if err != nil {
+		return nil, err
+	}
+
 	// Verify that the expression results in a boolean and does not use
 	// invalid functions.
-	typedExpr, colIDs, err := DequalifyAndValidateExpr(
+	typedExpr, colIDs, err := ValidateExprTypeAndVolatility(
 		b.ctx,
 		b.desc,
-		c.Expr,
+		expr,
 		types.Bool,
 		"CHECK",
 		b.semaCtx,
 		tree.VolatilityVolatile,
-		&b.tableName,
 	)
 	if err != nil {
 		return nil, err

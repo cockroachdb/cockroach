@@ -557,7 +557,7 @@ func addDelayedFKs(
 		if err := fixDescriptorFKState(def.tbl.TableDesc()); err != nil {
 			return err
 		}
-		if err := def.tbl.AllocateIDs(); err != nil {
+		if err := def.tbl.AllocateIDs(ctx); err != nil {
 			return err
 		}
 	}

@@ -826,7 +826,7 @@ func ResolveFK(
 				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key requires an existing index on columns %s", colNames.String())
 			}
-			_, err := addIndexForFK(tbl, originCols, constraintName, ts)
+			_, err := addIndexForFK(ctx, tbl, originCols, constraintName, ts)
 			if err != nil {
 				return err
 			}
@@ -873,6 +873,7 @@ func ResolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
+	ctx context.Context,
 	tbl *sqlbase.MutableTableDescriptor,
 	srcCols []*sqlbase.ColumnDescriptor,
 	constraintName string,
@@ -899,7 +900,7 @@ func addIndexForFK(
 		if err := tbl.AddIndex(idx, false); err != nil {
 			return 0, err
 		}
-		if err := tbl.AllocateIDs(); err != nil {
+		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
 		added := tbl.Indexes[len(tbl.Indexes)-1]
@@ -913,7 +914,7 @@ func addIndexForFK(
 	if err := tbl.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
-	if err := tbl.AllocateIDs(); err != nil {
+	if err := tbl.AllocateIDs(ctx); err != nil {
 		return 0, err
 	}
 	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
@@ -1416,7 +1417,7 @@ func MakeTableDesc(
 		}
 		return nil
 	}
-	idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
+	idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1471,7 +1472,7 @@ func MakeTableDesc(
 					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 				}
 
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := idxValidator.ValidateAndDequalify(d.Predicate, &n.Table)
 				if err != nil {
 					return desc, err
 				}
@@ -1517,7 +1518,7 @@ func MakeTableDesc(
 					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 				}
 
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := idxValidator.ValidateAndDequalify(d.Predicate, &n.Table)
 				if err != nil {
 					return desc, err
 				}
@@ -1600,7 +1601,7 @@ func MakeTableDesc(
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return desc, err
 	}
 
@@ -1731,7 +1732,7 @@ func MakeTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	err := desc.AllocateIDs()
+	err := desc.AllocateIDs(ctx)
 
 	// Record the types of indexes that the table has.
 	if err := desc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
