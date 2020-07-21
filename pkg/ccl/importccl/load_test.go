@@ -61,7 +61,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob")
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		batch := txn.NewBatch()

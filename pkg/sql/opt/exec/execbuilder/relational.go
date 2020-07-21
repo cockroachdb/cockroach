@@ -152,7 +152,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 		// where the table already exists. This will generate some false schema
 		// cache refreshes, but that's expected to be quite rare in practice.
-		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
+		if err := b.evalCtx.Txn.SetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 			return execPlan{}, errors.WithSecondaryError(
 				unimplemented.NewWithIssuef(26508,
 					"schema change statement cannot follow a statement that has written in the same transaction"),

@@ -261,7 +261,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 
 	// Update SystemConfig to trigger gossip.
 	if err := store.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		// We don't care about the values, just the keys.
@@ -1302,7 +1302,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	//   - the write triggers a SystemConfig update and gossip
 	// We should end up with splits at each user table prefix.
 	if err := store.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		descTablePrefix := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
@@ -1379,7 +1379,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	userTableMax += 3
 	exceptions = map[int]struct{}{userTableMax - 1: {}, userTableMax - 2: {}}
 	if err := store.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		// This time, only write the last table descriptor. Splits only occur for

@@ -311,10 +311,18 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
-// This will impact the EndTxnRequest.
-func (txn *Txn) SetSystemConfigTrigger() error {
+// This will impact the EndTxnRequest. Note that this method takes a boolean
+// argument indicating whether this transaction is intended for the system
+// tenant. Only transactions for the system tenant need to set the system config
+// trigger which is used to gossip updates to the system config to KV servers.
+// The KV servers need access to an up-to-date system config in order to
+// determine split points and zone configurations.
+func (txn *Txn) SetSystemConfigTrigger(forSystemTenant bool) error {
 	if txn.typ != RootTxn {
 		return errors.AssertionFailedf("SetSystemConfigTrigger() called on leaf txn")
+	}
+	if !forSystemTenant {
+		return nil
 	}
 
 	txn.mu.Lock()
