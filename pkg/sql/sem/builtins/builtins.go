@@ -3188,6 +3188,19 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.approximate_timestamp": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DecimalToInexactDTimestamp(args[0].(*tree.DDecimal))
+			},
+			Info:       "Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.cluster_id": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{

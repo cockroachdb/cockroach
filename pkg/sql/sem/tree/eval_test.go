@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -27,9 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEval(t *testing.T) {
@@ -364,5 +369,21 @@ func TestEvalError(t *testing.T) {
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
+	}
+}
+
+func TestHLCTimestampDecimalRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		ts := hlc.Timestamp{WallTime: rng.Int63(), Logical: rng.Int31()}
+		dec := tree.TimestampToDecimalDatum(ts)
+		approx, err := tree.DecimalToInexactDTimestamp(dec)
+		require.NoError(t, err)
+		// The expected timestamp is at the microsecond precision.
+		expectedTsDatum := tree.MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
+		require.True(t, expectedTsDatum.Equal(approx.Time))
 	}
 }
