@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -110,7 +111,7 @@ func unwrapDescriptor(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
+		if err := validator.ValidateTableAndCrossReferences(ctx, table, txn, codec); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
@@ -160,7 +161,7 @@ func unwrapDescriptorMutable(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
+		if err := validator.ValidateTableAndCrossReferences(ctx, table, txn, codec); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewMutableExistingTableDescriptor(*table), nil

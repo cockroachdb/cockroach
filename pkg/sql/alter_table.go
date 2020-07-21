@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -519,7 +520,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+			if err := validator.ValidateTableAndCrossReferences(params.ctx, n.tableDesc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
 				return err
 			}
 
@@ -546,7 +547,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+			if err := validator.ValidateTableAndCrossReferences(params.ctx, n.tableDesc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
 				return err
 			}
 

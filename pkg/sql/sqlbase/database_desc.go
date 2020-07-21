@@ -148,7 +148,7 @@ func (desc *MutableDatabaseDescriptor) SetName(name string) {
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
 func (desc *ImmutableDatabaseDescriptor) Validate() error {
-	if err := validateName(desc.GetName(), "descriptor"); err != nil {
+	if err := ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
 	if desc.GetID() == 0 {

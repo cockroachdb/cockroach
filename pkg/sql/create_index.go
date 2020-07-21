@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -126,7 +127,7 @@ func MakeIndexDescriptor(
 	}
 
 	// Ensure that the index name does not exist before trying to create the index.
-	if err := tableDesc.ValidateIndexNameIsUnique(string(n.Name)); err != nil {
+	if err := validator.ValidateIndexNameIsUnique(tableDesc.TableDesc(), string(n.Name)); err != nil {
 		return nil, err
 	}
 	indexDesc := sqlbase.IndexDescriptor{

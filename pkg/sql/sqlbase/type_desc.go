@@ -208,7 +208,7 @@ func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 // Validate performs validation on the TypeDescriptor.
 func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
 	// Validate local properties of the descriptor.
-	if err := validateName(desc.Name, "type"); err != nil {
+	if err := ValidateName(desc.Name, "type"); err != nil {
 		return err
 	}
 

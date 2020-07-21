@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -358,7 +359,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(params.ctx, desc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 
@@ -855,7 +856,7 @@ func addIndexForFK(
 	autoIndexName := sqlbase.GenerateUniqueConstraintName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
 		func(name string) bool {
-			return tbl.ValidateIndexNameIsUnique(name) != nil
+			return validator.ValidateIndexNameIsUnique(tbl.TableDesc(), name) != nil
 		},
 	)
 	// No existing index for the referencing columns found, so we add one.

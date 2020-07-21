@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -149,7 +150,7 @@ func (p *planner) createDescriptorWithID(
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
-		if err := mutDesc.ValidateTable(); err != nil {
+		if err := validator.ValidateTable(mutDesc.TableDesc()); err != nil {
 			return err
 		}
 		if err := p.Tables().AddUncommittedTable(*mutDesc); err != nil {

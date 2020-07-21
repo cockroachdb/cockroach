@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -140,7 +141,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(params.ctx, desc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 
@@ -225,5 +226,5 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = sqlbase.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable()
+	return desc, validator.ValidateTable(desc.TableDesc())
 }

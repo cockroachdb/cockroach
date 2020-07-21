@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -259,7 +260,7 @@ func (p *planner) writeTableDescToBatch(
 		tableDesc.MaybeIncrementVersion()
 	}
 
-	if err := tableDesc.ValidateTable(); err != nil {
+	if err := validator.ValidateTable(tableDesc.TableDesc()); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 

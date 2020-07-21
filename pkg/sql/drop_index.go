@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -496,7 +497,7 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(ctx, tableDesc.TableDesc(), p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

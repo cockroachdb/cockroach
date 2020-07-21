@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -148,7 +149,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
 		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(ctx, tableDesc.TableDesc(), p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 
