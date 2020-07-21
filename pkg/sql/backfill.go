@@ -1208,7 +1208,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			}
 			tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 			// pretend that the schema has been modified.
-			if err := tc.AddUncommittedTable(*desc); err != nil {
+			if err := tc.AddUncommittedDescriptor(desc); err != nil {
 				return err
 			}
 
@@ -1617,7 +1617,7 @@ func validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
 		}
 
@@ -1658,7 +1658,7 @@ func validateFkInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.AddUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
 		}
 
