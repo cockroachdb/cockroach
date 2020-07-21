@@ -367,7 +367,7 @@ func addResultColumns(
 		}
 		desc.AddColumn(col)
 	}
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 	return nil

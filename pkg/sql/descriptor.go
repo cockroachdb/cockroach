@@ -152,7 +152,7 @@ func (p *planner) createDescriptorWithID(
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
-		if err := mutDesc.ValidateTable(); err != nil {
+		if err := mutDesc.ValidateTable(ctx); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {

@@ -225,5 +225,10 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = sqlbase.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable()
+	ctx := context.Background()
+	if params != nil {
+		ctx = params.ctx
+	}
+
+	return desc, desc.ValidateTable(ctx)
 }

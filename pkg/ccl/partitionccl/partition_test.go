@@ -137,7 +137,7 @@ func (pt *partitioningTest) parse() error {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := pt.parsed.tableDesc.ValidateTable(); err != nil {
+		if err := pt.parsed.tableDesc.ValidateTable(ctx); err != nil {
 			return err
 		}
 	}

@@ -76,7 +76,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 
@@ -211,8 +211,8 @@ func MakeIndexDescriptor(
 			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 		}
 
-		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
-		expr, err := idxValidator.Validate(n.Predicate)
+		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, tableDesc, &params.p.semaCtx)
+		expr, err := idxValidator.ValidateAndDequalify(n.Predicate, &n.Table)
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +402,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
 	// The index name may have changed as a result of

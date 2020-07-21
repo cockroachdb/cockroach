@@ -138,7 +138,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		&sqlbase.PrivilegeDescriptor{},
 		false,
 	)
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(ctx, mKey, desc.DescriptorProto()); err != nil {
