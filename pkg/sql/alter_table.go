@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -429,8 +430,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 
-				// TODO(mgartner): Check partial index predicates for references
-				// to the dropped column.
+				// If the column being dropped is referenced in the partial
+				// index predicate, then the index should be dropped.
+				if !containsThisColumn && idx.IsPartial() {
+					expr, err := parser.ParseExpr(idx.Predicate)
+					if err != nil {
+						return err
+					}
+
+					colIDs, err := schemaexpr.ExtractColumnIDs(n.tableDesc, expr)
+					if err != nil {
+						return err
+					}
+
+					if colIDs.Contains(colToDrop.ID) {
+						containsThisColumn = true
+					}
+				}
 
 				// Perform the DROP.
 				if containsThisColumn {
