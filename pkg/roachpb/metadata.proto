@@ -216,7 +216,7 @@ message RangeDescriptor {
   // generational counter can answer the question whether the overlapping
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
-  optional int64 generation = 6 [(gogoproto.nullable) = false];
+  optional int64 generation = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "RangeGeneration"];
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note

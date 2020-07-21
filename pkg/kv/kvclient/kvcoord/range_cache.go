@@ -168,7 +168,7 @@ func makeLookupRequestKey(
 	// two cases, we can use the generation of the previous descriptor.
 	if prevDesc != nil {
 		ret.WriteString(":")
-		ret.WriteString(strconv.FormatInt(prevDesc.Generation, 10))
+		ret.WriteString(prevDesc.Generation.String())
 	}
 	return ret.String()
 }
