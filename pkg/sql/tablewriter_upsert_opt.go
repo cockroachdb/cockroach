@@ -146,16 +146,17 @@ func (tu *optTableUpserter) init(
 
 // flushAndStartNewBatch is part of the tableWriter interface.
 func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+	tu.resultCount = 0
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
 
-// batchedCount is part of the batchedTableWriter interface.
+// batchedCount is a helper in implementing batchedPlanNode interface.
 func (tu *optTableUpserter) batchedCount() int { return tu.resultCount }
 
-// batchedValues is part of the batchedTableWriter interface.
+// batchedValues is a helper in implementing batchedPlanNode interface.
 func (tu *optTableUpserter) batchedValues(rowIdx int) tree.Datums {
 	if !tu.collectRows {
 		panic("return row requested but collect rows was not set")
