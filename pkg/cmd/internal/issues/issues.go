@@ -508,7 +508,12 @@ type PostRequest struct {
 	// A link to the test artifacts. If empty, defaults to a link constructed
 	// from the TeamCity env vars (if available).
 	Artifacts,
-	// The email of the author, used to determine who to assign the issue to.
+	// The email of the author, used to determine which team/person to assign
+	// the issue to.
+	//
+	// TODO(irfansharif): We should re-think this, and our general approach to
+	// issue assignment, and move away from assigning individual authors.
+	// #51653.
 	AuthorEmail string
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
