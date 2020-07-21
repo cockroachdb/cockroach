@@ -29,10 +29,10 @@ import (
 func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
 	q := make(url.Values)
 	if conf.AccountName != "" {
-		q.Set(AzureAccountNameParam, conf.AccountName)
+		q.Set(cloud.AzureAccountNameParam, conf.AccountName)
 	}
 	if conf.AccountKey != "" {
-		q.Set(AzureAccountKeyParam, conf.AccountKey)
+		q.Set(cloud.AzureAccountKeyParam, conf.AccountKey)
 	}
 	return q.Encode()
 }

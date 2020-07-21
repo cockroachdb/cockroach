@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -85,8 +86,9 @@ func TestPutHttp(t *testing.T) {
 
 		u := testSettings.MakeUpdater()
 		if err := u.Set(
-			cloudimpl.CloudstorageHTTPCASetting,
-			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+			cloud.CloudstorageHTTPCASetting,
+			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE",
+				Bytes: srv.Certificate().Raw})),
 			"s",
 		); err != nil {
 			t.Fatal(err)
@@ -94,7 +96,7 @@ func TestPutHttp(t *testing.T) {
 
 		cleanup := func() {
 			srv.Close()
-			if err := u.Set(cloudimpl.CloudstorageHTTPCASetting, "", "s"); err != nil {
+			if err := u.Set(cloud.CloudstorageHTTPCASetting, "", "s"); err != nil {
 				t.Fatal(err)
 			}
 		}

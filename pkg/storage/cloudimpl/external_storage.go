@@ -34,70 +34,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// S3AccessKeyParam is the query parameter for access_key in an S3 URI.
-	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
-	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
-	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
-	// S3TempTokenParam is the query parameter for session_token in an S3 URI.
-	S3TempTokenParam = "AWS_SESSION_TOKEN"
-	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
-	S3EndpointParam = "AWS_ENDPOINT"
-	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
-	S3RegionParam = "AWS_REGION"
-
-	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
-	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
-	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
-	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
-
-	// GoogleBillingProjectParam is the query parameter for the billing project
-	// in a gs URI.
-	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
-
-	// AuthParam is the query parameter for the cluster settings named
-	// key in a URI.
-	AuthParam = "AUTH"
-	// AuthParamImplicit is the query parameter for the implicit authentication
-	// mode in a URI.
-	AuthParamImplicit = "implicit"
-	// AuthParamDefault is the query parameter for the default authentication
-	// mode in a URI.
-	AuthParamDefault = "default"
-	// AuthParamSpecified is the query parameter for the specified authentication
-	// mode in a URI.
-	AuthParamSpecified = "specified"
-
-	// CredentialsParam is the query parameter for the base64-encoded contents of
-	// the Google Application Credentials JSON file.
-	CredentialsParam = "CREDENTIALS"
-
-	cloudstoragePrefix = "cloudstorage"
-	cloudstorageGS     = cloudstoragePrefix + ".gs"
-	cloudstorageHTTP   = cloudstoragePrefix + ".http"
-
-	cloudstorageDefault = ".default"
-	cloudstorageKey     = ".key"
-
-	cloudstorageGSDefault = cloudstorageGS + cloudstorageDefault
-	// CloudstorageGSDefaultKey is the setting whose value is the JSON key to use
-	// during Google Cloud Storage operations.
-	CloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
-
-	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
-	// (appended to system's default CAs) for verifying certificates when
-	// interacting with HTTPS storage.
-	CloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
-
-	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
-)
-
 // See SanitizeExternalStorageURI.
 var redactedQueryParams = map[string]struct{}{
-	S3SecretParam:        {},
-	S3TempTokenParam:     {},
-	AzureAccountKeyParam: {},
-	CredentialsParam:     {},
+	cloud.S3SecretParam:        {},
+	cloud.S3TempTokenParam:     {},
+	cloud.AzureAccountKeyParam: {},
+	cloud.CredentialsParam:     {},
 }
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
@@ -121,12 +63,12 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.S3Config = &roachpb.ExternalStorage_S3{
 			Bucket:    uri.Host,
 			Prefix:    uri.Path,
-			AccessKey: uri.Query().Get(S3AccessKeyParam),
-			Secret:    uri.Query().Get(S3SecretParam),
-			TempToken: uri.Query().Get(S3TempTokenParam),
-			Endpoint:  uri.Query().Get(S3EndpointParam),
-			Region:    uri.Query().Get(S3RegionParam),
-			Auth:      uri.Query().Get(AuthParam),
+			AccessKey: uri.Query().Get(cloud.S3AccessKeyParam),
+			Secret:    uri.Query().Get(cloud.S3SecretParam),
+			TempToken: uri.Query().Get(cloud.S3TempTokenParam),
+			Endpoint:  uri.Query().Get(cloud.S3EndpointParam),
+			Region:    uri.Query().Get(cloud.S3RegionParam),
+			Auth:      uri.Query().Get(cloud.AuthParam),
 			/* NB: additions here should also update s3QueryParams() serializer */
 		}
 		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -143,9 +85,9 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
 			Bucket:         uri.Host,
 			Prefix:         uri.Path,
-			Auth:           uri.Query().Get(AuthParam),
-			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
-			Credentials:    uri.Query().Get(CredentialsParam),
+			Auth:           uri.Query().Get(cloud.AuthParam),
+			BillingProject: uri.Query().Get(cloud.GoogleBillingProjectParam),
+			Credentials:    uri.Query().Get(cloud.CredentialsParam),
 			/* NB: additions here should also update gcsQueryParams() serializer */
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
@@ -154,15 +96,17 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.AzureConfig = &roachpb.ExternalStorage_Azure{
 			Container:   uri.Host,
 			Prefix:      uri.Path,
-			AccountName: uri.Query().Get(AzureAccountNameParam),
-			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+			AccountName: uri.Query().Get(cloud.AzureAccountNameParam),
+			AccountKey:  uri.Query().Get(cloud.AzureAccountKeyParam),
 			/* NB: additions here should also update azureQueryParams() serializer */
 		}
 		if conf.AzureConfig.AccountName == "" {
-			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
+			return conf, errors.Errorf("azure uri missing %q parameter",
+				cloud.AzureAccountNameParam)
 		}
 		if conf.AzureConfig.AccountKey == "" {
-			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+			return conf, errors.Errorf("azure uri missing %q parameter",
+				cloud.AzureAccountKeyParam)
 		}
 		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	case "http", "https":
@@ -327,17 +271,12 @@ var (
 	// GcsDefault is the setting which defines the JSON key to use during GCS
 	// operations.
 	GcsDefault = settings.RegisterPublicStringSetting(
-		CloudstorageGSDefaultKey,
+		cloud.CloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
 		"",
 	)
-	httpCustomCA = settings.RegisterPublicStringSetting(
-		CloudstorageHTTPCASetting,
-		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
-		"",
-	)
 	timeoutSetting = settings.RegisterPublicDurationSetting(
-		cloudStorageTimeout,
+		cloud.CloudStorageTimeout,
 		"the timeout for import/export storage operations",
 		10*time.Minute)
 )

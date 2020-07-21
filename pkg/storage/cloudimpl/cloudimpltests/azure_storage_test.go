@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -36,15 +36,15 @@ func TestPutAzure(t *testing.T) {
 
 	testExportStore(t, fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 		bucket, "backup-test",
-		cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
-		cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
+		cloud.AzureAccountNameParam, url.QueryEscape(accountName),
+		cloud.AzureAccountKeyParam, url.QueryEscape(accountKey),
 	), false, security.RootUser, nil, nil)
 	testListFiles(
 		t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 			bucket, "listing-test",
-			cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
-			cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
+			cloud.AzureAccountNameParam, url.QueryEscape(accountName),
+			cloud.AzureAccountKeyParam, url.QueryEscape(accountKey),
 		),
 		security.RootUser, nil, nil,
 	)

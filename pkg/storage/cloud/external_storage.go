@@ -12,13 +12,83 @@ package cloud
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"io"
+	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/pkg/errors"
 )
 
-// This file is for interfaces only and should not contain any implementation
-// code. All concrete implementations should be added to pkg/storage/cloudimpl.
+const (
+	// S3AccessKeyParam is the query parameter for access_key in an S3 URI.
+	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
+	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
+	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
+	// S3TempTokenParam is the query parameter for session_token in an S3 URI.
+	S3TempTokenParam = "AWS_SESSION_TOKEN"
+	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3EndpointParam = "AWS_ENDPOINT"
+	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3RegionParam = "AWS_REGION"
+
+	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
+	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
+	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
+	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+
+	// GoogleBillingProjectParam is the query parameter for the billing project
+	// in a gs URI.
+	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
+
+	// AuthParam is the query parameter for the cluster settings named
+	// key in a URI.
+	AuthParam = "AUTH"
+	// AuthParamImplicit is the query parameter for the implicit authentication
+	// mode in a URI.
+	AuthParamImplicit = "implicit"
+	// AuthParamDefault is the query parameter for the default authentication
+	// mode in a URI.
+	AuthParamDefault = "default"
+	// AuthParamSpecified is the query parameter for the specified authentication
+	// mode in a URI.
+	AuthParamSpecified = "specified"
+
+	// CredentialsParam is the query parameter for the base64-encoded contents of
+	// the Google Application Credentials JSON file.
+	CredentialsParam = "CREDENTIALS"
+
+	cloudstoragePrefix = "cloudstorage"
+	cloudstorageGS     = cloudstoragePrefix + ".gs"
+	cloudstorageHTTP   = cloudstoragePrefix + ".http"
+
+	cloudstorageDefault = ".default"
+	cloudstorageKey     = ".key"
+
+	cloudstorageGSDefault = cloudstorageGS + cloudstorageDefault
+	// CloudstorageGSDefaultKey is the setting whose value is the JSON key to use
+	// during Google Cloud Storage operations.
+	CloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
+
+	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
+	// (appended to system's default CAs) for verifying certificates when
+	// interacting with HTTPS storage.
+	CloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
+
+	CloudStorageTimeout = cloudstoragePrefix + ".timeout"
+)
+
+var httpCustomCA = settings.RegisterPublicStringSetting(
+	CloudstorageHTTPCASetting,
+	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
+	"",
+)
+
+// This file is for interfaces and shared pure methods only. All concrete
+// implementations should be added to pkg/storage/cloudimpl.
 
 // ExternalStorage provides an API to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
@@ -72,3 +142,35 @@ type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStora
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
 	user string) (ExternalStorage, error)
+
+// MakeHTTPClient creates a custom HTTP client from the provided cluster
+// settings.
+func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
+	var tlsConf *tls.Config
+	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not load system root CA pool")
+		}
+		if !roots.AppendCertsFromPEM([]byte(pem)) {
+			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
+		}
+		tlsConf = &tls.Config{RootCAs: roots}
+	}
+	// Copy the defaults from http.DefaultTransport. We cannot just copy the
+	// entire struct because it has a sync Mutex. This has the unfortunate problem
+	// that if Go adds fields to DefaultTransport they won't be copied here,
+	// but this is ok for now.
+	t := http.DefaultTransport.(*http.Transport)
+	return &http.Client{Transport: &http.Transport{
+		Proxy:                 t.Proxy,
+		DialContext:           t.DialContext,
+		MaxIdleConns:          t.MaxIdleConns,
+		IdleConnTimeout:       t.IdleConnTimeout,
+		TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
+		ExpectContinueTimeout: t.ExpectContinueTimeout,
+
+		// Add our custom CA.
+		TLSClientConfig: tlsConf,
+	}}, nil
+}

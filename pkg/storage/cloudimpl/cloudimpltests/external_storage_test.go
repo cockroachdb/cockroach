@@ -55,7 +55,8 @@ var testSettings *cluster.Settings
 func init() {
 	testSettings = cluster.MakeTestingClusterSettings()
 	up := testSettings.MakeUpdater()
-	if err := up.Set(cloudimpl.CloudstorageGSDefaultKey, os.Getenv("GS_JSONKEY"), cloudimpl.GcsDefault.Typ()); err != nil {
+	if err := up.Set(cloud.CloudstorageGSDefaultKey, os.Getenv("GS_JSONKEY"),
+		cloudimpl.GcsDefault.Typ()); err != nil {
 		panic(err)
 	}
 }
@@ -457,7 +458,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 	t.Run("default", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", cloudimpl.AuthParam,
-			cloudimpl.AuthParamDefault), false, user, nil, nil)
+			cloud.AuthParamDefault), false, user, nil, nil)
 	})
 	t.Run("specified", func(t *testing.T) {
 		credentials := os.Getenv("GS_JSONKEY")
@@ -468,9 +469,9 @@ func TestPutGoogleCloud(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
-			cloudimpl.AuthParam,
-			cloudimpl.AuthParamSpecified,
-			cloudimpl.CredentialsParam,
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			cloud.CredentialsParam,
 			url.QueryEscape(encoded),
 		), false, user, nil, nil)
 		testListFiles(t,
@@ -478,9 +479,9 @@ func TestPutGoogleCloud(t *testing.T) {
 				bucket,
 				"backup-test-specified",
 				"listing-test",
-				cloudimpl.AuthParam,
-				cloudimpl.AuthParamSpecified,
-				cloudimpl.CredentialsParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				cloud.CredentialsParam,
 				url.QueryEscape(encoded),
 			),
 			security.RootUser, nil, nil,
@@ -492,7 +493,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			t.Skip(err)
 		}
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)
+			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil)
 	})
 }
 

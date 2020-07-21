@@ -35,13 +35,13 @@ import (
 func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
 	q := make(url.Values)
 	if conf.Auth != "" {
-		q.Set(AuthParam, conf.Auth)
+		q.Set(cloud.AuthParam, conf.Auth)
 	}
 	if conf.Credentials != "" {
-		q.Set(CredentialsParam, conf.Credentials)
+		q.Set(cloud.CredentialsParam, conf.Credentials)
 	}
 	if conf.BillingProject != "" {
-		q.Set(GoogleBillingProjectParam, conf.BillingProject)
+		q.Set(cloud.GoogleBillingProjectParam, conf.BillingProject)
 	}
 	return q.Encode()
 }
@@ -80,14 +80,15 @@ func makeGCSStorage(
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
 	switch conf.Auth {
-	case "", AuthParamDefault:
+	case "", cloud.AuthParamDefault:
 		var key string
 		if settings != nil {
 			key = GcsDefault.Get(&settings.SV)
 		}
 		// We expect a key to be present if default is specified.
-		if conf.Auth == AuthParamDefault && key == "" {
-			return nil, errors.Errorf("expected settings value for %s", CloudstorageGSDefaultKey)
+		if conf.Auth == cloud.AuthParamDefault && key == "" {
+			return nil, errors.Errorf("expected settings value for %s",
+				cloud.CloudstorageGSDefaultKey)
 		}
 		if key != "" {
 			source, err := google.JWTConfigFromJSON([]byte(key), scope)
@@ -96,25 +97,25 @@ func makeGCSStorage(
 			}
 			opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 		}
-	case AuthParamSpecified:
+	case cloud.AuthParamSpecified:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
-				CredentialsParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				cloud.CredentialsParam,
 			)
 		}
 		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
 		if err != nil {
-			return nil, errors.Wrapf(err, "decoding value of %s", CredentialsParam)
+			return nil, errors.Wrapf(err, "decoding value of %s", cloud.CredentialsParam)
 		}
 		source, err := google.JWTConfigFromJSON(decodedKey, scope)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-	case AuthParamImplicit:
+	case cloud.AuthParamImplicit:
 		if ioConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for gs due to --external-io-implicit-credentials flag")
@@ -122,7 +123,7 @@ func makeGCSStorage(
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 	g, err := gcs.NewClient(ctx, opts...)
 	if err != nil {

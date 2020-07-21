@@ -47,12 +47,12 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 			q.Set(key, value)
 		}
 	}
-	setIf(S3AccessKeyParam, conf.AccessKey)
-	setIf(S3SecretParam, conf.Secret)
-	setIf(S3TempTokenParam, conf.TempToken)
-	setIf(S3EndpointParam, conf.Endpoint)
-	setIf(S3RegionParam, conf.Region)
-	setIf(AuthParam, conf.Auth)
+	setIf(cloud.S3AccessKeyParam, conf.AccessKey)
+	setIf(cloud.S3SecretParam, conf.Secret)
+	setIf(cloud.S3TempTokenParam, conf.TempToken)
+	setIf(cloud.S3EndpointParam, conf.Endpoint)
+	setIf(cloud.S3RegionParam, conf.Region)
+	setIf(cloud.AuthParam, conf.Auth)
 
 	return q.Encode()
 }
@@ -78,7 +78,7 @@ func MakeS3Storage(
 		if conf.Region == "" {
 			region = "default-region"
 		}
-		client, err := makeHTTPClient(settings)
+		client, err := cloud.MakeHTTPClient(settings)
 		if err != nil {
 			return nil, err
 		}
@@ -91,32 +91,32 @@ func MakeS3Storage(
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch conf.Auth {
-	case "", AuthParamSpecified:
+	case "", cloud.AuthParamSpecified:
 		if conf.AccessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
-				S3AccessKeyParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				cloud.S3AccessKeyParam,
 			)
 		}
 		if conf.Secret == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
-				S3SecretParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				cloud.S3SecretParam,
 			)
 		}
 		opts.Config.MergeIn(config)
-	case AuthParamImplicit:
+	case cloud.AuthParamImplicit:
 		if ioConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 
 	sess, err := session.NewSessionWithOptions(opts)

@@ -12,8 +12,6 @@ package cloudimpl
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -60,43 +58,13 @@ var HTTPRetryOptions = retry.Options{
 	Multiplier:     4,
 }
 
-func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
-	var tlsConf *tls.Config
-	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
-		roots, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not load system root CA pool")
-		}
-		if !roots.AppendCertsFromPEM([]byte(pem)) {
-			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
-		}
-		tlsConf = &tls.Config{RootCAs: roots}
-	}
-	// Copy the defaults from http.DefaultTransport. We cannot just copy the
-	// entire struct because it has a sync Mutex. This has the unfortunate problem
-	// that if Go adds fields to DefaultTransport they won't be copied here,
-	// but this is ok for now.
-	t := http.DefaultTransport.(*http.Transport)
-	return &http.Client{Transport: &http.Transport{
-		Proxy:                 t.Proxy,
-		DialContext:           t.DialContext,
-		MaxIdleConns:          t.MaxIdleConns,
-		IdleConnTimeout:       t.IdleConnTimeout,
-		TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
-		ExpectContinueTimeout: t.ExpectContinueTimeout,
-
-		// Add our custom CA.
-		TLSClientConfig: tlsConf,
-	}}, nil
-}
-
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
 
-	client, err := makeHTTPClient(settings)
+	client, err := cloud.MakeHTTPClient(settings)
 	if err != nil {
 		return nil, err
 	}
