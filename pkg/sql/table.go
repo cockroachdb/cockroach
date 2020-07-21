@@ -263,7 +263,7 @@ func (p *planner) writeTableDescToBatch(
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
-	if err := p.Tables().AddUncommittedTable(*tableDesc); err != nil {
+	if err := p.Tables().AddUncommittedDescriptor(tableDesc); err != nil {
 		return err
 	}
 

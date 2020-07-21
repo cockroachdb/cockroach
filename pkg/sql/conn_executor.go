@@ -2374,10 +2374,10 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 // the stats refresher that new tables exist and should have their stats
 // collected now.
 func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
-	for _, desc := range ex.extraTxnState.descCollection.GetTableDescsWithNewVersion() {
+	for _, desc := range ex.extraTxnState.descCollection.GetUncommittedTables() {
 		// The CREATE STATISTICS run for an async CTAS query is initiated by the
 		// SchemaChanger, so we don't do it here.
-		if desc.IsTable() && !desc.IsAs() {
+		if desc.IsTable() && !desc.IsAs() && desc.GetVersion() == 1 {
 			// Initiate a run of CREATE STATISTICS. We use a large number
 			// for rowsAffected because we want to make sure that stats always get
 			// created/refreshed here.
