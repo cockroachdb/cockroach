@@ -628,10 +628,10 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				// We're eliding an assignee for roachtests and instead using
-				// the ownership tags to generate a label to be filtered through
-				// (#51653).
-				ownershipLabel := fmt.Sprintf("A-%s-roachtest", t.spec.Owner)
+				projectColumnID := 0
+				if info, ok := roachtestOwners[t.spec.Owner]; ok {
+					projectColumnID = info.TriageColumnID
+				}
 
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -653,7 +653,8 @@ func (r *testRunner) runTest(
 					// Issues posted from roachtest are identifiable as such and
 					// they are also release blockers (this label may be removed
 					// by a human upon closer investigation).
-					ExtraLabels: []string{"O-roachtest", "release-blocker", ownershipLabel},
+					ExtraLabels:     []string{"O-roachtest", "release-blocker"},
+					ProjectColumnID: projectColumnID,
 				}
 				if err := issues.Post(
 					context.Background(),
