@@ -1736,6 +1736,21 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) OriginalName() string {
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) OriginalID() ID {
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) OriginalVersion() DescriptorVersion {
+	return desc.ClusterVersion.Version
+}
+
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {

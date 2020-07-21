@@ -187,11 +187,35 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
 	}
 	desc.Version++
 	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalName() string {
+	if desc.ClusterVersion == nil {
+		return ""
+	}
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalID() ID {
+	if desc.ClusterVersion == nil {
+		return InvalidID
+	}
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalVersion() DescriptorVersion {
+	if desc.ClusterVersion == nil {
+		return 0
+	}
+	return desc.ClusterVersion.Version
 }
 
 // Immutable implements the MutableDescriptor interface.
@@ -203,5 +227,5 @@ func (desc *MutableDatabaseDescriptor) Immutable() DescriptorInterface {
 
 // IsNew implements the MutableDescriptor interface.
 func (desc *MutableDatabaseDescriptor) IsNew() bool {
-	return desc.ClusterVersion.ID == InvalidID
+	return desc.ClusterVersion == nil
 }
