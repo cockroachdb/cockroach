@@ -33,6 +33,8 @@ type MutableDescriptor interface {
 	SetDrainingNames([]sqlbase.NameInfo)
 	// Immutable returns an immutable copy of this descriptor.
 	Immutable() Descriptor
+	// IsNew returns whether the descriptor was created in this transaction.
+	IsNew() bool
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.

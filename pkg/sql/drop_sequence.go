@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -163,7 +164,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 		if err != nil {
 			// Special case error swallowing for #50711 and #50781, which can cause a
 			// column to own sequences that have been dropped/do not exist.
-			if errors.Is(err, sqlbase.ErrTableDropped) ||
+			if errors.Is(err, catalog.ErrDescriptorDropped) ||
 				pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 				log.Eventf(ctx, "swallowing error ensuring owned sequences can be removed: %s", err.Error())
 				continue

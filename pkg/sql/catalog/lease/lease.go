@@ -216,12 +216,8 @@ func (s storage) acquire(
 		if desc == nil {
 			return sqlbase.ErrDescriptorNotFound
 		}
-		// TODO (lucy): We need a more general concept of an offline descriptor that
-		// can't be leased. For now we just have a special case for tables.
-		if tableDesc := desc.TableDesc(); tableDesc != nil {
-			if err := sqlbase.FilterTableState(tableDesc); err != nil {
-				return err
-			}
+		if err := catalog.FilterDescriptorState(desc); err != nil {
+			return err
 		}
 		// Once the descriptor is set it is immutable and care must be taken
 		// to not modify it.
@@ -1179,8 +1175,7 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
-	// TODO (lucy): see above comments about offline state
-	if isInactive := sqlbase.HasInactiveTableError(err); err == nil || isInactive {
+	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
 			s, err := t.release(desc.Descriptor, m.removeOnceDereferenced())
@@ -1858,13 +1853,7 @@ func (m *Manager) refreshLeases(
 					}
 				}
 
-				// Handle dropping/offline tables as a special case.
-				// TODO (lucy): It's possible that with a more general API for offline
-				// descriptors we'll need to rethink using sqlbase.Descriptor here.
-				goingOffline := false
-				if table := desc.Table(hlc.Timestamp{}); table != nil {
-					goingOffline = table.GoingOffline()
-				}
+				goingOffline := desc.Offline() || desc.Dropped()
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
 					desc.GetID(), desc.GetVersion(), goingOffline)

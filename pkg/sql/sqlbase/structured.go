@@ -3737,9 +3737,9 @@ func (desc *TableDescriptor) HasColumnBackfillMutation() bool {
 	return false
 }
 
-// GoingOffline returns true if the table is being dropped or is importing.
-func (desc *TableDescriptor) GoingOffline() bool {
-	return desc.Dropped() || desc.State == TableDescriptor_OFFLINE
+// Offline returns true if the table is importing.
+func (desc *TableDescriptor) Offline() bool {
+	return desc.State == TableDescriptor_OFFLINE
 }
 
 // Dropped returns true if the table is being dropped.
@@ -3752,9 +3752,9 @@ func (desc *TableDescriptor) Adding() bool {
 	return desc.State == TableDescriptor_ADD
 }
 
-// IsNewTable returns true if the table was created in the current
+// IsNew returns true if the table was created in the current
 // transaction.
-func (desc *MutableTableDescriptor) IsNewTable() bool {
+func (desc *MutableTableDescriptor) IsNew() bool {
 	return desc.ClusterVersion.ID == InvalidID
 }
 
@@ -3879,6 +3879,38 @@ func (desc *Descriptor) GetModificationTime() hlc.Timestamp {
 	default:
 		debug.PrintStack()
 		panic(errors.AssertionFailedf("GetModificationTime: unknown Descriptor type %T", t))
+	}
+}
+
+// Dropped returns whether the descriptor is dropped.
+// TODO (lucy): Does this method belong on Descriptor? This state does matter
+// for descriptor leasing, but arguably we should be upwrapping the descriptor
+// to get it.
+func (desc *Descriptor) Dropped() bool {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Dropped()
+	case *Descriptor_Database, *Descriptor_Type, *Descriptor_Schema:
+		return false
+	default:
+		debug.PrintStack()
+		panic(errors.AssertionFailedf("Dropped: unknown Descriptor type %T", t))
+	}
+}
+
+// Offline returns whether the descriptor is offline.
+// TODO (lucy): Does this method belong on Descriptor? This state does matter
+// for descriptor leasing, but arguably we should be upwrapping the descriptor
+// to get it.
+func (desc *Descriptor) Offline() bool {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Offline()
+	case *Descriptor_Database, *Descriptor_Type, *Descriptor_Schema:
+		return false
+	default:
+		debug.PrintStack()
+		panic(errors.AssertionFailedf("Offline: unknown Descriptor type %T", t))
 	}
 }
 

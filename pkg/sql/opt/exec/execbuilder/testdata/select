@@ -262,7 +262,7 @@ EXPLAIN (VERBOSE) SELECT 1 FROM [53() as num_ref_alias]
 statement ok
 DROP TABLE num_ref
 
-query error pq: \[53\(1\) AS num_ref_alias\]: table is being dropped
+query error pq: \[53\(1\) AS num_ref_alias\]: descriptor is being dropped
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]
 
 # ------------------------------------------------------------------------------
