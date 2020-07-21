@@ -65,9 +65,9 @@ EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._
   └ *colexec.mergeJoinInnerOp
     ├ *colexec.castInt16Int32Op
     │ └ *colexec.sortOp
-    │   └ *colfetcher.colBatchScan
+    │   └ *colfetcher.ColBatchScan
     └ *colexec.sortOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._int2
@@ -76,10 +76,10 @@ EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._
 └ Node 1
   └ *colexec.mergeJoinInnerOp
     ├ *colexec.sortOp
-    │ └ *colfetcher.colBatchScan
+    │ └ *colfetcher.ColBatchScan
     └ *colexec.castInt16Int64Op
       └ *colexec.sortOp
-        └ *colfetcher.colBatchScan
+        └ *colfetcher.ColBatchScan
 
 # Also check that we cannot plan a merge join with other numeric types.
 statement error could not produce a query plan conforming to the MERGE JOIN hint

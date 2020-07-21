@@ -704,7 +704,8 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	ord := 0
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		colID := private.Table.ColumnID(i)
-		if outCols.Contains(colID) {
+		// System columns should not be included in mutations.
+		if outCols.Contains(colID) && !cat.IsSystemColumn(tab, i) {
 			colMap.Set(int(colID), ord)
 			ord++
 		}

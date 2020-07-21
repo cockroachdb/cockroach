@@ -47,10 +47,10 @@ project
  ├── prune: (1,3)
  ├── interesting orderings: (+1) (+3)
  └── scan abc
-      ├── columns: a:1 b:2 c:3 rowid:4!null
+      ├── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       ├── key: (4)
-      ├── fd: (4)-->(1-3), (3)~~>(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (4)-->(1-3,5), (3)~~>(1,2,4,5)
+      ├── prune: (1-5)
       └── interesting orderings: (+4) (+1,+2,+4) (+3,+4)
 
 build
@@ -63,10 +63,10 @@ project
  ├── prune: (2,3)
  ├── interesting orderings: (+3)
  └── scan abc
-      ├── columns: a:1 b:2 c:3 rowid:4!null
+      ├── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       ├── key: (4)
-      ├── fd: (4)-->(1-3), (3)~~>(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (4)-->(1-3,5), (3)~~>(1,2,4,5)
+      ├── prune: (1-5)
       └── interesting orderings: (+4) (+1,+2,+4) (+3,+4)
 
 # GroupBy operator.
@@ -74,12 +74,12 @@ opt
 SELECT min(b), a FROM abc GROUP BY a
 ----
 group-by
- ├── columns: min:5 a:1
+ ├── columns: min:6 a:1
  ├── grouping columns: a:1
  ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(5)
- ├── prune: (5)
+ ├── fd: (1)-->(6)
+ ├── prune: (6)
  ├── interesting orderings: (+1)
  ├── scan abc@secondary
  │    ├── columns: a:1 b:2
@@ -87,18 +87,18 @@ group-by
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1,+2)
  └── aggregations
-      └── min [as=min:5, outer=(2)]
+      └── min [as=min:6, outer=(2)]
            └── b:2
 
 opt
 SELECT min(b), c FROM abc GROUP BY c
 ----
 group-by
- ├── columns: min:5 c:3
+ ├── columns: min:6 c:3
  ├── grouping columns: c:3
  ├── key: (3)
- ├── fd: (3)-->(5)
- ├── prune: (5)
+ ├── fd: (3)-->(6)
+ ├── prune: (6)
  ├── interesting orderings: (+3)
  ├── scan abc
  │    ├── columns: b:2 c:3
@@ -107,7 +107,7 @@ group-by
  │    ├── prune: (2,3)
  │    └── interesting orderings: (+3)
  └── aggregations
-      └── min [as=min:5, outer=(2)]
+      └── min [as=min:6, outer=(2)]
            └── b:2
 
 # GroupBy with required ordering.
@@ -115,12 +115,12 @@ opt
 SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 ----
 group-by
- ├── columns: array_agg:5 b:2 c:3
+ ├── columns: array_agg:6 b:2 c:3
  ├── grouping columns: b:2 c:3
  ├── internal-ordering: +1 opt(2,3)
  ├── key: (2,3)
- ├── fd: (3)~~>(2), (2,3)-->(5)
- ├── prune: (5)
+ ├── fd: (3)~~>(2), (2,3)-->(6)
+ ├── prune: (6)
  ├── sort
  │    ├── columns: a:1 b:2 c:3
  │    ├── lax-key: (1-3)
@@ -135,7 +135,7 @@ group-by
  │         ├── prune: (1-3)
  │         └── interesting orderings: (+1,+2) (+3)
  └── aggregations
-      └── array-agg [as=array_agg:5, outer=(1)]
+      └── array-agg [as=array_agg:6, outer=(1)]
            └── a:1
 
 # Scalar GroupBy case.
@@ -143,11 +143,11 @@ opt
 SELECT max(a), min(b), sum(c) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5 min:6 sum:7
+ ├── columns: max:6 min:7 sum:8
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5-7)
- ├── prune: (5-7)
+ ├── fd: ()-->(6-8)
+ ├── prune: (6-8)
  ├── scan abc
  │    ├── columns: a:1 b:2 c:3
  │    ├── lax-key: (1-3)
@@ -155,11 +155,11 @@ scalar-group-by
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2) (+3)
  └── aggregations
-      ├── max [as=max:5, outer=(1)]
+      ├── max [as=max:6, outer=(1)]
       │    └── a:1
-      ├── min [as=min:6, outer=(2)]
+      ├── min [as=min:7, outer=(2)]
       │    └── b:2
-      └── sum [as=sum:7, outer=(3)]
+      └── sum [as=sum:8, outer=(3)]
            └── c:3
 
 # LookupJoin operator.
@@ -264,24 +264,24 @@ opt
 SELECT * FROM abc JOIN xyz ON a=x 
 ----
 inner-join (hash)
- ├── columns: a:1!null b:2 c:3 x:5!null y:6 z:7
- ├── lax-key: (2,3,5-7)
- ├── fd: (3)~~>(1,2), (5,6)~~>(7), (1)==(5), (5)==(1)
- ├── prune: (2,3,6,7)
- ├── interesting orderings: (+1,+2) (+3) (+7) (+5,+6)
+ ├── columns: a:1!null b:2 c:3 x:6!null y:7 z:8
+ ├── lax-key: (2,3,6-8)
+ ├── fd: (3)~~>(1,2), (6,7)~~>(8), (1)==(6), (6)==(1)
+ ├── prune: (2,3,7,8)
+ ├── interesting orderings: (+1,+2) (+3) (+8) (+6,+7)
  ├── scan abc
  │    ├── columns: a:1 b:2 c:3
  │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+3)
- │    └── unfiltered-cols: (1-4)
+ │    └── unfiltered-cols: (1-5)
  ├── scan xyz
- │    ├── columns: x:5 y:6 z:7
- │    ├── lax-key: (5-7)
- │    ├── fd: (5,6)~~>(7)
- │    ├── prune: (5-7)
- │    ├── interesting orderings: (+7) (+5,+6)
- │    └── unfiltered-cols: (5-8)
+ │    ├── columns: x:6 y:7 z:8
+ │    ├── lax-key: (6-8)
+ │    ├── fd: (6,7)~~>(8)
+ │    ├── prune: (6-8)
+ │    ├── interesting orderings: (+8) (+6,+7)
+ │    └── unfiltered-cols: (6-10)
  └── filters
-      └── a:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]

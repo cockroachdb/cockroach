@@ -31,28 +31,33 @@ ALTER TABLE a INJECT STATISTICS '[
 ]'
 ----
 
-build colstat=4 colstat=5 colstat=6 disable=InlineWith
+build colstat=5 colstat=6 colstat=7 disable=InlineWith
 WITH foo AS (SELECT * FROM a) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: x:4(int!null) y:5(int) s:6(string)
+ ├── columns: x:5(int!null) y:6(int) s:7(string)
  ├── stats: [rows=5000]
- ├── key: (4)
- ├── fd: (4)-->(5,6)
- ├── scan a
+ ├── key: (5)
+ ├── fd: (5)-->(6,7)
+ ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan a
+ │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) crdb_internal_mvcc_timestamp:4(decimal)
+ │         ├── stats: [rows=5000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-4)
  └── with-scan &1 (foo)
-      ├── columns: x:4(int!null) y:5(int) s:6(string)
+      ├── columns: x:5(int!null) y:6(int) s:7(string)
       ├── mapping:
-      │    ├──  a.x:1(int) => x:4(int)
-      │    ├──  a.y:2(int) => y:5(int)
-      │    └──  a.s:3(string) => s:6(string)
-      ├── stats: [rows=5000, distinct(4)=5000, null(4)=0, distinct(5)=500, null(5)=50, distinct(6)=500, null(6)=50]
-      ├── key: (4)
-      └── fd: (4)-->(5,6)
+      │    ├──  a.x:1(int) => x:5(int)
+      │    ├──  a.y:2(int) => y:6(int)
+      │    └──  a.s:3(string) => s:7(string)
+      ├── stats: [rows=5000, distinct(5)=5000, null(5)=0, distinct(6)=500, null(6)=50, distinct(7)=500, null(7)=50]
+      ├── key: (5)
+      └── fd: (5)-->(6,7)
 
 # Regression test for #40296.
 opt disable=InlineWith
@@ -71,9 +76,9 @@ WHERE
   );
 ----
 with &1 (t0)
- ├── columns: "?column?":27(unknown)
+ ├── columns: "?column?":28(unknown)
  ├── stats: [rows=10000]
- ├── fd: ()-->(27)
+ ├── fd: ()-->(28)
  ├── union
  │    ├── columns: column1:10(int) column2:11(oid!null) column3:12(date) column4:13(string)
  │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
@@ -96,64 +101,64 @@ with &1 (t0)
  │         ├── fd: ()-->(5-8)
  │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
  └── with &2 (t1)
-      ├── columns: "?column?":27(unknown)
+      ├── columns: "?column?":28(unknown)
       ├── stats: [rows=10000]
-      ├── fd: ()-->(27)
+      ├── fd: ()-->(28)
       ├── values
-      │    ├── columns: "?column?":21(unknown)
+      │    ├── columns: "?column?":22(unknown)
       │    ├── cardinality: [1 - 1]
       │    ├── stats: [rows=1]
       │    ├── key: ()
-      │    ├── fd: ()-->(21)
+      │    ├── fd: ()-->(22)
       │    └── (NULL,) [type=tuple{unknown}]
       └── project
-           ├── columns: "?column?":27(unknown)
+           ├── columns: "?column?":28(unknown)
            ├── stats: [rows=10000]
-           ├── fd: ()-->(27)
+           ├── fd: ()-->(28)
            ├── inner-join (cross)
-           │    ├── columns: true_agg:25(bool!null)
+           │    ├── columns: true_agg:26(bool!null)
            │    ├── stats: [rows=10000]
-           │    ├── fd: ()-->(25)
+           │    ├── fd: ()-->(26)
            │    ├── scan a
            │    │    └── stats: [rows=5000]
            │    ├── inner-join (cross)
-           │    │    ├── columns: true_agg:25(bool!null)
+           │    │    ├── columns: true_agg:26(bool!null)
            │    │    ├── cardinality: [0 - 2]
            │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
            │    │    ├── stats: [rows=2]
-           │    │    ├── fd: ()-->(25)
+           │    │    ├── fd: ()-->(26)
            │    │    ├── with-scan &1 (t0)
            │    │    │    ├── mapping:
            │    │    │    ├── cardinality: [1 - 2]
            │    │    │    └── stats: [rows=2]
            │    │    ├── select
-           │    │    │    ├── columns: true_agg:25(bool!null)
+           │    │    │    ├── columns: true_agg:26(bool!null)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
+           │    │    │    ├── stats: [rows=1, distinct(26)=1, null(26)=0]
            │    │    │    ├── key: ()
-           │    │    │    ├── fd: ()-->(25)
+           │    │    │    ├── fd: ()-->(26)
            │    │    │    ├── scalar-group-by
-           │    │    │    │    ├── columns: true_agg:25(bool)
+           │    │    │    │    ├── columns: true_agg:26(bool)
            │    │    │    │    ├── cardinality: [1 - 1]
-           │    │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
+           │    │    │    │    ├── stats: [rows=1, distinct(26)=1, null(26)=0]
            │    │    │    │    ├── key: ()
-           │    │    │    │    ├── fd: ()-->(25)
+           │    │    │    │    ├── fd: ()-->(26)
            │    │    │    │    ├── values
-           │    │    │    │    │    ├── columns: true:24(bool!null)
+           │    │    │    │    │    ├── columns: true:25(bool!null)
            │    │    │    │    │    ├── cardinality: [1 - 1]
            │    │    │    │    │    ├── stats: [rows=1]
            │    │    │    │    │    ├── key: ()
-           │    │    │    │    │    ├── fd: ()-->(24)
+           │    │    │    │    │    ├── fd: ()-->(25)
            │    │    │    │    │    └── (true,) [type=tuple{bool}]
            │    │    │    │    └── aggregations
-           │    │    │    │         └── const-agg [as=true_agg:25, type=bool, outer=(24)]
-           │    │    │    │              └── true:24 [type=bool]
+           │    │    │    │         └── const-agg [as=true_agg:26, type=bool, outer=(25)]
+           │    │    │    │              └── true:25 [type=bool]
            │    │    │    └── filters
-           │    │    │         └── true_agg:25 IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
+           │    │    │         └── true_agg:26 IS NOT NULL [type=bool, outer=(26), constraints=(/26: (/NULL - ]; tight)]
            │    │    └── filters (true)
            │    └── filters (true)
            └── projections
-                └── NULL [as="?column?":27, type=unknown]
+                └── NULL [as="?column?":28, type=unknown]
 
 exec-ddl
 CREATE TABLE test (
@@ -169,13 +174,13 @@ WITH RECURSIVE hierarchy(id) as
 SELECT * FROM hierarchy
 ----
 project
- ├── columns: id:7(string)
+ ├── columns: id:9(string)
  ├── stats: [rows=10]
  ├── recursive-c-t-e
- │    ├── columns: id:3(string)
+ │    ├── columns: id:4(string)
  │    ├── working table binding: &1
  │    ├── initial columns: test.id:1(string)
- │    ├── recursive columns: c.id:4(string)
+ │    ├── recursive columns: c.id:5(string)
  │    ├── stats: [rows=10]
  │    ├── values
  │    │    ├── columns: test.id:1(string!null)
@@ -184,23 +189,23 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(1)
  │    └── inner-join (cross)
- │         ├── columns: c.id:4(string!null)
+ │         ├── columns: c.id:5(string!null)
  │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │         ├── stats: [rows=10]
- │         ├── fd: ()-->(4)
+ │         ├── fd: ()-->(5)
  │         ├── select
- │         │    ├── columns: c.id:4(string!null)
- │         │    ├── stats: [rows=10, distinct(4)=1, null(4)=0]
- │         │    ├── fd: ()-->(4)
+ │         │    ├── columns: c.id:5(string!null)
+ │         │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+ │         │    ├── fd: ()-->(5)
  │         │    ├── scan c
- │         │    │    ├── columns: c.id:4(string)
- │         │    │    └── stats: [rows=1000, distinct(4)=100, null(4)=10]
+ │         │    │    ├── columns: c.id:5(string)
+ │         │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │         │    └── filters
- │         │         └── c.id:4 = 'bar' [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+ │         │         └── c.id:5 = 'bar' [type=bool, outer=(5), constraints=(/5: [/'bar' - /'bar']; tight), fd=()-->(5)]
  │         ├── with-scan &1 (hierarchy)
  │         │    ├── mapping:
  │         │    ├── cardinality: [1 - ]
  │         │    └── stats: [rows=1]
  │         └── filters (true)
  └── projections
-      └── id:3 [as=id:7, type=string, outer=(3)]
+      └── id:4 [as=id:9, type=string, outer=(4)]

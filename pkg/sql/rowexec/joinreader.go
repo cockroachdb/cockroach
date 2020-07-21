@@ -164,7 +164,7 @@ func newJoinReader(
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
+		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength, nil, /* systemColumns */
 	)
 	if err != nil {
 		return nil, err

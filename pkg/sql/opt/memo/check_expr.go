@@ -183,6 +183,9 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			if tab.ColumnKind(i) != cat.DeleteOnly && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
+			if cat.IsSystemColumn(tab, i) && t.InsertCols[i] != 0 {
+				panic(errors.AssertionFailedf("system column found in insertion columns"))
+			}
 		}
 
 		m.checkMutationExpr(t, &t.MutationPrivate)

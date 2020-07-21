@@ -329,14 +329,14 @@ query T
 EXPLAIN (opt,verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 ----
 group-by
- ├── columns: b:2 count:3
+ ├── columns: b:2 count:4
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
  ├── stats: [rows=9.5617925, distinct(2)=9.5617925, null(2)=0]
  ├── cost: 11.1256179
  ├── key: (2)
- ├── fd: (2)-->(3)
- ├── prune: (3)
+ ├── fd: (2)-->(4)
+ ├── prune: (4)
  ├── scan data2
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/2: [/1 - /1]
@@ -348,7 +348,7 @@ group-by
  │    ├── prune: (2)
  │    └── interesting orderings: (+1,+2) (+2,+1)
  └── aggregations
-      └── count-rows [as=count_rows:3]
+      └── count-rows [as=count_rows:4]
 
 query TTTTT
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b

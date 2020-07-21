@@ -132,7 +132,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
+		formatColumn(tab.Column(i), tab.ColumnKind(i), &buf)
 		child.Child(buf.String())
 	}
 
@@ -189,7 +189,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
+		formatColumn(idxCol.Column, tab.ColumnKind(i), &buf)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -284,7 +284,7 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
+func formatColumn(col Column, kind ColumnKind, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
@@ -298,8 +298,11 @@ func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	if col.IsHidden() {
 		fmt.Fprintf(buf, " [hidden]")
 	}
-	if isMutationCol {
+	switch kind {
+	case WriteOnly, DeleteOnly:
 		fmt.Fprintf(buf, " [mutation]")
+	case System:
+		fmt.Fprintf(buf, " [system]")
 	}
 }
 

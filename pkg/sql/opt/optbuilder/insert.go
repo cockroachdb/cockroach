@@ -371,6 +371,10 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
+		if cat.IsSystemColumn(mb.tab, i) {
+			// #2: Don't consider system columns.
+			continue
+		}
 		insertColID := mb.insertColIDs[i]
 		if insertColID == 0 {
 			// #2: Non-key column does not have insert value specified.
@@ -513,8 +517,8 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	// the SQL user.
 	numCols := 0
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
-		// Skip mutation or hidden columns.
-		if cat.IsMutationColumn(mb.tab, i) || mb.tab.Column(i).IsHidden() {
+		// Skip mutation, hidden or system columns.
+		if mb.tab.ColumnKind(i) != cat.Ordinary || mb.tab.Column(i).IsHidden() {
 			continue
 		}
 
@@ -561,7 +565,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if !cat.IsMutationColumn(mb.tab, i) {
+			if !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
 				tabCol := mb.tab.Column(i)
 				if !tabCol.IsHidden() {
 					desiredTypes = append(desiredTypes, tabCol.DatumType())
@@ -823,7 +827,10 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 	// Set fetchColIDs to reference the columns created for the fetch values.
 	for i := range fetchScope.cols {
-		mb.fetchColIDs[i] = fetchScope.cols[i].id
+		// Ensure that we don't add system columns to the fetch columns.
+		if !fetchScope.cols[i].system {
+			mb.fetchColIDs[i] = fetchScope.cols[i].id
+		}
 	}
 
 	// Add the fetch columns to the current scope. It's OK to modify the current
@@ -910,9 +917,9 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		copy(mb.updateColIDs, mb.insertColIDs)
 	}
 
-	// Never update mutation columns.
+	// Never update mutation or system columns.
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(mb.tab, i) {
+		if cat.IsMutationColumn(mb.tab, i) || cat.IsSystemColumn(mb.tab, i) {
 			mb.updateColIDs[i] = 0
 		}
 	}
@@ -987,6 +994,11 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			continue
 		}
 
+		// Skip system columns.
+		if cat.IsSystemColumn(mb.tab, i) {
+			continue
+		}
+
 		// Generate CASE that toggles between insert and update column.
 		caseExpr := mb.b.factory.ConstructCase(
 			memo.TrueSingleton,
@@ -1050,15 +1062,15 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(conflictOrds util.FastIntSet
 }
 
 // mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
-// the target table that correspond to the given names. Mutation columns are
-// ignored.
+// the target table that correspond to the given names. Mutation and system
+// columns are ignored.
 func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
 	var ords util.FastIntSet
 	for _, name := range names {
 		found := false
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
-			if tabCol.ColName() == name && !cat.IsMutationColumn(mb.tab, i) {
+			if tabCol.ColName() == name && !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
 				ords.Add(i)
 				found = true
 				break

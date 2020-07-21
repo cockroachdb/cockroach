@@ -42,25 +42,25 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q1_sort_1
- ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:17(float!null) sum_base_price:18(float!null) sum_disc_price:20(float!null) sum_charge:22(float!null) avg_qty:23(float!null) avg_price:24(float!null) avg_disc:25(float!null) count_order:26(int!null)
+ ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum_qty:18(float!null) sum_base_price:19(float!null) sum_disc_price:21(float!null) sum_charge:23(float!null) avg_qty:24(float!null) avg_price:25(float!null) avg_disc:26(float!null) count_order:27(int!null)
  ├── immutable
- ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
+ ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(18)=6, null(18)=0, distinct(19)=6, null(19)=0, distinct(21)=6, null(21)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(27)=6, null(27)=0, distinct(9,10)=6, null(9,10)=0]
  ├── key: (9,10)
- ├── fd: (9,10)-->(17,18,20,22-26)
+ ├── fd: (9,10)-->(18,19,21,23-27)
  ├── ordering: +9,+10
  └── group-by
       ├── save-table-name: q1_group_by_2
-      ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:17(float!null) sum:18(float!null) sum:20(float!null) sum:22(float!null) avg:23(float!null) avg:24(float!null) avg:25(float!null) count_rows:26(int!null)
+      ├── columns: l_returnflag:9(char!null) l_linestatus:10(char!null) sum:18(float!null) sum:19(float!null) sum:21(float!null) sum:23(float!null) avg:24(float!null) avg:25(float!null) avg:26(float!null) count_rows:27(int!null)
       ├── grouping columns: l_returnflag:9(char!null) l_linestatus:10(char!null)
       ├── immutable
-      ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(17)=6, null(17)=0, distinct(18)=6, null(18)=0, distinct(20)=6, null(20)=0, distinct(22)=6, null(22)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(9,10)=6, null(9,10)=0]
+      ├── stats: [rows=6, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(18)=6, null(18)=0, distinct(19)=6, null(19)=0, distinct(21)=6, null(21)=0, distinct(23)=6, null(23)=0, distinct(24)=6, null(24)=0, distinct(25)=6, null(25)=0, distinct(26)=6, null(26)=0, distinct(27)=6, null(27)=0, distinct(9,10)=6, null(9,10)=0]
       ├── key: (9,10)
-      ├── fd: (9,10)-->(17,18,20,22-26)
+      ├── fd: (9,10)-->(18,19,21,23-27)
       ├── project
       │    ├── save-table-name: q1_project_3
-      │    ├── columns: column19:19(float!null) column21:21(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
+      │    ├── columns: column20:20(float!null) column22:22(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
       │    ├── immutable
-      │    ├── stats: [rows=5925056.21, distinct(5)=50, null(5)=0, distinct(6)=925955, null(6)=0, distinct(7)=11, null(7)=0, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(19)=5925056.21, null(19)=0, distinct(21)=5925056.21, null(21)=0, distinct(9,10)=6, null(9,10)=0]
+      │    ├── stats: [rows=5925056.21, distinct(5)=50, null(5)=0, distinct(6)=925955, null(6)=0, distinct(7)=11, null(7)=0, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(20)=5925056.21, null(20)=0, distinct(22)=5925056.21, null(22)=0, distinct(9,10)=6, null(9,10)=0]
       │    ├── select
       │    │    ├── save-table-name: q1_select_4
       │    │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null)
@@ -76,24 +76,24 @@ sort
       │    │    └── filters
       │    │         └── l_shipdate:11 <= '1998-09-02' [type=bool, outer=(11), constraints=(/11: (/NULL - /'1998-09-02']; tight)]
       │    └── projections
-      │         ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column19:19, type=float, outer=(6,7), immutable]
-      │         └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column21:21, type=float, outer=(6-8), immutable]
+      │         ├── l_extendedprice:6 * (1.0 - l_discount:7) [as=column20:20, type=float, outer=(6,7), immutable]
+      │         └── (l_extendedprice:6 * (1.0 - l_discount:7)) * (l_tax:8 + 1.0) [as=column22:22, type=float, outer=(6-8), immutable]
       └── aggregations
-           ├── sum [as=sum:17, type=float, outer=(5)]
+           ├── sum [as=sum:18, type=float, outer=(5)]
            │    └── l_quantity:5 [type=float]
-           ├── sum [as=sum:18, type=float, outer=(6)]
+           ├── sum [as=sum:19, type=float, outer=(6)]
            │    └── l_extendedprice:6 [type=float]
-           ├── sum [as=sum:20, type=float, outer=(19)]
-           │    └── column19:19 [type=float]
-           ├── sum [as=sum:22, type=float, outer=(21)]
-           │    └── column21:21 [type=float]
-           ├── avg [as=avg:23, type=float, outer=(5)]
+           ├── sum [as=sum:21, type=float, outer=(20)]
+           │    └── column20:20 [type=float]
+           ├── sum [as=sum:23, type=float, outer=(22)]
+           │    └── column22:22 [type=float]
+           ├── avg [as=avg:24, type=float, outer=(5)]
            │    └── l_quantity:5 [type=float]
-           ├── avg [as=avg:24, type=float, outer=(6)]
+           ├── avg [as=avg:25, type=float, outer=(6)]
            │    └── l_extendedprice:6 [type=float]
-           ├── avg [as=avg:25, type=float, outer=(7)]
+           ├── avg [as=avg:26, type=float, outer=(7)]
            │    └── l_discount:7 [type=float]
-           └── count-rows [as=count_rows:26, type=int]
+           └── count-rows [as=count_rows:27, type=int]
 
 stats table=q1_sort_1
 ----
@@ -150,8 +150,8 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 stats table=q1_project_3
 ----
 column_names       row_count  distinct_count  null_count
-{column19}         5916591    4150364         0
-{column21}         5916591    5661182         0
+{column20}         5916591    4150364         0
+{column22}         5916591    5661182         0
 {l_discount}       5916591    11              0
 {l_extendedprice}  5916591    925955          0
 {l_linestatus}     5916591    2               0
@@ -159,8 +159,8 @@ column_names       row_count  distinct_count  null_count
 {l_returnflag}     5916591    3               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column19}         5925056.00     1.00           5925056.00          1.43                0.00            1.00
-{column21}         5925056.00     1.00           5925056.00          1.05                0.00            1.00
+{column20}         5925056.00     1.00           5925056.00          1.43                0.00            1.00
+{column22}         5925056.00     1.00           5925056.00          1.05                0.00            1.00
 {l_discount}       5925056.00     1.00           11.00               1.00                0.00            1.00
 {l_extendedprice}  5925056.00     1.00           925955.00           1.00                0.00            1.00
 {l_linestatus}     5925056.00     1.00           2.00                1.00                0.00            1.00

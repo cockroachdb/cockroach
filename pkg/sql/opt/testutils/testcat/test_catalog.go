@@ -527,16 +527,17 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
-	TabID      cat.StableID
-	TabVersion int
-	TabName    tree.TableName
-	Columns    []*Column
-	Indexes    []*Index
-	Stats      TableStats
-	Checks     []cat.CheckConstraint
-	Families   []*Family
-	IsVirtual  bool
-	Catalog    cat.Catalog
+	TabID         cat.StableID
+	TabVersion    int
+	TabName       tree.TableName
+	Columns       []*Column
+	SystemColumns []*Column
+	Indexes       []*Index
+	Stats         TableStats
+	Checks        []cat.CheckConstraint
+	Families      []*Family
+	IsVirtual     bool
+	Catalog       cat.Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -598,11 +599,14 @@ func (tt *Table) IsVirtualTable() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns)
+	return len(tt.Columns) + len(tt.SystemColumns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
+	if i >= len(tt.Columns) {
+		return tt.SystemColumns[i-len(tt.Columns)]
+	}
 	return tt.Columns[i]
 }
 
@@ -615,8 +619,10 @@ func (tt *Table) ColumnKind(i int) cat.ColumnKind {
 		return cat.Ordinary
 	case i < writeOnlyEnd:
 		return cat.WriteOnly
-	default:
+	case i < len(tt.Columns):
 		return cat.DeleteOnly
+	default:
+		return cat.System
 	}
 }
 

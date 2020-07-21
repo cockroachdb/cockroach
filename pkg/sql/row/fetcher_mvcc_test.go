@@ -140,7 +140,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			}
 			row := rowWithMVCCMetadata{
 				RowIsDeleted:    rf.RowIsDeleted(),
-				RowLastModified: tree.TimestampToDecimal(rf.RowLastModified()).String(),
+				RowLastModified: tree.TimestampToDecimalDatum(rf.RowLastModified()).String(),
 			}
 			for _, datum := range datums {
 				if datum == tree.DNull {

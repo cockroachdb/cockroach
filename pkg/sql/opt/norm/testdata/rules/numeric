@@ -15,17 +15,17 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6 s:7 t:8 u:9 v:10 w:11
+ ├── columns: r:7 s:8 t:9 u:10 v:11 w:12
  ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i:2 + i:2 [as=r:6, outer=(2), immutable]
-      ├── i:2 + i:2 [as=s:7, outer=(2), immutable]
-      ├── f:3 + f:3 [as=t:8, outer=(3), immutable]
-      ├── f:3 + f:3 [as=u:9, outer=(3), immutable]
-      ├── d:4 + d:4 [as=v:10, outer=(4), immutable]
-      └── d:4 + d:4 [as=w:11, outer=(4), immutable]
+      ├── i:2 + i:2 [as=r:7, outer=(2), immutable]
+      ├── i:2 + i:2 [as=s:8, outer=(2), immutable]
+      ├── f:3 + f:3 [as=t:9, outer=(3), immutable]
+      ├── f:3 + f:3 [as=u:10, outer=(3), immutable]
+      ├── d:4 + d:4 [as=v:11, outer=(4), immutable]
+      └── d:4 + d:4 [as=w:12, outer=(4), immutable]
 
 
 # Regression test for #35113.
@@ -33,23 +33,23 @@ norm expect=FoldPlusZero
 SELECT i + 0::decimal FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 norm expect=FoldZeroPlus
 SELECT 0::decimal + i FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -64,26 +64,26 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6 s:7 t:8
+ ├── columns: r:7 s:8 t:9
  ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i:2 + i:2 [as=r:6, outer=(2), immutable]
-      ├── f:3 + f:3 [as=s:7, outer=(3), immutable]
-      └── d:4 + d:4 [as=t:8, outer=(4), immutable]
+      ├── i:2 + i:2 [as=r:7, outer=(2), immutable]
+      ├── f:3 + f:3 [as=s:8, outer=(3), immutable]
+      └── d:4 + d:4 [as=t:9, outer=(4), immutable]
 
 # Regression test for #35113.
 norm expect=FoldMinusZero
 SELECT i - 0::decimal FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 # Regression test for #35612.
 norm expect-not=FoldMinusZero
@@ -109,40 +109,40 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6 s:7 t:8 u:9 v:10 w:11
+ ├── columns: r:7 s:8 t:9 u:10 v:11 w:12
  ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i:2 + i:2 [as=r:6, outer=(2), immutable]
-      ├── i:2 + i:2 [as=s:7, outer=(2), immutable]
-      ├── f:3 + f:3 [as=t:8, outer=(3), immutable]
-      ├── f:3 + f:3 [as=u:9, outer=(3), immutable]
-      ├── d:4 + d:4 [as=v:10, outer=(4), immutable]
-      └── d:4 + d:4 [as=w:11, outer=(4), immutable]
+      ├── i:2 + i:2 [as=r:7, outer=(2), immutable]
+      ├── i:2 + i:2 [as=s:8, outer=(2), immutable]
+      ├── f:3 + f:3 [as=t:9, outer=(3), immutable]
+      ├── f:3 + f:3 [as=u:10, outer=(3), immutable]
+      ├── d:4 + d:4 [as=v:11, outer=(4), immutable]
+      └── d:4 + d:4 [as=w:12, outer=(4), immutable]
 
 # Regression test for #35113.
 norm expect=FoldMultOne
 SELECT i * 1::decimal FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 norm expect=FoldOneMult
 SELECT 1::decimal * i FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -156,37 +156,37 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6 s:7 t:8
+ ├── columns: r:7 s:8 t:9
  ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i:2::DECIMAL [as=r:6, outer=(2), immutable]
-      ├── f:3 [as=s:7, outer=(3)]
-      └── d:4 [as=t:8, outer=(4)]
+      ├── i:2::DECIMAL [as=r:7, outer=(2), immutable]
+      ├── f:3 [as=s:8, outer=(3)]
+      └── d:4 [as=t:9, outer=(4)]
 
 # Regression test for #35113.
 norm expect=FoldDivOne
 SELECT i / 1::decimal FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 norm expect=FoldDivOne
 SELECT i / 1::int8 FROM a
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":6, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":7, outer=(2), immutable]
 
 # --------------------------------------------------
 # InvertMinus
@@ -199,14 +199,14 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:6 s:7 t:8
+ ├── columns: r:7 s:8 t:9
  ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4 a.t:5
  └── projections
-      ├── f:3 - f:3 [as=r:6, outer=(3), immutable]
-      ├── i:2 - d:4 [as=s:7, outer=(2,4), immutable]
-      └── a.t:5 - a.t:5 [as=t:8, outer=(5), immutable]
+      ├── f:3 - f:3 [as=r:7, outer=(3), immutable]
+      ├── i:2 - d:4 [as=s:8, outer=(2,4), immutable]
+      └── a.t:5 - a.t:5 [as=t:9, outer=(5), immutable]
 
 # --------------------------------------------------
 # EliminateUnaryMinus
@@ -215,8 +215,8 @@ norm expect=EliminateUnaryMinus
 SELECT -(-a.i::int) AS r FROM a
 ----
 project
- ├── columns: r:6
+ ├── columns: r:7
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2 [as=r:6, outer=(2)]
+      └── i:2 [as=r:7, outer=(2)]

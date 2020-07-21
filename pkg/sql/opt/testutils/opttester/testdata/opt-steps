@@ -55,20 +55,77 @@ SELECT * FROM ab WHERE b=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1050.04
+  Cost: 1060.15
 ================================================================================
-  select
+  project
    ├── columns: a:1(int!null) b:2(int!null)
    ├── key: (1)
    ├── fd: ()-->(2)
-   ├── scan ab
-   │    ├── columns: a:1(int!null) b:2(int)
-   │    ├── key: (1)
-   │    └── fd: (1)-->(2)
-   └── filters
-        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             ├── variable: b:2 [type=int]
-             └── const: 1 [type=int]
+   └── select
+        ├── columns: a:1(int!null) b:2(int!null) crdb_internal_mvcc_timestamp:3(decimal)
+        ├── key: (1)
+        ├── fd: ()-->(2), (1)-->(3)
+        ├── scan ab
+        │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2,3)
+        └── filters
+             └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+                  ├── variable: b:2 [type=int]
+                  └── const: 1 [type=int]
+================================================================================
+PruneSelectCols
+  Cost: 1050.15
+================================================================================
+   project
+    ├── columns: a:1(int!null) b:2(int!null)
+    ├── key: (1)
+    ├── fd: ()-->(2)
+    └── select
+  -      ├── columns: a:1(int!null) b:2(int!null) crdb_internal_mvcc_timestamp:3(decimal)
+  +      ├── columns: a:1(int!null) b:2(int!null)
+         ├── key: (1)
+  -      ├── fd: ()-->(2), (1)-->(3)
+  +      ├── fd: ()-->(2)
+         ├── scan ab
+  -      │    ├── columns: a:1(int!null) b:2(int) crdb_internal_mvcc_timestamp:3(decimal)
+  +      │    ├── columns: a:1(int!null) b:2(int)
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2,3)
+  +      │    └── fd: (1)-->(2)
+         └── filters
+              └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+                   ├── variable: b:2 [type=int]
+                   └── const: 1 [type=int]
+================================================================================
+EliminateProject
+  Cost: 1050.04
+================================================================================
+  -project
+  +select
+    ├── columns: a:1(int!null) b:2(int!null)
+    ├── key: (1)
+    ├── fd: ()-->(2)
+  - └── select
+  -      ├── columns: a:1(int!null) b:2(int!null)
+  -      ├── key: (1)
+  -      ├── fd: ()-->(2)
+  -      ├── scan ab
+  -      │    ├── columns: a:1(int!null) b:2(int)
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(2)
+  -      └── filters
+  -           └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+  -                ├── variable: b:2 [type=int]
+  -                └── const: 1 [type=int]
+  + ├── scan ab
+  + │    ├── columns: a:1(int!null) b:2(int)
+  + │    ├── key: (1)
+  + │    └── fd: (1)-->(2)
+  + └── filters
+  +      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+  +           ├── variable: b:2 [type=int]
+  +           └── const: 1 [type=int]
 --------------------------------------------------------------------------------
 GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
@@ -151,62 +208,195 @@ SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
 ----
 ================================================================================
 Initial expression
-  Cost: 2160.06
+  Cost: 2190.07
 ================================================================================
-  left-join (hash)
-   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-   ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+  project
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
    ├── key: (1)
-   ├── fd: (1)-->(2-6), (4)-->(5,6)
-   ├── scan orders
-   │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
-   │    ├── check constraint expressions
-   │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
-   │    │         ├── variable: status:3 [type=string]
-   │    │         └── tuple [type=tuple{string, string, string}]
-   │    │              ├── const: 'open' [type=string]
-   │    │              ├── const: 'complete' [type=string]
-   │    │              └── const: 'cancelled' [type=string]
-   │    ├── key: (1)
-   │    └── fd: (1)-->(2,3)
-   ├── scan customers
-   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-   │    ├── key: (4)
-   │    └── fd: (4)-->(5,6)
-   └── filters
-        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-             ├── variable: customer_id:2 [type=int]
-             └── variable: customers.id:4 [type=int]
+   ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+   └── left-join (hash)
+        ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal) customers.id:5(int) name:6(string) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+        ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+        ├── key: (1)
+        ├── fd: (1)-->(2-8), (5)-->(6-8)
+        ├── scan orders
+        │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal)
+        │    ├── check constraint expressions
+        │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+        │    │         ├── variable: status:3 [type=string]
+        │    │         └── tuple [type=tuple{string, string, string}]
+        │    │              ├── const: 'open' [type=string]
+        │    │              ├── const: 'complete' [type=string]
+        │    │              └── const: 'cancelled' [type=string]
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-4)
+        ├── scan customers
+        │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+        │    ├── key: (5)
+        │    └── fd: (5)-->(6-8)
+        └── filters
+             └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+                  ├── variable: customer_id:2 [type=int]
+                  └── variable: customers.id:5 [type=int]
 ================================================================================
 NormalizeInConst
+  Cost: 2190.07
+================================================================================
+   project
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+    └── left-join (hash)
+         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal) customers.id:5(int) name:6(string) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+         ├── key: (1)
+         ├── fd: (1)-->(2-8), (5)-->(6-8)
+         ├── scan orders
+         │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal)
+         │    ├── check constraint expressions
+         │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+         │    │         ├── variable: status:3 [type=string]
+         │    │         └── tuple [type=tuple{string, string, string}]
+  -      │    │              ├── const: 'open' [type=string]
+  +      │    │              ├── const: 'cancelled' [type=string]
+         │    │              ├── const: 'complete' [type=string]
+  -      │    │              └── const: 'cancelled' [type=string]
+  +      │    │              └── const: 'open' [type=string]
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-4)
+         ├── scan customers
+         │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+         │    ├── key: (5)
+         │    └── fd: (5)-->(6-8)
+         └── filters
+              └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+                   ├── variable: customer_id:2 [type=int]
+                   └── variable: customers.id:5 [type=int]
+================================================================================
+PruneJoinLeftCols
+  Cost: 2180.07
+================================================================================
+   project
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+    └── left-join (hash)
+  -      ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal) customers.id:5(int) name:6(string) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+  +      ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) customers.id:5(int) name:6(string) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+         ├── key: (1)
+  -      ├── fd: (1)-->(2-8), (5)-->(6-8)
+  +      ├── fd: (1)-->(2,3,5-8), (5)-->(6-8)
+         ├── scan orders
+  -      │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) orders.crdb_internal_mvcc_timestamp:4(decimal)
+  +      │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+         │    ├── check constraint expressions
+         │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+         │    │         ├── variable: status:3 [type=string]
+         │    │         └── tuple [type=tuple{string, string, string}]
+         │    │              ├── const: 'cancelled' [type=string]
+         │    │              ├── const: 'complete' [type=string]
+         │    │              └── const: 'open' [type=string]
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-4)
+  +      │    └── fd: (1)-->(2,3)
+         ├── scan customers
+         │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+         │    ├── key: (5)
+         │    └── fd: (5)-->(6-8)
+         └── filters
+              └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+                   ├── variable: customer_id:2 [type=int]
+                   └── variable: customers.id:5 [type=int]
+================================================================================
+PruneJoinRightCols
+  Cost: 2170.07
+================================================================================
+   project
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+    └── left-join (hash)
+  -      ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) customers.id:5(int) name:6(string) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+  +      ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) customers.id:5(int) name:6(string) address:7(string)
+         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+         ├── key: (1)
+  -      ├── fd: (1)-->(2,3,5-8), (5)-->(6-8)
+  +      ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+         ├── scan orders
+         │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+         │    ├── check constraint expressions
+         │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+         │    │         ├── variable: status:3 [type=string]
+         │    │         └── tuple [type=tuple{string, string, string}]
+         │    │              ├── const: 'cancelled' [type=string]
+         │    │              ├── const: 'complete' [type=string]
+         │    │              └── const: 'open' [type=string]
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2,3)
+         ├── scan customers
+  -      │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string) customers.crdb_internal_mvcc_timestamp:8(decimal)
+  +      │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+         │    ├── key: (5)
+  -      │    └── fd: (5)-->(6-8)
+  +      │    └── fd: (5)-->(6,7)
+         └── filters
+              └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+                   ├── variable: customer_id:2 [type=int]
+                   └── variable: customers.id:5 [type=int]
+================================================================================
+EliminateProject
   Cost: 2160.06
 ================================================================================
-   left-join (hash)
-    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+  -project
+  +left-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+  + ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
     ├── key: (1)
-    ├── fd: (1)-->(2-6), (4)-->(5,6)
-    ├── scan orders
-    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
-    │    ├── check constraint expressions
-    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
-    │    │         ├── variable: status:3 [type=string]
-    │    │         └── tuple [type=tuple{string, string, string}]
-  - │    │              ├── const: 'open' [type=string]
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+  - └── left-join (hash)
+  -      ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null) customers.id:5(int) name:6(string) address:7(string)
+  -      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+  -      ├── key: (1)
+  -      ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+  -      ├── scan orders
+  -      │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  -      │    ├── check constraint expressions
+  -      │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  -      │    │         ├── variable: status:3 [type=string]
+  -      │    │         └── tuple [type=tuple{string, string, string}]
+  -      │    │              ├── const: 'cancelled' [type=string]
+  -      │    │              ├── const: 'complete' [type=string]
+  -      │    │              └── const: 'open' [type=string]
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(2,3)
+  -      ├── scan customers
+  -      │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  -      │    ├── key: (5)
+  -      │    └── fd: (5)-->(6,7)
+  -      └── filters
+  -           └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+  -                ├── variable: customer_id:2 [type=int]
+  -                └── variable: customers.id:5 [type=int]
+  + ├── scan orders
+  + │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │    ├── check constraint expressions
+  + │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  + │    │         ├── variable: status:3 [type=string]
+  + │    │         └── tuple [type=tuple{string, string, string}]
   + │    │              ├── const: 'cancelled' [type=string]
-    │    │              ├── const: 'complete' [type=string]
-  - │    │              └── const: 'cancelled' [type=string]
+  + │    │              ├── const: 'complete' [type=string]
   + │    │              └── const: 'open' [type=string]
-    │    ├── key: (1)
-    │    └── fd: (1)-->(2,3)
-    ├── scan customers
-    │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-    │    ├── key: (4)
-    │    └── fd: (4)-->(5,6)
-    └── filters
-         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-              ├── variable: customer_id:2 [type=int]
-              └── variable: customers.id:4 [type=int]
+  + │    ├── key: (1)
+  + │    └── fd: (1)-->(2,3)
+  + ├── scan customers
+  + │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  + │    ├── key: (5)
+  + │    └── fd: (5)-->(6,7)
+  + └── filters
+  +      └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+  +           ├── variable: customer_id:2 [type=int]
+  +           └── variable: customers.id:5 [type=int]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -218,14 +408,14 @@ CommuteLeftJoin (higher cost)
 --------------------------------------------------------------------------------
   -left-join (hash)
   +right-join (hash)
-    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
   - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
     ├── key: (1)
-    ├── fd: (1)-->(2-6), (4)-->(5,6)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
   + ├── scan customers
-  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-  + │    ├── key: (4)
-  + │    └── fd: (4)-->(5,6)
+  + │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  + │    ├── key: (5)
+  + │    └── fd: (5)-->(6,7)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
@@ -238,13 +428,13 @@ CommuteLeftJoin (higher cost)
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
-  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-  - │    ├── key: (4)
-  - │    └── fd: (4)-->(5,6)
+  - │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  - │    ├── key: (5)
+  - │    └── fd: (5)-->(6,7)
     └── filters
-         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+         └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
               ├── variable: customer_id:2 [type=int]
-              └── variable: customers.id:4 [type=int]
+              └── variable: customers.id:5 [type=int]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
@@ -253,12 +443,12 @@ GenerateLookupJoins (higher cost)
 --------------------------------------------------------------------------------
   -left-join (hash)
   +left-join (lookup customers)
-    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
   - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-  + ├── key columns: [2] = [4]
+  + ├── key columns: [2] = [5]
   + ├── lookup columns are key
     ├── key: (1)
-    ├── fd: (1)-->(2-6), (4)-->(5,6)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
@@ -271,32 +461,32 @@ GenerateLookupJoins (higher cost)
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
-  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-  - │    ├── key: (4)
-  - │    └── fd: (4)-->(5,6)
+  - │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  - │    ├── key: (5)
+  - │    └── fd: (5)-->(6,7)
   - └── filters
-  -      └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+  -      └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
   -           ├── variable: customer_id:2 [type=int]
-  -           └── variable: customers.id:4 [type=int]
+  -           └── variable: customers.id:5 [type=int]
   + └── filters (true)
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
   -left-join (lookup customers)
   +right-join (merge)
-    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
-  - ├── key columns: [2] = [4]
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+  - ├── key columns: [2] = [5]
   - ├── lookup columns are key
-  + ├── left ordering: +4
+  + ├── left ordering: +5
   + ├── right ordering: +2
     ├── key: (1)
-    ├── fd: (1)-->(2-6), (4)-->(5,6)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
   - ├── scan orders
   + ├── scan customers
-  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-  + │    ├── key: (4)
-  + │    ├── fd: (4)-->(5,6)
-  + │    └── ordering: +4
+  + │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  + │    ├── key: (5)
+  + │    ├── fd: (5)-->(6,7)
+  + │    └── ordering: +5
   + ├── sort
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
   - │    ├── check constraint expressions
@@ -327,10 +517,10 @@ Final best expression
   Cost: 2160.06
 ================================================================================
   left-join (hash)
-   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
    ├── key: (1)
-   ├── fd: (1)-->(2-6), (4)-->(5,6)
+   ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
    │    ├── check constraint expressions
@@ -343,13 +533,13 @@ Final best expression
    │    ├── key: (1)
    │    └── fd: (1)-->(2,3)
    ├── scan customers
-   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-   │    ├── key: (4)
-   │    └── fd: (4)-->(5,6)
+   │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+   │    ├── key: (5)
+   │    └── fd: (5)-->(6,7)
    └── filters
-        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+        └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
              ├── variable: customer_id:2 [type=int]
-             └── variable: customers.id:4 [type=int]
+             └── variable: customers.id:5 [type=int]
 
 exec-ddl
 CREATE TABLE comp (
@@ -367,17 +557,17 @@ SELECT * FROM comp WHERE k=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1070.15
+  Cost: 1080.15
 ================================================================================
   project
    ├── columns: k:1(int!null) c:2(bool)
    ├── fd: ()-->(1)
    └── select
-        ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+        ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
         ├── key: (3)
-        ├── fd: ()-->(1), (3)-->(2)
+        ├── fd: ()-->(1), (3)-->(2,4)
         ├── scan comp
-        │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+        │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
         │    ├── computed column expressions
         │    │    └── c:2
         │    │         └── in [type=bool]
@@ -387,24 +577,24 @@ Initial expression
         │    │                   ├── const: 3 [type=int]
         │    │                   └── const: 2 [type=int]
         │    ├── key: (3)
-        │    └── fd: (3)-->(1,2)
+        │    └── fd: (3)-->(1,2,4)
         └── filters
              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                   ├── variable: k:1 [type=int]
                   └── const: 1 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 1070.15
+  Cost: 1080.15
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
     ├── fd: ()-->(1)
     └── select
-         ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+         ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
          ├── key: (3)
-         ├── fd: ()-->(1), (3)-->(2)
+         ├── fd: ()-->(1), (3)-->(2,4)
          ├── scan comp
-         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
          │    ├── computed column expressions
          │    │    └── c:2
          │    │         └── in [type=bool]
@@ -416,7 +606,7 @@ NormalizeInConst
   +      │    │                   ├── const: 2 [type=int]
   +      │    │                   └── const: 3 [type=int]
          │    ├── key: (3)
-         │    └── fd: (3)-->(1,2)
+         │    └── fd: (3)-->(1,2,4)
          └── filters
               └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                    ├── variable: k:1 [type=int]
@@ -429,13 +619,13 @@ PruneSelectCols
     ├── columns: k:1(int!null) c:2(bool)
     ├── fd: ()-->(1)
     └── select
-  -      ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+  -      ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
   -      ├── key: (3)
-  -      ├── fd: ()-->(1), (3)-->(2)
+  -      ├── fd: ()-->(1), (3)-->(2,4)
   +      ├── columns: k:1(int!null) c:2(bool)
   +      ├── fd: ()-->(1)
          ├── scan comp
-  -      │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+  -      │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
   -      │    ├── computed column expressions
   -      │    │    └── c:2
   -      │    │         └── in [type=bool]
@@ -445,7 +635,7 @@ PruneSelectCols
   -      │    │                   ├── const: 2 [type=int]
   -      │    │                   └── const: 3 [type=int]
   -      │    ├── key: (3)
-  -      │    └── fd: (3)-->(1,2)
+  -      │    └── fd: (3)-->(1,2,4)
   +      │    ├── columns: k:1(int) c:2(bool)
   +      │    └── computed column expressions
   +      │         └── c:2

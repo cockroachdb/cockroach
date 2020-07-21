@@ -13,10 +13,10 @@ norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
 values
- ├── columns: r:6
+ ├── columns: r:7
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(7)
  └── tuple
       └── gt
            ├── subquery
@@ -35,31 +35,31 @@ norm expect=EliminateMax1Row
 SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
 values
- ├── columns: r:7
+ ├── columns: r:8
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(7)
+ ├── fd: ()-->(8)
  └── tuple
       └── gt
            ├── subquery
            │    └── scalar-group-by
-           │         ├── columns: count_rows:6!null
+           │         ├── columns: count_rows:7!null
            │         ├── cardinality: [1 - 1]
            │         ├── key: ()
-           │         ├── fd: ()-->(6)
+           │         ├── fd: ()-->(7)
            │         ├── scan a
            │         └── aggregations
-           │              └── count-rows [as=count_rows:6]
+           │              └── count-rows [as=count_rows:7]
            └── 100
 
 norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
 values
- ├── columns: r:6
+ ├── columns: r:7
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(7)
  └── tuple
       └── gt
            ├── subquery
@@ -75,10 +75,10 @@ norm expect-not=EliminateMax1Row
 SELECT (SELECT i FROM a) > 5 AS r
 ----
 values
- ├── columns: r:6
+ ├── columns: r:7
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(7)
  └── tuple
       └── gt
            ├── subquery

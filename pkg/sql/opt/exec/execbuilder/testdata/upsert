@@ -96,7 +96,7 @@ count                                         ·                      ·
       │                                       auto commit            ·
       └── render                              ·                      ·
            │                                  render 0               k
-           │                                  render 1               column5
+           │                                  render 1               column7
            │                                  render 2               k
            └── lookup-join                    ·                      ·
                 │                             table                  kv@primary
@@ -147,24 +147,24 @@ count                            ·              ·
       │                          auto commit    ·
       └── render                 ·              ·
            │                     render 0       column1
-           │                     render 1       column6
-           │                     render 2       column7
-           │                     render 3       column8
+           │                     render 1       column7
+           │                     render 2       column8
+           │                     render 3       column9
            │                     render 4       a
            │                     render 5       b
            │                     render 6       c
            │                     render 7       d
-           │                     render 8       column6
-           │                     render 9       column7
-           │                     render 10      column8
+           │                     render 8       column7
+           │                     render 9       column8
+           │                     render 10      column9
            │                     render 11      a
            │                     render 12      check1
            └── render            ·              ·
-                │                render 0       column7 > 0
+                │                render 0       column8 > 0
                 │                render 1       column1
-                │                render 2       column6
-                │                render 3       column7
-                │                render 4       column8
+                │                render 2       column7
+                │                render 3       column8
+                │                render 4       column9
                 │                render 5       a
                 │                render 6       b
                 │                render 7       c
@@ -199,12 +199,12 @@ run                    ·              ·
       │                auto commit    ·
       └── render       ·              ·
            │           render 0       column1
-           │           render 1       column6
-           │           render 2       column7
-           │           render 3       column8
-           │           render 4       column6
-           │           render 5       column7
-           │           render 6       column8
+           │           render 1       column7
+           │           render 2       column8
+           │           render 3       column9
+           │           render 4       column7
+           │           render 5       column8
+           │           render 6       column9
            │           render 7       check1
            └── values  ·              ·
 ·                      size           5 columns, 1 row
@@ -349,42 +349,42 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                                  distribution  local                                                ·                            ·
-·                                                  vectorized    false                                                ·                            ·
-root                                               ·             ·                                                    (z)                          +z
- ├── sort                                          ·             ·                                                    (z)                          +z
- │    │                                            order         +z                                                   ·                            ·
- │    └── scan buffer node                         ·             ·                                                    (z)                          ·
- │                                                 label         buffer 1                                             ·                            ·
- └── subquery                                      ·             ·                                                    ·                            ·
-      │                                            id            @S1                                                  ·                            ·
-      │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                            ·
-      │                                            exec mode     all rows                                             ·                            ·
-      └── buffer node                              ·             ·                                                    (z)                          ·
-           │                                       label         buffer 1                                             ·                            ·
-           └── spool                               ·             ·                                                    (z)                          ·
-                └── render                         ·             ·                                                    (z)                          ·
-                     │                             render 0      z                                                    ·                            ·
-                     └── run                       ·             ·                                                    (z, rowid[hidden])           ·
-                          └── upsert               ·             ·                                                    (z, rowid[hidden])           ·
-                               │                   into          xyz(x, y, z, rowid)                                  ·                            ·
-                               │                   strategy      opt upserter                                         ·                            ·
-                               └── render          ·             ·                                                    (a, b, c, column9, a, b, c)  ·
-                                    │              render 0      a                                                    ·                            ·
-                                    │              render 1      b                                                    ·                            ·
-                                    │              render 2      c                                                    ·                            ·
-                                    │              render 3      column9                                              ·                            ·
-                                    │              render 4      a                                                    ·                            ·
-                                    │              render 5      b                                                    ·                            ·
-                                    │              render 6      c                                                    ·                            ·
-                                    └── render     ·             ·                                                    (column9, a, b, c)           ·
-                                         │         render 0      unique_rowid()                                       ·                            ·
-                                         │         render 1      a                                                    ·                            ·
-                                         │         render 2      b                                                    ·                            ·
-                                         │         render 3      c                                                    ·                            ·
-                                         └── scan  ·             ·                                                    (a, b, c)                    ·
-·                                                  table         abc@primary                                          ·                            ·
-·                                                  spans         FULL SCAN                                            ·                            ·
+·                                                  distribution  local                                                ·                             ·
+·                                                  vectorized    false                                                ·                             ·
+root                                               ·             ·                                                    (z)                           +z
+ ├── sort                                          ·             ·                                                    (z)                           +z
+ │    │                                            order         +z                                                   ·                             ·
+ │    └── scan buffer node                         ·             ·                                                    (z)                           ·
+ │                                                 label         buffer 1                                             ·                             ·
+ └── subquery                                      ·             ·                                                    ·                             ·
+      │                                            id            @S1                                                  ·                             ·
+      │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                             ·
+      │                                            exec mode     all rows                                             ·                             ·
+      └── buffer node                              ·             ·                                                    (z)                           ·
+           │                                       label         buffer 1                                             ·                             ·
+           └── spool                               ·             ·                                                    (z)                           ·
+                └── render                         ·             ·                                                    (z)                           ·
+                     │                             render 0      z                                                    ·                             ·
+                     └── run                       ·             ·                                                    (z, rowid[hidden])            ·
+                          └── upsert               ·             ·                                                    (z, rowid[hidden])            ·
+                               │                   into          xyz(x, y, z, rowid)                                  ·                             ·
+                               │                   strategy      opt upserter                                         ·                             ·
+                               └── render          ·             ·                                                    (a, b, c, column11, a, b, c)  ·
+                                    │              render 0      a                                                    ·                             ·
+                                    │              render 1      b                                                    ·                             ·
+                                    │              render 2      c                                                    ·                             ·
+                                    │              render 3      column11                                             ·                             ·
+                                    │              render 4      a                                                    ·                             ·
+                                    │              render 5      b                                                    ·                             ·
+                                    │              render 6      c                                                    ·                             ·
+                                    └── render     ·             ·                                                    (column11, a, b, c)           ·
+                                         │         render 0      unique_rowid()                                       ·                             ·
+                                         │         render 1      a                                                    ·                             ·
+                                         │         render 2      b                                                    ·                             ·
+                                         │         render 3      c                                                    ·                             ·
+                                         └── scan  ·             ·                                                    (a, b, c)                     ·
+·                                                  table         abc@primary                                          ·                             ·
+·                                                  spans         FULL SCAN                                            ·                             ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

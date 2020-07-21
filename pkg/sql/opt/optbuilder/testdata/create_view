@@ -66,7 +66,7 @@ CREATE VIEW v1 AS SELECT av.a, ab.a FROM av, ab
 ----
 create-view t.public.v1
  ├── SELECT av.a, ab.a FROM t.public.av, t.public.ab
- ├── columns: a:1 a:3
+ ├── columns: a:1 a:4
  └── dependencies
       ├── av
       └── ab [columns: a]
@@ -77,7 +77,7 @@ CREATE VIEW v1 AS SELECT a, table_schema FROM ab, information_schema.columns
 ----
 create-view t.public.v1
  ├── SELECT a, table_schema FROM t.public.ab, "".information_schema.columns
- ├── columns: a:1 table_schema:5
+ ├── columns: a:1 table_schema:6
  └── dependencies
       └── ab [columns: a]
 
@@ -146,7 +146,7 @@ WITH cd AS (SELECT a, b FROM ab)
 ----
 create-view t.public.v8
  ├── WITH cd AS (SELECT a, b FROM t.public.ab) SELECT a + b FROM cd
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  └── dependencies
       └── ab [columns: a b]
 
@@ -184,7 +184,7 @@ CREATE VIEW v10 as SELECT 1 FROM ab JOIN cd ON ab.a = cd.c
 ----
 create-view t.public.v10
  ├── SELECT 1 FROM t.public.ab JOIN t.public.cd ON ab.a = cd.c
- ├── columns: "?column?":5
+ ├── columns: "?column?":7
  └── dependencies
       ├── ab [columns: a]
       └── cd [columns: c]
@@ -199,7 +199,7 @@ CREATE VIEW v11 as SELECT 1 FROM ab NATURAL JOIN ac
 ----
 create-view t.public.v11
  ├── SELECT 1 FROM t.public.ab NATURAL JOIN t.public.ac
- ├── columns: "?column?":6
+ ├── columns: "?column?":8
  └── dependencies
       ├── ab [columns: a]
       └── ac [columns: a]
@@ -210,7 +210,7 @@ CREATE VIEW v12 as SELECT 1 FROM ab JOIN ac USING (a)
 ----
 create-view t.public.v12
  ├── SELECT 1 FROM t.public.ab JOIN t.public.ac USING (a)
- ├── columns: "?column?":6
+ ├── columns: "?column?":8
  └── dependencies
       ├── ab [columns: a]
       └── ac [columns: a]
@@ -231,7 +231,7 @@ CREATE VIEW v14 AS SELECT sum(a) FROM ab;
 ----
 create-view t.public.v14
  ├── SELECT sum(a) FROM t.public.ab
- ├── columns: sum:3
+ ├── columns: sum:4
  └── dependencies
       └── ab [columns: a]
 
@@ -241,7 +241,7 @@ CREATE VIEW v15 AS SELECT sum(a) OVER (PARTITION by b) FROM ab;
 ----
 create-view t.public.v15
  ├── SELECT sum(a) OVER (PARTITION BY b) FROM t.public.ab
- ├── columns: sum:3
+ ├── columns: sum:4
  └── dependencies
       └── ab [columns: a b]
 
@@ -275,7 +275,7 @@ CREATE VIEW v17 AS SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY f) FROM t
 ----
 create-view t.public.v17
  ├── SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY f) FROM t.public.tf
- ├── columns: percentile_cont:4
+ ├── columns: percentile_cont:5
  └── dependencies
       └── tf [columns: f]
 
@@ -285,7 +285,7 @@ CREATE VIEW v18 AS SELECT ab.a, ab2.b FROM ab, ab as ab2
 ----
 create-view t.public.v18
  ├── SELECT ab.a, ab2.b FROM t.public.ab, t.public.ab AS ab2
- ├── columns: a:1 b:4
+ ├── columns: a:1 b:5
  └── dependencies
       ├── ab [columns: a]
       └── ab [columns: b]
@@ -295,7 +295,7 @@ CREATE VIEW v19 AS SELECT 1 FROM (SELECT a FROM ab) t1 JOIN (SELECT b FROM AB) t
 ----
 create-view t.public.v19
  ├── SELECT 1 FROM (SELECT a FROM t.public.ab) AS t1 JOIN (SELECT b FROM t.public.ab) AS t2 ON t1.a = t2.b
- ├── columns: "?column?":5
+ ├── columns: "?column?":7
  └── dependencies
       ├── ab [columns: a]
       └── ab [columns: b]
@@ -306,7 +306,7 @@ CREATE VIEW v20 AS SELECT a + b FROM ab
 ----
 create-view t.public.v20
  ├── SELECT a + b FROM t.public.ab
- ├── columns: "?column?":3
+ ├── columns: "?column?":4
  └── dependencies
       └── ab [columns: a b]
 
@@ -320,7 +320,7 @@ CREATE VIEW v21 AS SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM abc
 ----
 create-view t.public.v21
  ├── SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM t.public.abc
- ├── columns: sum:5
+ ├── columns: sum:6
  └── dependencies
       └── abc [columns: a b c]
 

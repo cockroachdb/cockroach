@@ -25,24 +25,24 @@ UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
 ----
 update usertable
  ├── columns: <none>
- ├── fetch columns: ycsb_key:12 field5:18
+ ├── fetch columns: ycsb_key:13 field5:19
  ├── update-mapping:
- │    └── field5_new:23 => field5:7
+ │    └── field5_new:25 => field5:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: field5_new:23!null ycsb_key:12!null field5:18
+      ├── columns: field5_new:25!null ycsb_key:13!null field5:19
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(12,18,23)
+      ├── fd: ()-->(13,19,25)
       ├── scan usertable
-      │    ├── columns: ycsb_key:12!null field5:18
-      │    ├── constraint: /12: [/'user123' - /'user123']
+      │    ├── columns: ycsb_key:13!null field5:19
+      │    ├── constraint: /13: [/'user123' - /'user123']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(12,18)
+      │    └── fd: ()-->(13,19)
       └── projections
-           └── 'field5data' [as=field5_new:23]
+           └── 'field5data' [as=field5_new:25]
 
 # --------------------------------------------------
 # Workload B: Read mostly
@@ -93,24 +93,24 @@ INSERT INTO usertable VALUES (
 insert usertable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:12 => ycsb_key:1
- │    ├── column2:13 => field0:2
- │    ├── column3:14 => field1:3
- │    ├── column4:15 => field2:4
- │    ├── column5:16 => field3:5
- │    ├── column6:17 => field4:6
- │    ├── column7:18 => field5:7
- │    ├── column8:19 => field6:8
- │    ├── column9:20 => field7:9
- │    ├── column10:21 => field8:10
- │    └── column11:22 => field9:11
+ │    ├── column1:13 => ycsb_key:1
+ │    ├── column2:14 => field0:2
+ │    ├── column3:15 => field1:3
+ │    ├── column4:16 => field2:4
+ │    ├── column5:17 => field3:5
+ │    ├── column6:18 => field4:6
+ │    ├── column7:19 => field5:7
+ │    ├── column8:20 => field6:8
+ │    ├── column9:21 => field7:9
+ │    ├── column10:22 => field8:10
+ │    └── column11:23 => field9:11
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column8:19!null column9:20!null column10:21!null column11:22!null
+      ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null column6:18!null column7:19!null column8:20!null column9:21!null column10:22!null column11:23!null
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(12-22)
+      ├── fd: ()-->(13-23)
       └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data')
 
 # --------------------------------------------------
@@ -169,21 +169,21 @@ UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
 ----
 update usertable
  ├── columns: <none>
- ├── fetch columns: ycsb_key:12 field5:18
+ ├── fetch columns: ycsb_key:13 field5:19
  ├── update-mapping:
- │    └── field5_new:23 => field5:7
+ │    └── field5_new:25 => field5:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: field5_new:23!null ycsb_key:12!null field5:18
+      ├── columns: field5_new:25!null ycsb_key:13!null field5:19
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(12,18,23)
+      ├── fd: ()-->(13,19,25)
       ├── scan usertable
-      │    ├── columns: ycsb_key:12!null field5:18
-      │    ├── constraint: /12: [/'user123' - /'user123']
+      │    ├── columns: ycsb_key:13!null field5:19
+      │    ├── constraint: /13: [/'user123' - /'user123']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(12,18)
+      │    └── fd: ()-->(13,19)
       └── projections
-           └── 'field5data' [as=field5_new:23]
+           └── 'field5data' [as=field5_new:25]

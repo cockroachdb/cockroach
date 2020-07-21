@@ -423,6 +423,7 @@ TABLE ok1
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -465,6 +466,7 @@ TABLE ok2
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -507,6 +509,7 @@ TABLE ok3
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -552,6 +555,7 @@ TABLE ok4
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -590,6 +594,7 @@ TABLE ok5
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -653,6 +658,7 @@ TABLE ok6
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── b int not null
@@ -688,6 +694,7 @@ TABLE ok7
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── b int not null
@@ -729,6 +736,7 @@ TABLE ok8
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── b int not null
@@ -772,6 +780,7 @@ TABLE ok9
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── b int not null
@@ -817,6 +826,7 @@ TABLE ok10
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       └── b int not null
@@ -871,6 +881,7 @@ TABLE ok11
  ├── a int not null
  ├── b int not null
  ├── c int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null
@@ -916,6 +927,7 @@ TABLE ok12
  ├── a int not null
  ├── b int not null
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  └── INDEX primary
       ├── a int not null
       ├── b int not null

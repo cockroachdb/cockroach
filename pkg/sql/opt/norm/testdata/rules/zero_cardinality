@@ -28,10 +28,10 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b INNER JOIN b b2 ON False
 ----
 values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null k:6!null i:7!null f:8!null s:9!null j:10!null
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null k:7!null i:8!null f:9!null s:10!null j:11!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(1-10)
+ └── fd: ()-->(1-5,7-11)
 
 norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b LIMIT 0
@@ -73,15 +73,15 @@ norm
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project
- ├── columns: case:6!null
+ ├── columns: case:7!null
  ├── cardinality: [0 - 0]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(7)
  ├── values
  │    ├── columns: k:1!null
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── projections
-      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:6, outer=(1), immutable]
+      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:7, outer=(1), immutable]
