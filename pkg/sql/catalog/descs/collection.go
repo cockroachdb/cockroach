@@ -70,19 +70,19 @@ func NewCollection(leaseMgr *lease.Manager, settings *cluster.Settings) *Collect
 	return &tc
 }
 
-// Collection is a collection of tables held by a single session that
-// serves SQL requests, or a background job using a table descriptor. The
+// Collection is a collection of descriptors held by a single session that
+// serves SQL requests, or a background job using descriptors. The
 // collection is cleared using ReleaseAll() which is called at the
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
 type Collection struct {
-	// leaseMgr manages acquiring and releasing per-table leases.
+	// leaseMgr manages acquiring and releasing per-descriptor leases.
 	leaseMgr *lease.Manager
-	// A collection of table descriptor valid for the timestamp.
-	// They are released once the transaction using them is complete.
-	// If the transaction gets pushed and the timestamp changes,
-	// the tables are released.
-	leasedTables []*sqlbase.ImmutableTableDescriptor
+	// A collection of descriptors valid for the timestamp. They are released once
+	// the transaction using them is complete. If the transaction gets pushed and
+	// the timestamp changes, the descriptors are released.
+	// TODO (lucy): Use something other than an unsorted slice for faster lookups.
+	leasedDescriptors []catalog.Descriptor
 	// Tables modified by the uncommitted transaction affiliated
 	// with this Collection. This allows a transaction to see
 	// its own modifications while bypassing the table lease mechanism.
@@ -360,10 +360,10 @@ func (tc *Collection) GetTableVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for _, table := range tc.leasedTables {
+	for _, table := range tc.leasedDescriptors {
 		if lease.NameMatchesDescriptor(table, dbID, schemaID, tn.Table()) {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
-			return table, nil
+			return table.(*sqlbase.ImmutableTableDescriptor), nil
 		}
 	}
 
@@ -393,7 +393,7 @@ func (tc *Collection) GetTableVersion(
 		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedTables = append(tc.leasedTables, table)
+	tc.leasedDescriptors = append(tc.leasedDescriptors, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
@@ -436,10 +436,10 @@ func (tc *Collection) GetTableVersionByID(
 
 	// First, look to see if we already have the table -- including those
 	// via `GetTableVersion`.
-	for _, table := range tc.leasedTables {
-		if table.ID == tableID {
+	for _, table := range tc.leasedDescriptors {
+		if table.GetID() == tableID {
 			log.VEventf(ctx, 2, "found table %d in table cache", tableID)
-			return table, nil
+			return table.(*sqlbase.ImmutableTableDescriptor), nil
 		}
 	}
 
@@ -465,7 +465,7 @@ func (tc *Collection) GetTableVersionByID(
 		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedTables = append(tc.leasedTables, table)
+	tc.leasedDescriptors = append(tc.leasedDescriptors, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
@@ -494,12 +494,12 @@ func (tc *Collection) GetMutableTableVersionByID(
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseTableLeases(ctx context.Context, tables []lease.IDVersion) {
 	// Sort the tables and leases to make it easy to find the leases to release.
-	leasedTables := tc.leasedTables
+	leasedTables := tc.leasedDescriptors
 	sort.Slice(tables, func(i, j int) bool {
 		return tables[i].ID < tables[j].ID
 	})
 	sort.Slice(leasedTables, func(i, j int) bool {
-		return leasedTables[i].ID < leasedTables[j].ID
+		return leasedTables[i].GetID() < leasedTables[j].GetID()
 	})
 
 	filteredLeases := leasedTables[:0] // will store the remaining leases
@@ -511,26 +511,26 @@ func (tc *Collection) ReleaseTableLeases(ctx context.Context, tables []lease.IDV
 		return len(tablesToConsider) > 0 && tablesToConsider[0].ID == id
 	}
 	for _, l := range leasedTables {
-		if !shouldRelease(l.ID) {
+		if !shouldRelease(l.GetID()) {
 			filteredLeases = append(filteredLeases, l)
 		} else if err := tc.leaseMgr.Release(l); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
-	tc.leasedTables = filteredLeases
+	tc.leasedDescriptors = filteredLeases
 }
 
 // ReleaseLeases releases the leases for the tables with ids in
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
-	if len(tc.leasedTables) > 0 {
-		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
-		for _, table := range tc.leasedTables {
+	if len(tc.leasedDescriptors) > 0 {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedDescriptors))
+		for _, table := range tc.leasedDescriptors {
 			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 		}
-		tc.leasedTables = tc.leasedTables[:0]
+		tc.leasedDescriptors = tc.leasedDescriptors[:0]
 	}
 }
 
