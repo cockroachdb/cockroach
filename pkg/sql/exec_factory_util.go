@@ -367,7 +367,7 @@ func constructVirtualScan(
 }
 
 func collectSystemColumnsFromCfg(
-	colCfg *scanColumnsConfig, table *sqlbase.TableDescriptor,
+	colCfg *scanColumnsConfig,
 ) (systemColumns []sqlbase.SystemColumnKind, systemColumnOrdinals []int) {
 	for i, id := range colCfg.wantedColumns {
 		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(sqlbase.ColumnID(id))

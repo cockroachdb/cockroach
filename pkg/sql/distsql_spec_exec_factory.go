@@ -191,7 +191,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	// Check if any system columns are requested, as they need special handling.
-	systemColumns, systemColumnOrdinals := collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+	systemColumns, systemColumnOrdinals := collectSystemColumnsFromCfg(&colCfg)
 
 	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
