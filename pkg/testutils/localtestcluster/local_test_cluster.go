@@ -56,10 +56,10 @@ type LocalTestCluster struct {
 	Eng               storage.Engine
 	Store             *kvserver.Store
 	StoreTestingKnobs *kvserver.StoreTestingKnobs
-	DBContext         *kv.DBContext
+	dbContext         *kv.DBContext
 	DB                *kv.DB
 	Stores            *kvserver.Stores
-	Stopper           *stop.Stopper
+	stopper           *stop.Stopper
 	Latency           time.Duration // sleep for each RPC sent
 	tester            testing.TB
 
@@ -92,12 +92,19 @@ type InitFactoryFn func(
 	gossip *gossip.Gossip,
 ) kv.TxnSenderFactory
 
+// Stopper returns the Stopper.
+func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
+	return ltc.stopper
+}
+
 // Start starts the test cluster by bootstrapping an in-memory store
 // (defaults to maximum of 50M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
+	ltc.stopper = stop.NewStopper()
+
 	ltc.Manual = hlc.NewManualClock(123)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfig(ltc.Clock)
@@ -112,36 +119,34 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	ltc.tester = t
-	ltc.Stopper = stop.NewStopper()
 	cfg.RPCContext = rpc.NewContext(rpc.ContextOptions{
 		AmbientCtx: ambient,
 		Config:     baseCtx,
 		Clock:      ltc.Clock,
-		Stopper:    ltc.Stopper,
+		Stopper:    ltc.stopper,
 		Settings:   cfg.Settings,
 	})
 	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
-	c := &cfg.RPCContext.ClusterID
+	clusterID := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
-	ltc.Gossip = gossip.New(ambient, c, nc, cfg.RPCContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
+	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
 	ltc.Eng = storage.NewInMem(ambient.AnnotateCtx(context.Background()),
 		storage.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
-	ltc.Stopper.AddCloser(ltc.Eng)
+	ltc.stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
 
-	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
-	if ltc.DBContext == nil {
-		dbCtx := kv.DefaultDBContext()
-		dbCtx.Stopper = ltc.Stopper
-		ltc.DBContext = &dbCtx
+	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+
+	var nodeIDContainer base.NodeIDContainer
+	nodeIDContainer.Set(context.Background(), nodeID)
+
+	ltc.dbContext = &kv.DBContext{
+		UserPriority: roachpb.NormalUserPriority,
+		Stopper:      ltc.stopper,
+		NodeID:       base.NewSQLIDContainer(0, &nodeIDContainer, true /* exposed */),
 	}
-	{
-		var c base.NodeIDContainer
-		c.Set(context.Background(), nodeID)
-		ltc.DBContext.NodeID = base.NewSQLIDContainer(0, &c, true /* exposed */)
-	}
-	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.DBContext)
+	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
@@ -216,10 +221,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.Stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
+		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
 	}
 
-	if err := ltc.Store.Start(ctx, ltc.Stopper); err != nil {
+	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 
@@ -242,5 +247,5 @@ func (ltc *LocalTestCluster) Stop() {
 	if r := recover(); r != nil {
 		panic(r)
 	}
-	ltc.Stopper.Stop(context.TODO())
+	ltc.stopper.Stop(context.TODO())
 }

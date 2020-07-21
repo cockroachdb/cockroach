@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -687,6 +688,9 @@ func TestReadConsistencyTypes(t *testing.T) {
 		roachpb.INCONSISTENT,
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
 			factory := kv.NonTransactionalFactoryFunc(
@@ -699,8 +703,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-			ctx := context.Background()
+			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
 			prepWithRC := func() *kv.Batch {
 				b := &kv.Batch{}
@@ -830,6 +833,10 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
 	factory := kv.MakeMockTxnSenderFactory(
@@ -839,7 +846,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	setup := func(nodeID roachpb.NodeID) *kv.DB {
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-		dbCtx := kv.DefaultDBContext()
+		dbCtx := kv.DefaultDBContext(stopper)
 		var c base.NodeIDContainer
 		if nodeID != 0 {
 			c.Set(context.Background(), nodeID)
@@ -849,7 +856,6 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 		return db
 	}
-	ctx := context.Background()
 
 	// Verify direct creation of Txns.
 	directCases := []struct {

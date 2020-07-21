@@ -95,6 +95,16 @@ SELECT x, y, crdb_internal_mvcc_timestamp IS NOT NULL AS foo FROM t ORDER BY foo
 ----
 1 2 true
 
+# Ensure that standard lookup joins can produce the timestamp column.
+statement ok
+CREATE TABLE t2 (x INT, INDEX (x));
+INSERT INTO t2 VALUES (1)
+
+query BII
+SELECT t.crdb_internal_mvcc_timestamp IS NOT NULL, t.x, t2.x FROM t2 INNER LOOKUP JOIN t ON t.x = t2.x
+----
+true 1 1
+
 # We shouldn't be able to insert into the MVCC column.
 statement error pq: cannot modify system column \"crdb_internal_mvcc_timestamp\"
 INSERT INTO t (x, crdb_internal_mvcc_timestamp) VALUES (1, 0)

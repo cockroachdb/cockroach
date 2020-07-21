@@ -244,7 +244,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
 		factory := &testSenderFactory{}
-		cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
+		cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock, stopper)
 
 		require.NoError(t, WriteClusterVersion(ctx, tc.engine, cv))
 		if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{

@@ -85,6 +85,10 @@ func interestingGoroutines() map[int64]string {
 // mis-attributed as leaked by the currently-running test.
 var leakDetectorDisabled uint32
 
+// PrintLeakedStoppers is injected from `pkg/util/stop` to avoid a dependency
+// cycle.
+var PrintLeakedStoppers = func(t testing.TB) {}
+
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
@@ -107,6 +111,10 @@ func AfterTest(t testing.TB) func() {
 			}
 			return
 		}
+
+		// TODO(tbg): make this call 't.Error' instead of 't.Logf' once there is
+		// enough Stopper discipline.
+		PrintLeakedStoppers(t)
 
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.

@@ -156,8 +156,7 @@ func TestOracleFactory(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	c := kv.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
-	}, kv.MockTxnSenderFactory{},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	}, kv.MockTxnSenderFactory{}, hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper)
 	txn := kv.NewTxn(context.Background(), c, 0)
 	of := replicaoracle.NewOracleFactory(followerReadAwareChoice, replicaoracle.Config{
 		Settings:   st,

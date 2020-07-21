@@ -22,8 +22,10 @@ import (
 // allocations when the values are small. It is not thread-safe.
 type FastIntSet struct {
 	// We use a uint64 as long as all elements are between 0 and 63. If we add an
-	// element outside of this range, we switch to Sparse. We don't just use the
-	// latter directly because it's larger and can't be passed around by value.
+	// element outside of this range, we use both the uint64 and the Sparse; the
+	// Sparse then holds all elements of the set and the uint64 provides a fast
+	// path in certain cases. We don't just use the latter directly because it's
+	// larger and can't be passed around by value.
 	small uint64
 	large *intsets.Sparse
 }
@@ -58,24 +60,23 @@ func (s *FastIntSet) largeToSmall() (small uint64, otherValues bool) {
 	if s.large == nil {
 		panic("set not large")
 	}
-	for x := s.large.LowerBound(0); x < smallCutoff; x = s.large.LowerBound(x + 1) {
-		small |= (1 << uint64(x))
-	}
-	return small, s.large.Min() < 0 || s.large.Max() >= smallCutoff
+	return s.small, s.large.Min() < 0 || s.large.Max() >= smallCutoff
 }
 
-// Add adds a value to the set. No-op if the value is already in the set.
+// Add adds a value to the set. No-op if the value is already in the set. If the
+// large set is not nil and the value is within the range [0, 63], the value is
+// added to both the large and small sets.
 func (s *FastIntSet) Add(i int) {
-	if i >= 0 && i < smallCutoff && s.large == nil {
-		// Fast path.
+	withinSmallBounds := i >= 0 && i < smallCutoff
+	if withinSmallBounds {
 		s.small |= (1 << uint64(i))
-		return
 	}
-	if s.large == nil {
+	if !withinSmallBounds && s.large == nil {
 		s.large = s.toLarge()
-		s.small = 0
 	}
-	s.large.Insert(i)
+	if s.large != nil {
+		s.large.Insert(i)
+	}
 }
 
 // AddRange adds values 'from' up to 'to' (inclusively) to the set.
@@ -87,39 +88,36 @@ func (s *FastIntSet) AddRange(from, to int) {
 		panic("invalid range when adding range to FastIntSet")
 	}
 
-	if from >= 0 && to < smallCutoff && s.large == nil {
+	withinSmallBounds := from >= 0 && to < smallCutoff
+	if withinSmallBounds && s.large == nil {
 		nValues := to - from + 1
-		// Fast path.
 		s.small |= (1<<uint64(nValues) - 1) << uint64(from)
-		return
-	}
-
-	if s.large == nil {
-		s.large = s.toLarge()
-		s.small = 0
-	}
-	for i := from; i <= to; i++ {
-		s.large.Insert(i)
+	} else {
+		for i := from; i <= to; i++ {
+			s.Add(i)
+		}
 	}
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.
 func (s *FastIntSet) Remove(i int) {
-	if s.large == nil {
-		if i >= 0 && i < smallCutoff {
-			s.small &= ^(1 << uint64(i))
-		}
-	} else {
+	if i >= 0 && i < smallCutoff {
+		s.small &= ^(1 << uint64(i))
+	}
+	if s.large != nil {
 		s.large.Remove(i)
 	}
 }
 
 // Contains returns true if the set contains the value.
 func (s FastIntSet) Contains(i int) bool {
+	if i >= 0 && i < smallCutoff {
+		return (s.small & (1 << uint64(i))) != 0
+	}
 	if s.large != nil {
 		return s.large.Has(i)
 	}
-	return i >= 0 && i < smallCutoff && (s.small&(1<<uint64(i))) != 0
+	return false
 }
 
 // Empty returns true if the set is empty.
@@ -138,10 +136,6 @@ func (s FastIntSet) Len() int {
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
 func (s FastIntSet) Next(startVal int) (int, bool) {
-	if s.large != nil {
-		res := s.large.LowerBound(startVal)
-		return res, res != intsets.MaxInt
-	}
 	if startVal < smallCutoff {
 		if startVal < 0 {
 			startVal = 0
@@ -150,6 +144,10 @@ func (s FastIntSet) Next(startVal int) (int, bool) {
 		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
 			return startVal + ntz, true
 		}
+	}
+	if s.large != nil {
+		res := s.large.LowerBound(startVal)
+		return res, res != intsets.MaxInt
 	}
 	return intsets.MaxInt, false
 }
@@ -187,11 +185,10 @@ func (s FastIntSet) Ordered() []int {
 // Copy returns a copy of s which can be modified independently.
 func (s FastIntSet) Copy() FastIntSet {
 	var c FastIntSet
+	c.small = s.small
 	if s.large != nil {
 		c.large = new(intsets.Sparse)
 		c.large.Copy(s.large)
-	} else {
-		c.small = s.small
 	}
 	return c
 }
@@ -199,13 +196,13 @@ func (s FastIntSet) Copy() FastIntSet {
 // CopyFrom sets the receiver to a copy of other, which can then be modified
 // independently.
 func (s *FastIntSet) CopyFrom(other FastIntSet) {
+	s.small = other.small
 	if other.large != nil {
 		if s.large == nil {
 			s.large = new(intsets.Sparse)
 		}
 		s.large.Copy(other.large)
 	} else {
-		s.small = other.small
 		if s.large != nil {
 			s.large.Clear()
 		}
@@ -214,15 +211,14 @@ func (s *FastIntSet) CopyFrom(other FastIntSet) {
 
 // UnionWith adds all the elements from rhs to this set.
 func (s *FastIntSet) UnionWith(rhs FastIntSet) {
+	s.small |= rhs.small
 	if s.large == nil && rhs.large == nil {
 		// Fast path.
-		s.small |= rhs.small
 		return
 	}
 
 	if s.large == nil {
 		s.large = s.toLarge()
-		s.small = 0
 	}
 	if rhs.large == nil {
 		for i, ok := rhs.Next(0); ok; i, ok = rhs.Next(i + 1) {
@@ -242,15 +238,12 @@ func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
 
 // IntersectionWith removes any elements not in rhs from this set.
 func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
+	s.small &= rhs.small
+	if rhs.large == nil {
+		s.large = nil
+	}
 	if s.large == nil {
 		// Fast path.
-		other := rhs.small
-		if rhs.large != nil {
-			// If the other set is large, we can ignore any values outside of the
-			// small range.
-			other, _ = rhs.largeToSmall()
-		}
-		s.small &= other
 		return
 	}
 
@@ -266,30 +259,20 @@ func (s FastIntSet) Intersection(rhs FastIntSet) FastIntSet {
 
 // Intersects returns true if s has any elements in common with rhs.
 func (s FastIntSet) Intersects(rhs FastIntSet) bool {
-	if s.large == nil {
-		// Fast path
-		other := rhs.small
-		if rhs.large != nil {
-			// If the other set is large, we can ignore any values outside of the
-			// small range.
-			other, _ = rhs.largeToSmall()
-		}
-		return (s.small & other) != 0
+	if (s.small & rhs.small) != 0 {
+		return true
+	}
+	if s.large == nil || rhs.large == nil {
+		return false
 	}
 	return s.large.Intersects(rhs.toLarge())
 }
 
 // DifferenceWith removes any elements in rhs from this set.
 func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
+	s.small &^= rhs.small
 	if s.large == nil {
 		// Fast path
-		other := rhs.small
-		if rhs.large != nil {
-			// If the other set is large, we can ignore any values outside of the
-			// small range.
-			other, _ = rhs.largeToSmall()
-		}
-		s.small &^= other
 		return
 	}
 	s.large.DifferenceWith(rhs.toLarge())
@@ -325,34 +308,27 @@ func (s FastIntSet) Equals(rhs FastIntSet) bool {
 
 // SubsetOf returns true if rhs contains all the elements in s.
 func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
-	if s.large == nil && rhs.large == nil {
+	if s.large == nil {
 		return (s.small & rhs.small) == s.small
 	}
 	if s.large != nil && rhs.large != nil {
 		return s.large.SubsetOf(rhs.large)
 	}
-	// One set is "large" and one is "small".
-	s1 := s.small
-	s2 := rhs.small
-	if s.large != nil {
-		var extraVals bool
-		s1, extraVals = s.largeToSmall()
-		if extraVals {
-			// s has elements that rhs (which is small) can't have.
-			return false
-		}
-	} else {
-		// We don't care if rhs has extra values.
-		s2, _ = rhs.largeToSmall()
+	// s is "large" and rhs is "small".
+	_, hasExtra := s.largeToSmall()
+	if hasExtra {
+		return false
 	}
-	return (s1 & s2) == s1
+	// s is "large", but has no elements outside of the range [0, 63]. This can
+	// happen if elements outside of the range are removed.
+	return (s.small & rhs.small) == s.small
 }
 
 // Shift generates a new set which contains elements i+delta for elements i in
 // the original set.
 func (s *FastIntSet) Shift(delta int) FastIntSet {
 	if s.large == nil {
-		// Fast paths.
+		// Fast path.
 		if delta > 0 {
 			if bits.LeadingZeros64(s.small)-(64-smallCutoff) >= delta {
 				return FastIntSet{small: s.small << uint32(delta)}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Test that EvalContext.GetClusterTimestamp() gets its timestamp from the
@@ -42,16 +43,17 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	senderFactory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			panic("unused")
 		})
-	db := kv.NewDB(
-		testutils.MakeAmbientCtx(),
-		senderFactory,
-		clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), senderFactory, clock, stopper)
 
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}

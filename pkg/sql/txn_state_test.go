@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -48,7 +49,7 @@ type testContext struct {
 	settings *cluster.Settings
 }
 
-func makeTestContext() testContext {
+func makeTestContext(stopper *stop.Stopper) testContext {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	factory := kv.MakeMockTxnSenderFactory(
@@ -62,7 +63,7 @@ func makeTestContext() testContext {
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      kv.NewDB(ambient, factory, clock),
+		mockDB:      kv.NewDB(ambient, factory, clock, stopper),
 		mon: mon.NewMonitor(
 			"test root mon",
 			mon.MemoryResource,
@@ -209,8 +210,10 @@ func TestTransitions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
-	testCon := makeTestContext()
+	testCon := makeTestContext(stopper)
 	tranCtx := transitionCtx{
 		db:             testCon.mockDB,
 		nodeIDOrZero:   roachpb.NodeID(5),

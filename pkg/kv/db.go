@@ -183,13 +183,13 @@ type DBContext struct {
 
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
-func DefaultDBContext() DBContext {
+func DefaultDBContext(stopper *stop.Stopper) DBContext {
 	var c base.NodeIDContainer
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
 		NodeID:  base.NewSQLIDContainer(0, &c, true /* exposed */),
-		Stopper: stop.NewStopper(),
+		Stopper: stopper,
 	}
 }
 
@@ -278,8 +278,10 @@ func (db *DB) Clock() *hlc.Clock {
 }
 
 // NewDB returns a new DB.
-func NewDB(actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock) *DB {
-	return NewDBWithContext(actx, factory, clock, DefaultDBContext())
+func NewDB(
+	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,
+) *DB {
+	return NewDBWithContext(actx, factory, clock, DefaultDBContext(stopper))
 }
 
 // NewDBWithContext returns a new DB with the given parameters.

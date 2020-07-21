@@ -210,6 +210,9 @@ func (n *scanNode) initTable(
 		}
 	}
 
+	// Check if any system columns are requested, as they need special handling.
+	n.systemColumns, n.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg)
+
 	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(colCfg)
 }

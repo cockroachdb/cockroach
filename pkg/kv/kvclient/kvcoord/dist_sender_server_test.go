@@ -101,7 +101,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		},
 		ds,
 	)
-	db := kv.NewDB(ambient, tsf, s.Clock())
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to

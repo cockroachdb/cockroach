@@ -215,7 +215,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs)
+			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs, stopper)
 			var didPush, didSucceed bool
 			done := make(chan struct{})
 			onComplete := func(pushed, succeeded bool) {
@@ -256,7 +256,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 		pushTxnSendFunc(t, 1),
 		resolveIntentsSendFunc(t),
 	)
-	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
 	// Run defaultTaskLimit tasks which will block until blocker is closed.
 	blocker := make(chan struct{})
 	defer close(blocker)
@@ -329,7 +329,7 @@ func TestCleanupIntentsAsync(t *testing.T) {
 				Stopper: stopper,
 				Clock:   clock,
 			}
-			ir := newIntentResolverWithSendFuncs(cfg, sf)
+			ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
 			err := ir.CleanupIntentsAsync(context.Background(), c.intents, true)
 			sf.drain(t)
 			stopper.Stop(context.Background())
@@ -394,7 +394,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 			MaxIntentResolutionBatchSize: 1,
 		},
 	}
-	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
 	err := ir.CleanupIntentsAsync(ctx, testIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
@@ -493,7 +493,7 @@ func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
 		Stopper: stopper,
 		Clock:   clock,
 	}
-	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
 
 	intents := []result.EndTxnIntents{{Txn: txn}}
 
@@ -567,7 +567,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 				Stopper: stopper,
 				Clock:   clock,
 			}
-			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs)
+			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs, stopper)
 			if c.before != nil {
 				defer c.before(&c, ir)()
 			}
@@ -665,7 +665,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			MaxIntentResolutionBatchSize: 1,
 		},
 	}
-	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
 	err := ir.CleanupTxnIntentsAsync(ctx, 1, testEndTxnIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
@@ -744,7 +744,7 @@ func TestCleanupIntents(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			c.cfg.Stopper = stopper
 			c.cfg.Clock = clock
-			ir := newIntentResolverWithSendFuncs(c.cfg, c.sendFuncs)
+			ir := newIntentResolverWithSendFuncs(c.cfg, c.sendFuncs, stopper)
 			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
 			assert.Equal(t, err != nil, c.expectedErr, "error during CleanupIntents: %v", err)
@@ -782,7 +782,9 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 // A library of useful sendFuncs are defined below.
 type sendFunc func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
-func newIntentResolverWithSendFuncs(c Config, sf *sendFuncs) *IntentResolver {
+func newIntentResolverWithSendFuncs(
+	c Config, sf *sendFuncs, stopper *stop.Stopper,
+) *IntentResolver {
 	txnSenderFactory := kv.NonTransactionalFactoryFunc(
 		func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			sf.mu.Lock()
@@ -792,7 +794,7 @@ func newIntentResolverWithSendFuncs(c Config, sf *sendFuncs) *IntentResolver {
 		})
 	db := kv.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
-	}, txnSenderFactory, c.Clock)
+	}, txnSenderFactory, c.Clock, stopper)
 	c.DB = db
 	c.MaxGCBatchWait = time.Nanosecond
 	return New(c)
