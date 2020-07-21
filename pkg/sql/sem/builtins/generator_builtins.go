@@ -1043,7 +1043,6 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 }
 
 type checkConsistencyGenerator struct {
-	ctx      context.Context
 	db       *kv.DB
 	from, to roachpb.Key
 	mode     roachpb.ChecksumMode
@@ -1084,7 +1083,6 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
-		ctx:  ctx.Ctx(),
 		db:   ctx.DB,
 		from: keyFrom,
 		to:   keyTo,
@@ -1103,7 +1101,7 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	var b kv.Batch
 	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1117,7 +1115,7 @@ func (c *checkConsistencyGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	})
 	// NB: DistSender has special code to avoid parallelizing the request if
 	// we're requesting CHECK_FULL.
-	if err := c.db.Run(c.ctx, &b); err != nil {
+	if err := c.db.Run(ctx, &b); err != nil {
 		return err
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
