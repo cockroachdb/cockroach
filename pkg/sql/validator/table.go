@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -28,9 +30,9 @@ import (
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func ValidateTableAndCrossReferences(
-	ctx context.Context, desc *sqlbase.TableDescriptor, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, txn *kv.Txn, codec keys.SQLCodec,
 ) error {
-	err := ValidateTable(desc)
+	err := ValidateTable(ctx, desc)
 	if err != nil {
 		return err
 	}
@@ -46,7 +48,7 @@ func ValidateTableAndCrossReferences(
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func ValidateTable(desc *sqlbase.TableDescriptor) error {
+func ValidateTable(ctx context.Context, desc *sqlbase.MutableTableDescriptor) error {
 	if err := sqlbase.ValidateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -178,7 +180,7 @@ func ValidateTable(desc *sqlbase.TableDescriptor) error {
 			return err
 		}
 
-		if err := validateTableIndexes(desc, columnNames); err != nil {
+		if err := validateTableIndexes(ctx, desc, columnNames); err != nil {
 			return err
 		}
 		if err := validatePartitioning(desc); err != nil {
@@ -253,7 +255,7 @@ func ValidateIndexNameIsUnique(desc *sqlbase.TableDescriptor, indexName string) 
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
 func validateCrossReferences(
-	ctx context.Context, desc *sqlbase.TableDescriptor, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, txn *kv.Txn, codec keys.SQLCodec,
 ) error {
 	// Check that parent DB exists.
 	{
@@ -266,7 +268,7 @@ func validateCrossReferences(
 		}
 	}
 
-	tablesByID := map[sqlbase.ID]*sqlbase.TableDescriptor{desc.ID: desc}
+	tablesByID := map[sqlbase.ID]*sqlbase.TableDescriptor{desc.ID: desc.TableDesc()}
 	getTable := func(id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
 		if table, ok := tablesByID[id]; ok {
 			return table, nil
@@ -294,7 +296,7 @@ func validateCrossReferences(
 	}
 
 	// Check foreign keys.
-	for i := range desc.OutboundFKs {
+	for i := range desc.TableDesc().OutboundFKs {
 		fk := &desc.OutboundFKs[i]
 		referencedTable, err := getTable(fk.ReferencedTableID)
 		if err != nil {
@@ -420,7 +422,7 @@ func validateCrossReferences(
 }
 
 func validateColumnFamilies(
-	desc *sqlbase.TableDescriptor, columnIDs map[sqlbase.ColumnID]string,
+	desc *sqlbase.MutableTableDescriptor, columnIDs map[sqlbase.ColumnID]string,
 ) error {
 	if len(desc.Families) < 1 {
 		return fmt.Errorf("at least 1 column family must be specified")
@@ -500,7 +502,9 @@ func validateColumnFamilies(
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func validateTableIndexes(
-	desc *sqlbase.TableDescriptor, columnNames map[string]sqlbase.ColumnID,
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	columnNames map[string]sqlbase.ColumnID,
 ) error {
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return sqlbase.ErrMissingPrimaryKey
@@ -577,6 +581,20 @@ func validateTableIndexes(
 					index.Name, index.Sharded.Name)
 			}
 		}
+		if index.IsPartial() {
+			expr, err := parser.ParseExpr(index.Predicate)
+			if err != nil {
+				return err
+			}
+
+			// TODO(mgartner): How can I get a TableName from a TableDescriptor?
+			tn := tree.MakeTableName(tree.Name("foo"), tree.Name(desc.Name))
+			semaCtx := tree.MakeSemaContext()
+			idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, tn, desc, &semaCtx)
+			if _, err := idxValidator.Validate(expr); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -587,7 +605,7 @@ func validateTableIndexes(
 // under the hood and we don't support transitively computed columns (computed column A
 // based on another computed column B).
 func ensureShardedIndexNotComputed(
-	desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	desc *sqlbase.MutableTableDescriptor, index *sqlbase.IndexDescriptor,
 ) error {
 	for _, colName := range index.Sharded.ColumnNames {
 		col, _, err := desc.FindColumnByName(tree.Name(colName))
@@ -604,7 +622,7 @@ func ensureShardedIndexNotComputed(
 
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
-func validatePartitioning(desc *sqlbase.TableDescriptor) error {
+func validatePartitioning(desc *sqlbase.MutableTableDescriptor) error {
 	partitionNames := make(map[string]string)
 
 	a := &sqlbase.DatumAlloc{}
@@ -622,7 +640,7 @@ func validatePartitioning(desc *sqlbase.TableDescriptor) error {
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
 func validatePartitioningDescriptor(
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.MutableTableDescriptor,
 	a *sqlbase.DatumAlloc,
 	idxDesc *sqlbase.IndexDescriptor,
 	partDesc *sqlbase.PartitioningDescriptor,
@@ -692,7 +710,7 @@ func validatePartitioningDescriptor(
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
 				tuple, keyPrefix, err := sqlbase.DecodePartitionTuple(
-					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc.TableDesc(), idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
@@ -721,12 +739,12 @@ func validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := sqlbase.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc.TableDesc(), idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			toDatums, toKey, err := sqlbase.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc.TableDesc(), idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}

@@ -111,10 +111,11 @@ func unwrapDescriptor(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := validator.ValidateTableAndCrossReferences(ctx, table, txn, codec); err != nil {
+		desc := sqlbase.NewMutableExistingTableDescriptor(*table)
+		if err := validator.ValidateTableAndCrossReferences(ctx, desc, txn, codec); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewImmutableTableDescriptor(*table), nil
+		return desc.Immutable(), nil
 	case database != nil:
 		dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*database)
 		if err := dbDesc.Validate(); err != nil {
@@ -161,10 +162,11 @@ func unwrapDescriptorMutable(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := validator.ValidateTableAndCrossReferences(ctx, table, txn, codec); err != nil {
+		desc := sqlbase.NewMutableExistingTableDescriptor(*table)
+		if err := validator.ValidateTableAndCrossReferences(ctx, desc, txn, codec); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewMutableExistingTableDescriptor(*table), nil
+		return desc, nil
 	case database != nil:
 		dbDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*database)
 		if err := dbDesc.Validate(); err != nil {

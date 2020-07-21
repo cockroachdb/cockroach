@@ -260,7 +260,7 @@ func (p *planner) writeTableDescToBatch(
 		tableDesc.MaybeIncrementVersion()
 	}
 
-	if err := validator.ValidateTable(tableDesc.TableDesc()); err != nil {
+	if err := validator.ValidateTable(ctx, tableDesc); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 

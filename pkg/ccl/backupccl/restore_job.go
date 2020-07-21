@@ -524,12 +524,13 @@ func WriteDescriptors(
 			return err
 		}
 
-		for _, table := range tables {
-			if err := table.TableDesc().Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
-				return errors.Wrapf(err,
-					"validate table %d", errors.Safe(table.GetID()))
-			}
-		}
+		// TODO(mgartner): Another reason to support sqlbase.TableDescriptorInterface...
+		// for _, table := range tables {
+		// 	 if err := validator.ValidateTableAndCrossReferences(ctx, table, txn, keys.SystemSQLCodec); err != nil {
+		// 	 	return errors.Wrapf(err,
+		// 	 		"validate table %d", errors.Safe(table.GetID()))
+		// 	 }
+		// }
 		return nil
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")

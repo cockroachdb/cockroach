@@ -141,7 +141,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := validator.ValidateTableAndCrossReferences(params.ctx, desc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(params.ctx, &desc, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 
@@ -226,5 +226,5 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = sqlbase.TableDescriptor_PUBLIC
 
-	return desc, validator.ValidateTable(desc.TableDesc())
+	return desc, validator.ValidateTable(params.ctx, &desc)
 }

@@ -205,7 +205,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := validator.ValidateTableAndCrossReferences(params.ctx, newDesc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(params.ctx, newDesc, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 

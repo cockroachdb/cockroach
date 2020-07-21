@@ -23,7 +23,7 @@ import (
 type IndexPredicateValidator struct {
 	ctx       context.Context
 	tableName tree.TableName
-	desc      *sqlbase.MutableTableDescriptor
+	desc      sqlbase.TableDescriptorInterface
 	semaCtx   *tree.SemaContext
 }
 
@@ -32,7 +32,7 @@ type IndexPredicateValidator struct {
 func NewIndexPredicateValidator(
 	ctx context.Context,
 	tableName tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
+	desc sqlbase.TableDescriptorInterface,
 	semaCtx *tree.SemaContext,
 ) IndexPredicateValidator {
 	return IndexPredicateValidator{

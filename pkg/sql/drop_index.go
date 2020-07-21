@@ -497,7 +497,7 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := validator.ValidateTableAndCrossReferences(ctx, tableDesc.TableDesc(), p.txn, p.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(ctx, tableDesc, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

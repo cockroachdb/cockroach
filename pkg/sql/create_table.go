@@ -359,7 +359,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := validator.ValidateTableAndCrossReferences(params.ctx, desc.TableDesc(), params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := validator.ValidateTableAndCrossReferences(params.ctx, &desc, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}
 
