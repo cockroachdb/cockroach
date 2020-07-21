@@ -178,6 +178,31 @@ t7  CREATE TABLE t7 (
     FAMILY "primary" (b, rowid)
 )
 
+#### Dropping a column referenced in the predicate drops the index.
+
+statement ok
+CREATE TABLE t8 (
+    a INT,
+    b INT,
+    c STRING,
+    INDEX (a) WHERE b > 0,
+    INDEX (a) WHERE c = 'foo',
+    FAMILY (a, b, c)
+)
+
+statement ok
+ALTER TABLE t8 DROP COLUMN c
+
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE t8 (
+    a INT8 NULL,
+    b INT8 NULL,
+    INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+    FAMILY fam_0_a_b_c_rowid (a, b, rowid)
+)
+
 #### Update a non-indexed column referenced by the predicate.
 
 statement ok
