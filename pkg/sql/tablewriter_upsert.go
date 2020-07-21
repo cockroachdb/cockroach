@@ -144,8 +144,6 @@ func (tu *tableUpserterBase) batchedValues(rowIdx int) tree.Datums {
 	return tu.rowsUpserted.At(rowIdx)
 }
 
-func (tu *tableUpserterBase) curBatchSize() int { return tu.insertRows.Len() }
-
 // close is part of the tableWriter interface.
 func (tu *tableUpserterBase) close(ctx context.Context) {
 	tu.insertRows.Close(ctx)
@@ -486,6 +484,11 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 	return nil
 }
+
+// curBatchSize is part of the extendedTableWriter interface. Note that we need
+// to override tableWriterBase.curBatchSize because tableUpserter stores the
+// insert rows not in the batch but in insertRows row container.
+func (tu *tableUpserter) curBatchSize() int { return tu.insertRows.Len() }
 
 // updateConflictingRow updates the existing row in the table, when there was a
 // conflict. existingRows contains the previously seen rows, and is modified

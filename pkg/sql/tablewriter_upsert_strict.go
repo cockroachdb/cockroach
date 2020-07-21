@@ -97,6 +97,11 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 	return nil
 }
 
+// curBatchSize is part of the extendedTableWriter interface. Note that we need
+// to override tableWriterBase.curBatchSize because tableUpserter stores the
+// insert rows not in the batch but in insertRows row container.
+func (tu *strictTableUpserter) curBatchSize() int { return tu.insertRows.Len() }
+
 // Get all unique indexes and store them in tu.ConflictIndexes.
 func (tu *strictTableUpserter) getUniqueIndexes() (err error) {
 	tableDesc := tu.tableDesc()
