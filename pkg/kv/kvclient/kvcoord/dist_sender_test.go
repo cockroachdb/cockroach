@@ -3580,7 +3580,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	initGen := int64(1)
+	initGen := roachpb.RangeGeneration(1)
 	testUserRangeDescriptor := roachpb.RangeDescriptor{
 		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
