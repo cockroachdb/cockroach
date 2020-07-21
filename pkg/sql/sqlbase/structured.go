@@ -457,11 +457,12 @@ func getTableDescFromIDRaw(
 	return table, nil
 }
 
-// GetMutableTableDescFromID retrieves the table descriptor for the table
+// TestingGetMutableTableDescFromID retrieves the table descriptor for the table
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 // Otherwise a mutable copy of the table is returned.
-func GetMutableTableDescFromID(
+// TODO (lucy): Probably replace this with catalogkv.GetMutableDescriptorByID().
+func TestingGetMutableTableDescFromID(
 	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
 ) (*MutableTableDescriptor, error) {
 	table, err := GetTableDescFromID(ctx, protoGetter, codec, id)

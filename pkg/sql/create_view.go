@@ -61,7 +61,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor, len(n.planDeps))
 	for id, updated := range n.planDeps {
-		backRefMutable := params.p.Tables().GetUncommittedTableByID(id).MutableTableDescriptor
+		backRefMutable := params.p.Tables().GetUncommittedTableByID(id)
 		if backRefMutable == nil {
 			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
 		}
