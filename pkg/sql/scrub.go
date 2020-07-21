@@ -160,7 +160,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		return err
 	}
 
-	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
