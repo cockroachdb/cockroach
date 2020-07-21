@@ -551,7 +551,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	return nil, nil, nil
 }
 
-// checkTableTwoVersionInvariant checks whether any new table schema being
+// checkDescriptorTwoVersionInvariant checks whether any new schema being
 // modified written at a version V has only valid leases at version = V - 1.
 // A transaction retry error is returned whenever the invariant is violated.
 // Before returning the retry error the current transaction is
@@ -560,8 +560,8 @@ func (ex *connExecutor) execStmtInOpenState(
 // event that there are no other schema changes simultaneously contending with
 // this txn.
 //
-// checkTableTwoVersionInvariant blocks until it's legal for the modified
-// table descriptors (if any) to be committed.
+// checkDescriptorTwoVersionInvariant blocks until it's legal for the modified
+// descriptors (if any) to be committed.
 // Reminder: a descriptor version v can only be written at a timestamp
 // that's not covered by a lease on version v-2. So, if the current
 // txn wants to write some updated descriptors, it needs
@@ -574,11 +574,11 @@ func (ex *connExecutor) execStmtInOpenState(
 // v-1 exists.
 //
 // If this method succeeds it is the caller's responsibility to release the
-// executor's table leases after the txn commits so that schema changes can
+// executor's leases after the txn commits so that schema changes can
 // proceed.
-func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
-	tables := ex.extraTxnState.descCollection.GetTablesWithNewVersion()
-	if tables == nil {
+func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) error {
+	descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion()
+	if descs == nil {
 		return nil
 	}
 	txn := ex.state.mu.txn
@@ -586,28 +586,28 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 		panic("transaction has already committed")
 	}
 
-	// We potentially hold leases for tables which we've modified which
-	// we need to drop. Say we're updating tables at version V. All leases
+	// We potentially hold leases for descriptors which we've modified which
+	// we need to drop. Say we're updating descriptors at version V. All leases
 	// for version V-2 need to be dropped immediately, otherwise the check
 	// below that nobody holds leases for version V-2 will fail. Worse yet,
 	// the code below loops waiting for nobody to hold leases on V-2. We also
-	// may hold leases for version V-1 of modified tables that are good to drop
+	// may hold leases for version V-1 of modified descriptors that are good to drop
 	// but not as vital for correctness. It's good to drop them because as soon
 	// as this transaction commits jobs may start and will need to wait until
 	// the lease expires. It is safe because V-1 must remain valid until this
 	// transaction commits; if we commit then nobody else could have written
 	// a new V beneath us because we've already laid down an intent.
 	//
-	// All this being said, we must retain our leases on tables which we have
-	// not modified to ensure that our writes to those other tables in this
+	// All this being said, we must retain our leases on descriptors which we have
+	// not modified to ensure that our writes to those other descriptors in this
 	// transaction remain valid.
-	ex.extraTxnState.descCollection.ReleaseTableLeases(ctx, tables)
+	ex.extraTxnState.descCollection.ReleaseSpecifiedLeases(ctx, descs)
 
-	// We know that so long as there are no leases on the updated tables as of
+	// We know that so long as there are no leases on the updated descriptors as of
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
-	count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.ProvisionalCommitTimestamp())
+	count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, descs, txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return err
 	}
@@ -620,21 +620,21 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// version.
 	retryErr := txn.PrepareRetryableError(ctx,
 		fmt.Sprintf(
-			`cannot publish new versions for tables: %v, old versions still in use`,
-			tables))
+			`cannot publish new versions for descriptors: %v, old versions still in use`,
+			descs))
 	// We cleanup the transaction and create a new transaction after
 	// waiting for the invariant to be satisfied because the wait time
 	// might be extensive and intents can block out leases being created
 	// on a descriptor.
 	//
 	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
-	// table descriptor intents can be laid down here after the invariant
+	// descriptor intents can be laid down here after the invariant
 	// has been checked.
 	userPriority := txn.UserPriority()
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
 	txn.CleanupOnError(ctx, retryErr)
-	// Release the rest of our leases on unmodified tables so we don't hold up
+	// Release the rest of our leases on unmodified descriptors so we don't hold up
 	// schema changes there and potentially create a deadlock.
 	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 
@@ -642,7 +642,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := ex.server.cfg.Clock.Now()
-		count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, now)
+		count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, descs, now)
 		if err != nil {
 			return err
 		}
@@ -684,7 +684,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 		return err
 	}
 
-	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
+	if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
 		return err
 	}
 
@@ -692,10 +692,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 		return err
 	}
 
-	// Now that we've committed, if we modified any table we need to make sure
+	// Now that we've committed, if we modified any descriptor we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if tables := ex.extraTxnState.descCollection.GetTablesWithNewVersion(); tables != nil {
+	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
 		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	}
 	return nil
@@ -705,9 +705,9 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 // an enabled primary key after potentially undergoing DROP PRIMARY KEY, which
 // is required to be followed by ADD PRIMARY KEY.
 func validatePrimaryKeys(tc *descs.Collection) error {
-	modifiedTables := tc.GetTablesWithNewVersion()
-	for i := range modifiedTables {
-		table := tc.GetUncommittedTableByID(modifiedTables[i].ID).MutableTableDescriptor
+	ids := tc.GetTableIDsWithNewVersion()
+	for i := range ids {
+		table := tc.GetUncommittedTableByID(ids[i])
 		if !table.HasPrimaryKey() {
 			return unimplemented.NewWithIssuef(48026,
 				"primary key of table %s dropped without subsequent addition of new primary key",
