@@ -116,9 +116,11 @@ func BenchmarkLikeOps(b *testing.B) {
 	// everything out.
 	prefix := "abc"
 	suffix := "xyz"
+	contains := "lmn"
 	for i := 0; i < coldata.BatchSize()/2; i++ {
 		copy(col.Get(i)[:3], prefix)
 		copy(col.Get(i)[width-3:], suffix)
+		copy(col.Get(i)[width/2:], contains)
 	}
 
 	batch.SetLength(coldata.BatchSize())
@@ -137,6 +139,10 @@ func BenchmarkLikeOps(b *testing.B) {
 		selConstOpBase: base,
 		constArg:       []byte(suffix),
 	}
+	containsOp := &selContainsBytesBytesConstOp{
+		selConstOpBase: base,
+		constArg:       []byte(contains),
+	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
 	regexpOp := &selRegexpBytesBytesConstOp{
 		selConstOpBase: base,
@@ -149,6 +155,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},
+		{name: "selContainsBytesBytesConstOp", op: containsOp},
 		{name: "selRegexpBytesBytesConstOp", op: regexpOp},
 	}
 	for _, tc := range testCases {

@@ -727,7 +727,7 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
                     │   └ *rowexec.joinReader
                     │     └ *rowexec.joinReader
                     │       └ *colexec.mergeJoinInnerOp
-                    │         ├ *colexec.selRegexpBytesBytesConstOp
+                    │         ├ *colexec.selContainsBytesBytesConstOp
                     │         │ └ *colfetcher.colBatchScan
                     │         └ *colfetcher.colBatchScan
                     └ *colfetcher.colBatchScan
