@@ -528,6 +528,8 @@ type TempStorageConfig struct {
 
 // ExternalIODirConfig describes various configuration options pertaining
 // to external storage implementations.
+// TODO(adityamaru): Rename ExternalIODirConfig to ExternalIOConfig because it
+// is now used to configure both ExternalStorage and KMS.
 type ExternalIODirConfig struct {
 	// Disables the use of external HTTP endpoints.
 	// This turns off http:// external storage as well as any custom
