@@ -510,7 +510,8 @@ func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
 		return nil
 	}
 	// Mark transaction as operating on the system DB.
-	return p.txn.SetSystemConfigTrigger()
+	// Only the system tenant marks the SystemConfigTrigger.
+	return p.txn.SetSystemConfigTrigger(p.execCfg.Codec.ForSystemTenant())
 }
 
 // planFlags is used throughout the planning code to keep track of various

@@ -61,7 +61,7 @@ func dropTableDesc(
 ) error {
 	log.Infof(ctx, "removing table descriptor for table %d", tableDesc.ID)
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err
 		}
 		b := &kv.Batch{}
@@ -90,7 +90,7 @@ func deleteDatabaseZoneConfig(
 		return nil
 	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		b := &kv.Batch{}

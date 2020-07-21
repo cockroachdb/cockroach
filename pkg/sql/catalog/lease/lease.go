@@ -427,8 +427,8 @@ func (m *Manager) PublishMultiple(
 				versions[id] = descsToUpdate[id].GetVersion()
 			}
 
-			// This is to write the updated descriptors.
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			// This is to write the updated descriptors if we're the system tenant.
+			if err := txn.SetSystemConfigTrigger(m.storage.codec.ForSystemTenant()); err != nil {
 				return err
 			}
 
