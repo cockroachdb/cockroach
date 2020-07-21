@@ -203,14 +203,14 @@ func updateStatsForInline(
 			if isAbortSpanKey(key) {
 				ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
 			}
+		} else {
+			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
+			ms.LiveCount--
+			ms.KeyBytes -= origMetaKeySize
+			ms.ValBytes -= origMetaValSize
+			ms.KeyCount--
+			ms.ValCount--
 		}
-	} else {
-		ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
-		ms.LiveCount--
-		ms.KeyBytes -= origMetaKeySize
-		ms.ValBytes -= origMetaValSize
-		ms.KeyCount--
-		ms.ValCount--
 	}
 	// Add counts for this key if the new size is non-zero.
 	if metaKeySize != 0 {
