@@ -214,8 +214,10 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			c.Start(ctx, t, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
-				c.InternalAddr(ctx, c.Node(nodes))[0], node)))
+			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", c.InternalAddr(ctx, c.Node(nodes))[0], node))
+			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
+				return err
+			}
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes
 		// having disappeared. Verify that the workloads don't dip their qps or
