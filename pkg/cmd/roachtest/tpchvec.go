@@ -351,26 +351,31 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					}
 					// The output of the command looks like:
 					//   Statement diagnostics bundle generated. Download from the Admin UI (Advanced
-					//   Debug -> Statement Diagnostics History) or use the direct link below.
-					//   Admin UI: http://127.0.0.1:56014
-					//   Direct link: http://127.0.0.1:56014/_admin/v1/stmtbundle/564245503516377089
-					// We are interested in the last line that contains the url
-					// that we will curl below.
-					var lastLine string
+					//   Debug -> Statement Diagnostics History), via the direct link below, or using
+					//   the command line.
+					//   Admin UI: http://Yahors-MacBook-Pro.local:8081
+					//   Direct link: http://Yahors-MacBook-Pro.local:8081/_admin/v1/stmtbundle/574364979110641665
+					//   Command line: cockroach statement-diag list / download
+					// We are interested in the line that contains the url that
+					// we will curl below.
+					directLinkPrefix := "Direct link: "
+					var line, url string
 					for rows.Next() {
-						if err = rows.Scan(&lastLine); err != nil {
+						if err = rows.Scan(&line); err != nil {
 							t.Fatal(err)
+						}
+						if strings.HasPrefix(line, directLinkPrefix) {
+							url = line[len(directLinkPrefix):]
+							break
 						}
 					}
 					if err = rows.Close(); err != nil {
 						t.Fatal(err)
 					}
-					expectedPrefix := "Direct link: "
-					if !strings.HasPrefix(lastLine, expectedPrefix) {
-						t.Fatal(fmt.Sprintf("unexpectedly the last line of EXPLAIN ANALYZE (DEBUG) "+
-							"doesn't have 'Direct link: ' prefix, received %s", lastLine))
+					if url == "" {
+						t.Fatal(fmt.Sprintf("unexpectedly didn't find a line "+
+							"with %q prefix in EXPLAIN ANALYZE (DEBUG) output", directLinkPrefix))
 					}
-					url := lastLine[len(expectedPrefix):]
 					// We will curl into the logs folder so that test runner
 					// retrieves the bundle together with the log files.
 					curlCmd := fmt.Sprintf(
