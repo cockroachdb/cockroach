@@ -396,16 +396,32 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	// NB: newMS is copied to prevent conditional calls to this method from
-	// causing the stats argument to escape. This is legacy code which does
-	// not need to be optimized for performance.
-	newMSCopy := *newMS
-	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
+	// Because we added a new field to the MVCC stats to track abort span bytes,
+	// this causes the size of the legacy MVCC stats representation (which doesn't
+	// track abort span bytes) to differ from this newer version. As a result,
+	// the following conversion is necessary to track the sysbyte count correctly.
+	legacyMS := enginepb.MVCCStatsLegacyRepresentation{
+		ContainsEstimates: newMS.ContainsEstimates,
+		LastUpdateNanos:   newMS.LastUpdateNanos,
+		IntentAge:         newMS.IntentAge,
+		GCBytesAge:        newMS.GCBytesAge,
+		LiveBytes:         newMS.LiveBytes,
+		LiveCount:         newMS.LiveCount,
+		KeyBytes:          newMS.KeyBytes,
+		KeyCount:          newMS.KeyCount,
+		ValBytes:          newMS.ValBytes,
+		ValCount:          newMS.ValCount,
+		IntentBytes:       newMS.IntentBytes,
+		IntentCount:       newMS.IntentCount,
+		SysBytes:          newMS.SysBytes,
+		SysCount:          newMS.SysCount,
+	}
+	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &legacyMS)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
 //
-// The range applied state key cannot already exist or an assetion will be
+// The range applied state key cannot already exist or an assertion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyMVCCStats(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,

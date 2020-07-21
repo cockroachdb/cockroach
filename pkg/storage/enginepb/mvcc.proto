@@ -185,3 +185,72 @@ message MVCCStats {
   // abort span. These bytes are a subset of sys_bytes.
   optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false];
 }
+
+// MVCCStatsLegacyRepresentation is almost identical to MVCCStats, except
+// it does not have a field tracking abort span bytes.
+// The abort span bytes field in MVCCStats didn't exist in earlier versions,
+// and its addition of it to MVCCStats causes the struct to be larger than it was
+// previously. The discrepancy between the size of MVCCStats between versions
+// could cause incorrect sysbyte counts during version migration.
+// MVCCStatsLegacyRepresentation is the older version of MVCCStats, and allows
+// us to prevent this discrepancy during version migration.
+message MVCCStatsLegacyRepresentation {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // contains_estimates indicates that the MVCCStats object contains values
+  // which have been estimated. This means that the stats should not be used
+  // where complete accuracy is required, and instead should be recomputed
+  // when necessary. See clusterversion.VersionContainsEstimatesCounter for
+  // details about the migration from bool to int64.
+  optional int64 contains_estimates = 14 [(gogoproto.nullable) = false];
+
+  // last_update_nanos is a timestamp at which the ages were last
+  // updated. See the comment on MVCCStats.
+  optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];
+  // intent_age is the cumulative age of the tracked intents.
+  // See the comment on MVCCStats.
+  optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false];
+  // gc_bytes_age is the cumulative age of the non-live data (i.e.
+  // data included in key_bytes and val_bytes, but not live_bytes).
+  // See the comment on MVCCStats.
+  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
+  // live_bytes is the number of bytes stored in keys and values which can in
+  // principle be read by means of a Scan or Get in the far future, including
+  // intents but not deletion tombstones (or their intents). Note that the
+  // size of the meta kv pair (which could be explicit or implicit) is
+  // included in this. Only the meta kv pair counts for the actual length of
+  // the encoded key (regular pairs only count the timestamp suffix).
+  optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false];
+  // live_count is the number of meta keys tracked under live_bytes.
+  optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];
+  // key_bytes is the number of bytes stored in all non-system
+  // keys, including live, meta, old, and deleted keys.
+  // Only meta keys really account for the "full" key; value
+  // keys only for the timestamp suffix.
+  optional sfixed64 key_bytes = 6 [(gogoproto.nullable) = false];
+  // key_count is the number of meta keys tracked under key_bytes.
+  optional sfixed64 key_count = 7 [(gogoproto.nullable) = false];
+  // value_bytes is the number of bytes in all non-system version
+  // values, including meta values.
+  optional sfixed64 val_bytes = 8 [(gogoproto.nullable) = false];
+  // val_count is the number of meta values tracked under val_bytes.
+  optional sfixed64 val_count = 9 [(gogoproto.nullable) = false];
+  // intent_bytes is the number of bytes in intent key-value
+  // pairs (without their meta keys).
+  optional sfixed64 intent_bytes = 10 [(gogoproto.nullable) = false];
+  // intent_count is the number of keys tracked under intent_bytes.
+  // It is equal to the number of meta keys in the system with
+  // a non-empty Transaction proto.
+  optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false];
+
+  // sys_bytes is the number of bytes stored in system-local kv-pairs.
+  // This tracks the same quantity as (key_bytes + val_bytes), but
+  // for system-local metadata keys (which aren't counted in either
+  // key_bytes or val_bytes). Each of the keys falling into this group
+  // is documented in keys/constants.go under the localPrefix constant
+  // and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
+  optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
+  // sys_count is the number of meta keys tracked under sys_bytes.
+  optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
+}
