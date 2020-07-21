@@ -130,6 +130,26 @@ func (desc *ImmutableDatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMod
 	return TableDescriptor_DISABLED
 }
 
+// Adding implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) Adding() bool {
+	return false
+}
+
+// Dropped implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) Dropped() bool {
+	return false
+}
+
+// Offline implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) Offline() bool {
+	return false
+}
+
+// GetOfflineReason implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) GetOfflineReason() string {
+	return ""
+}
+
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
 func (desc *ImmutableDatabaseDescriptor) DescriptorProto() *Descriptor {
 	return &Descriptor{
@@ -167,11 +187,35 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
 	}
 	desc.Version++
 	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalName() string {
+	if desc.ClusterVersion == nil {
+		return ""
+	}
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalID() ID {
+	if desc.ClusterVersion == nil {
+		return InvalidID
+	}
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalVersion() DescriptorVersion {
+	if desc.ClusterVersion == nil {
+		return 0
+	}
+	return desc.ClusterVersion.Version
 }
 
 // Immutable implements the MutableDescriptor interface.
@@ -179,4 +223,9 @@ func (desc *MutableDatabaseDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableDatabaseDescriptor(*protoutil.Clone(desc.DatabaseDesc()).(*DatabaseDescriptor))
+}
+
+// IsNew implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) IsNew() bool {
+	return desc.ClusterVersion == nil
 }

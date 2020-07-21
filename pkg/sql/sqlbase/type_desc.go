@@ -147,6 +147,26 @@ func (desc *ImmutableTypeDescriptor) TypeDesc() *TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
+// Adding implements the BaseDescriptorInterface interface.
+func (desc *TypeDescriptor) Adding() bool {
+	return false
+}
+
+// Dropped implements the BaseDescriptorInterface interface.
+func (desc *TypeDescriptor) Dropped() bool {
+	return false
+}
+
+// Offline implements the BaseDescriptorInterface interface.
+func (desc *TypeDescriptor) Offline() bool {
+	return false
+}
+
+// GetOfflineReason implements the BaseDescriptorInterface interface.
+func (desc *TypeDescriptor) GetOfflineReason() string {
+	return ""
+}
+
 // DescriptorProto returns a Descriptor for serialization.
 func (desc *TypeDescriptor) DescriptorProto() *Descriptor {
 	return &Descriptor{
@@ -181,11 +201,35 @@ func (desc *TypeDescriptor) TypeName() string {
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableTypeDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
 	}
 	desc.Version++
 	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) OriginalName() string {
+	if desc.ClusterVersion == nil {
+		return ""
+	}
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) OriginalID() ID {
+	if desc.ClusterVersion == nil {
+		return InvalidID
+	}
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) OriginalVersion() DescriptorVersion {
+	if desc.ClusterVersion == nil {
+		return 0
+	}
+	return desc.ClusterVersion.Version
 }
 
 // Immutable implements the MutableDescriptor interface.
@@ -193,6 +237,11 @@ func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*TypeDescriptor))
+}
+
+// IsNew implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) IsNew() bool {
+	return desc.ClusterVersion == nil
 }
 
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the

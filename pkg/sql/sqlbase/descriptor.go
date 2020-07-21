@@ -61,6 +61,11 @@ type BaseDescriptorInterface interface {
 	TypeName() string
 	GetAuditMode() TableDescriptor_AuditMode
 
+	Adding() bool
+	Dropped() bool
+	Offline() bool
+	GetOfflineReason() string
+
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *Descriptor
 }

@@ -575,7 +575,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, _, err = t.acquireMinVersion(1, tableDesc.ID, tableDesc.Version+1)
-	if !testutils.IsError(err, "table is being dropped") {
+	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
@@ -682,7 +682,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 	// Now we shouldn't be able to acquire any more.
 	_, _, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID)
-	if !testutils.IsError(err, "table is being dropped") {
+	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
@@ -1592,7 +1592,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		// This can hang waiting for one version before tx.Commit() is
 		// called below, so it is executed in another goroutine
 		if err := txRetry.Commit(); !testutils.IsError(err,
-			`TransactionRetryWithProtoRefreshError: cannot publish new versions for tables: \[\{kv1 53 1\}\], old versions still in use`,
+			`TransactionRetryWithProtoRefreshError: cannot publish new versions for descriptors: \[\{kv1 53 1\}\], old versions still in use`,
 		) {
 			t.Errorf("err = %v", err)
 		}

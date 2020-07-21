@@ -313,7 +313,7 @@ func (opc *optPlanningCtx) reset() {
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
-		opc.allowMemoReuse = !p.Tables().HasUncommittedTables()
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {

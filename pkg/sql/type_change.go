@@ -66,11 +66,13 @@ func (p *planner) writeTypeChange(
 		log.Infof(ctx, "queued new type change job %d for type %d", *newJob.ID(), typeDesc.ID)
 	}
 
-	// TODO (rohany): Once the desc.Collection has a hook to register a modified
-	//  type, call into that hook here.
-
 	// Maybe increment the type's version.
 	typeDesc.MaybeIncrementVersion()
+
+	// Add the modified descriptor to the descriptor collection.
+	if err := p.Descriptors().AddUncommittedDescriptor(typeDesc); err != nil {
+		return err
+	}
 
 	// Write the type out to a batch.
 	b := p.txn.NewBatch()
