@@ -485,7 +485,7 @@ func (p *planner) LookupTableByID(
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if sqlbase.HasAddingTableError(err) {
+		if catalog.HasAddingTableError(err) {
 			return catalog.TableEntry{IsAdding: true}, nil
 		}
 		return catalog.TableEntry{}, err

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -344,7 +345,7 @@ func (tc *Collection) GetTableVersion(
 			if !flags.Required {
 				return nil, nil
 			}
-			return nil, sqlbase.FilterTableState(immut.TableDesc())
+			return nil, catalog.FilterDescriptorState(immut)
 		}
 
 		log.VEventf(ctx, 2, "found uncommitted table %d", immut.ID)
@@ -372,7 +373,7 @@ func (tc *Collection) GetTableVersion(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if sqlbase.HasInactiveTableError(err) ||
+		if catalog.HasInactiveDescriptorError(err) ||
 			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return readTableFromStore()
 		}
@@ -414,10 +415,11 @@ func (tc *Collection) GetTableVersionByID(
 		if err != nil {
 			return nil, err
 		}
-		if err := sqlbase.FilterTableState(table); err != nil {
+		immutDesc := sqlbase.NewImmutableTableDescriptor(*table)
+		if err := catalog.FilterDescriptorState(immutDesc); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewImmutableTableDescriptor(*table), nil
+		return immutDesc, nil
 	}
 
 	for _, table := range tc.uncommittedTables {
@@ -610,7 +612,7 @@ func (tc *Collection) AddUncommittedTable(desc sqlbase.MutableTableDescriptor) e
 func (tc *Collection) GetTablesWithNewVersion() []lease.IDVersion {
 	var tables []lease.IDVersion
 	for _, table := range tc.uncommittedTables {
-		if mut := table.MutableTableDescriptor; !mut.IsNewTable() {
+		if mut := table.MutableTableDescriptor; !mut.IsNew() {
 			clusterVer := &mut.ClusterVersion
 			tables = append(tables, lease.NewIDVersionPrev(clusterVer.Name, clusterVer.ID, clusterVer.Version))
 		}
@@ -623,7 +625,7 @@ func (tc *Collection) GetTableDescsWithNewVersion() (
 	newTables []*sqlbase.ImmutableTableDescriptor,
 ) {
 	for _, table := range tc.uncommittedTables {
-		if mut := table.MutableTableDescriptor; mut.IsNewTable() {
+		if mut := table.MutableTableDescriptor; mut.IsNew() {
 			newTables = append(newTables, table.ImmutableTableDescriptor)
 		}
 	}
@@ -715,7 +717,7 @@ func (tc *Collection) getUncommittedTable(
 			tn.Table(),
 		) {
 			// Right state?
-			if err = sqlbase.FilterTableState(mutTbl.TableDesc()); err != nil && !sqlbase.HasAddingTableError(err) {
+			if err = catalog.FilterDescriptorState(mutTbl); err != nil && !catalog.HasAddingTableError(err) {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil

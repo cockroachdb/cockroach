@@ -120,6 +120,26 @@ func (desc *ImmutableSchemaDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
 }
 
+// Adding implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Adding() bool {
+	return false
+}
+
+// Dropped implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Dropped() bool {
+	return false
+}
+
+// Offline implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) Offline() bool {
+	return false
+}
+
+// GetOfflineReason implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) GetOfflineReason() string {
+	return ""
+}
+
 // DescriptorProto wraps a SchemaDescriptor in a Descriptor.
 func (desc *ImmutableSchemaDescriptor) DescriptorProto() *Descriptor {
 	return &Descriptor{
@@ -147,4 +167,9 @@ func (desc *MutableSchemaDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*SchemaDescriptor))
+}
+
+// IsNew implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) IsNew() bool {
+	return desc.ClusterVersion.ID == InvalidID
 }
