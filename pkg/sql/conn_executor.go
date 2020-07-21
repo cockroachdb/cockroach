@@ -645,6 +645,7 @@ func (s *Server) newConnExecutor(
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 	ex.statsCollector = ex.newStatsCollector()
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -865,6 +866,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.eventLog = nil
 	}
 
+	// Stop idle timer if the connExecutor is closed to ensure cancel session
+	// is not called.
+	ex.mu.IdleInSessionTimeout.Stop()
+
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
@@ -1047,6 +1052,10 @@ type connExecutor struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
+
+		// IdleInSessionTimeout is returned by the AfterFunc call that cancels the
+		// session if the idle time exceeds the idle_in_session_timeout.
+		IdleInSessionTimeout timeout
 	}
 
 	// curStmt is the statement that's currently being prepared or executed, if
@@ -1083,6 +1092,19 @@ type connExecutor struct {
 type ctxHolder struct {
 	connCtx           context.Context
 	sessionTracingCtx context.Context
+}
+
+// timeout wraps a Timer returned by time.AfterFunc. This interface
+// allows us to call Stop() on the Timer without having to check if
+// the timer is nil.
+type timeout struct {
+	timeout *time.Timer
+}
+
+func (t timeout) Stop() {
+	if t.timeout != nil {
+		t.timeout.Stop()
+	}
 }
 
 func (ch *ctxHolder) ctx() context.Context {
