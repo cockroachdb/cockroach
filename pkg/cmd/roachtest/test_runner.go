@@ -610,7 +610,6 @@ func (r *testRunner) runTest(
 		if t.Failed() {
 			t.mu.Lock()
 			output := fmt.Sprintf("test artifacts and logs in: %s\n", t.ArtifactsDir()) + string(t.mu.output)
-			failLoc := t.mu.failLoc
 			t.mu.Unlock()
 
 			if teamCity {
@@ -629,13 +628,11 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				authorEmail := getAuthorEmail(t.spec.Tags, failLoc.file, failLoc.line)
-				if authorEmail == "" {
-					ownerInfo, ok := roachtestOwners[t.spec.Owner]
-					if ok {
-						authorEmail = ownerInfo.ContactEmail
-					}
-				}
+				// We're eliding an assignee for roachtests and instead using
+				// the ownership tags to generate a label to be filtered through
+				// (#51653).
+				ownershipLabel := fmt.Sprintf("A-%s-roachtest", t.spec.Owner)
+
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 					branch = b
@@ -653,11 +650,10 @@ func (r *testRunner) runTest(
 					TestName:     t.Name(),
 					Message:      msg,
 					Artifacts:    artifacts,
-					AuthorEmail:  authorEmail,
 					// Issues posted from roachtest are identifiable as such and
 					// they are also release blockers (this label may be removed
 					// by a human upon closer investigation).
-					ExtraLabels: []string{"O-roachtest", "release-blocker"},
+					ExtraLabels: []string{"O-roachtest", "release-blocker", ownershipLabel},
 				}
 				if err := issues.Post(
 					context.Background(),
