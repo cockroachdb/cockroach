@@ -233,6 +233,8 @@ type poster struct {
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error)
+	createProjectCard func(ctx context.Context, columnID int64,
+		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 	getLatestTag func() (string, error)
 }
 
@@ -248,12 +250,13 @@ func newPoster() *poster {
 	)))
 
 	return &poster{
-		createIssue:    client.Issues.Create,
-		searchIssues:   client.Search.Issues,
-		createComment:  client.Issues.CreateComment,
-		listCommits:    client.Repositories.ListCommits,
-		listMilestones: client.Issues.ListMilestones,
-		getLatestTag:   getLatestTag,
+		createIssue:       client.Issues.Create,
+		searchIssues:      client.Search.Issues,
+		createComment:     client.Issues.CreateComment,
+		listCommits:       client.Repositories.ListCommits,
+		listMilestones:    client.Issues.ListMilestones,
+		createProjectCard: client.Projects.CreateProjectCard,
+		getLatestTag:      getLatestTag,
 	}
 }
 
@@ -416,9 +419,21 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
-		if _, _, err := p.createIssue(ctx, githubUser, githubRepo, &issueRequest); err != nil {
+		issue, _, err := p.createIssue(ctx, githubUser, githubRepo, &issueRequest)
+		if err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s",
 				github.Stringify(issueRequest))
+		}
+
+		if req.ProjectColumnID != 0 {
+			_, _, err := p.createProjectCard(ctx, int64(req.ProjectColumnID), &github.ProjectCardOptions{
+				ContentID:   *issue.ID,
+				ContentType: "Issue",
+			})
+			if err != nil {
+				return errors.Wrapf(err, "failed to add GitHub issue %s to project column %d",
+					*issue.Title, req.ProjectColumnID)
+			}
 		}
 	} else {
 		comment := github.IssueComment{Body: &body}
@@ -519,6 +534,10 @@ type PostRequest struct {
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
 	ExtraLabels []string
+
+	// ProjectColumnID is the id of the GitHub project column to add the issue to,
+	// or 0 if none.
+	ProjectColumnID int
 }
 
 // Post either creates a new issue for a failed test, or posts a comment to an
