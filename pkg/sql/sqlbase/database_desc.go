@@ -194,6 +194,21 @@ func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 
+// OriginalName implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalName() string {
+	return desc.ClusterVersion.Name
+}
+
+// OriginalID implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalID() ID {
+	return desc.ClusterVersion.ID
+}
+
+// OriginalVersion implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) OriginalVersion() DescriptorVersion {
+	return desc.ClusterVersion.Version
+}
+
 // Immutable implements the MutableDescriptor interface.
 func (desc *MutableDatabaseDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
