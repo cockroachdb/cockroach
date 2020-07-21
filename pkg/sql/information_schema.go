@@ -1523,7 +1523,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []*sqlbase.ImmutableDatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Tables().GetAllDatabaseDescriptors(ctx, p.txn)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -1559,7 +1559,7 @@ func forEachTypeDesc(
 	dbContext *sqlbase.ImmutableDatabaseDescriptor,
 	fn func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typ *sqlbase.ImmutableTypeDescriptor) error,
 ) error {
-	descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
@@ -1683,15 +1683,15 @@ func getSchemaNames(
 	ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor,
 ) (map[sqlbase.ID]string, error) {
 	if dbContext != nil {
-		return p.Tables().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
+		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
 	}
 	ret := make(map[sqlbase.ID]string)
-	dbs, err := p.Tables().GetAllDatabaseDescriptors(ctx, p.txn)
+	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 	if err != nil {
 		return nil, err
 	}
 	for _, db := range dbs {
-		schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, db.GetID())
+		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db.GetID())
 		if err != nil {
 			return nil, err
 		}
@@ -1715,7 +1715,7 @@ func forEachTableDescWithTableLookupInternal(
 	allowAdding bool,
 	fn func(*sqlbase.ImmutableDatabaseDescriptor, string, *ImmutableTableDescriptor, tableLookupFn) error,
 ) error {
-	descs, err := p.Tables().GetAllDescriptors(ctx, p.txn)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}

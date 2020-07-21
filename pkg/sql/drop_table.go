@@ -186,7 +186,7 @@ func (p *planner) prepareDropWithTableDesc(
 func (p *planner) canRemoveFKBackreference(
 	ctx context.Context, from string, ref *sqlbase.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (p *planner) canRemoveFKBackreference(
 func (p *planner) canRemoveInterleave(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
+	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
-	table, err := p.Tables().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
+	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (p *planner) removeFKForBackReference(
 	if tableDesc.ID == ref.OriginTableID {
 		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving origin table ID %d: %v", ref.OriginTableID, err)
 		}
@@ -476,7 +476,7 @@ func (p *planner) removeFKBackReference(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
 		}
@@ -533,7 +533,7 @@ func (p *planner) removeInterleaveBackReference(
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
 	} else {
-		lookup, err := p.Tables().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
+		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
 		}

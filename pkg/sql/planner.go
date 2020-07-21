@@ -412,7 +412,7 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
-func (p *planner) Tables() *descs.Collection {
+func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
 }
 
@@ -422,7 +422,7 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 }
 
 func (p *planner) LeaseMgr() *lease.Manager {
-	return p.Tables().LeaseManager()
+	return p.Descriptors().LeaseManager()
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -483,7 +483,7 @@ func (p *planner) LookupTableByID(
 		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Tables().GetTableVersionByID(ctx, p.txn, tableID, flags)
+	table, err := p.Descriptors().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if catalog.HasAddingTableError(err) {
 			return catalog.TableEntry{IsAdding: true}, nil
