@@ -378,7 +378,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -620,7 +620,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	injected := false
 	var refreshTS hlc.Timestamp
 	errKey := roachpb.Key("inject_err")
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
 				if injected {

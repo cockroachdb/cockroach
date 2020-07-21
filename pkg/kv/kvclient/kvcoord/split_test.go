@@ -193,7 +193,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 
 	// This is purely to silence log spam.
-	config.TestingSetupZoneConfigHook(s.Stopper)
+	config.TestingSetupZoneConfigHook(s.Stopper())
 	defer s.Stop()
 
 	// Start test writer write about a 32K/key so there aren't too many
@@ -240,7 +240,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
@@ -268,7 +268,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,

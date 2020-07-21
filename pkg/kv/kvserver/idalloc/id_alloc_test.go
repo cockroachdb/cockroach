@@ -46,7 +46,7 @@ func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idallo
 		Key:         keys.RangeIDGenerator,
 		Incrementer: idalloc.DBIncrementer(s.DB),
 		BlockSize:   10, /* blockSize */
-		Stopper:     s.Stopper,
+		Stopper:     s.Stopper(),
 	})
 	if err != nil {
 		s.Stop()

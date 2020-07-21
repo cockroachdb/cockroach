@@ -243,6 +243,11 @@ ORDER BY
 		if len(currentCols) == 0 {
 			return fmt.Errorf("zero columns for %s.%s", lastCatalog, lastName)
 		}
+		// All non virtual tables contain implicit system columns.
+		currentCols = append(currentCols, &tree.ColumnTableDef{
+			Name: sqlbase.MVCCTimestampColumnName,
+			Type: sqlbase.MVCCTimestampColumnType,
+		})
 		tables = append(tables, &tableRef{
 			TableName: tree.NewTableName(lastCatalog, lastName),
 			Columns:   currentCols,
