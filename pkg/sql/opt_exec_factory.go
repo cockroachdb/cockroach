@@ -562,6 +562,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
+	// Check if any system columns are requested, as they need special handling.
+	tableScan.systemColumns, tableScan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
