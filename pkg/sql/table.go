@@ -248,7 +248,7 @@ func (p *planner) writeTableDescToBatch(
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
-	if tableDesc.IsNewTable() {
+	if tableDesc.IsNew() {
 		if err := runSchemaChangesInTxn(
 			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		); err != nil {

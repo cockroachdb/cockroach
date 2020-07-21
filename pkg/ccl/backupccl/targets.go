@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -276,7 +277,9 @@ func descriptorsMatchingTargets(
 			}
 
 			// Verify that the table is in the correct state.
-			if err := sqlbase.FilterTableState(tableDesc); err != nil {
+			// TODO (lucy): The immutable wrapper here can be dispensed with once we
+			// start using catalog.Descriptor everywhere.
+			if err := catalog.FilterDescriptorState(sqlbase.NewImmutableTableDescriptor(*tableDesc)); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
 			}
@@ -335,7 +338,9 @@ func descriptorsMatchingTargets(
 		for _, id := range resolver.objsByName[dbID] {
 			desc := resolver.descByID[id]
 			if table := desc.Table(hlc.Timestamp{}); table != nil {
-				if err := sqlbase.FilterTableState(table); err != nil {
+				// TODO (lucy): The immutable wrapper here can be dispensed with once we
+				// start using catalog.Descriptor everywhere.
+				if err := catalog.FilterDescriptorState(sqlbase.NewImmutableTableDescriptor(*table)); err != nil {
 					// Don't include this table in the expansion since it's not in a valid
 					// state. Silently fail since this table was not directly requested,
 					// but was just part of an expansion.
