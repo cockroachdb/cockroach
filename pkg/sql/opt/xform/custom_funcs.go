@@ -2181,6 +2181,18 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		return
 	}
 
+	// Zigzag joins aren't currently equipped to produce system columns, so
+	// don't generate any if some system columns are requested.
+	foundSystemCol := false
+	scanPrivate.Cols.ForEach(func(colID opt.ColumnID) {
+		if cat.IsSystemColumn(tab, scanPrivate.Table.ColumnOrdinal(colID)) {
+			foundSystemCol = true
+		}
+	})
+	if foundSystemCol {
+		return
+	}
+
 	// Iterate through indexes, looking for those prefixed with fixedEq cols.
 	// Efficiently finding a set of indexes that make the most efficient zigzag
 	// join, with no limit on the number of indexes selected, is an instance of
