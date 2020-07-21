@@ -123,6 +123,16 @@ func newJoinReader(
 		indexCols[i] = uint32(columnID)
 	}
 
+	// Add all requested system columns to the output.
+	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&jr.desc, spec.SystemColumns)
+	if err != nil {
+		return nil, err
+	}
+	columnTypes = append(columnTypes, sysColTypes...)
+	for i := range sysColDescs {
+		jr.colIdxMap[sysColDescs[i].ID] = len(jr.colIdxMap)
+	}
+
 	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
 	// should parallelize the key lookups it performs.
 	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
@@ -164,7 +174,7 @@ func newJoinReader(
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength, nil, /* systemColumns */
+		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength, sysColDescs,
 	)
 	if err != nil {
 		return nil, err
