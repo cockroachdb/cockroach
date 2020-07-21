@@ -35,11 +35,17 @@ func TestRunTC(t *testing.T) {
 }
 
 func Example_runTC() {
-	// Shows sample output for two packages, one of which runs with reduced
-	// parallelism.
+	// Shows sample output for the following packages, some of which runs with
+	// non-default configurations.
+	pkgs := map[string]struct{}{
+		baseImportPath + "kv/kvnemesis":  {},
+		baseImportPath + "sql/logictest": {},
+		baseImportPath + "storage":       {},
+	}
+
 	runTC(func(buildID string, opts map[string]string) {
 		pkg := opts["env.PKG"]
-		if !strings.HasSuffix(pkg, "pkg/sql/logictest") && !strings.HasSuffix(pkg, "pkg/storage") {
+		if _, ok := pkgs[pkg]; !ok {
 			return
 		}
 		var keys []string
@@ -57,19 +63,27 @@ func Example_runTC() {
 	})
 
 	// Output:
+	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
+	//   env.GOFLAGS:     -parallel=4
+	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
+	//
+	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
+	//   env.GOFLAGS:     -race -parallel=2
+	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 2
+	//
 	// github.com/cockroachdb/cockroach/pkg/sql/logictest
 	//   env.GOFLAGS:     -parallel=2
-	//   env.STRESSFLAGS: -p 2
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 2
 	//
 	// github.com/cockroachdb/cockroach/pkg/sql/logictest
 	//   env.GOFLAGS:     -race -parallel=1
-	//   env.STRESSFLAGS: -p 1
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 1
 	//
 	// github.com/cockroachdb/cockroach/pkg/storage
 	//   env.GOFLAGS:     -parallel=4
-	//   env.STRESSFLAGS: -p 4
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4
 	//
 	// github.com/cockroachdb/cockroach/pkg/storage
 	//   env.GOFLAGS:     -race -parallel=2
-	//   env.STRESSFLAGS: -p 2
+	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 2
 }
