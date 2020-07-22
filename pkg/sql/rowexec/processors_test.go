@@ -810,8 +810,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		// The default behavior is to enable uncertainty errors for a single random
 		// node and for all scan requests.
 		overrideErrorOrigin []errorOriginSpec
-		// if non-empty, this test will be skipped.
-		skip string
 	}{
 		{
 			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
@@ -855,14 +853,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				if testCase.skip != "" {
-					t.Skip(testCase.skip)
-				}
-				if vectorize {
-					// TODO(asubiotto): figure out why this race occurs.
-					t.Skip("vectorize option is temporarily skipped because there appears to be " +
-						"a race between the expected error and the context cancellation error")
-				}
 				func() {
 					_, err := defaultConn.Exec(fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
