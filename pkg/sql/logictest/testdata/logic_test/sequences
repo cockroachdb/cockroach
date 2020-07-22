@@ -1161,8 +1161,10 @@ CREATE SEQUENCE seq_50712 OWNED BY db_50712.t_50712.a
 statement ok
 DROP DATABASE db_50712 CASCADE
 
-statement error pq: relation "seq_50712" does not exist
-SELECT * FROM seq_50712
+query I
+SELECT COUNT(*) FROM system.namespace WHERE name LIKE 'seq_50712'
+----
+0
 
 # Tests db drop.
 # Sequence: inside db

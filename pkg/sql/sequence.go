@@ -530,6 +530,11 @@ func (p *planner) removeSequenceDependencies(
 		if err != nil {
 			return err
 		}
+		// If the sequence descriptor has been dropped, we do not need to unlink the
+		// dependency.
+		if seqDesc.Dropped() {
+			continue
+		}
 		// Find the item in seqDesc.DependedOnBy which references tableDesc and col.
 		refTableIdx := -1
 		refColIdx := -1
