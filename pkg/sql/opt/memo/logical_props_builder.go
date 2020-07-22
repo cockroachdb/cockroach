@@ -2168,3 +2168,74 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {
 	*rel = *fake.Props
 }
+
+// WithUses returns the WithUsesMap for the given expression.
+func WithUses(r opt.Expr) props.WithUsesMap {
+	switch e := r.(type) {
+	case RelExpr:
+		relProps := e.Relational()
+
+		// Lazily calculate and store the WithUses value.
+		if !relProps.IsAvailable(props.WithUses) {
+			relProps.Shared.Rule.WithUses = deriveWithUses(r)
+			relProps.SetAvailable(props.WithUses)
+		}
+		return relProps.Shared.Rule.WithUses
+
+	case ScalarPropsExpr:
+		scalarProps := e.ScalarProps()
+
+		// Lazily calculate and store the WithUses value.
+		if !scalarProps.IsAvailable(props.WithUses) {
+			scalarProps.Shared.Rule.WithUses = deriveWithUses(r)
+			scalarProps.SetAvailable(props.WithUses)
+		}
+		return scalarProps.Shared.Rule.WithUses
+
+	default:
+		return deriveWithUses(r)
+	}
+}
+
+// deriveWithUses collects information about WithScans in the expression.
+func deriveWithUses(r opt.Expr) props.WithUsesMap {
+	// We don't allow the information to escape the scope of the WITH itself, so
+	// we exclude that ID from the results.
+	var excludedID opt.WithID
+
+	switch e := r.(type) {
+	case *WithScanExpr:
+		info := props.WithUseInfo{
+			Count:    1,
+			UsedCols: e.InCols.ToSet(),
+		}
+		return props.WithUsesMap{e.With: info}
+
+	case *WithExpr:
+		excludedID = e.ID
+
+	default:
+		if opt.IsMutationOp(e) {
+			// Note: this can still be 0.
+			excludedID = e.Private().(*MutationPrivate).WithID
+		}
+	}
+
+	var result props.WithUsesMap
+	for i, n := 0, r.ChildCount(); i < n; i++ {
+		childUses := WithUses(r.Child(i))
+		for id, info := range childUses {
+			if id == excludedID {
+				continue
+			}
+			if result == nil {
+				result = make(props.WithUsesMap, len(childUses))
+			}
+			existing := result[id]
+			existing.Count += info.Count
+			existing.UsedCols.UnionWith(info.UsedCols)
+			result[id] = existing
+		}
+	}
+	return result
+}

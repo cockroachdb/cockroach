@@ -13,7 +13,6 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // CanInlineWith returns whether or not it's valid to inline binding in expr.
@@ -29,7 +28,7 @@ func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.Wi
 	if binding.Relational().VolatilitySet.HasVolatile() {
 		return false
 	}
-	return c.WithUses(expr)[private.ID].Count <= 1
+	return memo.WithUses(expr)[private.ID].Count <= 1
 }
 
 // InlineWith replaces all references to the With expression in input (via
@@ -61,75 +60,4 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	}
 
 	return replace(input).(memo.RelExpr)
-}
-
-// WithUses returns the WithUsesMap for the given expression.
-func (c *CustomFuncs) WithUses(r opt.Expr) props.WithUsesMap {
-	switch e := r.(type) {
-	case memo.RelExpr:
-		relProps := e.Relational()
-
-		// Lazily calculate and store the WithUses value.
-		if !relProps.IsAvailable(props.WithUses) {
-			relProps.Shared.Rule.WithUses = c.deriveWithUses(r)
-			relProps.SetAvailable(props.WithUses)
-		}
-		return relProps.Shared.Rule.WithUses
-
-	case memo.ScalarPropsExpr:
-		scalarProps := e.ScalarProps()
-
-		// Lazily calculate and store the WithUses value.
-		if !scalarProps.IsAvailable(props.WithUses) {
-			scalarProps.Shared.Rule.WithUses = c.deriveWithUses(r)
-			scalarProps.SetAvailable(props.WithUses)
-		}
-		return scalarProps.Shared.Rule.WithUses
-
-	default:
-		return c.deriveWithUses(r)
-	}
-}
-
-// deriveWithUses collects information about WithScans in the expression.
-func (c *CustomFuncs) deriveWithUses(r opt.Expr) props.WithUsesMap {
-	// We don't allow the information to escape the scope of the WITH itself, so
-	// we exclude that ID from the results.
-	var excludedID opt.WithID
-
-	switch e := r.(type) {
-	case *memo.WithScanExpr:
-		info := props.WithUseInfo{
-			Count:    1,
-			UsedCols: e.InCols.ToSet(),
-		}
-		return props.WithUsesMap{e.With: info}
-
-	case *memo.WithExpr:
-		excludedID = e.ID
-
-	default:
-		if opt.IsMutationOp(e) {
-			// Note: this can still be 0.
-			excludedID = e.Private().(*memo.MutationPrivate).WithID
-		}
-	}
-
-	var result props.WithUsesMap
-	for i, n := 0, r.ChildCount(); i < n; i++ {
-		childUses := c.WithUses(r.Child(i))
-		for id, info := range childUses {
-			if id == excludedID {
-				continue
-			}
-			if result == nil {
-				result = make(props.WithUsesMap, len(childUses))
-			}
-			existing := result[id]
-			existing.Count += info.Count
-			existing.UsedCols.UnionWith(info.UsedCols)
-			result[id] = existing
-		}
-	}
-	return result
 }

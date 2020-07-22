@@ -70,7 +70,7 @@ func (c *CustomFuncs) NeededMutationCols(
 
 	if private.WithID != 0 {
 		for i := range checks {
-			withUses := c.WithUses(checks[i].Check)
+			withUses := memo.WithUses(checks[i].Check)
 			cols.UnionWith(withUses[private.WithID].UsedCols)
 		}
 	}
