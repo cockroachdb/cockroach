@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -21,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -222,8 +223,14 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.externalWaitGroup.Done()
 			}()
 			sendErr := func(err error) {
-				if strings.Contains(err.Error(), context.Canceled.Error()) && atomic.LoadInt32(&internalCancellation) == 1 {
-					// Don't propagate an internal cancellation error.
+				ctxCanceled := errors.Is(err, context.Canceled)
+				grpcCtxCanceled := grpcutil.IsContextCanceled(err)
+				queryCanceled := errors.Is(err, sqlbase.QueryCanceledError)
+				if atomic.LoadInt32(&internalCancellation) == 1 && (ctxCanceled || grpcCtxCanceled || queryCanceled) {
+					// If the synchronizer performed the internal cancellation,
+					// we need to swallow context cancellation and "query
+					// canceled" errors since they could occur as part of
+					// "graceful" shutdown of synchronizer's inputs.
 					return
 				}
 				select {

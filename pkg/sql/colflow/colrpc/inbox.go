@@ -266,6 +266,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				i.close()
 				return coldata.ZeroBatch
 			}
+			// Note that here err can be stream's context cancellation. If it
+			// was caused by the internal cancellation of the parallel
+			// unordered synchronizer, it'll get swallowed by the synchronizer
+			// goroutine. Regardless of the cause we want to propagate such
+			// error in all cases so that the caller could decide on how to
+			// handle it.
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}

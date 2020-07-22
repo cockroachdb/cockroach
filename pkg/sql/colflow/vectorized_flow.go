@@ -647,8 +647,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts, metadataSourcesQueue, toClose)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
-		logtags.AddTag(ctx, "hashRouterID", mmName)
-		router.Run(ctx)
+		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
 	}
 	s.accumulateAsyncComponent(runRouter)
 
