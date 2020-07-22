@@ -3959,6 +3959,7 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     kConditionFailed = 12,
     kLeaseRejected = 13,
     kNodeUnavailable = 14,
+    kUnhandledRetry = 40,
     kRaftGroupDeleted = 16,
     kReplicaCorruption = 17,
     kReplicaTooOld = 18,
@@ -4201,6 +4202,18 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::NodeUnavailableError* mutable_node_unavailable();
   void set_allocated_node_unavailable(::cockroach::roachpb::NodeUnavailableError* node_unavailable);
 
+  // optional .cockroach.roachpb.UnhandledRetryableError unhandled_retry = 40;
+  bool has_unhandled_retry() const;
+  void clear_unhandled_retry();
+  static const int kUnhandledRetryFieldNumber = 40;
+  private:
+  const ::cockroach::roachpb::UnhandledRetryableError& _internal_unhandled_retry() const;
+  public:
+  const ::cockroach::roachpb::UnhandledRetryableError& unhandled_retry() const;
+  ::cockroach::roachpb::UnhandledRetryableError* release_unhandled_retry();
+  ::cockroach::roachpb::UnhandledRetryableError* mutable_unhandled_retry();
+  void set_allocated_unhandled_retry(::cockroach::roachpb::UnhandledRetryableError* unhandled_retry);
+
   // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
   bool has_raft_group_deleted() const;
   void clear_raft_group_deleted();
@@ -4387,6 +4400,7 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   void set_has_condition_failed();
   void set_has_lease_rejected();
   void set_has_node_unavailable();
+  void set_has_unhandled_retry();
   void set_has_raft_group_deleted();
   void set_has_replica_corruption();
   void set_has_replica_too_old();
@@ -4424,6 +4438,7 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     ::cockroach::roachpb::ConditionFailedError* condition_failed_;
     ::cockroach::roachpb::LeaseRejectedError* lease_rejected_;
     ::cockroach::roachpb::NodeUnavailableError* node_unavailable_;
+    ::cockroach::roachpb::UnhandledRetryableError* unhandled_retry_;
     ::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted_;
     ::cockroach::roachpb::ReplicaCorruptionError* replica_corruption_;
     ::cockroach::roachpb::ReplicaTooOldError* replica_too_old_;
@@ -7821,6 +7836,50 @@ inline ::cockroach::roachpb::NodeUnavailableError* ErrorDetail::mutable_node_una
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.node_unavailable)
   return value_.node_unavailable_;
+}
+
+// optional .cockroach.roachpb.UnhandledRetryableError unhandled_retry = 40;
+inline bool ErrorDetail::has_unhandled_retry() const {
+  return value_case() == kUnhandledRetry;
+}
+inline void ErrorDetail::set_has_unhandled_retry() {
+  _oneof_case_[0] = kUnhandledRetry;
+}
+inline void ErrorDetail::clear_unhandled_retry() {
+  if (has_unhandled_retry()) {
+    delete value_.unhandled_retry_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::UnhandledRetryableError& ErrorDetail::_internal_unhandled_retry() const {
+  return *value_.unhandled_retry_;
+}
+inline ::cockroach::roachpb::UnhandledRetryableError* ErrorDetail::release_unhandled_retry() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ErrorDetail.unhandled_retry)
+  if (has_unhandled_retry()) {
+    clear_has_value();
+      ::cockroach::roachpb::UnhandledRetryableError* temp = value_.unhandled_retry_;
+    value_.unhandled_retry_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::UnhandledRetryableError& ErrorDetail::unhandled_retry() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.unhandled_retry)
+  return has_unhandled_retry()
+      ? *value_.unhandled_retry_
+      : *reinterpret_cast< ::cockroach::roachpb::UnhandledRetryableError*>(&::cockroach::roachpb::_UnhandledRetryableError_default_instance_);
+}
+inline ::cockroach::roachpb::UnhandledRetryableError* ErrorDetail::mutable_unhandled_retry() {
+  if (!has_unhandled_retry()) {
+    clear_value();
+    set_has_unhandled_retry();
+    value_.unhandled_retry_ = CreateMaybeMessage< ::cockroach::roachpb::UnhandledRetryableError >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.unhandled_retry)
+  return value_.unhandled_retry_;
 }
 
 // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
