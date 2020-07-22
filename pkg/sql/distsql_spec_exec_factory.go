@@ -78,6 +78,12 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
 		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
 	}
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if e.planner.Descriptors().HasUncommittedTypes() {
+		distribute = false
+	}
 	if distribute {
 		if e.planContexts.distPlanCtx == nil {
 			evalCtx := e.planner.ExtendedEvalContext()

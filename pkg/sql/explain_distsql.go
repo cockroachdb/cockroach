@@ -108,6 +108,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if params.p.Descriptors().HasUncommittedTypes() {
+		distribution = physicalplan.LocalPlan
+	}
 	willDistribute := distribution.WillDistribute()
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, willDistribute)
 	planCtx.ignoreClose = true

@@ -1070,3 +1070,33 @@ SELECT * FROM t51474 INTERSECT ALL SELECT * FROM t51474
 ----
 hello
 howdy
+
+# Transactions which create or modify types must not distribute their
+# plans to remote nodes.
+statement ok
+BEGIN;
+CREATE TYPE local_type AS ENUM ('local');
+CREATE TABLE local_table (x INT);
+INSERT INTO local_table VALUES (1), (2)
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
+----
+·     distribution  local
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER TYPE greeting RENAME TO greeting_local;
+CREATE TABLE local_table (x INT);
+INSERT INTO local_table VALUES (1), (2)
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
+----
+·     distribution  local
+
+statement ok
+ROLLBACK

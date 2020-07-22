@@ -791,6 +791,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	distributePlan := getPlanDistribution(
 		ctx, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
 	).WillDistribute()
+
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if planner.Descriptors().HasUncommittedTypes() {
+		distributePlan = false
+	}
+
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
