@@ -43,7 +43,7 @@ ANNOTATE_TYPE('1-2 02:12', interval)
 eval
 ANNOTATE_TYPE('2010-09-28', timestamp)
 ----
-'2010-09-28 00:00:00+00:00'
+'2010-09-28 00:00:00'
 
 eval
 ANNOTATE_TYPE('2010-09-28', timestamptz)

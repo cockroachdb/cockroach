@@ -1090,7 +1090,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       └── filters
-           └── tz:4 > '2017-11-12 07:35:01+00:00' [outer=(4), stable, constraints=(/4: (/NULL - ])]
+           └── tz:4 > '2017-11-12 07:35:01' [outer=(4), stable, constraints=(/4: (/NULL - ])]
 
 opt expect=UnifyComparisonTypes
 SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
@@ -1138,7 +1138,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(5)
       └── filters
-           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+           └── d:5 < '2018-07-08 00:00:01' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # NULL value.
 opt

@@ -927,7 +927,9 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 			lex.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
-		return t.Format(tree.TimestampOutputFormat)
+		// Since we do not know whether the datum is Timestamp or TimestampTZ,
+		// output the full format.
+		return t.Format(tree.TimestampTZOutputFormat)
 	}
 
 	return fmt.Sprint(val)
