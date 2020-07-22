@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,7 +163,11 @@ func (tc *Collection) GetMutableTableDescriptor(
 	if !ok {
 		return nil, nil
 	}
-	return mutDesc, nil
+	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, mutDesc)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated.(*sqlbase.MutableTableDescriptor), nil
 }
 
 func (tc *Collection) getMutableObjectDescriptor(
@@ -288,7 +293,11 @@ func (tc *Collection) GetTableVersion(
 		}
 		return nil, nil
 	}
-	return table, nil
+	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated.(*sqlbase.ImmutableTableDescriptor), nil
 }
 
 func (tc *Collection) getObjectVersion(
@@ -434,7 +443,11 @@ func (tc *Collection) GetTableVersionByID(
 		return nil, sqlbase.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
 	}
-	return table, nil
+	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated.(*sqlbase.ImmutableTableDescriptor), nil
 }
 
 func (tc *Collection) getDescriptorVersionByID(
@@ -506,7 +519,12 @@ func (tc *Collection) GetMutableTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.MutableTableDescriptor), nil
+	table := desc.(*sqlbase.MutableTableDescriptor)
+	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated.(*sqlbase.MutableTableDescriptor), nil
 }
 
 func (tc *Collection) getMutableDescriptorByID(
@@ -526,6 +544,46 @@ func (tc *Collection) getMutableDescriptorByID(
 		return nil, sqlbase.ErrDescriptorNotFound
 	}
 	return desc, nil
+}
+
+// hydrateTypesInTableDesc installs user defined type metadata in all types.T
+// present in the input TableDescriptor. It always returns the same type of
+// TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
+// are not modified during the process of metadata installation.
+func (tc *Collection) hydrateTypesInTableDesc(
+	ctx context.Context, txn *kv.Txn, desc sqlbase.TableDescriptorInterface,
+) (sqlbase.TableDescriptorInterface, error) {
+	getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		// TODO (rohany): Use the collection API's here.
+		return resolver.ResolveTypeDescByID(ctx, txn, tc.codec(), id, tree.ObjectLookupFlags{})
+	}
+	switch t := desc.(type) {
+	case *sqlbase.MutableTableDescriptor:
+		// It is safe to hydrate directly into MutableTableDescriptor since it is
+		// not shared.
+		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
+	case *sqlbase.ImmutableTableDescriptor:
+		// ImmutableTableDescriptors need to be copied before hydration, because
+		// they are potentially read by multiple threads. If there aren't any user
+		// defined types in the descriptor, then return early.
+		if !t.ContainsUserDefinedTypes() {
+			return desc, nil
+		}
+
+		// TODO (rohany, ajwerner): Here we would look into the cached set of
+		//  hydrated table descriptors and potentially return without having to
+		//  make a copy. However, we could avoid hitting the cache if any of the
+		//  user defined types have been modified in this transaction.
+
+		// Make a copy of the underlying descriptor before hydration.
+		descBase := protoutil.Clone(t.TableDesc()).(*sqlbase.TableDescriptor)
+		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, descBase, sqlbase.TypeLookupFunc(getType)); err != nil {
+			return nil, err
+		}
+		return sqlbase.NewImmutableTableDescriptor(*descBase), nil
+	default:
+		return desc, nil
+	}
 }
 
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
