@@ -17,7 +17,7 @@
 # The Insert operator is capable of inserting values into computed columns and
 # mutation columns, which are not writable (or even visible in the case of
 # mutation columns) by SQL users.
-[Relational, Mutation]
+[Relational, Mutation, WithBinding]
 define Insert {
     Input RelExpr
     Checks FKChecksExpr
@@ -174,7 +174,7 @@ define MutationPrivate {
 #
 # The Update operator will also update any computed columns, including mutation
 # columns that are computed.
-[Relational, Mutation]
+[Relational, Mutation, WithBinding]
 define Update {
     Input RelExpr
     Checks FKChecksExpr
@@ -197,7 +197,7 @@ define Update {
 #
 # The Update operator will also insert/update any computed columns, including
 # mutation columns that are computed.
-[Relational, Mutation]
+[Relational, Mutation, WithBinding]
 define Upsert {
     Input RelExpr
     Checks FKChecksExpr
@@ -209,7 +209,7 @@ define Upsert {
 #
 #   DELETE FROM abc WHERE a>0 ORDER BY b LIMIT 10
 #
-[Relational, Mutation]
+[Relational, Mutation, WithBinding]
 define Delete {
     Input RelExpr
     Checks FKChecksExpr

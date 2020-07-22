@@ -132,7 +132,10 @@ func (b *Builder) buildCTE(
 	if bindingProps.Stats.RowCount < 1 {
 		bindingProps.Stats.RowCount = 1
 	}
-	cteSrc.bindingProps = bindingProps
+	cteSrc.expr = b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
+		Props: bindingProps,
+	})
+	b.factory.Metadata().AddWithBinding(withID, cteSrc.expr)
 
 	cteSrc.cols = b.getCTECols(initialScope, cte.Name)
 

@@ -315,12 +315,15 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		outCols[i] = md.AddColumn(c.Alias, c.Type)
 	}
 
+	// Construct a dummy operator as the binding.
+	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
+		Props: bindingProps,
+	}))
 	mutationInput := b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		With:         binding,
-		InCols:       oldValues,
-		OutCols:      outCols,
-		BindingProps: bindingProps,
-		ID:           md.NextUniqueID(),
+		With:    binding,
+		InCols:  oldValues,
+		OutCols: outCols,
+		ID:      md.NextUniqueID(),
 	})
 
 	on := make(memo.FiltersExpr, numFKCols)
@@ -566,12 +569,14 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		outColsNew[i] = md.AddColumn(c.Alias, c.Type)
 	}
 
+	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
+		Props: bindingProps,
+	}))
 	mutationInput := f.ConstructWithScan(&memo.WithScanPrivate{
-		With:         binding,
-		InCols:       append(oldValues[:len(oldValues):len(oldValues)], newValues...),
-		OutCols:      outCols,
-		BindingProps: bindingProps,
-		ID:           md.NextUniqueID(),
+		With:    binding,
+		InCols:  append(oldValues[:len(oldValues):len(oldValues)], newValues...),
+		OutCols: outCols,
+		ID:      md.NextUniqueID(),
 	})
 
 	// Filter out rows where the new values are the same as the old values. This

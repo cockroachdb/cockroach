@@ -74,6 +74,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	// more efficient if we did it in here (or we'd end up building the entire FK
 	// subtrees twice).
 	mb.withID = mb.b.factory.Memo().NextWithID()
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 
 	h := &mb.fkCheckHelper
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
@@ -123,6 +124,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 
 	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
 		h := &mb.fkCheckHelper
@@ -229,6 +231,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 
 	// An Update can be thought of an insertion paired with a deletion, so for an
 	// Update we can emit both semi-joins and anti-joins.
@@ -372,6 +375,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
 
 	h := &mb.fkCheckHelper
 	for i := 0; i < numOutbound; i++ {
@@ -633,11 +637,10 @@ func (h *fkCheckHelper) makeFKInputScan(
 	}
 
 	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		With:         mb.withID,
-		InCols:       inputCols,
-		OutCols:      outCols,
-		BindingProps: mb.outScope.expr.Relational(),
-		ID:           mb.b.factory.Metadata().NextUniqueID(),
+		With:    mb.withID,
+		InCols:  inputCols,
+		OutCols: outCols,
+		ID:      mb.b.factory.Metadata().NextUniqueID(),
 	})
 	return scan, outCols, notNullOutCols
 }
