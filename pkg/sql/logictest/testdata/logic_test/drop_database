@@ -259,3 +259,69 @@ query TT
 SELECT job_type, status FROM [SHOW JOBS] WHERE description LIKE '%empty%'
 ----
 SCHEMA CHANGE       succeeded
+
+subtest bug_50997
+
+statement ok
+CREATE DATABASE db_50997
+
+statement ok
+CREATE SEQUENCE db_50997.seq_50997
+
+statement ok
+CREATE TABLE db_50997.t_50997(a INT DEFAULT nextval('db_50997.seq_50997'))
+
+statement ok
+DROP DATABASE db_50997 CASCADE
+
+query I
+SELECT COUNT(*) FROM system.namespace WHERE name = 'seq_50997'
+----
+0
+
+# Similar to the test above, except now the relationship is cross database. In
+# this case the sequence should be simply unlinked (and not dropped). This wasn't
+# broken before, but it is nice to have a test that checks things behave as expected.
+statement ok
+CREATE DATABASE db_50997
+
+statement ok
+CREATE SEQUENCE seq_50997
+
+statement ok
+CREATE TABLE db_50997.t_50997(a INT DEFAULT nextval('seq_50997'))
+
+statement ok
+DROP DATABASE db_50997 CASCADE
+
+query I
+SELECT COUNT(*) FROM system.namespace WHERE name LIKE 'seq_50997'
+----
+1
+
+subtest regression_51782
+
+statement ok
+CREATE DATABASE db_51782
+
+statement ok
+CREATE TABLE db_51782.t_51782(a int, b int);
+
+statement ok
+CREATE VIEW db_51782.v_51782 AS SELECT a, b FROM db_51782.t_51782
+
+statement ok
+CREATE VIEW db_51782.w_51782 AS SELECT a FROM db_51782.v_51782
+
+statement ok
+DROP DATABASE db_51782 CASCADE
+
+query I
+SELECT COUNT(*) FROM system.namespace WHERE name LIKE 'v_51782'
+----
+0
+
+query I
+SELECT COUNT(*) FROM system.namespace WHERE name LIKE 'w_51782'
+----
+0
