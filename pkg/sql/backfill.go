@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -655,21 +654,6 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-
-				// Hydrate types used in the retrieved table.
-				// TODO (rohany): This can be removed once table access from the
-				//  desc.Collection returns tables with hydrated types.
-				typLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-					return resolver.ResolveTypeDescByID(ctx, txn, sc.execCfg.Codec, id, tree.ObjectLookupFlags{})
-				}
-				if err := sqlbase.HydrateTypesInTableDescriptor(
-					ctx,
-					tableDesc.TableDesc(),
-					sqlbase.TypeLookupFunc(typLookup),
-				); err != nil {
-					return err
-				}
-
 				rd, err := row.MakeDeleter(
 					ctx,
 					txn,
