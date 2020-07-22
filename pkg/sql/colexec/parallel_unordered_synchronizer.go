@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
@@ -220,8 +221,13 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
 			}()
 			sendErr := func(err error) {
-				if strings.Contains(err.Error(), context.Canceled.Error()) && atomic.LoadInt32(&internalCancellation) == 1 {
-					// Don't propagate an internal cancellation error.
+				ctxCanceled := strings.Contains(err.Error(), context.Canceled.Error())
+				queryCanceled := strings.Contains(err.Error(), sqlbase.QueryCanceledError.Error())
+				if atomic.LoadInt32(&internalCancellation) == 1 && (ctxCanceled || queryCanceled) {
+					// If the synchronizer performed the internal cancellation,
+					// we need to swallow "context canceled" and "query
+					// canceled" errors since they could occur as part of
+					// "graceful" shutdown of synchronizer's inputs.
 					return
 				}
 				select {
