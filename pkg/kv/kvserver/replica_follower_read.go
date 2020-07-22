@@ -39,53 +39,53 @@ var FollowerReadsEnabled = settings.RegisterPublicBoolSetting(
 func (r *Replica) canServeFollowerRead(
 	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 ) *roachpb.Error {
-	canServeFollowerRead := false
-	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
+	lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
+	eligible := ok &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
 		(!ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
 		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
-		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) {
+		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 
-		// There's no known reason that a non-VOTER_FULL replica couldn't serve follower
-		// reads (or RangeFeed), but as of the time of writing, these are expected
-		// to be short-lived, so it's not worth working out the edge-cases. Revisit if
-		// we add long-lived learners or feel that incoming/outgoing voters also need
-		// to be able to serve follower reads.
-		repDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
-			return roachpb.NewError(err)
-		}
-		if typ := repDesc.GetType(); typ != roachpb.VOTER_FULL {
-			log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
-			return pErr
-		}
-
-		ts := ba.Timestamp
-		if ba.Txn != nil {
-			ts.Forward(ba.Txn.MaxTimestamp)
-		}
-
-		maxClosed, _ := r.maxClosed(ctx)
-		canServeFollowerRead = ts.LessEq(maxClosed)
-		if !canServeFollowerRead {
-			// We can't actually serve the read based on the closed timestamp.
-			// Signal the clients that we want an update so that future requests can succeed.
-			r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
-
-			if false {
-				// NB: this can't go behind V(x) because the log message created by the
-				// storage might be gigantic in real clusters, and we don't want to trip it
-				// using logspy.
-				log.Warningf(ctx, "can't serve follower read for %s at epo %d, storage is %s",
-					ba.Timestamp, lErr.Lease.Epoch,
-					r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
-				)
-			}
-		}
+	if !eligible {
+		// We couldn't do anything with the error, propagate it.
+		return pErr
 	}
 
+	// There's no known reason that a non-VOTER_FULL replica couldn't serve follower
+	// reads (or RangeFeed), but as of the time of writing, these are expected
+	// to be short-lived, so it's not worth working out the edge-cases. Revisit if
+	// we add long-lived learners or feel that incoming/outgoing voters also need
+	// to be able to serve follower reads.
+	repDesc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	if typ := repDesc.GetType(); typ != roachpb.VOTER_FULL {
+		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
+		return pErr
+	}
+
+	ts := ba.Timestamp
+	if ba.Txn != nil {
+		ts.Forward(ba.Txn.MaxTimestamp)
+	}
+
+	maxClosed, _ := r.maxClosed(ctx)
+	canServeFollowerRead := ts.LessEq(maxClosed)
 	if !canServeFollowerRead {
-		// We couldn't do anything with the error, propagate it.
+		// We can't actually serve the read based on the closed timestamp.
+		// Signal the clients that we want an update so that future requests can succeed.
+		r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+
+		if false {
+			// NB: this can't go behind V(x) because the log message created by the
+			// storage might be gigantic in real clusters, and we don't want to trip it
+			// using logspy.
+			log.Warningf(ctx, "can't serve follower read for %s at epo %d, storage is %s",
+				ba.Timestamp, lErr.Lease.Epoch,
+				r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
+			)
+		}
 		return pErr
 	}
 
