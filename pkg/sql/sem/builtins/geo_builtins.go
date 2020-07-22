@@ -2984,6 +2984,28 @@ The calculations are done on a sphere.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_envelope": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				envelope, err := geomfn.Envelope(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(envelope), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a bounding envelope for the given geometry.
+
+For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
+or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
+returned POLYGON will be ordered Bottom Left, Top Left, Top Right, Bottom Right,
+Bottom Left.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Schema changes

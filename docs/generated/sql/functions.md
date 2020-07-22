@@ -1094,6 +1094,12 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_envelope"></a><code>st_envelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding envelope for the given geometry.</p>
+<p>For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
+or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
+returned POLYGON will be ordered Bottom Left, Top Left, Top Right, Bottom Right,
+Bottom Left.</p>
+</span></td></tr>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
