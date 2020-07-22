@@ -227,6 +227,7 @@ class ErrorDetailDefaultTypeInternal {
   const ::cockroach::roachpb::ConditionFailedError* condition_failed_;
   const ::cockroach::roachpb::LeaseRejectedError* lease_rejected_;
   const ::cockroach::roachpb::NodeUnavailableError* node_unavailable_;
+  const ::cockroach::roachpb::UnhandledRetryableError* unhandled_retry_;
   const ::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted_;
   const ::cockroach::roachpb::ReplicaCorruptionError* replica_corruption_;
   const ::cockroach::roachpb::ReplicaTooOldError* replica_too_old_;
@@ -485,6 +486,11 @@ static void InitDefaultsAmbiguousResultError() {
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
   {
+    void* ptr = &::cockroach::roachpb::_UnhandledRetryableError_default_instance_;
+    new (ptr) ::cockroach::roachpb::UnhandledRetryableError();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  {
     void* ptr = &::cockroach::roachpb::_ErrorDetail_default_instance_;
     new (ptr) ::cockroach::roachpb::ErrorDetail();
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
@@ -495,6 +501,7 @@ static void InitDefaultsAmbiguousResultError() {
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
   ::cockroach::roachpb::AmbiguousResultError::InitAsDefaultInstance();
+  ::cockroach::roachpb::UnhandledRetryableError::InitAsDefaultInstance();
   ::cockroach::roachpb::ErrorDetail::InitAsDefaultInstance();
   ::cockroach::roachpb::Error::InitAsDefaultInstance();
 }
@@ -587,21 +594,6 @@ static void InitDefaultsStoreNotFoundError() {
 
 ::google::protobuf::internal::SCCInfo<0> scc_info_StoreNotFoundError =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsStoreNotFoundError}, {}};
-
-static void InitDefaultsUnhandledRetryableError() {
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  {
-    void* ptr = &::cockroach::roachpb::_UnhandledRetryableError_default_instance_;
-    new (ptr) ::cockroach::roachpb::UnhandledRetryableError();
-    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
-  }
-  ::cockroach::roachpb::UnhandledRetryableError::InitAsDefaultInstance();
-}
-
-::google::protobuf::internal::SCCInfo<1> scc_info_UnhandledRetryableError =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsUnhandledRetryableError}, {
-      &protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base,}};
 
 static void InitDefaultsTransactionRetryWithProtoRefreshError() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -754,7 +746,6 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ReplicaCorruptionError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ReplicaTooOldError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_StoreNotFoundError.base);
-  ::google::protobuf::internal::InitSCC(&scc_info_UnhandledRetryableError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_TransactionRetryWithProtoRefreshError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_TxnAlreadyEncounteredErrorError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_IntegerOverflowError.base);
@@ -5333,7 +5324,7 @@ const int UnhandledRetryableError::kPErrFieldNumber;
 UnhandledRetryableError::UnhandledRetryableError()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
   ::google::protobuf::internal::InitSCC(
-      &protobuf_roachpb_2ferrors_2eproto::scc_info_UnhandledRetryableError.base);
+      &protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.roachpb.UnhandledRetryableError)
 }
@@ -5367,7 +5358,7 @@ void UnhandledRetryableError::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
 const UnhandledRetryableError& UnhandledRetryableError::default_instance() {
-  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2ferrors_2eproto::scc_info_UnhandledRetryableError.base);
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base);
   return *internal_default_instance();
 }
 
@@ -7466,6 +7457,20 @@ void ErrorDetail::set_allocated_node_unavailable(::cockroach::roachpb::NodeUnava
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.node_unavailable)
 }
+void ErrorDetail::set_allocated_unhandled_retry(::cockroach::roachpb::UnhandledRetryableError* unhandled_retry) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  clear_value();
+  if (unhandled_retry) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      unhandled_retry = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, unhandled_retry, submessage_arena);
+    }
+    set_has_unhandled_retry();
+    value_.unhandled_retry_ = unhandled_retry;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.unhandled_retry)
+}
 void ErrorDetail::set_allocated_raft_group_deleted(::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   clear_value();
@@ -7677,6 +7682,7 @@ const int ErrorDetail::kOpRequiresTxnFieldNumber;
 const int ErrorDetail::kConditionFailedFieldNumber;
 const int ErrorDetail::kLeaseRejectedFieldNumber;
 const int ErrorDetail::kNodeUnavailableFieldNumber;
+const int ErrorDetail::kUnhandledRetryFieldNumber;
 const int ErrorDetail::kRaftGroupDeletedFieldNumber;
 const int ErrorDetail::kReplicaCorruptionFieldNumber;
 const int ErrorDetail::kReplicaTooOldFieldNumber;
@@ -7761,6 +7767,10 @@ ErrorDetail::ErrorDetail(const ErrorDetail& from)
     }
     case kNodeUnavailable: {
       mutable_node_unavailable()->::cockroach::roachpb::NodeUnavailableError::MergeFrom(from.node_unavailable());
+      break;
+    }
+    case kUnhandledRetry: {
+      mutable_unhandled_retry()->::cockroach::roachpb::UnhandledRetryableError::MergeFrom(from.unhandled_retry());
       break;
     }
     case kRaftGroupDeleted: {
@@ -7907,6 +7917,10 @@ void ErrorDetail::clear_value() {
     }
     case kNodeUnavailable: {
       delete value_.node_unavailable_;
+      break;
+    }
+    case kUnhandledRetry: {
+      delete value_.unhandled_retry_;
       break;
     }
     case kRaftGroupDeleted: {
@@ -8336,6 +8350,18 @@ bool ErrorDetail::MergePartialFromCodedStream(
         break;
       }
 
+      // optional .cockroach.roachpb.UnhandledRetryableError unhandled_retry = 40;
+      case 40: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 322 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_unhandled_retry()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8475,6 +8501,10 @@ void ErrorDetail::SerializeWithCachedSizes(
       ::google::protobuf::internal::WireFormatLite::WriteMessage(
         39, this->_internal_indeterminate_commit(), output);
       break;
+    case kUnhandledRetry:
+      ::google::protobuf::internal::WireFormatLite::WriteMessage(
+        40, this->_internal_unhandled_retry(), output);
+      break;
     default: ;
   }
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -8585,6 +8615,13 @@ size_t ErrorDetail::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           *value_.node_unavailable_);
+      break;
+    }
+    // optional .cockroach.roachpb.UnhandledRetryableError unhandled_retry = 40;
+    case kUnhandledRetry: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *value_.unhandled_retry_);
       break;
     }
     // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
@@ -8761,6 +8798,10 @@ void ErrorDetail::MergeFrom(const ErrorDetail& from) {
     }
     case kNodeUnavailable: {
       mutable_node_unavailable()->::cockroach::roachpb::NodeUnavailableError::MergeFrom(from.node_unavailable());
+      break;
+    }
+    case kUnhandledRetry: {
+      mutable_unhandled_retry()->::cockroach::roachpb::UnhandledRetryableError::MergeFrom(from.unhandled_retry());
       break;
     }
     case kRaftGroupDeleted: {

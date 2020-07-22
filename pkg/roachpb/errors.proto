@@ -183,7 +183,7 @@ enum TransactionAbortedReason {
   // TODO(andrei): We should be able to identify the range merge case by saving
   // a bit more info in the timestamp cache.
   ABORT_REASON_TIMESTAMP_CACHE_REJECTED = 7;
-  
+
   reserved 2;
 }
 
@@ -370,6 +370,8 @@ message StoreNotFoundError {
 // them into TransactionRetryWithProtoRefreshError. For non-transactional requests,
 // this error will be observed by layers above the TxnCoordSender.
 message UnhandledRetryableError {
+  option (gogoproto.equal) = true;
+
   // The underlying storage error that is being marshaled.
   // pErr.TransactionRestart is expected to be set, and the error
   // detail is one of the retryable ones.
@@ -513,6 +515,7 @@ message ErrorDetail {
     ConditionFailedError condition_failed = 12;
     LeaseRejectedError lease_rejected = 13;
     NodeUnavailableError node_unavailable = 14;
+    UnhandledRetryableError unhandled_retry =  40;
     // TODO(kaneda): Following three are added to preserve the type when
     // converting Go errors from/to proto Errors. Revisit this design.
     RaftGroupDeletedError raft_group_deleted = 16;
