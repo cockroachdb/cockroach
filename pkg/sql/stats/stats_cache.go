@@ -65,10 +65,24 @@ type TableStatisticsCache struct {
 // The cache stores *cacheEntry objects. The fields are protected by the
 // cache-wide mutex.
 type cacheEntry struct {
-	// If true, we are in the process of updating the statistics for this
-	// table. Other callers can wait on the waitCond until this is false.
+	// If mustWait is true, we do not have any statistics for this table and we
+	// are in the process of fetching the stats from the database. Other callers
+	// can wait on the waitCond until this is false.
 	mustWait bool
 	waitCond sync.Cond
+
+	// If refreshing is true, the current statistics for this table are stale,
+	// and we are in the process of fetching the updated stats from the database.
+	// In the mean time, other callers can use the stale stats and do not need to
+	// wait.
+	//
+	// If a goroutine tries to perform a refresh when a refresh is already
+	// in progress, it will see that refreshing=true and will set the
+	// mustRefreshAgain flag to true before returning. When the original
+	// goroutine that was performing the refresh returns from the database and
+	// sees that mustRefreshAgain=true, it will trigger another refresh.
+	refreshing       bool
+	mustRefreshAgain bool
 
 	stats []*TableStatistic
 
@@ -246,18 +260,33 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID s
 	if !found || e.err != nil {
 		return
 	}
-	sc.mu.numInternalQueries++
+
+	// Don't perform a refresh if a refresh is already in progress, but let that
+	// goroutine know it needs to refresh again.
+	if e.refreshing {
+		e.mustRefreshAgain = true
+		return
+	}
+	e.refreshing = true
 
 	var stats []*TableStatistic
 	var err error
-	func() {
-		sc.mu.Unlock()
-		defer sc.mu.Lock()
+	for {
+		func() {
+			sc.mu.numInternalQueries++
+			sc.mu.Unlock()
+			defer sc.mu.Lock()
 
-		stats, err = sc.getTableStatsFromDB(ctx, tableID)
-	}()
+			stats, err = sc.getTableStatsFromDB(ctx, tableID)
+		}()
+		if !e.mustRefreshAgain {
+			break
+		}
+		e.mustRefreshAgain = false
+	}
 
 	e.stats, e.err = stats, err
+	e.refreshing = false
 
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
