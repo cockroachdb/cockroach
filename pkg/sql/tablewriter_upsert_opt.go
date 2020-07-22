@@ -62,10 +62,6 @@ type optTableUpserter struct {
 	// collectRows is true.
 	insertReorderingRequired bool
 
-	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
-	// collectRows is set, counted separately otherwise.
-	resultCount int
-
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
 	// existing values for updates.
@@ -104,7 +100,7 @@ var _ tableWriter = &optTableUpserter{}
 func (tu *optTableUpserter) init(
 	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext,
 ) error {
-	tu.tableWriterBase.init(txn)
+	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc)
 
 	// collectRows, set upon initialization, indicates whether or not we want
 	// rows returned from the operation.
@@ -121,9 +117,8 @@ func (tu *optTableUpserter) init(
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
 		tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
-		tableDesc := tu.tableDesc()
-		for i := range tableDesc.Columns {
-			id := tableDesc.Columns[i].ID
+		for i := range tu.tableDesc().Columns {
+			id := tu.tableDesc().Columns[i].ID
 			tu.colIDToReturnIndex[id] = i
 		}
 
@@ -148,13 +143,10 @@ func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
-	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
+	return tu.tableWriterBase.flushAndStartNewBatch(ctx)
 }
 
-// batchedCount is part of the batchedTableWriter interface.
-func (tu *optTableUpserter) batchedCount() int { return tu.resultCount }
-
-// batchedValues is part of the batchedTableWriter interface.
+// batchedValues is a helper in implementing batchedPlanNode interface.
 func (tu *optTableUpserter) batchedValues(rowIdx int) tree.Datums {
 	if !tu.collectRows {
 		panic("return row requested but collect rows was not set")
@@ -164,16 +156,10 @@ func (tu *optTableUpserter) batchedValues(rowIdx int) tree.Datums {
 
 // close is part of the tableWriter interface.
 func (tu *optTableUpserter) close(ctx context.Context) {
+	tu.tableWriterBase.close(ctx)
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
 	}
-}
-
-// finalize is part of the tableWriter interface.
-func (tu *optTableUpserter) finalize(
-	ctx context.Context, traceKV bool,
-) (*rowcontainer.RowContainer, error) {
-	return nil, tu.tableWriterBase.finalize(ctx, tu.tableDesc())
 }
 
 // makeResultFromRow reshapes a row that was inserted or updated to a row
@@ -207,8 +193,7 @@ func (*optTableUpserter) desc() string { return "opt upserter" }
 func (tu *optTableUpserter) row(
 	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
-	tu.batchSize++
-	tu.resultCount++
+	tu.currentBatchSize++
 
 	// Consult the canary column to determine whether to insert or update. For
 	// more details on how canary columns work, see the block comment on
@@ -245,12 +230,6 @@ func (tu *optTableUpserter) row(
 		tu.tableDesc(),
 		traceKV,
 	)
-}
-
-// atBatchEnd is part of the tableWriter interface.
-func (tu *optTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
-	// Nothing to do, because the row method does everything.
-	return nil
 }
 
 // insertNonConflictingRow inserts the given source row into the table when
