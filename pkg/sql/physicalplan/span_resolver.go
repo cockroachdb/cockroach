@@ -13,7 +13,6 @@ package physicalplan
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -35,7 +34,7 @@ import (
 //   spans ...spanWithDir,
 // ) ([][]kv.ReplicaInfo, error) {
 //   lr := execinfra.NewSpanResolver(
-//     distSender, gossip, nodeDescriptor,
+//     distSender, nodeDescs, nodeDescriptor,
 //     execinfra.BinPackingLeaseHolderChoice)
 //   it := lr.NewSpanResolverIterator(nil)
 //   res := make([][]kv.ReplicaInfo, 0)
@@ -109,7 +108,7 @@ type SpanResolverIterator interface {
 
 	// ReplicaInfo returns information about the replica that has been picked for
 	// the current range.
-	// A RangeUnavailableError is returned if there's no information in gossip
+	// A RangeUnavailableError is returned if there's no information in nodeDescs
 	// about any of the replicas.
 	ReplicaInfo(ctx context.Context) (roachpb.ReplicaDescriptor, error)
 }
@@ -117,7 +116,6 @@ type SpanResolverIterator interface {
 // spanResolver implements SpanResolver.
 type spanResolver struct {
 	st            *cluster.Settings
-	gossip        gossip.DeprecatedGossip
 	distSender    *kvcoord.DistSender
 	nodeDesc      roachpb.NodeDescriptor
 	oracleFactory replicaoracle.OracleFactory
@@ -129,7 +127,7 @@ var _ SpanResolver = &spanResolver{}
 func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
-	gw gossip.DeprecatedGossip,
+	nodeDescs kvcoord.NodeDescStore,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
@@ -138,13 +136,12 @@ func NewSpanResolver(
 		st:       st,
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
-			Settings:   st,
-			Gossip:     gw.DeprecatedOracleGossip(48432),
+			NodeDescs:  nodeDescs,
 			NodeDesc:   nodeDesc,
+			Settings:   st,
 			RPCContext: rpcCtx,
 		}),
 		distSender: distSender,
-		gossip:     gw,
 	}
 }
 

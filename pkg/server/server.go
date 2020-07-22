@@ -613,6 +613,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock:                    clock,
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
+		nodeDescs:                g,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
