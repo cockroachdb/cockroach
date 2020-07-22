@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -780,7 +781,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/33357")
+	skip.WithIssue(t, 33357)
 
 	defer func(oldInterval time.Duration) {
 		BackupCheckpointInterval = oldInterval
@@ -1018,7 +1019,7 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("#24136")
+	skip.WithIssue(t, 24136)
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()

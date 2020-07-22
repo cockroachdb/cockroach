@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,7 +57,7 @@ func TestAdaptiveThrottling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	if !*runManual {
-		t.Skip("manual test with no --run-manual")
+		skip.IgnoreLint(t, "manual test with no --run-manual")
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)

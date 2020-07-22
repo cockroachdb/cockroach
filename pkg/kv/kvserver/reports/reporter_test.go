@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -38,15 +38,10 @@ import (
 func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	if testing.Short() {
-		// This test takes seconds because of replication vagaries.
-		t.Skip("short flag")
-	}
-	if testutils.NightlyStress() && util.RaceEnabled {
-		// Under stressrace, replication changes seem to hit 1m deadline errors and
-		// don't make progress.
-		t.Skip("test too slow for stressrace")
-	}
+	// This test takes seconds because of replication vagaries.
+	skip.UnderShort(t)
+	// Under stressrace, replication changes seem to hit 1m deadline errors and
+	// don't make progress.
 
 	ctx := context.Background()
 	tc := serverutils.StartTestCluster(t, 5, base.TestClusterArgs{

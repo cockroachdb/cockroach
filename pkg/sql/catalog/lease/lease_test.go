@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -823,7 +824,7 @@ CREATE TABLE t.foo (v INT);
 func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50037")
+	skip.WithIssue(t, 50037)
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -1616,11 +1617,11 @@ INSERT INTO t.kv VALUES ('a', 'b');
 func TestModificationTimeTxnOrdering(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
-	testingT.Skip("#22479")
+	skip.WithIssue(testingT, 22479)
 
 	// Decide how long we should run this.
 	maxTime := time.Duration(5) * time.Second
-	if testutils.NightlyStress() {
+	if skip.NightlyStress() {
 		maxTime = time.Duration(2) * time.Minute
 	}
 

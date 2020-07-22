@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1494,8 +1495,8 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("TODO(andreimatei): This last assertion in this test was broken by #33150. " +
-		"I suspect the reason is that there is no longer a single Range " +
+	skip.WithIssue(t, 51795, "TODO(andreimatei): This last assertion in this test was broken by #33150. "+
+		"I suspect the reason is that there is no longer a single Range "+
 		"that spans [KeyMin, z), so we're not hitting the error.")
 	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())

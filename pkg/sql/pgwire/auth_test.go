@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -187,7 +188,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						}
 					}
 					if !allowed {
-						t.Skip("Test file not applicable at this security level.")
+						skip.IgnoreLint(t, "Test file not applicable at this security level.")
 					}
 
 				case "set_hba":
