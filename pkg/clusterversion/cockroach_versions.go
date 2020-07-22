@@ -73,7 +73,6 @@ const (
 	VersionNodeMembershipStatus
 	VersionRangeStatsRespHasDesc
 	VersionMinPasswordLength
-
 	// Add new versions here (step one of two).
 )
 
@@ -551,7 +550,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionMinPasswordLength,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
 	},
-
 	// Add new versions here (step two of two).
 
 })

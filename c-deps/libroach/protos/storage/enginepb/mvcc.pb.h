@@ -722,6 +722,12 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::google::protobuf::int64 contains_estimates() const;
   void set_contains_estimates(::google::protobuf::int64 value);
 
+  bool has_abort_span_bytes() const;
+  void clear_abort_span_bytes();
+  static const int kAbortSpanBytesFieldNumber = 15;
+  ::google::protobuf::int64 abort_span_bytes() const;
+  void set_abort_span_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCStats)
  private:
   void set_has_contains_estimates();
@@ -752,6 +758,8 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   void clear_has_sys_bytes();
   void set_has_sys_count();
   void clear_has_sys_count();
+  void set_has_abort_span_bytes();
+  void clear_has_abort_span_bytes();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -770,6 +778,7 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
   ::google::protobuf::int64 contains_estimates_;
+  ::google::protobuf::int64 abort_span_bytes_;
   friend struct ::protobuf_storage_2fenginepb_2fmvcc_2eproto::TableStruct;
 };
 // ===================================================================
@@ -1649,6 +1658,29 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
   set_has_sys_count();
   sys_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.sys_count)
+}
+
+inline bool MVCCStats::has_abort_span_bytes() const {
+  return (_has_bits_[0] & 0x00004000u) != 0;
+}
+inline void MVCCStats::set_has_abort_span_bytes() {
+  _has_bits_[0] |= 0x00004000u;
+}
+inline void MVCCStats::clear_has_abort_span_bytes() {
+  _has_bits_[0] &= ~0x00004000u;
+}
+inline void MVCCStats::clear_abort_span_bytes() {
+  abort_span_bytes_ = GOOGLE_LONGLONG(0);
+  clear_has_abort_span_bytes();
+}
+inline ::google::protobuf::int64 MVCCStats::abort_span_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStats.abort_span_bytes)
+  return abort_span_bytes_;
+}
+inline void MVCCStats::set_abort_span_bytes(::google::protobuf::int64 value) {
+  set_has_abort_span_bytes();
+  abort_span_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.abort_span_bytes)
 }
 
 #ifdef __GNUC__

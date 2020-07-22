@@ -121,8 +121,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 
 			// Verify cArgs.Stats is equal to the stats we wrote.
 			newStats := stats
-			newStats.SysBytes, newStats.SysCount = 0, 0       // ignore these values
-			cArgs.Stats.SysBytes, cArgs.Stats.SysCount = 0, 0 // these too, as GC threshold is updated
+			newStats.SysBytes, newStats.SysCount, newStats.AbortSpanBytes = 0, 0, 0          // ignore these values
+			cArgs.Stats.SysBytes, cArgs.Stats.SysCount, cArgs.Stats.AbortSpanBytes = 0, 0, 0 // these too, as GC threshold is updated
 			newStats.Add(*cArgs.Stats)
 			newStats.AgeTo(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {

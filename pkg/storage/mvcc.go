@@ -164,25 +164,49 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
-// isSysLocal returns whether the whether the key is system-local.
+// isSysLocal returns whether the key is system-local.
 func isSysLocal(key roachpb.Key) bool {
 	return key.Compare(keys.LocalMax) < 0
 }
 
-// updateStatsForInline updates stat counters for an inline value.
-// These are simpler as they don't involve intents or multiple
-// versions.
+// isAbortSpanKey returns whether the key is an abort span key.
+func isAbortSpanKey(key roachpb.Key) (bool, error) {
+	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return false, nil
+	}
+
+	_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(key)
+	if err != nil {
+		return false, err
+	}
+	hasAbortSpanSuffix := infix.Equal(keys.LocalRangeIDReplicatedInfix) && suffix.Equal(keys.LocalAbortSpanSuffix)
+	return hasAbortSpanSuffix, nil
+}
+
+// updateStatsForInline updates stat counters for an inline value
+// (abort span entries for example). These are simpler as they don't
+// involve intents or multiple versions.
 func updateStatsForInline(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
-) {
+) error {
 	sys := isSysLocal(key)
 	// Remove counts for this key if the original size is non-zero.
 	if origMetaKeySize != 0 {
 		if sys {
 			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
 			ms.SysCount--
+			isAbortSpan, err := isAbortSpanKey(key)
+			if err != nil {
+				return err
+			}
+			if isAbortSpan {
+				// We only do this check in updateStatsForInline since
+				// abort span keys are always inlined - we don't associate
+				// timestamps with them.
+				ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
+			}
 		} else {
 			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
 			ms.LiveCount--
@@ -197,6 +221,13 @@ func updateStatsForInline(
 		if sys {
 			ms.SysBytes += metaKeySize + metaValSize
 			ms.SysCount++
+			isAbortSpan, err := isAbortSpanKey(key)
+			if err != nil {
+				return err
+			}
+			if isAbortSpan {
+				ms.AbortSpanBytes += metaKeySize + metaValSize
+			}
 		} else {
 			ms.LiveBytes += metaKeySize + metaValSize
 			ms.LiveCount++
@@ -206,6 +237,7 @@ func updateStatsForInline(
 			ms.ValCount++
 		}
 	}
+	return nil
 }
 
 // updateStatsOnMerge updates metadata stats while merging inlined
@@ -1468,7 +1500,9 @@ func mvccPutInternal(
 			metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, &buf.meta)
 		}
 		if ms != nil {
-			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+			if err := updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize); err != nil {
+				return err
+			}
 		}
 		if err == nil {
 			writer.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
@@ -3224,7 +3258,9 @@ func MVCCGarbageCollect(
 			}
 			if ms != nil {
 				if inlinedValue {
-					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
+					if err := updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0); err != nil {
+						return err
+					}
 					ms.AgeTo(timestamp.WallTime)
 				} else {
 					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime))
@@ -3577,6 +3613,13 @@ func ComputeStatsGo(
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
+				isAbortSpan, err := isAbortSpanKey(unsafeKey.Key)
+				if err != nil {
+					return ms, err
+				}
+				if isAbortSpan {
+					ms.AbortSpanBytes += totalBytes
+				}
 			} else {
 				if !meta.Deleted {
 					ms.LiveBytes += totalBytes
