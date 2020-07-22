@@ -64,12 +64,13 @@ type tableWriter interface {
 	// inner loop of table accesses.
 	row(context.Context, tree.Datums, util.FastIntSet /* ignoreIndexes */, bool /* traceKV */) error
 
-	// finalize flushes out any remaining writes. It is called after all calls to
-	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
-	// The traceKV parameter determines whether the individual K/V operations
-	// should be logged to the context. See the comment above for why
-	// this a separate parameter as opposed to a Value field on the context.
-	finalize(ctx context.Context, traceKV bool) (*rowcontainer.RowContainer, error)
+	// flushAndStartNewBatch is called at the end of each batch but the last.
+	// This should flush the current batch.
+	flushAndStartNewBatch(context.Context) error
+
+	// finalize flushes out any remaining writes. It is called after all calls
+	// to row.
+	finalize(context.Context) error
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -84,23 +85,6 @@ type tableWriter interface {
 
 	// enable auto commit in call to finalize().
 	enableAutoCommit()
-
-	// atBatchEnd is called at the end of each batch, just before
-	// finalize/flush. It can utilize the current KV batch which is
-	// still open at that point. It must not run the batch itself; that
-	// task is left to tableWriter.finalize() or flushAndStartNewBatch()
-	// below.
-	atBatchEnd(context.Context, bool /* traceKV */) error
-
-	// flushAndStartNewBatch is called at the end of each batch but the last.
-	// This should flush the current batch.
-	flushAndStartNewBatch(context.Context) error
-
-	// curBatchSize returns an upper bound for the amount of KV work
-	// needed for the current batch. This cannot reflect the actual KV
-	// batch size because the actual KV batch will be constructed only
-	// during the call to atBatchEnd().
-	curBatchSize() int
 }
 
 type autoCommitOpt int
@@ -111,43 +95,44 @@ const (
 )
 
 // tableWriterBase is meant to be used to factor common code between
-// the other tableWriters.
+// the all tableWriters.
 type tableWriterBase struct {
 	// txn is the current KV transaction.
 	txn *kv.Txn
+	// desc is the descriptor of the table that we're writing.
+	desc *sqlbase.ImmutableTableDescriptor
 	// is autoCommit turned on.
 	autoCommit autoCommitOpt
 	// b is the current batch.
 	b *kv.Batch
-	// batchSize is the current batch size (when known).
-	batchSize int
+	// currentBatchSize is the current batch size (when known).
+	currentBatchSize int
+	// lastBatchSize is the size of the last batch. It is
+	lastBatchSize int
+	// rows contains the accumulated result rows if rowsNeeded is set on the
+	// corresponding tableWriter.
+	rows *rowcontainer.RowContainer
 }
 
-func (tb *tableWriterBase) init(txn *kv.Txn) {
+func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor) {
 	tb.txn = txn
+	tb.desc = tableDesc
 	tb.b = txn.NewBatch()
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
 // tableWriters.
-func (tb *tableWriterBase) flushAndStartNewBatch(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
-) error {
+func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
-		return row.ConvertBatchError(ctx, tableDesc, tb.b)
+		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
 	tb.b = tb.txn.NewBatch()
-	tb.batchSize = 0
+	tb.currentBatchSize = 0
 	return nil
 }
 
-// curBatchSize shares the common curBatchSize() code between tableWriters.
-func (tb *tableWriterBase) curBatchSize() int { return tb.batchSize }
-
 // finalize shares the common finalize() code between tableWriters.
-func (tb *tableWriterBase) finalize(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
-) (err error) {
+func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	if tb.autoCommit == autoCommitEnabled {
 		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -159,11 +144,25 @@ func (tb *tableWriterBase) finalize(
 	}
 
 	if err != nil {
-		return row.ConvertBatchError(ctx, tableDesc, tb.b)
+		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
 	return nil
 }
 
 func (tb *tableWriterBase) enableAutoCommit() {
 	tb.autoCommit = autoCommitEnabled
+}
+
+func (tb *tableWriterBase) clearLastBatch(ctx context.Context) {
+	tb.lastBatchSize = 0
+	if tb.rows != nil {
+		tb.rows.Clear(ctx)
+	}
+}
+
+func (tb *tableWriterBase) close(ctx context.Context) {
+	if tb.rows != nil {
+		tb.rows.Close(ctx)
+		tb.rows = nil
+	}
 }

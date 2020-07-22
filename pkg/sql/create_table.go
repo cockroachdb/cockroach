@@ -457,9 +457,7 @@ func (n *createTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					_, err := tw.finalize(
-						params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-					if err != nil {
+					if err := tw.finalize(params.ctx); err != nil {
 						return err
 					}
 					break

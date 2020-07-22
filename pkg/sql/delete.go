@@ -43,15 +43,9 @@ type deleteRun struct {
 	td         tableDeleter
 	rowsNeeded bool
 
-	// rowCount is the number of rows in the current batch.
-	rowCount int
-
 	// done informs a new call to BatchedNext() that the previous call
 	// to BatchedNext() has completed the work already.
 	done bool
-
-	// rows contains the accumulated result rows if rowsNeeded is set.
-	rows *rowcontainer.RowContainer
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
@@ -80,7 +74,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if d.run.rowsNeeded {
-		d.run.rows = rowcontainer.NewRowContainer(
+		d.run.td.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
 	}
@@ -105,11 +99,8 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 
 	tracing.AnnotateTrace()
 
-	// Advance one batch. First, clear the current batch.
-	d.run.rowCount = 0
-	if d.run.rows != nil {
-		d.run.rows.Clear(params.ctx)
-	}
+	// Advance one batch. First, clear the last batch.
+	d.run.td.clearLastBatch(params.ctx)
 	// Now consume/accumulate the rows for this batch.
 	lastBatch := false
 	for {
@@ -132,19 +123,14 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 			return false, err
 		}
 
-		d.run.rowCount++
-
 		// Are we done yet with the current batch?
-		if d.run.td.curBatchSize() >= maxDeleteBatchSize {
+		if d.run.td.currentBatchSize >= maxDeleteBatchSize {
 			break
 		}
 	}
+	d.run.td.lastBatchSize = d.run.td.currentBatchSize
 
-	if d.run.rowCount > 0 {
-		if err := d.run.td.atBatchEnd(params.ctx, d.run.traceKV); err != nil {
-			return false, err
-		}
-
+	if d.run.td.lastBatchSize > 0 {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
@@ -155,7 +141,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := d.run.td.finalize(params.ctx, d.run.traceKV); err != nil {
+		if err := d.run.td.finalize(params.ctx); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -165,10 +151,10 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	// Possibly initiate a run of CREATE STATISTICS.
 	params.ExecCfg().StatsRefresher.NotifyMutation(
 		d.run.td.tableDesc().ID,
-		d.run.rowCount,
+		d.run.td.lastBatchSize,
 	)
 
-	return d.run.rowCount > 0, nil
+	return d.run.td.lastBatchSize > 0, nil
 }
 
 // processSourceRow processes one row from the source for deletion and, if
@@ -210,7 +196,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// If result rows need to be accumulated, do it.
-	if d.run.rows != nil {
+	if d.run.td.rows != nil {
 		// The new values can include all columns, the construction of the
 		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
 		// values may contain additional columns for every newly dropped column
@@ -218,14 +204,14 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
-		resultValues := make(tree.Datums, d.run.rows.NumCols())
+		resultValues := make(tree.Datums, d.run.td.rows.NumCols())
 		for i, retIdx := range d.run.rowIdxToRetIdx {
 			if retIdx >= 0 {
 				resultValues[retIdx] = sourceVals[i]
 			}
 		}
 
-		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
+		if _, err := d.run.td.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
 	}
@@ -234,17 +220,13 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (d *deleteNode) BatchedCount() int { return d.run.rowCount }
+func (d *deleteNode) BatchedCount() int { return d.run.td.lastBatchSize }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (d *deleteNode) BatchedValues(rowIdx int) tree.Datums { return d.run.rows.At(rowIdx) }
+func (d *deleteNode) BatchedValues(rowIdx int) tree.Datums { return d.run.td.rows.At(rowIdx) }
 
 func (d *deleteNode) Close(ctx context.Context) {
 	d.source.Close(ctx)
-	if d.run.rows != nil {
-		d.run.rows.Close(ctx)
-		d.run.rows = nil
-	}
 	d.run.td.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
