@@ -87,13 +87,13 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
-// sqlServerOptionalArgs are the arguments supplied to newSQLServer which
-// are only available if the SQL server runs as part of a KV node.
+// sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
+// only available if the SQL server runs as part of a KV node.
 //
 // TODO(tbg): give all of these fields a wrapper that can signal whether the
 // respective object is available. When it is not, return
 // UnsupportedWithMultiTenancy.
-type sqlServerOptionalArgs struct {
+type sqlServerOptionalKVArgs struct {
 	// statusServer gives access to the Status service.
 	statusServer serverpb.OptionalStatusServer
 	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
@@ -114,15 +114,17 @@ type sqlServerOptionalArgs struct {
 	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+}
 
-	// TODO(nvanbenschoten): Move to a second "optional" args struct. One for
-	// dependencies that are only available if the SQL server runs NOT as part
-	// of a KV node.
+// sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
+// are only available if the SQL server runs as part of a standalone SQL node.
+type sqlServerOptionalTenantArgs struct {
 	tenantProxy kvtenant.Proxy
 }
 
 type sqlServerArgs struct {
-	sqlServerOptionalArgs
+	sqlServerOptionalKVArgs
+	sqlServerOptionalTenantArgs
 
 	*SQLConfig
 	*BaseConfig

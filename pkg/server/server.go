@@ -596,7 +596,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		sqlServerOptionalArgs: sqlServerOptionalArgs{
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
 			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
 			gossip:                 gossip.MakeExposedGossip(g),
