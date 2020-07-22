@@ -930,6 +930,39 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 </span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geography: geography, distance: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
+from the given Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This operation is done by transforming the object into a Geometry. This occurs by translating
+the Geography objects into Geometry objects before applying an LAEA, UTM or Web Mercator
+based projection based on the bounding boxes of the given Geography objects. When the result is
+calculated, the result is transformed back into a Geography with SRID 4326.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geography: geography, distance: <a href="float.html">float</a>, buffer_style_params: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
+given Geometry.</p>
+<p>This variant takes in a space separate parameter string, which will augment the buffer styles. Valid parameters are:</p>
+<ul>
+<li>quad_segs=&lt;int&gt;, default 8</li>
+<li>endcap=&lt;round|flat|butt|square&gt;, default round</li>
+<li>join=&lt;round|mitre|miter|bevel&gt;, default round</li>
+<li>side=&lt;both|left|right&gt;, default both</li>
+<li>mitre_limit=&lt;float&gt;, default 5.0</li>
+</ul>
+<p>This function utilizes the GEOS module.</p>
+<p>This operation is done by transforming the object into a Geometry. This occurs by translating
+the Geography objects into Geometry objects before applying an LAEA, UTM or Web Mercator
+based projection based on the bounding boxes of the given Geography objects. When the result is
+calculated, the result is transformed back into a Geography with SRID 4326.</p>
+</span></td></tr>
+<tr><td><a name="st_buffer"></a><code>st_buffer(geography: geography, distance: <a href="float.html">float</a>, quad_segs: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance from the
+given Geometry.</p>
+<p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This operation is done by transforming the object into a Geometry. This occurs by translating
+the Geography objects into Geometry objects before applying an LAEA, UTM or Web Mercator
+based projection based on the bounding boxes of the given Geography objects. When the result is
+calculated, the result is transformed back into a Geography with SRID 4326.</p>
+</span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geometry: geometry, distance: <a href="decimal.html">decimal</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
 from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -1163,8 +1196,19 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_interiorringn"></a><code>st_interiorringn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.</p>
 </span></td></tr>
+<tr><td><a name="st_intersection"></a><code>st_intersection(geography_a: geography, geography_b: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the point intersections of the given geographies.</p>
+<p>This operation is done by transforming the object into a Geometry. This occurs by translating
+the Geography objects into Geometry objects before applying an LAEA, UTM or Web Mercator
+based projection based on the bounding boxes of the given Geography objects. When the result is
+calculated, the result is transformed back into a Geography with SRID 4326.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_intersection"></a><code>st_intersection(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the point intersections of the given geometries.</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_intersection"></a><code>st_intersection(geometry_a_str: <a href="string.html">string</a>, geometry_b_str: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the point intersections of the given geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+<p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
 <tr><td><a name="st_intersects"></a><code>st_intersects(geography_a: geography, geography_b: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geography_a shares any portion of space with geography_b.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
