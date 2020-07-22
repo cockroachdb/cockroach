@@ -1442,7 +1442,7 @@ func shouldCampaignOnWake(
 	leaseStatus kvserverpb.LeaseStatus,
 	lease roachpb.Lease,
 	storeID roachpb.StoreID,
-	raftStatus raft.Status,
+	raftStatus raft.BasicStatus,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -1470,7 +1470,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	}
 
 	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
-	raftStatus := r.mu.internalRaftGroup.Status()
+	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {

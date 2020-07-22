@@ -138,7 +138,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // replicas if the remaining live replicas all meet the quiesce
 // requirements. When a node considered non-live becomes live, the
 // node liveness instance invokes a callback which causes all nodes to
-// wakes up any ranges containing replicas owned by the newly-live
+// wake up any ranges containing replicas owned by the newly-live
 // node, allowing the out-of-date replicas to be brought back up to date.
 // If livenessMap is nil, liveness data will not be used, meaning no range
 // will quiesce if any replicas are behind, whether or not they are live.
