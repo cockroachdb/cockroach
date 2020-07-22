@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -553,14 +555,25 @@ func (tc *Collection) getMutableDescriptorByID(
 func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc sqlbase.TableDescriptorInterface,
 ) (sqlbase.TableDescriptorInterface, error) {
-	getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		// TODO (rohany): Use the collection API's here.
-		return resolver.ResolveTypeDescByID(ctx, txn, tc.codec(), id, tree.ObjectLookupFlags{})
-	}
 	switch t := desc.(type) {
 	case *sqlbase.MutableTableDescriptor:
 		// It is safe to hydrate directly into MutableTableDescriptor since it is
-		// not shared.
+		// not shared. When hydrating mutable descriptors, use the mutable access
+		// method to access types.
+		getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+			if err != nil {
+				return nil, nil, err
+			}
+			// TODO (lucy): This database access should go through the collection.
+			dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tc.codec(), desc.ParentID)
+			if err != nil {
+				return nil, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+			return &name, desc, nil
+		}
+
 		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
 	case *sqlbase.ImmutableTableDescriptor:
 		// ImmutableTableDescriptors need to be copied before hydration, because
@@ -574,6 +587,20 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		//  hydrated table descriptors and potentially return without having to
 		//  make a copy. However, we could avoid hitting the cache if any of the
 		//  user defined types have been modified in this transaction.
+
+		getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return nil, nil, err
+			}
+			// TODO (lucy): This database access should go through the collection.
+			dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tc.codec(), desc.ParentID)
+			if err != nil {
+				return nil, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+			return &name, desc, nil
+		}
 
 		// Make a copy of the underlying descriptor before hydration.
 		descBase := protoutil.Clone(t.TableDesc()).(*sqlbase.TableDescriptor)
@@ -599,12 +626,12 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 	})
 
 	filteredLeases := leasedDescs[:0] // will store the remaining leases
-	tablesToConsider := descs
+	descsToConsider := descs
 	shouldRelease := func(id sqlbase.ID) (found bool) {
-		for len(tablesToConsider) > 0 && tablesToConsider[0].ID < id {
-			tablesToConsider = tablesToConsider[1:]
+		for len(descsToConsider) > 0 && descsToConsider[0].ID < id {
+			descsToConsider = descsToConsider[1:]
 		}
-		return len(tablesToConsider) > 0 && tablesToConsider[0].ID == id
+		return len(descsToConsider) > 0 && descsToConsider[0].ID == id
 	}
 	for _, l := range leasedDescs {
 		if !shouldRelease(l.GetID()) {
@@ -742,6 +769,78 @@ func (tc *Collection) GetUncommittedTables() (tables []*sqlbase.ImmutableTableDe
 		}
 	}
 	return tables
+}
+
+// User defined type accessors.
+
+// GetMutableTypeDescriptor is the equivalent of GetMutableTableDescriptor but
+// for accessing types.
+func (tc *Collection) GetMutableTypeDescriptor(
+	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
+) (*sqlbase.MutableTypeDescriptor, error) {
+	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
+	if err != nil {
+		return nil, err
+	}
+	mutDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlbase.NewUndefinedTypeError(tn)
+		}
+		return nil, nil
+	}
+	return mutDesc, nil
+}
+
+// GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID
+// but for accessing types.
+func (tc *Collection) GetMutableTypeVersionByID(
+	ctx context.Context, txn *kv.Txn, typeID sqlbase.ID,
+) (*sqlbase.MutableTypeDescriptor, error) {
+	desc, err := tc.getMutableDescriptorByID(ctx, typeID, txn)
+	if err != nil {
+		return nil, err
+	}
+	return desc.(*sqlbase.MutableTypeDescriptor), nil
+}
+
+// GetTypeVersion is the equivalent of GetTableVersion but for accessing types.
+func (tc *Collection) GetTypeVersion(
+	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
+) (*sqlbase.ImmutableTypeDescriptor, error) {
+	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
+	if err != nil {
+		return nil, err
+	}
+	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlbase.NewUndefinedTypeError(tn)
+		}
+		return nil, nil
+	}
+	return typ, nil
+}
+
+// GetTypeVersionByID is the equivalent of GetTableVersionByID but for accessing
+// types.
+func (tc *Collection) GetTypeVersionByID(
+	ctx context.Context, txn *kv.Txn, typeID sqlbase.ID, flags tree.ObjectLookupFlags,
+) (*sqlbase.ImmutableTypeDescriptor, error) {
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags)
+	if err != nil {
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			return nil, pgerror.Newf(
+				pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
+		}
+		return nil, err
+	}
+	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	if !ok {
+		return nil, pgerror.Newf(
+			pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
+	}
+	return typ, nil
 }
 
 // DBAction is an operation to an uncommitted database.

@@ -142,8 +142,19 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 func (p *planner) GetTypeDescriptor(
 	ctx context.Context, id sqlbase.ID,
 ) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-	// TODO (rohany): This should go through the descs.Collection.
-	return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id, tree.ObjectLookupFlags{})
+	desc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return nil, nil, err
+	}
+	// TODO (lucy): This database access should go through the collection.
+	//  When I try to use the DatabaseCache() here, a nil pointer deref occurs.
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	// TODO (rohany): Update this once user defined schemas exist.
+	name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+	return &name, desc, nil
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
@@ -180,15 +191,7 @@ func (p *planner) ResolveType(
 
 // ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := resolver.ResolveTypeDescByID(
-		ctx,
-		p.txn,
-		p.ExecCfg().Codec,
-		sqlbase.ID(id),
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{Required: true},
-		},
-	)
+	name, desc, err := p.GetTypeDescriptor(ctx, sqlbase.ID(id))
 	if err != nil {
 		return nil, err
 	}
