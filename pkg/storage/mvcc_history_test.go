@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -138,7 +139,7 @@ func TestMVCCHistories(t *testing.T) {
 					switch d.Cmd {
 					case "skip":
 						if len(d.CmdArgs) == 0 || d.CmdArgs[0].Key == engineImpl.name {
-							e.t.Skip("skipped")
+							skip.IgnoreLint(e.t, "skipped")
 						}
 						return d.Expected
 					case "run":

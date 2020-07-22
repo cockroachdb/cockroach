@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,7 +41,7 @@ func VerifyNoImports(
 
 	// Skip test if source is not available.
 	if build.Default.GOPATH == "" {
-		t.Skip("GOPATH isn't set")
+		skip.IgnoreLint(t, "GOPATH isn't set")
 	}
 
 	buildContext := build.Default
@@ -124,7 +125,7 @@ func VerifyNoImports(
 func VerifyTransitiveAllowlist(t testing.TB, pkg string, allowedPkgs []string) {
 	// Skip test if source is not available.
 	if build.Default.GOPATH == "" {
-		t.Skip("GOPATH isn't set")
+		skip.IgnoreLint(t, "GOPATH isn't set")
 	}
 
 	checked := make(map[string]struct{})

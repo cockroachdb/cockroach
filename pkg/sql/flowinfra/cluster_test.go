@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -633,7 +634,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		if vectorize {
-			t.Skip("skipped because we can't yet vectorize queries using DECIMALs")
+			skip.IgnoreLint(t, "skipped because we can't yet vectorize queries using DECIMALs")
 		}
 		// We're going to use the first node as the gateway and expect everything to
 		// be planned remotely.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/logtags"
@@ -734,7 +735,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but cannot import sqlmigrations")
+	skip.WithIssue(t, 51798, "fails in the presence of migrations requiring backfill, "+
+		"but cannot import sqlmigrations")
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
