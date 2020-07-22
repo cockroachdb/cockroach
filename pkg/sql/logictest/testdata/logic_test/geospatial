@@ -1912,6 +1912,17 @@ SELECT ST_NPoints(ST_Buffer('SRID=4326;POINT(0 0)', 10.0))
 33
 
 # DE-9IM relations
+query B
+SELECT
+  ST_RelateMatch(m, pattern)
+FROM ( VALUES
+  ('101202FFF', 'TTTTTTFFF'),
+  ('101202FTF', 'TTTTTTFFF')
+) tbl(m, pattern)
+----
+true
+false
+
 query TTTB
 SELECT
   a.dsc,
