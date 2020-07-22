@@ -273,6 +273,7 @@ func startConnExecutor(
 				NodeID:         nodeID,
 			}),
 			nil, /* distSender */
+			nil, /* nodeDescs */
 			gw,
 			stopper,
 			func(roachpb.NodeID) (bool, error) { return true, nil }, // everybody is live

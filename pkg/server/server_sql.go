@@ -144,7 +144,10 @@ type sqlServerArgs struct {
 	// is running insecure, and to read the cluster name.
 	rpcContext *rpc.Context
 
-	// Used by DistSQLConfig and DistSQLPlanner.
+	// Used by DistSQLPlanner.
+	nodeDescs kvcoord.NodeDescStore
+
+	// Used by DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
@@ -415,6 +418,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
+			cfg.nodeDescs,
 			cfg.gossip,
 			cfg.stopper,
 			isLive,

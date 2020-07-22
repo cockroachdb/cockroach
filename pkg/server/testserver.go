@@ -601,6 +601,7 @@ func makeSQLServerArgs(
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		rpcContext:               rpcContext,
+		nodeDescs:                tenantProxy,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,
