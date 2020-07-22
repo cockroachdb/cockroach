@@ -140,6 +140,15 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		}
 	}
 
+	if hashedPassword == nil {
+		// v20.1 and below crash during authentication if they find a NULL value
+		// in system.users.hashedPassword. v20.2 and above handle this correctly,
+		// but we need to maintain mixed version compatibility for at least one
+		// release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		hashedPassword = []byte{}
+	}
+
 	// Check if the user/role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
@@ -316,15 +325,6 @@ func (p *planner) checkPasswordAndGetHash(
 	hashedPassword, err = security.HashPassword(password)
 	if err != nil {
 		return hashedPassword, err
-	}
-
-	if hashedPassword == nil {
-		// v20.1 and below crash during authentication if they find a NULL value
-		// in system.users.hashedPassword. v20.2 and above handle this correctly,
-		// but we need to maintain mixed version compatibility for at least one
-		// release.
-		// TODO(nvanbenschoten): remove this for v21.1.
-		hashedPassword = []byte{}
 	}
 
 	return hashedPassword, nil
