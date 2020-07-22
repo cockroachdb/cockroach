@@ -657,14 +657,14 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness kvserverpb.Liven
 
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, oldLiveness kvserverpb.Liveness, incrementEpoch bool,
-) error {
+) (err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
 	defer sp.Finish()
 	defer func(start time.Time) {
 		dur := timeutil.Now().Sub(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
-			log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
+			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
 		}
 	}(timeutil.Now())
 
@@ -955,7 +955,6 @@ func (nl *NodeLiveness) updateLiveness(
 		}
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
-			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
 				log.Infof(ctx, "retrying liveness update after %s", err)
 				continue
