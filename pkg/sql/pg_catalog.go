@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -2805,10 +2807,12 @@ CREATE TABLE pg_catalog.pg_type (
 
 				// Check if it is a user defined type.
 				id := sqlbase.ID(types.UserDefinedTypeOIDToID(ooid))
-				// TODO (rohany): This access should go through the desc.Collection.
-				typDesc, err := sqlbase.GetTypeDescFromID(ctx, p.txn, keys.SystemSQLCodec, id)
+				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+						return false, nil
+					}
+					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
 						return false, nil
 					}
 					return false, err
