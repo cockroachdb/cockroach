@@ -41,7 +41,7 @@ WHERE z > 1.0
 with &1
  ├── columns: x:10(string!null) y:11(int!null) z:12(float!null)
  ├── volatile, mutations
- ├── stats: [rows=69.4736842, distinct(12)=6.66666667, null(12)=0]
+ ├── stats: [rows=66.5105818, distinct(12)=43.4214373, null(12)=0]
  ├── fd: ()-->(10)
  ├── insert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
@@ -50,15 +50,15 @@ with &1
  │    │    ├── a:5 => xyz.y:2
  │    │    └── c:7 => xyz.z:3
  │    ├── volatile, mutations
- │    ├── stats: [rows=200]
+ │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0, distinct(3)=130.264312, null(3)=2]
  │    ├── fd: ()-->(1)
  │    └── project
  │         ├── columns: a:5(int!null) b:6(string!null) c:7(float)
- │         ├── stats: [rows=200]
+ │         ├── stats: [rows=200, distinct(5)=200, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=130.264312, null(7)=2]
  │         ├── fd: ()-->(6)
  │         └── select
  │              ├── columns: a:5(int!null) b:6(string!null) c:7(float) rowid:8(int!null) abc.crdb_internal_mvcc_timestamp:9(decimal)
- │              ├── stats: [rows=200, distinct(6)=1, null(6)=0]
+ │              ├── stats: [rows=200, distinct(5)=200, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=130.264312, null(7)=2]
  │              ├── key: (8)
  │              ├── fd: ()-->(6), (8)-->(5,7,9)
  │              ├── scan abc
@@ -66,14 +66,14 @@ with &1
  │              │    ├── computed column expressions
  │              │    │    └── c:7
  │              │    │         └── a:5::FLOAT8 [type=float]
- │              │    ├── stats: [rows=2000, distinct(5)=2000, null(5)=0, distinct(6)=10, null(6)=0, distinct(8)=2000, null(8)=0]
+ │              │    ├── stats: [rows=2000, distinct(5)=2000, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=200, null(7)=20, distinct(8)=2000, null(8)=0]
  │              │    ├── key: (8)
  │              │    └── fd: (8)-->(5-7,9)
  │              └── filters
  │                   └── b:6 = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  └── select
       ├── columns: x:10(string!null) y:11(int!null) z:12(float!null)
-      ├── stats: [rows=69.4736842, distinct(12)=6.66666667, null(12)=0]
+      ├── stats: [rows=66.5105818, distinct(12)=43.4214373, null(12)=0]
       ├── fd: ()-->(10)
       ├── with-scan &1
       │    ├── columns: x:10(string!null) y:11(int!null) z:12(float)
@@ -81,7 +81,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:10(string)
       │    │    ├──  xyz.y:2(int) => y:11(int)
       │    │    └──  xyz.z:3(float) => z:12(float)
-      │    ├── stats: [rows=200, distinct(10)=20, null(10)=0, distinct(11)=20, null(11)=0, distinct(12)=20, null(12)=2]
+      │    ├── stats: [rows=200, distinct(10)=1, null(10)=0, distinct(11)=200, null(11)=0, distinct(12)=130.264312, null(12)=2]
       │    └── fd: ()-->(10)
       └── filters
            └── z:12 > 1.0 [type=bool, outer=(12), constraints=(/12: [/1.0000000000000002 - ]; tight)]

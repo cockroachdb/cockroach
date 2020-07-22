@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,6 +62,8 @@ func TestMetadata(t *testing.T) {
 	}
 
 	// Call CopyFrom and verify that same objects are present in new metadata.
+	expr := &memo.ProjectExpr{}
+	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
 	mdNew.CopyFrom(&md)
 	if mdNew.Schema(schID) != testCat.Schema() {
@@ -85,6 +88,19 @@ func TestMetadata(t *testing.T) {
 	depsUpToDate, err = md.CheckDependencies(context.Background(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
+	}
+
+	paniced := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				paniced = true
+			}
+		}()
+		mdNew.WithBinding(1)
+	}()
+	if !paniced {
+		t.Fatalf("with bindings should not be copied!")
 	}
 }
 

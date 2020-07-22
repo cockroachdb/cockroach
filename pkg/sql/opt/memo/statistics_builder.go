@@ -218,9 +218,6 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(t, sb)
 		return t.leftProps.Stats.Available
-
-	case *WithScanExpr:
-		return t.BindingProps.Stats.Available
 	}
 
 	available := true
@@ -413,7 +410,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStat(colSet, e.Child(1).(RelExpr))
 
 	case opt.FakeRelOp:
-		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
+		rel := e.Relational()
+		return sb.colStatLeaf(colSet, &rel.Stats, &rel.FuncDeps, rel.NotNullCols)
 	}
 
 	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", log.Safe(e.Op())))
@@ -2306,17 +2304,17 @@ func (sb *statisticsBuilder) colStatProjectSet(
 // | WithScan |
 // +----------+
 
-func (sb *statisticsBuilder) buildWithScan(withScan *WithScanExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildWithScan(
+	withScan *WithScanExpr, relProps, bindingProps *props.Relational,
+) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
-	s.Available = sb.availabilityFromInput(withScan)
 
-	inputStats := withScan.BindingProps.Stats
-
-	s.RowCount = inputStats.RowCount
+	s.Available = bindingProps.Stats.Available
+	s.RowCount = bindingProps.Stats.RowCount
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -2324,17 +2322,13 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colSet opt.ColSet, withScan *WithScanExpr,
 ) *props.ColumnStatistic {
 	s := &withScan.Relational().Stats
-	withProps := withScan.BindingProps
+
+	boundExpr := sb.md.WithBinding(withScan.With).(RelExpr)
+
+	// Calculate the corresponding col stat in the bound expression and convert
+	// the result.
 	inColSet := opt.TranslateColSet(colSet, withScan.OutCols, withScan.InCols)
-
-	// We cannot call colStatLeaf on &withProps.Stats directly because it can
-	// modify it.
-	var statsCopy props.Statistics
-	statsCopy.CopyFrom(&withProps.Stats)
-
-	// TODO(rytaft): This would be more accurate if we could access the WithExpr
-	// itself.
-	inColStat := sb.colStatLeaf(inColSet, &statsCopy, &withProps.FuncDeps, withProps.NotNullCols)
+	inColStat := sb.colStat(inColSet, boundExpr)
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
