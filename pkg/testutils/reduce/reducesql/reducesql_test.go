@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/jackc/pgx"
 )
 
@@ -29,7 +30,7 @@ var printUnknown = flag.Bool("unknown", false, "print unknown types during walk"
 
 func TestReduceSQL(t *testing.T) {
 	// These take a bit too long to need to run every time.
-	t.Skip("unnecessary")
+	skip.IgnoreLint(t, "unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
 	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting, reducesql.SQLPasses)

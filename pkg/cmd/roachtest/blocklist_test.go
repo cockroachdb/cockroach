@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	skip2 "github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -28,7 +29,7 @@ const runBlocklistEnv = "RUN_BLOCKLIST_TEST"
 
 func TestBlocklists(t *testing.T) {
 	if _, ok := os.LookupEnv(runBlocklistEnv); !ok {
-		t.Skipf("Blocklist test is only run if %s is set", runBlocklistEnv)
+		skip2.IgnoreLintf(t, "Blocklist test is only run if %s is set", runBlocklistEnv)
 	}
 
 	blocklists := map[string]blocklist{

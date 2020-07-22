@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -878,9 +879,7 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"

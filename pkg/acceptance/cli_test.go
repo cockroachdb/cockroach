@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -42,7 +43,7 @@ func TestDockerCLI(t *testing.T) {
 	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	paths, err := filepath.Glob(testGlob)
@@ -102,7 +103,7 @@ func TestDockerUnixSocket(t *testing.T) {
 	ctx := context.Background()
 
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
-		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}

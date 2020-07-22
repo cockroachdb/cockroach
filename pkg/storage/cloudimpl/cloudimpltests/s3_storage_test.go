@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -37,11 +38,11 @@ func TestPutS3(t *testing.T) {
 	// it is not used in auth-implicit.
 	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
-		t.Skip("No AWS credentials")
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
-		t.Skip("AWS_S3_BUCKET env var must be set")
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
 	ctx := context.Background()
@@ -65,7 +66,7 @@ func TestPutS3(t *testing.T) {
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
 		if err != nil {
-			t.Skip(err)
+			skip.IgnoreLint(t, err)
 		}
 
 		testExportStore(t, fmt.Sprintf(
@@ -107,14 +108,14 @@ func TestPutS3Endpoint(t *testing.T) {
 	for env, param := range expect {
 		v := os.Getenv(env)
 		if v == "" {
-			t.Skipf("%s env var must be set", env)
+			skip.IgnoreLintf(t, "%s env var must be set", env)
 		}
 		q.Add(param, v)
 	}
 
 	bucket := os.Getenv("AWS_S3_ENDPOINT_BUCKET")
 	if bucket == "" {
-		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
+		skip.IgnoreLint(t, "AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
 	user := security.RootUser
 
@@ -168,7 +169,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	for env, param := range expect {
 		v := os.Getenv(env)
 		if v == "" {
-			t.Skipf("%s env var must be set", env)
+			skip.IgnoreLintf(t, "%s env var must be set", env)
 		}
 		q.Add(param, v)
 	}
