@@ -440,13 +440,22 @@ func TestPebbleMapClose(t *testing.T) {
 	}
 	defer e.Close()
 
-	decodeKey := func(v []byte) []byte {
-		var err error
-		v, _, err = encoding.DecodeUvarintAscending(v)
-		if err != nil {
-			t.Fatal(err)
+	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
+
+	getLSM := func() string {
+		var buf bytes.Buffer
+		for l, ssts := range e.db.SSTables() {
+			if len(ssts) == 0 {
+				continue
+			}
+			fmt.Fprintf(&buf, "L%d:\n", l)
+			for _, sst := range ssts {
+				fmt.Fprintf(&buf, "  %s: %d bytes, %x (%s) - %x (%s)\n", sst.FileNum, sst.Size,
+					sst.Smallest.UserKey, bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix),
+					sst.Largest.UserKey, bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix))
+			}
 		}
-		return v
+		return buf.String()
 	}
 
 	getSSTables := func() string {
@@ -454,8 +463,9 @@ func TestPebbleMapClose(t *testing.T) {
 		fmt.Fprintf(&buf, "\n")
 		for l, ssts := range e.db.SSTables() {
 			for _, sst := range ssts {
-				fmt.Fprintf(&buf, "%d: %s - %s\n",
-					l, decodeKey(sst.Smallest.UserKey), decodeKey(sst.Largest.UserKey))
+				sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
+				la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
+				fmt.Fprintf(&buf, "%d: %s - %s\n", l, sm, la)
 			}
 		}
 		return buf.String()
@@ -470,8 +480,6 @@ func TestPebbleMapClose(t *testing.T) {
 			fmt.Printf("%s", actual)
 		}
 	}
-
-	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
 
 	// Put a small amount of data into the disk map.
 	bw := diskMap.NewBatchWriter()
@@ -508,11 +516,11 @@ func TestPebbleMapClose(t *testing.T) {
 
 	// Wait for the data stored in the engine to disappear.
 	testutils.SucceedsSoon(t, func() error {
-		actual := getSSTables()
+		actual := getLSM()
 		if testing.Verbose() {
-			fmt.Printf("%s", actual)
+			fmt.Println(actual)
 		}
-		if actual != "\n" {
+		if actual != "" {
 			return fmt.Errorf("%s", actual)
 		}
 		return nil
