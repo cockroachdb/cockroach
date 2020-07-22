@@ -649,6 +649,16 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 	}
 }
 
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (m *MutationPrivate) WithBindingID() opt.WithID {
+	return m.WithID
+}
+
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (w *WithExpr) WithBindingID() opt.WithID {
+	return w.ID
+}
+
 // initUnexportedFields is called when a project expression is created.
 func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 	inputProps := prj.Input.Relational()
