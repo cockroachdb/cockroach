@@ -805,7 +805,8 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
 	BuildSharedProps(withScan, &rel.Shared)
-	bindingProps := withScan.BindingProps
+	boundExpr := b.mem.Metadata().WithBinding(withScan.With).(RelExpr)
+	bindingProps := boundExpr.Relational()
 
 	// Side Effects
 	// ------------
@@ -841,7 +842,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildWithScan(withScan, rel)
+		b.sb.buildWithScan(withScan, rel, bindingProps)
 	}
 }
 
