@@ -186,6 +186,7 @@ func (p *planner) createArrayType(
 		ParentSchemaID: keys.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ALIAS,
 		Alias:          types.MakeArray(elemTyp),
+		Version:        1,
 	})
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", tree.AsStringWithFQNames(n, params.Ann()))
@@ -260,6 +261,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		ParentSchemaID: keys.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
 		EnumMembers:    members,
+		Version:        1,
 	})
 
 	// Create the implicit array type for this type before finishing the type.
