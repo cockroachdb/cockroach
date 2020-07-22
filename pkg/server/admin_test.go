@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1804,9 +1805,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 }
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 

@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,9 +48,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	if util.RaceEnabled || testing.Short() {
-		t.Skip("this test is too slow to run with race")
-	}
+	// This test is too slow to run with race.
+	skip.UnderRace(t)
+	skip.UnderShort(t)
 
 	args := base.TestClusterArgs{}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{DisableGCQueue: true}

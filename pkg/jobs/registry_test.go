@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -196,9 +197,8 @@ func TestRegistryCancelation(t *testing.T) {
 func TestRegistryGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("")
-	// TODO (lucy): This test probably shouldn't continue to exist in its current
-	// form if GCMutations will cease to be used. Refactor or get rid of it.
+	skip.WithIssue(t, 51796, "TODO (lucy): This test probably shouldn't continue to exist in its current"+
+		"form if GCMutations will cease to be used. Refactor or get rid of it.")
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})

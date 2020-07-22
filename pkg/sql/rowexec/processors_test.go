@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -857,11 +858,11 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
 				if testCase.skip != "" {
-					t.Skip(testCase.skip)
+					skip.IgnoreLint(t, testCase.skip)
 				}
 				if vectorize {
 					// TODO(asubiotto): figure out why this race occurs.
-					t.Skip("vectorize option is temporarily skipped because there appears to be " +
+					skip.WithIssue(t, 51647, "vectorize option is temporarily skipped because there appears to be "+
 						"a race between the expected error and the context cancellation error")
 				}
 				func() {

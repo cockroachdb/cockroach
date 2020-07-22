@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -738,9 +739,7 @@ func TestJoinReaderDrain(t *testing.T) {
 // returned for a single lookup row. Some cases will cause the join reader to
 // spill to disk, in which case the benchmark logs that the join spilled.
 func BenchmarkJoinReader(b *testing.B) {
-	if testing.Short() {
-		b.Skip()
-	}
+	skip.UnderShort(b)
 
 	// Create an *on-disk* store spec for the primary store and temp engine to
 	// reflect the real costs of lookups and spilling.

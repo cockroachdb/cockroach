@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -4673,7 +4674,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 					t.Run("", func(t *testing.T) {
 						if tenant {
 							if test.skipTenant {
-								t.Skip("")
+								skip.IgnoreLint(t, "")
 							}
 							// Update all keys to include a tenant prefix.
 							tenPrefix := keys.MakeSQLCodec(roachpb.MinTenantID).TenantPrefix()

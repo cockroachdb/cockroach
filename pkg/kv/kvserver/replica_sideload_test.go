@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -597,7 +598,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "engineInMem", func(t *testing.T, engineInMem bool) {
 		testutils.RunTrueAndFalse(t, "mockSideloaded", func(t *testing.T, mockSideloaded bool) {
 			if engineInMem && !mockSideloaded {
-				t.Skip("https://github.com/cockroachdb/cockroach/issues/31913")
+				skip.WithIssue(t, 31913)
 			}
 			testRaftSSTableSideloadingProposal(t, engineInMem, mockSideloaded)
 		})

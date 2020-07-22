@@ -11,6 +11,7 @@ package allccl
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/fnv"
 	"math"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -79,8 +81,8 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
-			if bigInitialData(meta) && testing.Short() {
-				t.Skipf(`%s loads a lot of data`, meta.Name)
+			if bigInitialData(meta) {
+				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
 			}
 			defer log.Scope(t).Close(t)
 
@@ -245,9 +247,7 @@ func TestDeterministicInitialData(t *testing.T) {
 
 	// There are other tests that run initial data generation under race, so we
 	// don't get anything from running this one under race as well.
-	if util.RaceEnabled {
-		t.Skip(`uninteresting under race`)
-	}
+	skip.UnderRace(t, "uninteresting under race")
 
 	// Hardcode goldens for the fingerprint of the initial data of generators with
 	// default flags. This lets us opt in generators known to be deterministic and
@@ -285,8 +285,8 @@ func TestDeterministicInitialData(t *testing.T) {
 			continue
 		}
 		t.Run(meta.Name, func(t *testing.T) {
-			if bigInitialData(meta) && testing.Short() {
-				t.Skipf(`%s involves a lot of data`, meta.Name)
+			if bigInitialData(meta) {
+				skip.UnderShort(t, fmt.Sprintf(`%s involves a lot of data`, meta.Name))
 			}
 
 			h := fnv.New64()

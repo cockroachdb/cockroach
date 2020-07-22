@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,7 +55,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 	// work with RangeFeed without a rewrite, but it's not being used for anything
 	// right now, so the rewrite isn't worth it. We should fix this if we need to
 	// start doing changefeed perf work at some point.
-	b.Skip(`broken in #38211`)
+	skip.WithIssue(b, 51842, `broken in #38211`)
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "d"})

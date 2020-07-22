@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,7 +91,7 @@ func TestFixture(t *testing.T) {
 	gcsBucket := os.Getenv(`GS_BUCKET`)
 	gcsKey := os.Getenv(`GS_JSONKEY`)
 	if gcsBucket == "" || gcsKey == "" {
-		t.Skip("GS_BUCKET and GS_JSONKEY env vars must be set")
+		skip.IgnoreLint(t, "GS_BUCKET and GS_JSONKEY env vars must be set")
 	}
 
 	source, err := google.JWTConfigFromJSON([]byte(gcsKey), storage.ScopeReadWrite)

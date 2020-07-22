@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/kr/pretty"
 )
 
@@ -60,7 +61,7 @@ func TestPkgsFromDiff(t *testing.T) {
 
 func TestPkgsFromDiffHelper(t *testing.T) {
 	// This helper can easily generate new test cases.
-	t.Skip("only for manual use")
+	skip.IgnoreLint(t, "only for manual use")
 
 	ctx := context.Background()
 	client := ghClient(ctx)

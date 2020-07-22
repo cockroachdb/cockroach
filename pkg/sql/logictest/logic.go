@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -2120,7 +2121,7 @@ func (t *logicTest) processSubtest(
 			if len(fields) > 1 {
 				reason = fields[1]
 			}
-			t.t().Skip(reason)
+			skip.IgnoreLint(t.t(), reason)
 
 		case "skipif":
 			if len(fields) < 2 {
@@ -2674,12 +2675,10 @@ func RunLogicTestWithDefaultConfig(
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
 	// As of 6/4/2019, the logic tests never complete under race.
-	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip("logic tests and race detector don't mix: #37993")
-	}
+	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
 	if skipLogicTests {
-		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
+		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
 	// Override default glob sets if -d flag was specified.
@@ -2777,13 +2776,13 @@ func RunLogicTestWithDefaultConfig(
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
 			if testing.Short() && cfg.skipShort {
-				t.Skip("config skipped by -test.short")
+				skip.IgnoreLint(t, "config skipped by -test.short")
 			}
 			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
-				t.Skip("config excluded via env var")
+				skip.IgnoreLint(t, "config excluded via env var")
 			}
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
-				t.Skip("config does not match env var")
+				skip.IgnoreLint(t, "config does not match env var")
 			}
 			for _, path := range paths {
 				path := path // Rebind range variable.

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
@@ -496,7 +497,7 @@ func TestStatusGetFiles(t *testing.T) {
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if log.V(3) {
-		t.Skip("Test only works with low verbosity levels")
+		skip.IgnoreLint(t, "Test only works with low verbosity levels")
 	}
 
 	s := log.ScopeWithoutShowLogs(t)

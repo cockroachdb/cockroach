@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,7 +54,7 @@ func mockPutter(p s3putter) func() {
 
 func TestMain(t *testing.T) {
 	if !slow {
-		t.Skip("only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+		skip.IgnoreLint(t, "only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
 	}
 	r := &recorder{}
 	undo := mockPutter(r)

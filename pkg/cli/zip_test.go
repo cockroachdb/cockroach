@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -185,14 +185,10 @@ func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
-	if util.RaceEnabled {
-		// Race builds make the servers so slow that they report spurious
-		// unavailability.
-		t.Skip("not running under race")
-	}
+	skip.UnderShort(t)
+	// Race builds make the servers so slow that they report spurious
+	// unavailability.
+	skip.UnderRace(t)
 
 	// unavailableCh is used by the replica command filter
 	// to conditionally block requests and simulate unavailability.
@@ -286,16 +282,12 @@ func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/51538")
+	skip.WithIssue(t, 51538)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
-	if util.RaceEnabled {
-		// We want a low timeout so that the test doesn't take forever;
-		// however low timeouts make race runs flaky with false positives.
-		t.Skip("not running under race")
-	}
+	// We want a low timeout so that the test doesn't take forever;
+	// however low timeouts make race runs flaky with false positives.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
