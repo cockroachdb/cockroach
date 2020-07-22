@@ -266,7 +266,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		defer recv.Release()
 
 		willDistribute := getPlanDistribution(
-			ctx, localPlanner.execCfg.NodeID,
+			ctx, localPlanner, localPlanner.execCfg.NodeID,
 			localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
 			localPlanner.curPlan.main,
 		).WillDistribute()
