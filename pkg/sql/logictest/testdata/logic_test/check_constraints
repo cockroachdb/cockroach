@@ -337,3 +337,12 @@ CREATE TABLE t46675isnotnull (k int, a int, CHECK ((k, a) IS NOT NULL))
 # value.
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(\(k, a\) IS NOT NULL\)
 INSERT INTO t46675isnotnull VALUES (1, NULL)
+
+# Regression test for #51690. Make sure we don't panic when a check constraint
+# errors during an insert using the fast path.
+statement ok
+CREATE TABLE t51690(x INT, y INT, CHECK(x / y = 1));
+
+statement error pq: division by zero
+INSERT INTO t51690 VALUES (1, 0)
+
