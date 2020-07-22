@@ -10404,35 +10404,35 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		},
 	}
 
-	followerWithoutLeader := raft.Status{BasicStatus: raft.BasicStatus{
+	followerWithoutLeader := raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateFollower,
 			Lead:      0,
 		},
-	}}
-	followerWithLeader := raft.Status{BasicStatus: raft.BasicStatus{
+	}
+	followerWithLeader := raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateFollower,
 			Lead:      1,
 		},
-	}}
-	candidate := raft.Status{BasicStatus: raft.BasicStatus{
+	}
+	candidate := raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateCandidate,
 			Lead:      0,
 		},
-	}}
-	leader := raft.Status{BasicStatus: raft.BasicStatus{
+	}
+	leader := raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateLeader,
 			Lead:      1,
 		},
-	}}
+	}
 
 	tests := []struct {
 		leaseStatus kvserverpb.LeaseStatus
 		lease       roachpb.Lease
-		raftStatus  raft.Status
+		raftStatus  raft.BasicStatus
 		exp         bool
 	}{
 		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
