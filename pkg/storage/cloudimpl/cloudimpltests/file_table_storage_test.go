@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -46,6 +48,20 @@ func TestPutUserFileTable(t *testing.T) {
 
 	testListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
 		security.RootUser, ie, kvDB)
+
+	t.Run("reject-normalized-basename", func(t *testing.T) {
+		testfile := "listing-test/../basepath"
+		userfileURL := url.URL{Scheme: "userfile", Host: qualifiedTableName, Path: ""}
+
+		store, err := cloudimpl.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
+			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
+			security.RootUser, ie, kvDB)
+		require.NoError(t, err)
+		defer store.Close()
+
+		err = store.WriteFile(ctx, testfile, bytes.NewReader([]byte{0}))
+		require.True(t, testutils.IsError(err, "does not permit such constructs"))
+	})
 }
 
 func createUserGrantAllPrivieleges(username, database string, sqlDB *gosql.DB) error {
