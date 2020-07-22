@@ -197,7 +197,14 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// we probably could pool those allocations using sync.Pool. Investigate
 	// this.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
-		bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLDefaultPlanning), execMemo, &opc.catalog, root, p.EvalContext())
+		planningMode := distSQLDefaultPlanning
+		// If this transaction has modified or created any types, it is not safe to
+		// distribute due to limitations around leasing descriptors modified in the
+		// current transaction.
+		if p.Descriptors().HasUncommittedTypes() {
+			planningMode = distSQLLocalOnlyPlanning
+		}
+		bld = execbuilder.New(newDistSQLSpecExecFactory(p, planningMode), execMemo, &opc.catalog, root, p.EvalContext())
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
