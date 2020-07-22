@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -159,10 +158,8 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	if util.RaceEnabled {
-		// This test times out with the race detector enabled.
-		return
-	}
+	// This test times out with the race detector enabled.
+	testutils.SkipUnderRace(t)
 
 	// Have one fixed seed, one user-specified seed, and one random seed.
 	seeds := []int64{123, *seed, rand.Int63()}
@@ -192,12 +189,10 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 func TestRocksPebbleRestarts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// This test times out with the race detector enabled.
+	testutils.SkipUnderRace(t)
 
 	ctx := context.Background()
-	if util.RaceEnabled {
-		// This test times out with the race detector enabled.
-		return
-	}
 
 	// Have one fixed seed, one user-specified seed, and one random seed.
 	seeds := []int64{123, *seed, rand.Int63()}

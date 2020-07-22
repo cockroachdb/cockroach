@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/jackc/pgx/pgproto3"
 )
@@ -71,10 +72,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 		switch d.Cmd {
 		case "only":
 			if d.HasArg("crdb") && !p.isCockroachDB {
-				t.Skip("only crdb")
+				testutils.SkipIgnoreLint(t, "only crdb")
 			}
 			if d.HasArg("noncrdb") && p.isCockroachDB {
-				t.Skip("only non-crdb")
+				testutils.SkipIgnoreLint(t, "only non-crdb")
 			}
 			return d.Expected
 

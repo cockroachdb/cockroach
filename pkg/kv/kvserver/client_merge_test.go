@@ -1533,7 +1533,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50795")
+	testutils.SkipWithIssue(t, 50795)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)

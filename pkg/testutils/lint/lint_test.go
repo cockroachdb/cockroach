@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
@@ -348,7 +349,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestOptfmt", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
-			t.Skip("PKG specified")
+			testutils.SkipIgnoreLint(t, "PKG specified")
 		}
 
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.opt", ":!*/testdata/*")
@@ -1058,7 +1059,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestMisspell", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
-			t.Skip("PKG specified")
+			testutils.SkipIgnoreLint(t, "PKG specified")
 		}
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files")
 		if err != nil {
@@ -1103,7 +1104,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
-			t.Skip("PKG specified")
+			testutils.SkipIgnoreLint(t, "PKG specified")
 		}
 
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go")
@@ -1143,7 +1144,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
-			t.Skip("PKG specified")
+			testutils.SkipIgnoreLint(t, "PKG specified")
 		}
 		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|_generated\.go$`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
@@ -1320,9 +1321,7 @@ func TestLint(t *testing.T) {
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
@@ -1357,9 +1356,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
 		if err != nil {
@@ -1415,9 +1412,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,
 			"staticcheck",
@@ -1627,9 +1622,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGCAssert", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		var buf strings.Builder
@@ -1677,9 +1670,7 @@ func TestLint(t *testing.T) {
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
 	t.Run("TestRoachVet", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//

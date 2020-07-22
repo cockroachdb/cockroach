@@ -138,7 +138,7 @@ func TestMVCCHistories(t *testing.T) {
 					switch d.Cmd {
 					case "skip":
 						if len(d.CmdArgs) == 0 || d.CmdArgs[0].Key == engineImpl.name {
-							e.t.Skip("skipped")
+							e.testutils.SkipIgnoreLint(t, "skipped")
 						}
 						return d.Expected
 					case "run":

@@ -434,7 +434,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("#49843. test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
+	testutils.SkipWithIssue(t, 49843, "test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
 
 	const n = 100
 	const numNodes = 5

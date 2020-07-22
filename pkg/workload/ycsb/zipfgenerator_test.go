@@ -16,6 +16,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/exp/rand"
@@ -60,9 +61,7 @@ var tests = []struct {
 
 func TestZetaFromScratch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		t.Skip("short")
-	}
+	testutils.SkipUnderShort(t)
 	for _, test := range tests {
 		computedZeta, err := computeZetaFromScratch(test.n, test.theta)
 		if err != nil {
@@ -76,9 +75,7 @@ func TestZetaFromScratch(t *testing.T) {
 
 func TestZetaIncrementally(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		t.Skip("short")
-	}
+	testutils.SkipUnderShort(t)
 	// Theta cannot be 1 by definition, so this is a safe initial value.
 	oldTheta := 1.0
 	var oldZetaN float64

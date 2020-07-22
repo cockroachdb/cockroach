@@ -597,7 +597,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "engineInMem", func(t *testing.T, engineInMem bool) {
 		testutils.RunTrueAndFalse(t, "mockSideloaded", func(t *testing.T, mockSideloaded bool) {
 			if engineInMem && !mockSideloaded {
-				t.Skip("https://github.com/cockroachdb/cockroach/issues/31913")
+				testutils.SkipWithIssue(t, 31913)
 			}
 			testRaftSSTableSideloadingProposal(t, engineInMem, mockSideloaded)
 		})

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -276,8 +277,8 @@ var profileQuery = flag.String("profile-query", "kv-read", "name of query to run
 // TestCPUProfile writes the output profile to a cpu.out file in the current
 // directory. See the profile flags for ways to configure what is profiled.
 func TestCPUProfile(t *testing.T) {
-	t.Skip(
-		"Remove this when profiling. Use profile flags above to configure. Sample command line: \n" +
+	testutils.SkipIgnoreLint(t,
+		"Remove this when profiling. Use profile flags above to configure. Sample command line: \n"+
 			"GOMAXPROCS=1 go test -run TestCPUProfile --logtostderr NONE && go tool pprof bench.test cpu.out",
 	)
 

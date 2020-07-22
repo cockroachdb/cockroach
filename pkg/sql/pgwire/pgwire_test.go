@@ -1655,7 +1655,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	if runtime.GOOS == "windows" {
-		t.Skip("unix sockets not support on windows")
+		testutils.SkipIgnoreLint(t, "unix sockets not support on windows")
 	}
 
 	// We need a temp directory in which we'll create the unix socket.

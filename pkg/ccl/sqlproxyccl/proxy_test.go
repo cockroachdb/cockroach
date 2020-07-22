@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -199,7 +200,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Skip("this test needs a running (secure) CockroachDB instance at the given address")
+	testutils.SkipIgnoreLint(t, "this test needs a running (secure) CockroachDB instance at the given address")
 	const crdbSQL = "127.0.0.1:52966"
 	// TODO(asubiotto): use an in-mem test server once this code lives in the CRDB
 	// repo.

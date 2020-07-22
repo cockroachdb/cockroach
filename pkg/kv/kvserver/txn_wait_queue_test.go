@@ -353,7 +353,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 	tc := testContext{}
 	ctx := context.Background()

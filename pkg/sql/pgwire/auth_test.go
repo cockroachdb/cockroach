@@ -187,7 +187,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						}
 					}
 					if !allowed {
-						t.Skip("Test file not applicable at this security level.")
+						testutils.SkipIgnoreLint(t, "Test file not applicable at this security level.")
 					}
 
 				case "set_hba":

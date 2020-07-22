@@ -4673,7 +4673,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 					t.Run("", func(t *testing.T) {
 						if tenant {
 							if test.skipTenant {
-								t.Skip("")
+								testutils.SkipIgnoreLint(t, "")
 							}
 							// Update all keys to include a tenant prefix.
 							tenPrefix := keys.MakeSQLCodec(roachpb.MinTenantID).TenantPrefix()

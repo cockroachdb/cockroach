@@ -633,7 +633,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		if vectorize {
-			t.Skip("skipped because we can't yet vectorize queries using DECIMALs")
+			testutils.SkipIgnoreLint(t, "skipped because we can't yet vectorize queries using DECIMALs")
 		}
 		// We're going to use the first node as the gateway and expect everything to
 		// be planned remotely.

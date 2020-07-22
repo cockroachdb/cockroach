@@ -33,7 +33,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip("uses too many resources for stressrace")
+		testutils.SkipIgnoreLint(t, "uses too many resources for stressrace")
 	}
 
 	const numHosts = 3

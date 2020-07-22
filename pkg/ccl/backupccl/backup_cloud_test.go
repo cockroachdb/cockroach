@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,11 +40,11 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
-		t.Skipf("No AWS env keys (%v)", err)
+		testutils.SkipIgnoreLintf(t, "No AWS env keys (%v)", err)
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
-		t.Skip("AWS_S3_BUCKET env var must be set")
+		testutils.SkipIgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
@@ -69,7 +70,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	bucket := os.Getenv("GS_BUCKET")
 	if bucket == "" {
-		t.Skip("GS_BUCKET env var must be set")
+		testutils.SkipIgnoreLint(t, "GS_BUCKET env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
@@ -92,11 +93,11 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {
-		t.Skip("AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+		testutils.SkipIgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
 	}
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
-		t.Skip("AZURE_CONTAINER env var must be set")
+		testutils.SkipIgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.

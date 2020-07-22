@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -83,7 +84,7 @@ func TestAntagonisticRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		// This test requires valid GS credential file.
-		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
+		testutils.SkipIgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
 
 	rnd, _ := randutil.NewPseudoRand()
@@ -126,7 +127,7 @@ func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		// This test requires valid GS credential file.
-		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
+		testutils.SkipIgnoreLint(t, "GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
 	user := security.RootUser
 

@@ -449,7 +449,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/38584")
+	testutils.SkipWithIssue(t, 38584)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())

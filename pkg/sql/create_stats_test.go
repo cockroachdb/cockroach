@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -36,11 +35,9 @@ func TestStatsWithLowTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// The test requires a bunch of data to be inserted, which is much slower in
-		// race mode.
-		t.Skip("skipping under race")
-	}
+	// The test requires a bunch of data to be inserted, which is much slower in
+	// race mode.
+	testutils.SkipUnderRace(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

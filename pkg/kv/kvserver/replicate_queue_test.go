@@ -43,10 +43,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// This test was seen taking north of 20m under race.
-		t.Skip("too heavyweight for race")
-	}
+	// This test was seen taking north of 20m under race.
+	testutils.SkipUnderRace(t)
 
 	testutils.RunTrueAndFalse(t, "atomic", func(t *testing.T, atomic bool) {
 		testReplicateQueueRebalanceInner(t, atomic)
@@ -54,8 +52,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 }
 
 func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
-	if testing.Short() {
-		t.Skip("short flag")
+	testutils.SkipUnderShort(t)
 	}
 
 	const numNodes = 5
@@ -362,7 +359,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	if testing.Short() || testutils.NightlyStress() || util.RaceEnabled {
-		t.Skip("https://github.com/cockroachdb/cockroach/issues/38565")
+		testutils.SkipWithIssue(t, 38565)
 	}
 	ctx := context.Background()
 

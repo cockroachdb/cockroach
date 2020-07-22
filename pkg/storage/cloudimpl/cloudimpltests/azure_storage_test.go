@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -27,11 +28,11 @@ func TestPutAzure(t *testing.T) {
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {
-		t.Skip("AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+		testutils.SkipIgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
 	}
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
-		t.Skip("AZURE_CONTAINER env var must be set")
+		testutils.SkipIgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
 	testExportStore(t, fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",

@@ -33,7 +33,7 @@ func TestShowTraceReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/34213")
+	testutils.SkipWithIssue(t, 34213)
 
 	const numNodes = 4
 

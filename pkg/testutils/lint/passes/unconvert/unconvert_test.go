@@ -20,7 +20,7 @@ import (
 
 func Test(t *testing.T) {
 	if testutils.NightlyStress() {
-		t.Skip("Go cache files don't work under stress")
+		testutils.SkipIgnoreLint(t, "Go cache files don't work under stress")
 	}
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, unconvert.Analyzer, "a")

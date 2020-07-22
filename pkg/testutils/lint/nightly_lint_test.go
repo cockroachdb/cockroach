@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	sqlparser "github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestNightlyLint(t *testing.T) {
@@ -27,11 +28,9 @@ func TestNightlyLint(t *testing.T) {
 
 	// TestHelpURLs checks that all help texts have a valid documentation URL.
 	t.Run("TestHelpURLs", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
+		testutils.SkipUnderShort(t)
 		if pkgSpecified {
-			t.Skip("PKG specified")
+			testutils.SkipIgnoreLint(t, "PKG specified")
 		}
 
 		t.Parallel()

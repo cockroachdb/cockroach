@@ -343,7 +343,7 @@ func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/40351")
+	testutils.SkipWithIssue(t, 40351)
 
 	sc := kvserver.TestStoreConfig(nil)
 	// Disable periodic gossip activities. The periodic gossiping of the first
@@ -1096,7 +1096,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 
 	mtc := &multiTestContext{
@@ -1746,7 +1746,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -1921,7 +1921,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 	sc := kvserver.TestStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
@@ -3032,11 +3032,9 @@ func TestDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Five nodes is too much to reliably run under testrace with our aggressive
-		// liveness timings.
-		t.Skip("skipping under testrace: #39807 and #37811")
-	}
+	// Five nodes is too much to reliably run under testrace with our aggressive
+	// liveness timings.
+	testutils.SkipUnderRace(t, "#39807 and #37811")
 
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
@@ -3044,7 +3042,7 @@ func TestDecommission(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 
 	ctx := context.Background()
@@ -4516,7 +4514,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 
 	stopper := stop.NewStopper()
@@ -4805,7 +4803,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 	sc := kvserver.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
@@ -5277,7 +5275,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	// test to make sense. It usually is.
 	lease, pendingLease := repl.GetLease()
 	if pendingLease != (roachpb.Lease{}) || lease.OwnedBy(store.StoreID()) {
-		t.Skip("the replica is not the leaseholder, this happens rarely under stressrace")
+		testutils.SkipIgnoreLint(t, "the replica is not the leaseholder, this happens rarely under stressrace")
 	}
 	var wg sync.WaitGroup
 	const N = 100

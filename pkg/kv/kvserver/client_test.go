@@ -1355,7 +1355,7 @@ func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expecte
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := m.readIntFromEngines(key)

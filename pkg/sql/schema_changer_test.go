@@ -1393,7 +1393,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("")
+	testutils.SkipWithIssue(t, 51796)
 	// TODO (lucy): This test needs more complicated schema changer knobs than
 	// currently implemented. Previously this test disabled the async schema
 	// changer so that we don't retry the cleanup of the failed schema change
@@ -1865,7 +1865,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	}
 
 	// State of jobs table
-	t.Skip("TODO(pbardea): The following fails due to causes seemingly unrelated to GC")
+	testutils.SkipWithIssue(t, 51796, "TODO(pbardea): The following fails due to causes seemingly unrelated to GC")
 	runner := sqlutils.SQLRunner{DB: sqlDB}
 	// TODO (lucy): This test API should use an offset starting from the
 	// most recent job instead.
@@ -2320,7 +2320,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	}
 
 	t.Run("create-index-before", func(t *testing.T) {
-		t.Skip("unskip once #45510 is completed")
+		testutils.SkipWithIssue(t, 45510, "unskip when finished")
 		if _, err := sqlDB.Exec(`CREATE TABLE t.test (k INT NOT NULL, v INT)`); err != nil {
 			t.Fatal(err)
 		}
@@ -3779,7 +3779,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangeCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("")
+	testutils.SkipWithIssue(t, 51796)
 	// TODO (lucy): This test needs more complicated schema changer knobs than is
 	// currently implemented.
 	params, _ := tests.CreateTestServerParams()
@@ -4117,7 +4117,7 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/43990")
+	testutils.SkipWithIssue(t, 43990)
 
 	backfillNotification := make(chan struct{})
 	backfillCount := int64(0)
@@ -4500,7 +4500,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 func TestCancelSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("")
+	testutils.SkipWithIssue(t, 51796)
 
 	const (
 		numNodes = 3
@@ -5751,8 +5751,7 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO (lucy): get rid of this test once GCMutations goes away
-	t.Skip("")
+	testutils.SkipWithIssue(t, 51796, "TODO (lucy): get rid of this test once GCMutations goes away")
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get

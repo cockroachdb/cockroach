@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -982,9 +981,9 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() || util.RaceEnabled {
-		t.Skip("takes too long with race enabled")
-	}
+	testutils.SkipUnderRace(t)
+	testutils.SkipUnderShort(t)
+
 	schemaChangeTimestampRegexp := regexp.MustCompile(`schema change occurred at ([0-9]+\.[0-9]+)`)
 	timestampStrFromError := func(t *testing.T, err error) string {
 		require.Regexp(t, schemaChangeTimestampRegexp, err)
@@ -1128,9 +1127,8 @@ func TestChangefeedNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() || util.RaceEnabled {
-		t.Skip("takes too long with race enabled")
-	}
+	testutils.SkipUnderRace(t)
+	testutils.SkipUnderShort(t)
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		// Shorten the intervals so this test doesn't take so long. We need to wait
@@ -1494,7 +1492,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, func(t *testing.T) {
-		t.Skip("https://github.com/cockroachdb/cockroach/issues/38443")
+		testutils.SkipWithIssue(t, 38443)
 		enterpriseTest(testFn)
 	})
 }
@@ -1576,7 +1574,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/37154")
+	testutils.SkipWithIssue(t, 37154)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
@@ -2552,7 +2550,7 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 func TestChangefeedNodeShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("#32232")
+	testutils.SkipWithIssue(t, 32232)
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -2847,9 +2845,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	flushCh := make(chan struct{}, 1)
 	defer close(flushCh)
 
-	if util.RaceEnabled {
-		t.Skip("takes too long with race enabled")
-	}
+	testutils.SkipUnderRace(t, "Takes too long with race enabled")
 
 	shouldDrain := true
 	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{

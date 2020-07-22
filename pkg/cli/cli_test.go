@@ -382,9 +382,7 @@ func (c cliTest) RunWithCAArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	testutils.SkipUnderShort(t)
 
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
@@ -1553,7 +1551,7 @@ SQLSTATE: 57014
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("currently flaky: #38151")
+	testutils.SkipWithIssue(t, 38151)
 
 	start := timeutil.Now()
 	c := newCLITest(cliTestParams{})

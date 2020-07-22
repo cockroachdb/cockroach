@@ -333,7 +333,7 @@ func TestCopyOne(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("#18352")
+	testutils.SkipWithIssue(t, 18352)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -368,7 +368,7 @@ func TestCopyInProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("#18352")
+	testutils.SkipWithIssue(t, 18352)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)

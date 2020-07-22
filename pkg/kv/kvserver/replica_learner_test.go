@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -729,11 +728,9 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work well with race
-		// unless we're extremely lenient, which drives up the test duration.
-		t.Skip("skipping under race")
-	}
+	// Limiting how long transactions can run does not work well with race
+	// unless we're extremely lenient, which drives up the test duration.
+	testutils.SkipUnderRace(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()

@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1713,9 +1712,9 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// This test is relatively slow and resource intensive. When run under
 	// stressrace on a loaded machine (as in the nightly tests), sometimes the
 	// SucceedsSoon conditions below take longer than the allotted time (#25273).
-	if testing.Short() || testutils.NightlyStress() || util.RaceEnabled {
-		t.Skip()
-	}
+	testutils.SkipUnderRace(t)
+	testutils.SkipUnderShort(t)
+	testutils.SkipUnderStress(t)
 
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
@@ -1723,7 +1722,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 
 	ctx := context.Background()
@@ -2196,7 +2195,7 @@ func TestReplicaTombstone(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		testutils.SkipIgnoreLint(t, "disabled on teeing engine")
 	}
 
 	t.Run("(1) ChangeReplicasTrigger", func(t *testing.T) {

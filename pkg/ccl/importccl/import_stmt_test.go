@@ -1227,9 +1227,7 @@ ALTER TABLE ONLY public.b
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	if testing.Short() {
-		t.Skip("short")
-	}
+	testutils.SkipUnderShort(t)
 
 	const nodes = 3
 
@@ -1515,7 +1513,7 @@ func TestImportCSVStmt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if strings.Contains(tc.name, "bzip") && len(testFiles.bzipFiles) == 0 {
-				t.Skip("bzip2 not available on PATH?")
+				testutils.SkipIgnoreLint(t, "bzip2 not available on PATH?")
 			}
 			intodb := fmt.Sprintf(`csv%d`, i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, intodb))
@@ -1888,9 +1886,7 @@ func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short")
-	}
+	testutils.SkipUnderShort(t)
 
 	const nodes = 3
 
@@ -2126,7 +2122,7 @@ func TestImportIntoCSV(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if strings.Contains(tc.name, "bzip") && len(testFiles.bzipFiles) == 0 {
-				t.Skip("bzip2 not available on PATH?")
+				testutils.SkipIgnoreLint(t, "bzip2 not available on PATH?")
 			}
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
@@ -3446,7 +3442,7 @@ func TestImportControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("TODO(dt): add knob to force faster progress checks.")
+	testutils.SkipWithIssue(t, 51792, "TODO(dt): add knob to force faster progress checks.")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -3573,7 +3569,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	// TODO(mjibson): Although this test passes most of the time it still
 	// sometimes fails because not all kinds of failures caused by shutting a
 	// node down are detected and retried.
-	t.Skip("flaky due to undetected kinds of failures when the node is shutdown")
+	testutils.SkipWithIssue(t, 51793, "flaky due to undetected kinds of failures when the node is shutdown")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -3653,7 +3649,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("TODO(dt): this relies on chunking done by prior version of IMPORT." +
+	testutils.SkipWithIssue(t, 51794, "TODO(dt): this relies on chunking done by prior version of IMPORT."+
 		"Rework this test, or replace it with resume-tests + jobs infra tests.")
 
 	defer func(oldInterval time.Duration) {
@@ -3918,7 +3914,7 @@ func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/40263")
+	testutils.SkipWithIssue(t, 40263)
 
 	const (
 		nodes = 3

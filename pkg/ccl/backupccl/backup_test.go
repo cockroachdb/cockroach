@@ -780,7 +780,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/33357")
+	testutils.SkipWithIssue(t, 33357)
 
 	defer func(oldInterval time.Duration) {
 		BackupCheckpointInterval = oldInterval
@@ -1018,7 +1018,7 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("#24136")
+	testutils.SkipWithIssue(t, 24136)
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()

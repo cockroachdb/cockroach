@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -144,12 +145,10 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50024")
+	testutils.SkipWithIssue(t, 50024)
 
-	if testing.Short() {
-		// As of Nov 2018 it takes 3.6s.
-		t.Skip("short")
-	}
+	// As of Nov 2018 it takes 3.6s.
+	testutils.SkipUnderShort(t)
 	ctx := context.Background()
 
 	// Shorten the raft tick interval and election timeout to make range leases

@@ -90,7 +90,7 @@ func TestFixture(t *testing.T) {
 	gcsBucket := os.Getenv(`GS_BUCKET`)
 	gcsKey := os.Getenv(`GS_JSONKEY`)
 	if gcsBucket == "" || gcsKey == "" {
-		t.Skip("GS_BUCKET and GS_JSONKEY env vars must be set")
+		testutils.SkipIgnoreLint(t, "GS_BUCKET and GS_JSONKEY env vars must be set")
 	}
 
 	source, err := google.JWTConfigFromJSON([]byte(gcsKey), storage.ScopeReadWrite)

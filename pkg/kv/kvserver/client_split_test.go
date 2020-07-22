@@ -1955,7 +1955,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50809")
+	testutils.SkipWithIssue(t, 50809)
 
 	mtc := &multiTestContext{}
 	storeCfg := kvserver.TestStoreConfig(nil)

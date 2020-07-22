@@ -38,14 +38,12 @@ import (
 func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	if testing.Short() {
-		// This test takes seconds because of replication vagaries.
-		t.Skip("short flag")
-	}
+	// This test takes seconds because of replication vagaries.
+	testutils.SkipUnderShort(t)
 	if testutils.NightlyStress() && util.RaceEnabled {
 		// Under stressrace, replication changes seem to hit 1m deadline errors and
 		// don't make progress.
-		t.Skip("test too slow for stressrace")
+		testutils.SkipIgnoreLint(t, "test too slow for stressrace")
 	}
 
 	ctx := context.Background()

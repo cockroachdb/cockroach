@@ -878,9 +878,7 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	testutils.SkipUnderShort(t)
 
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"

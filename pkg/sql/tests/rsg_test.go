@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -668,7 +669,7 @@ func testRandomSyntax(
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
+		testutils.SkipIgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
 	defer utilccl.TestingEnableEnterprise()()

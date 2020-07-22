@@ -857,11 +857,11 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
 				if testCase.skip != "" {
-					t.Skip(testCase.skip)
+					testutils.SkipIgnoreLint(t, testCase.skip)
 				}
 				if vectorize {
 					// TODO(asubiotto): figure out why this race occurs.
-					t.Skip("vectorize option is temporarily skipped because there appears to be " +
+					testutils.SkipWithIssue(t, 51647, "vectorize option is temporarily skipped because there appears to be "+
 						"a race between the expected error and the context cancellation error")
 				}
 				func() {

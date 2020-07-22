@@ -496,7 +496,7 @@ func TestStatusGetFiles(t *testing.T) {
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if log.V(3) {
-		t.Skip("Test only works with low verbosity levels")
+		testutils.SkipIgnoreLint(t, "Test only works with low verbosity levels")
 	}
 
 	s := log.ScopeWithoutShowLogs(t)

@@ -2675,11 +2675,11 @@ func RunLogicTestWithDefaultConfig(
 	// please make adjustments there.
 	// As of 6/4/2019, the logic tests never complete under race.
 	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip("logic tests and race detector don't mix: #37993")
+		testutils.SkipIgnoreLint(t, "logic tests and race detector don't mix: #37993")
 	}
 
 	if skipLogicTests {
-		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
+		testutils.SkipIgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
 	// Override default glob sets if -d flag was specified.
@@ -2777,13 +2777,13 @@ func RunLogicTestWithDefaultConfig(
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
 			if testing.Short() && cfg.skipShort {
-				t.Skip("config skipped by -test.short")
+				testutils.SkipIgnoreLint(t, "config skipped by -test.short")
 			}
 			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
-				t.Skip("config excluded via env var")
+				testutils.SkipIgnoreLint(t, "config excluded via env var")
 			}
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
-				t.Skip("config does not match env var")
+				testutils.SkipIgnoreLint(t, "config does not match env var")
 			}
 			for _, path := range paths {
 				path := path // Rebind range variable.

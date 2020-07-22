@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -150,7 +151,7 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 	// track the open file count in the cockroach container, but that seems
 	// brittle and probably not worth the effort. However this test is
 	// useful when doing manual tracking of file descriptor count.
-	t.Skip("skip")
+	testutils.SkipWithIssue(t, 51791)
 
 	rootConnector, err := pq.NewConnector("user=root sslmode=require")
 	if err != nil {

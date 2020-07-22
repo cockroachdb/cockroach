@@ -19,9 +19,7 @@ import (
 )
 
 func Test(t *testing.T) {
-	if testutils.NightlyStress() {
-		t.Skip("Go cache files don't work under stress")
-	}
+	testutils.SkipUnderStress(t)
 	fmtsafe.Tip = ""
 	testdata := analysistest.TestData()
 	results := analysistest.Run(t, testdata, fmtsafe.Analyzer, "a")

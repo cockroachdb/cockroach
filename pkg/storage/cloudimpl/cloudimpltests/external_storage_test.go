@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -446,7 +447,7 @@ func TestPutGoogleCloud(t *testing.T) {
 
 	bucket := os.Getenv("GS_BUCKET")
 	if bucket == "" {
-		t.Skip("GS_BUCKET env var must be set")
+		testutils.SkipIgnoreLint(t, "GS_BUCKET env var must be set")
 	}
 
 	user := security.RootUser
@@ -462,7 +463,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	t.Run("specified", func(t *testing.T) {
 		credentials := os.Getenv("GS_JSONKEY")
 		if credentials == "" {
-			t.Skip("GS_JSONKEY env var must be set")
+			testutils.SkipIgnoreLint(t, "GS_JSONKEY env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
@@ -489,7 +490,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	t.Run("implicit", func(t *testing.T) {
 		// Only test these if they exist.
 		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
-			t.Skip(err)
+			testutils.SkipIgnoreLint(t, err)
 		}
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)

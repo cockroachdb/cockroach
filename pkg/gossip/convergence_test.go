@@ -54,7 +54,7 @@ func connectionsRefused(network *simulation.Network) int64 {
 func TestConvergence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if testutils.NightlyStress() {
-		t.Skip()
+		testutils.SkipIgnoreLint(t)
 	}
 
 	stopper := stop.NewStopper()
@@ -87,7 +87,7 @@ func TestConvergence(t *testing.T) {
 func TestNetworkReachesEquilibrium(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if testutils.NightlyStress() {
-		t.Skip()
+		testutils.SkipIgnoreLint(t)
 	}
 
 	stopper := stop.NewStopper()

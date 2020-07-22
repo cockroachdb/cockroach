@@ -823,7 +823,7 @@ CREATE TABLE t.foo (v INT);
 func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50037")
+	testutils.SkipWithIssue(t, 50037)
 
 	params, _ := tests.CreateTestServerParams()
 
