@@ -36,7 +36,7 @@ func TestShowBackup(t *testing.T) {
 
 	const full, inc, inc2 = LocalFoo + "/full", LocalFoo + "/inc", LocalFoo + "/inc2"
 
-	beforeTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
 	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
@@ -51,7 +51,7 @@ func TestShowBackup(t *testing.T) {
 
 	// Backup the changes by appending to the base and by making a separate
 	// inc backup.
-	incTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	incTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, incTS), full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
@@ -75,7 +75,7 @@ func TestShowBackup(t *testing.T) {
 
 	// Backup the changes again, by appending to the base and by making a
 	// separate inc backup.
-	inc2TS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
+	inc2TS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, inc2TS), full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, inc2TS), inc2, full, inc)
 

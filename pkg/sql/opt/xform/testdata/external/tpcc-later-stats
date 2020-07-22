@@ -160,7 +160,7 @@ insert "order"
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(10-17)
- │    └── (100, 5, 10, 50, '2019-08-26 16:50:41+00:00', 10, 1, NULL)
+ │    └── (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1, NULL)
  └── f-k-checks
       └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
            └── anti-join (lookup customer)
@@ -621,7 +621,7 @@ insert history
  │    ├── volatile
  │    ├── key: ()
  │    ├── fd: ()-->(11-15,17-20)
- │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41+00:00', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
+ │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
       │    └── anti-join (lookup customer)
@@ -992,7 +992,7 @@ update order_line
       │    ├── key: (13,15)
       │    └── fd: ()-->(12,14), (13,15)-->(16-21)
       └── projections
-           └── '2019-08-26 16:50:41+00:00' [as=ol_delivery_d_new:23]
+           └── '2019-08-26 16:50:41' [as=ol_delivery_d_new:23]
 
 # --------------------------------------------------
 # 2.8 The Stock-Level Transaction
