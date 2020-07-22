@@ -35,16 +35,7 @@ message RaftHeartbeat {
   optional uint64 term = 4 [(gogoproto.nullable) = false];
   optional uint64 commit = 5 [(gogoproto.nullable) = false];
   optional bool quiesce = 6 [(gogoproto.nullable) = false];
-
-  // ToIsLearner was added in v19.2 to aid in the transition from preemptive
-  // snapshots to learner replicas. If a Replica learns its ID from a message
-  // which indicates that it is a learner and it is not currently a part of the
-  // range (due to being from a preemptive snapshot) then it must delete all of
-  // its data.
-  //
-  // TODO(ajwerner): remove in 20.2 once we ensure that preemptive snapshots can
-  // no longer be present and that we're never talking to a 19.2 node.
-  optional bool to_is_learner = 7 [(gogoproto.nullable) = false];
+  reserved 7;
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
