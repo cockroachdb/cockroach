@@ -91,7 +91,7 @@ WHERE y=10
 with &1
  ├── columns: x:16(string!null) y:17(int!null) z:18(float)
  ├── side-effects, mutations
- ├── stats: [rows=9.94974874, distinct(17)=0.994974874, null(17)=0]
+ ├── stats: [rows=1, distinct(17)=1, null(17)=0]
  ├── fd: ()-->(17)
  ├── upsert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
@@ -108,20 +108,20 @@ with &1
  │    │    ├── upsert_y:14 => xyz.y:2
  │    │    └── upsert_z:15 => xyz.z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=9.94974874]
+ │    ├── stats: [rows=9.94974874, distinct(1)=9.94974874, null(1)=0, distinct(2)=9.94974874, null(2)=0]
  │    └── project
  │         ├── columns: upsert_x:13(string) upsert_y:14(int!null) upsert_z:15(float) a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float) column12:12(int!null)
- │         ├── stats: [rows=9.94974874]
+ │         ├── stats: [rows=9.94974874, distinct(13)=9.94974874, null(13)=0, distinct(14)=9.94974874, null(14)=0]
  │         ├── lax-key: (5,9)
  │         ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11), (5,9)-->(13), (4,9)-->(14), (5,9)~~>(4,14,15)
  │         ├── project
  │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
- │         │    ├── stats: [rows=9.94974874]
+ │         │    ├── stats: [rows=9.94974874, distinct(5,9)=9.94974874, null(5,9)=0, distinct(4,9,12)=9.94974874, null(4,9,12)=0]
  │         │    ├── lax-key: (5,9)
  │         │    ├── fd: ()-->(8,12), (5)~~>(4), (9)-->(10,11)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
- │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0]
+ │         │    │    ├── stats: [rows=9.94974874, distinct(9)=9.94974874, null(9)=0, distinct(4,9)=9.94974874, null(4,9)=0, distinct(5,9)=9.94974874, null(5,9)=0]
  │         │    │    ├── lax-key: (5,9)
  │         │    │    ├── fd: ()-->(8), (5)~~>(4), (9)-->(10,11)
  │         │    │    ├── upsert-distinct-on
@@ -175,7 +175,7 @@ with &1
  │              └── CASE WHEN xyz.x:9 IS NULL THEN column8:8 ELSE xyz.z:11 END [as=upsert_z:15, type=float, outer=(8,9,11)]
  └── select
       ├── columns: x:16(string!null) y:17(int!null) z:18(float)
-      ├── stats: [rows=9.94974874, distinct(17)=0.994974874, null(17)=0]
+      ├── stats: [rows=1, distinct(17)=1, null(17)=0]
       ├── fd: ()-->(17)
       ├── with-scan &1
       │    ├── columns: x:16(string!null) y:17(int!null) z:18(float)
@@ -183,7 +183,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:16(string)
       │    │    ├──  xyz.y:2(int) => y:17(int)
       │    │    └──  xyz.z:3(float) => z:18(float)
-      │    └── stats: [rows=9.94974874, distinct(16)=0.994974874, null(16)=0, distinct(17)=0.994974874, null(17)=0]
+      │    └── stats: [rows=9.94974874, distinct(16)=9.94974874, null(16)=0, distinct(17)=9.94974874, null(17)=0]
       └── filters
            └── y:17 = 10 [type=bool, outer=(17), constraints=(/17: [/10 - /10]; tight), fd=()-->(17)]
 

@@ -48,12 +48,12 @@ with &1
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
  │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
  │    ├── side-effects, mutations
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
  │    └── select
  │         ├── columns: xyz.x:4(string!null) xyz.y:5(int!null) xyz.z:6(float!null)
- │         ├── stats: [rows=10, distinct(6)=1, null(6)=0]
+ │         ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(5)=9.5617925, null(5)=0, distinct(6)=1, null(6)=0]
  │         ├── key: (4)
  │         ├── fd: ()-->(6), (4)-->(5)
  │         ├── scan xyz
@@ -74,7 +74,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:7(string)
       │    │    ├──  xyz.y:2(int) => y:8(int)
       │    │    └──  xyz.z:3(float) => z:9(float)
-      │    ├── stats: [rows=10, distinct(7)=10, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
+      │    ├── stats: [rows=10, distinct(7)=10, null(7)=0, distinct(8)=9.5617925, null(8)=0, distinct(9)=1, null(9)=0]
       │    ├── key: (7)
       │    └── fd: ()-->(9), (7)-->(8)
       └── filters
