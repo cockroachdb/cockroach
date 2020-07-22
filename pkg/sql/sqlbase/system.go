@@ -11,7 +11,6 @@
 package sqlbase
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ShouldSplitAtDesc determines whether a specific descriptor should be
@@ -44,7 +44,7 @@ func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
 	case *Descriptor_Schema:
 		return false
 	default:
-		panic(fmt.Sprintf("unexpected descriptor type %#v", &desc))
+		panic(errors.AssertionFailedf("unexpected descriptor type %#v", &desc))
 	}
 }
 
@@ -1720,7 +1720,7 @@ func createZoneConfigKV(
 ) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
-		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+		panic(errors.AssertionFailedf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
 		Key:   codec.ZoneKey(uint32(keyID)),

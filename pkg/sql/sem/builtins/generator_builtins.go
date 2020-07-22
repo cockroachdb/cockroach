@@ -13,7 +13,6 @@ package builtins
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -44,7 +43,7 @@ func initGeneratorBuiltins() {
 		}
 
 		if v.props.Class != tree.GeneratorClass {
-			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
+			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
 		}
 

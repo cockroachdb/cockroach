@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -539,5 +538,5 @@ func (jr *joinReader) Child(nth int, verbose bool) execinfra.OpNode {
 		}
 		panic("input to joinReader is not an execinfra.OpNode")
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

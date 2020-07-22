@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,7 +97,7 @@ func (jsonIntersectionExpr) Convert(
 		panic(err)
 	}
 	if len(keys) != 2 {
-		panic(fmt.Sprintf("unexpected length: %d", len(keys)))
+		panic(errors.AssertionFailedf("unexpected length: %d", len(keys)))
 	}
 	d1Span := invertedexpr.MakeSingleInvertedValSpan(keys[0])
 	d2Span := invertedexpr.MakeSingleInvertedValSpan(keys[1])
@@ -129,7 +130,7 @@ func (jsonUnionExpr) Convert(
 		panic(err)
 	}
 	if len(keys) != 2 {
-		panic(fmt.Sprintf("unexpected length: %d", len(keys)))
+		panic(errors.AssertionFailedf("unexpected length: %d", len(keys)))
 	}
 	d1Span := invertedexpr.MakeSingleInvertedValSpan(keys[0])
 	d2Span := invertedexpr.MakeSingleInvertedValSpan(keys[1])

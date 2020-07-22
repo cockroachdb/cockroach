@@ -11,9 +11,8 @@
 package tree
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // This file implements the generation of unique names for every
@@ -52,7 +51,7 @@ func init() {
 	// Label the unary operators.
 	for op, overloads := range UnaryOps {
 		if int(op) >= len(unaryOpName) || unaryOpName[op] == "" {
-			panic(fmt.Sprintf("missing name for operator %q", op.String()))
+			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
 		}
 		opName := unaryOpName[op]
 		for _, impl := range overloads {
@@ -64,7 +63,7 @@ func init() {
 	// Label the comparison operators.
 	for op, overloads := range CmpOps {
 		if int(op) >= len(comparisonOpName) || comparisonOpName[op] == "" {
-			panic(fmt.Sprintf("missing name for operator %q", op.String()))
+			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
 		}
 		opName := comparisonOpName[op]
 		for _, impl := range overloads {
@@ -78,7 +77,7 @@ func init() {
 	// Label the binary operators.
 	for op, overloads := range BinOps {
 		if int(op) >= len(binaryOpName) || binaryOpName[op] == "" {
-			panic(fmt.Sprintf("missing name for operator %q", op.String()))
+			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
 		}
 		opName := binaryOpName[op]
 		for _, impl := range overloads {

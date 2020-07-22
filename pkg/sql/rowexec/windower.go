@@ -894,5 +894,5 @@ func (w *windower) Child(nth int, verbose bool) execinfra.OpNode {
 		}
 		panic("input to windower is not an execinfra.OpNode")
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

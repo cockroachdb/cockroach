@@ -11,7 +11,6 @@
 package tree
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 )
 
 // presetTypesForTesting is a mapping of qualified names to types that can be mocked out
@@ -85,6 +85,6 @@ func SampleDatum(t *types.T) Datum {
 	case types.GeometryFamily:
 		return NewDGeometry(geo.MustParseGeometryFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")))
 	default:
-		panic(fmt.Sprintf("SampleDatum not implemented for %s", t))
+		panic(errors.AssertionFailedf("SampleDatum not implemented for %s", t))
 	}
 }

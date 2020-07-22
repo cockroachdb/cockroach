@@ -11,9 +11,8 @@
 package sqlbase
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // Prettier aliases for JoinType values. See the original types for
@@ -46,7 +45,7 @@ func JoinTypeFromAstString(joinStr string) JoinType {
 		return FullOuterJoin
 
 	default:
-		panic(fmt.Sprintf("unknown join string %s", joinStr))
+		panic(errors.AssertionFailedf("unknown join string %s", joinStr))
 	}
 }
 

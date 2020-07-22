@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -978,5 +977,5 @@ func (z *zigzagJoiner) ChildCount(verbose bool) int {
 
 // Child is part of the execinfra.OpNode interface.
 func (z *zigzagJoiner) Child(nth int, verbose bool) execinfra.OpNode {
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

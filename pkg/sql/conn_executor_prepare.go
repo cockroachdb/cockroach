@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -99,7 +98,7 @@ func (ex *connExecutor) addPreparedStmt(
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
-		panic(fmt.Sprintf("prepared statement already exists: %q", name))
+		panic(errors.AssertionFailedf("prepared statement already exists: %q", name))
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
@@ -386,7 +385,7 @@ func (ex *connExecutor) addPortal(
 	outFormats []pgwirebase.FormatCode,
 ) error {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-		panic(fmt.Sprintf("portal already exists: %q", portalName))
+		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
 
 	portal, err := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
@@ -437,7 +436,7 @@ func (ex *connExecutor) execDelPrepStmt(
 		}
 		ex.deletePortal(ctx, delCmd.Name)
 	default:
-		panic(fmt.Sprintf("unknown del type: %s", delCmd.Type))
+		panic(errors.AssertionFailedf("unknown del type: %s", delCmd.Type))
 	}
 	return nil, nil
 }

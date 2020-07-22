@@ -12,12 +12,12 @@ package builtins
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func initWindowBuiltins() {
@@ -28,12 +28,12 @@ func initWindowBuiltins() {
 		}
 
 		if v.props.Class != tree.WindowClass {
-			panic(fmt.Sprintf("%s: window functions should be marked with the tree.WindowClass "+
+			panic(errors.AssertionFailedf("%s: window functions should be marked with the tree.WindowClass "+
 				"function class, found %v", k, v))
 		}
 		for _, w := range v.overloads {
 			if w.WindowFunc == nil {
-				panic(fmt.Sprintf("%s: window functions should have tree.WindowFunc constructors, "+
+				panic(errors.AssertionFailedf("%s: window functions should have tree.WindowFunc constructors, "+
 					"found %v", k, w))
 			}
 		}

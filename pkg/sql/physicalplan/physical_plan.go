@@ -559,7 +559,7 @@ func (p *PhysicalPlan) AddRendering(
 		for i, e := range exprs {
 			streamCol, _ := exprColumn(e, indexVarMap)
 			if streamCol == -1 {
-				panic(fmt.Sprintf("render %d refers to column not in source: %s", i, e))
+				panic(errors.AssertionFailedf("render %d refers to column not in source: %s", i, e))
 			}
 			cols[i] = uint32(streamCol)
 		}
@@ -924,7 +924,7 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 		// because the streams should be in order; if that assumption changes we can
 		// reorder them here according to sourceRouterSlot.
 		if len(router.Streams) != s.SourceRouterSlot {
-			panic(fmt.Sprintf(
+			panic(errors.AssertionFailedf(
 				"sourceRouterSlot mismatch: %d, expected %d", len(router.Streams), s.SourceRouterSlot,
 			))
 		}
@@ -1336,7 +1336,7 @@ func (a PlanDistribution) String() string {
 	case FullyDistributedPlan:
 		return "full"
 	default:
-		panic(fmt.Sprintf("unsupported PlanDistribution %d", a))
+		panic(errors.AssertionFailedf("unsupported PlanDistribution %d", a))
 	}
 }
 
