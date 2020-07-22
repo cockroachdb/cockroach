@@ -71,10 +71,17 @@ type distSQLExplainable interface {
 // *only* be used in EXPLAIN variants.
 func getPlanDistributionForExplainPurposes(
 	ctx context.Context,
+	p *planner,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
 ) physicalplan.PlanDistribution {
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if p.Descriptors().HasUncommittedTypes() {
+		return physicalplan.LocalPlan
+	}
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.Distribution
 	}
@@ -99,13 +106,13 @@ func getPlanDistributionForExplainPurposes(
 		// for setting up the correct DistSQL infrastructure).
 		return physicalplan.FullyDistributedPlan
 	}
-	return getPlanDistribution(ctx, nodeID, distSQLMode, plan)
+	return getPlanDistribution(ctx, p, nodeID, distSQLMode, plan)
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistributionForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
 	willDistribute := distribution.WillDistribute()
