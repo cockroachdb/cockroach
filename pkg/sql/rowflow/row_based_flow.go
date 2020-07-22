@@ -12,7 +12,6 @@ package rowflow
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -178,7 +177,7 @@ func findProcByOutputStreamID(
 			continue
 		}
 		if len(ospec.Streams) != 1 {
-			panic(fmt.Sprintf("pass-through router with %d streams", len(ospec.Streams)))
+			panic(errors.AssertionFailedf("pass-through router with %d streams", len(ospec.Streams)))
 		}
 		if ospec.Streams[0].StreamID == streamID {
 			return pspec

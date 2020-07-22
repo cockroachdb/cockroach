@@ -12,13 +12,13 @@ package rowcontainer
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -218,7 +218,7 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // Returns an error if the allocation was denied by the MemoryMonitor.
 func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums, error) {
 	if len(row) != c.numCols {
-		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
+		panic(errors.AssertionFailedf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
 		c.numRows++

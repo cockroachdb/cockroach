@@ -1508,7 +1508,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// Closing the res will flush the connection's buffer.
 		res = ex.clientComm.CreateFlushResult(pos)
 	default:
-		panic(fmt.Sprintf("unsupported command type: %T", cmd))
+		panic(errors.AssertionFailedf("unsupported command type: %T", cmd))
 	}
 
 	var advInfo advanceInfo
@@ -1572,7 +1572,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	case stayInPlace:
 		// Nothing to do. The same statement will be executed again.
 	default:
-		panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
+		panic(errors.AssertionFailedf("unexpected advance code: %s", advInfo.code))
 	}
 
 	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
@@ -1656,7 +1656,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		// (i.e. we don't do anything if txnRewindPos != pos).
 
 		if advInfo.code != advanceOne {
-			panic(fmt.Sprintf("unexpected advanceCode: %s", advInfo.code))
+			panic(errors.AssertionFailedf("unexpected advanceCode: %s", advInfo.code))
 		}
 
 		var canAdvance bool
@@ -1687,7 +1687,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case Flush:
 				canAdvance = true
 			default:
-				panic(fmt.Sprintf("unsupported cmd: %T", cmd))
+				panic(errors.AssertionFailedf("unsupported cmd: %T", cmd))
 			}
 			if canAdvance {
 				ex.setTxnRewindPos(ctx, pos+1)
@@ -1703,7 +1703,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 // won't ever need them again.
 func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 	if pos <= ex.extraTxnState.txnRewindPos {
-		panic(fmt.Sprintf("can only move the  txnRewindPos forward. "+
+		panic(errors.AssertionFailedf("can only move the  txnRewindPos forward. "+
 			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos))
 	}
 	ex.extraTxnState.txnRewindPos = pos
@@ -1733,7 +1733,7 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 	case stateInternalError:
 		return InTxnBlock
 	default:
-		panic(fmt.Sprintf("unknown state: %T", s))
+		panic(errors.AssertionFailedf("unknown state: %T", s))
 	}
 }
 

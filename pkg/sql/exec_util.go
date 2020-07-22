@@ -916,7 +916,7 @@ func shouldDistributeGivenRecAndMode(
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute
 	}
-	panic(fmt.Sprintf("unhandled distsql mode %v", mode))
+	panic(errors.AssertionFailedf("unhandled distsql mode %v", mode))
 }
 
 // getPlanDistribution returns the PlanDistribution that plan will have. If
@@ -1022,7 +1022,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 				}
 			}
 			if d == nil {
-				panic(fmt.Sprintf("unexpected type %T", arg))
+				panic(errors.AssertionFailedf("unexpected type %T", arg))
 			}
 		}
 		res[i] = d

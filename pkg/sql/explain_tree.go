@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // planToTree uses a stack to "parse" the planObserver's sequence of calls
@@ -112,7 +113,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 	if err := observePlan(
 		ctx, &top.planComponents, observer, true /* returnError */, sampledLogicalPlanFmtFlags,
 	); err != nil {
-		panic(fmt.Sprintf("error while walking plan to save it to statement stats: %s", err.Error()))
+		panic(errors.AssertionFailedf("error while walking plan to save it to statement stats: %s", err.Error()))
 	}
 	return nodeStack.peek()
 }

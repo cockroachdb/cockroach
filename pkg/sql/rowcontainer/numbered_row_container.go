@@ -13,7 +13,6 @@ package rowcontainer
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"math"
 	"sync"
 
@@ -130,7 +129,7 @@ func (d *DiskBackedNumberedRowContainer) AddRow(
 			// Existing row.
 			return assignedIdx, nil
 		} else if assignedIdx != d.idx {
-			panic(fmt.Sprintf("DiskBackedNumberedRowContainer bug: assignedIdx %d != d.idx %d",
+			panic(errors.AssertionFailedf("DiskBackedNumberedRowContainer bug: assignedIdx %d != d.idx %d",
 				assignedIdx, d.idx))
 		}
 		// Else assignedIdx == d.idx, so a new row.

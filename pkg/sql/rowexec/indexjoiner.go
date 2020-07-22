@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -280,5 +279,5 @@ func (ij *indexJoiner) Child(nth int, verbose bool) execinfra.OpNode {
 		}
 		panic("input to indexJoiner is not an execinfra.OpNode")
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

@@ -987,7 +987,7 @@ func tableOrdinal(
 		return len(desc.Columns) + len(desc.MutationColumns()) + int(colID-sqlbase.MVCCTimestampColumnID)
 	}
 
-	panic(fmt.Sprintf("column %d not in desc.Columns", colID))
+	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
 }
 
 // toTableOrdinals returns a mapping from column ordinals in cols to table

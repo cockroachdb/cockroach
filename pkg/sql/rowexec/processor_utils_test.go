@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 type ProcessorTestConfig struct {
@@ -69,7 +69,7 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 		case nil:
 			return tree.DNull
 		default:
-			panic(fmt.Sprintf("type %T not supported yet", concreteType))
+			panic(errors.AssertionFailedf("type %T not supported yet", concreteType))
 		}
 	}()
 	// Initialize both EncDatum.Datum, and EncDatum.encoded.

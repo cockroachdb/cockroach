@@ -46,7 +46,7 @@ func constructPlan(
 		case planMaybePhysical:
 			*plan = n
 		default:
-			panic(fmt.Sprintf("unexpected node type %T", node))
+			panic(errors.AssertionFailedf("unexpected node type %T", node))
 		}
 	}
 	assignPlan(&res.main, root)
@@ -144,7 +144,7 @@ func constructExplainPlanNode(
 		)
 
 	default:
-		panic(fmt.Sprintf("unsupported explain mode %v", options.Mode))
+		panic(errors.AssertionFailedf("unsupported explain mode %v", options.Mode))
 	}
 }
 

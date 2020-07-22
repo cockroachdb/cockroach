@@ -11,10 +11,9 @@
 package sqlbase
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
@@ -58,7 +57,7 @@ func resultColumnsFromColDescs(
 		colDesc := getColDesc(i)
 		typ := colDesc.Type
 		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Family()))
+			panic(errors.AssertionFailedf("unsupported column type: %s", colDesc.Type.Family()))
 		}
 		cols[i] = ResultColumn{
 			Name:           colDesc.Name,
