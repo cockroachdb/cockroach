@@ -377,7 +377,7 @@ func TestCacheWait(t *testing.T) {
 		before := sc.mu.numInternalQueries
 
 		id := tableIDs[rand.Intn(len(tableIDs))]
-		sc.RefreshTableStats(ctx, id)
+		sc.InvalidateTableStats(ctx, id)
 		// Run GetTableStats multiple times in parallel.
 		var wg sync.WaitGroup
 		for n := 0; n < 10; n++ {
