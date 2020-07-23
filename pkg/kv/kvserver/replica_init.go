@@ -318,6 +318,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
+		r.store.metrics.acquireTenant(tenantID)
 	}
 
 	// Determine if a new replica was added. This is true if the new max replica
