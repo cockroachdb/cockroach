@@ -238,11 +238,11 @@ scan  ·             ·                       ()  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT rowid FROM [54(3) AS num_ref_alias]
 ----
-·     distribution  local                   ·                ·
-·     vectorized    true                    ·                ·
-scan  ·             ·                       (rowid[hidden])  ·
-·     table         num_ref_hidden@primary  ·                ·
-·     spans         FULL SCAN               ·                ·
+·     distribution  local                   ·        ·
+·     vectorized    true                    ·        ·
+scan  ·             ·                       (rowid)  ·
+·     table         num_ref_hidden@primary  ·        ·
+·     spans         FULL SCAN               ·        ·
 
 query error pq: \[666\(1\) AS num_ref_alias\]: relation \"\[666\]\" does not exist
 EXPLAIN (VERBOSE) SELECT * FROM [666(1) AS num_ref_alias]
@@ -400,11 +400,11 @@ scan  ·             ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
-·     distribution  local      ·                      ·
-·     vectorized    true       ·                      ·
-scan  ·             ·          (x, y, rowid[hidden])  ·
-·     table         b@primary  ·                      ·
-·     spans         /1-        ·                      ·
+·     distribution  local      ·              ·
+·     vectorized    true       ·              ·
+scan  ·             ·          (x, y, rowid)  ·
+·     table         b@primary  ·              ·
+·     spans         /1-        ·              ·
 
 statement ok
 DROP TABLE b
