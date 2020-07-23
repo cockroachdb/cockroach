@@ -242,10 +242,10 @@ export function getDisplayName(node: INodeStatus | NoConnection, livenessStatus 
     : "";
 
   if (isNoConnection(node)) {
-    return `${decommissionedString} (n${node.from.nodeID})`;
+    return `${decommissionedString}(n${node.from.nodeID})`;
   }
   // as the only other type possible right now is INodeStatus we don't have a type guard for that
-  return `${decommissionedString}${node.desc.address.address_field} (n${node.desc.node_id})`;
+  return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
 }
 
 function isNoConnection(node: INodeStatus | NoConnection): node is NoConnection {
