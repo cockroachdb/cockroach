@@ -85,6 +85,18 @@ func (ri *RangeIterator) Lease() *roachpb.Lease {
 	return ri.token.Lease()
 }
 
+// Leaseholder returns the current leaseholder, if one is known. Nil otherwise.
+func (ri *RangeIterator) Leaseholder() *roachpb.ReplicaDescriptor {
+	if !ri.Valid() {
+		panic(ri.Error())
+	}
+	l := ri.token.Lease()
+	if l == nil {
+		return nil
+	}
+	return &l.Replica
+}
+
 // Token returns the eviction token corresponding to the range
 // descriptor for the current iteration. The iterator must be valid.
 func (ri *RangeIterator) Token() EvictionToken {
