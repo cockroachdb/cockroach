@@ -35,7 +35,7 @@ var StartOpts struct {
 // Cockroach TODO(peter): document
 type Cockroach struct{}
 
-func cockroachNodeBinary(c *SyncedCluster, i int) string {
+func cockroachNodeBinary(c *SyncedCluster, node int) string {
 	if filepath.IsAbs(config.Binary) {
 		return config.Binary
 	}
@@ -43,7 +43,7 @@ func cockroachNodeBinary(c *SyncedCluster, i int) string {
 		return "./" + config.Binary
 	}
 
-	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i), config.Binary)
+	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), config.Binary)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
@@ -75,14 +75,14 @@ func cockroachNodeBinary(c *SyncedCluster, i int) string {
 	return path
 }
 
-func getCockroachVersion(c *SyncedCluster, i int) (*version.Version, error) {
-	sess, err := c.newSession(i)
+func getCockroachVersion(c *SyncedCluster, node int) (*version.Version, error) {
+	sess, err := c.newSession(node)
 	if err != nil {
 		return nil, err
 	}
 	defer sess.Close()
 
-	cmd := cockroachNodeBinary(c, i) + " version"
+	cmd := cockroachNodeBinary(c, node) + " version"
 	out, err := sess.CombinedOutput(cmd)
 	if err != nil {
 		return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
@@ -121,8 +121,8 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	// Check to see if node 1 was started, indicating the cluster is to be
 	// bootstrapped.
 	var bootstrap bool
-	for _, i := range c.ServerNodes() {
-		if i == 1 {
+	for _, node := range c.ServerNodes() {
+		if node == 1 {
 			bootstrap = true
 			break
 		}
@@ -170,28 +170,28 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	if StartOpts.Sequential {
 		p = 1
 	}
-	c.Parallel(display, len(nodes), p, func(i int) ([]byte, error) {
-		vers, err := getCockroachVersion(c, nodes[i])
+	c.Parallel(display, len(nodes), p, func(nodeIdx int) ([]byte, error) {
+		vers, err := getCockroachVersion(c, nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
 
-		sess, err := c.newSession(nodes[i])
+		sess, err := c.newSession(nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
 		defer sess.Close()
 
-		port := r.NodePort(c, nodes[i])
+		port := r.NodePort(c, nodes[nodeIdx])
 
 		var args []string
 		if c.Secure {
-			args = append(args, "--certs-dir="+c.Impl.CertsDir(c, nodes[i]))
+			args = append(args, "--certs-dir="+c.Impl.CertsDir(c, nodes[nodeIdx]))
 		} else {
 			args = append(args, "--insecure")
 		}
-		dir := c.Impl.NodeDir(c, nodes[i])
-		logDir := c.Impl.LogDir(c, nodes[i])
+		dir := c.Impl.NodeDir(c, nodes[nodeIdx])
+		logDir := c.Impl.LogDir(c, nodes[nodeIdx])
 		if idx := argExists(extraArgs, "--store"); idx == -1 {
 			args = append(args, "--store=path="+dir)
 		}
@@ -218,7 +218,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		args = append(args, fmt.Sprintf("--port=%d", port))
 		args = append(args, fmt.Sprintf("--http-port=%d", GetAdminUIPort(port)))
-		if locality := c.locality(nodes[i]); locality != "" {
+		if locality := c.locality(nodes[nodeIdx]); locality != "" {
 			if idx := argExists(extraArgs, "--locality"); idx == -1 {
 				args = append(args, "--locality="+locality)
 			}
@@ -234,13 +234,13 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			startCmd = "start"
 
 			// `cockroach start` without `--join` is no longer supported as 20.1.
-			if nodes[i] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
+			if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
 				args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
 			}
 		}
 
 		if advertisePublicIP {
-			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i+1)))
+			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(nodeIdx+1)))
 		} else if !c.IsLocal() {
 			// Explicitly advertise by IP address so that we don't need to
 			// deal with cross-region name resolution. The `hostname -I`
@@ -269,7 +269,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 		// Argument template expansion is node specific (e.g. for {store-dir}).
 		e := expander{
-			node: nodes[i],
+			node: nodes[nodeIdx],
 		}
 		for _, arg := range extraArgs {
 			expandedArg, err := e.expand(c, arg)
@@ -279,7 +279,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			args = append(args, strings.Split(expandedArg, " ")...)
 		}
 
-		binary := cockroachNodeBinary(c, nodes[i])
+		binary := cockroachNodeBinary(c, nodes[nodeIdx])
 		// NB: this is awkward as when the process fails, the test runner will show an
 		// unhelpful empty error (since everything has been redirected away). This is
 		// unfortunately equally awkward to address.
@@ -292,7 +292,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
 
 		cmd += keyCmd +
-			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[i], c.Tag) +
+			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[nodeIdx], c.Tag) +
 			"GOTRACEBACK=crash " +
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
 			// Turn stats mismatch into panic, see:
@@ -318,8 +318,8 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 	var initOut string
 	display = fmt.Sprintf("%s: bootstrapping cluster", c.Name)
-	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-		vers, err := getCockroachVersion(c, nodes[i])
+	c.Parallel(display, 1, 0, func(nodeIdx int) ([]byte, error) {
+		vers, err := getCockroachVersion(c, nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +339,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 
 		binary := cockroachNodeBinary(c, 1)
-		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[i]), "cluster-bootstrapped")
+		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[nodeIdx]), "cluster-bootstrapped")
 		url := r.NodeURL(c, "localhost", r.NodePort(c, 1))
 
 		cmd += fmt.Sprintf(`
@@ -367,7 +367,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 	var clusterSettingsOut string
 	display = fmt.Sprintf("%s: initializing cluster settings", c.Name)
-	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
+	c.Parallel(display, 1, 0, func(nodeIdx int) ([]byte, error) {
 		sess, err := c.newSession(1)
 		if err != nil {
 			return nil, err
@@ -380,7 +380,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 
 		binary := cockroachNodeBinary(c, 1)
-		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[i]), "settings-initialized")
+		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[nodeIdx]), "settings-initialized")
 		url := r.NodeURL(c, "localhost", r.NodePort(c, 1))
 
 		cmd += fmt.Sprintf(`
@@ -483,8 +483,8 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	resultChan := make(chan result, len(c.Nodes))
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
-		sess, err := c.newSession(c.Nodes[i])
+	c.Parallel(display, len(c.Nodes), 0, func(nodeIdx int) ([]byte, error) {
+		sess, err := c.newSession(c.Nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
@@ -492,10 +492,10 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 
 		var cmd string
 		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, c.Nodes[i])
+			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, c.Nodes[nodeIdx])
 		}
-		cmd += cockroachNodeBinary(c, c.Nodes[i]) + " sql --url " +
-			r.NodeURL(c, "localhost", r.NodePort(c, c.Nodes[i])) + " " +
+		cmd += cockroachNodeBinary(c, c.Nodes[nodeIdx]) + " sql --url " +
+			r.NodeURL(c, "localhost", r.NodePort(c, c.Nodes[nodeIdx])) + " " +
 			ssh.Escape(args)
 
 		out, err := sess.CombinedOutput(cmd)
@@ -503,7 +503,7 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
 
-		resultChan <- result{node: c.Nodes[i], output: string(out)}
+		resultChan <- result{node: c.Nodes[nodeIdx], output: string(out)}
 		return nil, nil
 	})
 
