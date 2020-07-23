@@ -23,7 +23,6 @@ import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";

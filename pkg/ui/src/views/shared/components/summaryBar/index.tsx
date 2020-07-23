@@ -212,9 +212,9 @@ function aggregateLatestValuesFromMetrics(data?: TSResponse, aggregator?: Summar
  */
 export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProps, {}> {
   render() {
-    return <div className="summary-headline">
-      <div className="summary-headline__value">{formatNumberForDisplay(this.props.value, this.props.format)}</div>
-      <div className="summary-headline__title">
+    return <div className="summary-headline-stat">
+      <div className="summary-headline-stat__value">{formatNumberForDisplay(this.props.value, this.props.format)}</div>
+      <div className="summary-headline-stat__title">
         {this.props.title}
         <div className="section-heading__tooltip">
           <ToolTipWrapper text={this.props.tooltip}>
