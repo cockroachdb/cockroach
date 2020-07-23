@@ -57,7 +57,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 	isTemporary := n.n.Temporary
 
-	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.n.Name.Table())
+	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, &n.n.Name)
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
