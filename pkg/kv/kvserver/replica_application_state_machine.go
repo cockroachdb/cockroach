@@ -884,12 +884,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
+	tenantID := r.mu.tenantID
 	r.mu.Unlock()
 
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
 	deltaStats.Subtract(prevStats)
-	r.store.metrics.addMVCCStats(deltaStats)
+	r.store.metrics.addMVCCStats(ctx, tenantID, deltaStats)
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.

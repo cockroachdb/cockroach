@@ -223,7 +223,7 @@ func (r *Replica) TenantID() (roachpb.TenantID, bool) {
 }
 
 func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
-	return r.mu.tenantID, r.mu.tenantID == (roachpb.TenantID{})
+	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
 }
 
 // isInitializedRLocked is true if we know the metadata of this range, either
@@ -318,6 +318,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
+		r.store.metrics.acquireTenant(tenantID)
 	}
 
 	// Determine if a new replica was added. This is true if the new max replica
