@@ -4,6 +4,10 @@
 statement ok
 SET experimental_partial_indexes=on
 
+# TODO(mgartner): remove this once enums are fully supported.
+statement ok
+SET experimental_enable_enums = true
+
 #### Validate partial index predicates.
 
 statement ok
@@ -455,3 +459,136 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 100  110  100  foo  true
 300  330  300  foo  true
 400  400  400  foo  true
+
+#### Backfill a partial index.
+
+statement ok
+CREATE TABLE e (a INT, b INT)
+
+statement ok
+INSERT INTO e VALUES (1, 10);
+INSERT INTO e VALUES (2, 20);
+INSERT INTO e VALUES (3, 30);
+INSERT INTO e VALUES (4, 40);
+INSERT INTO e VALUES (5, 50);
+INSERT INTO e VALUES (6, 60);
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON e (a) WHERE b > 30
+
+query II
+SELECT * FROM e@a_b_gt_30_idx WHERE b > 30
+----
+4  40
+5  50
+6  60
+
+#### Backfill a partial index when a new table is created in the same
+#### transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE f (a INT, b INT)
+
+statement ok
+INSERT INTO f VALUES (1, 10);
+INSERT INTO f VALUES (6, 60);
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON f (a) WHERE b > 30
+
+statement ok
+COMMIT
+
+query II
+SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
+----
+6  60
+
+#### Backfill a partial index with a reference to a new column in the predicate.
+
+statement ok
+CREATE TABLE g (a INT)
+
+statement ok
+INSERT INTO g VALUES (1);
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE g ADD COLUMN b INT
+
+statement ok
+CREATE INDEX a_b_null_idx ON g (a) WHERE b IS NULL
+
+statement ok
+COMMIT
+
+query II
+SELECT * FROM g@a_b_null_idx WHERE b IS NULL
+----
+1  NULL
+
+#### Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz');
+
+statement ok
+CREATE TABLE h (a INT, b enum)
+
+statement ok
+INSERT INTO h VALUES (1, 'foo');
+INSERT INTO h VALUES (2, 'bar');
+
+statement ok
+CREATE INDEX a_b_foo_idx ON h (a) WHERE b = 'foo'
+
+query IT
+SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+#### Backfill a partial index with a user defined type when a new table is
+#### created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE i (a INT, b enum)
+
+statement ok
+INSERT INTO i VALUES (1, 'foo');
+INSERT INTO i VALUES (2, 'bar');
+
+statement ok
+CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+
+statement ok
+COMMIT
+
+query IT
+SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+#### Add a primary key to a table with a partial index.
+
+statement ok
+CREATE TABLE j (k INT NOT NULL, a INT, INDEX a_gt_5_idx (a) WHERE a > 5)
+
+statement ok
+INSERT INTO j VALUES (1, 1);
+INSERT INTO j VALUES (6, 6);
+
+statement ok
+ALTER TABLE j ADD PRIMARY KEY (k)
+
+query II
+SELECT * FROM j@a_gt_5_idx WHERE a > 5
+----
+6  6

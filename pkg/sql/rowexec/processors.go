@@ -217,7 +217,7 @@ func NewProcessor(
 		}
 		switch core.Backfiller.Type {
 		case execinfrapb.BackfillerSpec_Index:
-			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		case execinfrapb.BackfillerSpec_Column:
 			return newColumnBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
