@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -83,6 +84,10 @@ type storeMetrics interface {
 	Descriptor(context.Context, bool) (*roachpb.StoreDescriptor, error)
 	Registry() *metric.Registry
 }
+
+var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.enabled",
+	"enables the exporting of child metrics, additional prometheus time series with extra labels",
+	false)
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -249,10 +254,10 @@ func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
 	}
-
-	pm.ScrapeRegistry(mr.mu.nodeRegistry)
+	includeChildMetrics := childMetricsEnabled.Get(&mr.settings.SV)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg)
+		pm.ScrapeRegistry(reg, includeChildMetrics)
 	}
 }
 
