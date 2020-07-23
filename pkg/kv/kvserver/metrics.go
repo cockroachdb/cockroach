@@ -13,13 +13,18 @@ package kvserver
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -1003,6 +1008,10 @@ var (
 type StoreMetrics struct {
 	registry *metric.Registry
 
+	// TenantStorageMetrics stores aggregate metrics for storage usage on a per
+	// tenant basis.
+	*TenantsStorageMetrics
+
 	// Replica metrics.
 	ReplicaCount                  *metric.Gauge // Does not include uninitialized or reserved replicas.
 	ReservedReplicaCount          *metric.Gauge
@@ -1028,18 +1037,6 @@ type StoreMetrics struct {
 	LeaseEpochCount           *metric.Gauge
 
 	// Storage metrics.
-	LiveBytes          *metric.Gauge
-	KeyBytes           *metric.Gauge
-	ValBytes           *metric.Gauge
-	TotalBytes         *metric.Gauge
-	IntentBytes        *metric.Gauge
-	LiveCount          *metric.Gauge
-	KeyCount           *metric.Gauge
-	ValCount           *metric.Gauge
-	IntentCount        *metric.Gauge
-	IntentAge          *metric.Gauge
-	GcBytesAge         *metric.Gauge
-	LastUpdateNanos    *metric.Gauge
 	ResolveCommitCount *metric.Counter
 	ResolveAbortCount  *metric.Counter
 	ResolvePoisonCount *metric.Counter
@@ -1047,8 +1044,6 @@ type StoreMetrics struct {
 	Available          *metric.Gauge
 	Used               *metric.Gauge
 	Reserved           *metric.Gauge
-	SysBytes           *metric.Gauge
-	SysCount           *metric.Gauge
 
 	// Rebalancing metrics.
 	AverageQueriesPerSecond *metric.GaugeFloat64
@@ -1198,10 +1193,189 @@ type StoreMetrics struct {
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 }
 
+// TenantsStorageMetrics are metrics which are aggregated over all tenants
+// present on the server. The struct maintains child metrics used by each
+// tenant to track their individual values. The struct expects that children
+// call acquire and release to properly reference count the metrics for
+// individual tenants.
+type TenantsStorageMetrics struct {
+	LiveBytes       *aggmetric.AggGauge
+	KeyBytes        *aggmetric.AggGauge
+	ValBytes        *aggmetric.AggGauge
+	TotalBytes      *aggmetric.AggGauge
+	IntentBytes     *aggmetric.AggGauge
+	LiveCount       *aggmetric.AggGauge
+	KeyCount        *aggmetric.AggGauge
+	ValCount        *aggmetric.AggGauge
+	IntentCount     *aggmetric.AggGauge
+	IntentAge       *aggmetric.AggGauge
+	GcBytesAge      *aggmetric.AggGauge
+	LastUpdateNanos *aggmetric.AggGauge
+	SysBytes        *aggmetric.AggGauge
+	SysCount        *aggmetric.AggGauge
+
+	// This struct is invisble to the metric package.
+	tenants syncutil.IntMap
+}
+
+var _ metric.Struct = (*TenantsStorageMetrics)(nil)
+
+// MetricStruct makes TenantsStorageMetrics a metric.Struct.
+func (sm *TenantsStorageMetrics) MetricStruct() {}
+
+// acquireTenant allocates the child metrics for a given tenant. Calls to this
+// method are reference counted with decrements occurring in the corresponding
+// releaseTenant call. This method must be called prior to adding or subtracting
+// MVCC stats.
+func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
+	// incRef increments the reference count if it is not already zero indicating
+	// that the struct has already been destroyed.
+	incRef := func(m *tenantStorageMetrics) (alreadyDestroyed bool) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.mu.refCount == 0 {
+			return true
+		}
+		m.mu.refCount++
+		return false
+	}
+	key := int64(tenantID.ToUint64())
+	for {
+		if mPtr, ok := sm.tenants.Load(key); ok {
+			m := (*tenantStorageMetrics)(mPtr)
+			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
+				return
+			}
+			// Somebody else concurrently took the reference count to zero, go back
+			// around.
+		} else {
+			m := &tenantStorageMetrics{}
+			m.mu.Lock()
+			_, loaded := sm.tenants.LoadOrStore(key, unsafe.Pointer(m))
+			if loaded {
+				// Lost the race with another goroutine to add the instance, go back
+				// around.
+				m.mu.Unlock()
+				continue
+			}
+			// Successfully stored a new instance, initialize it and then unlock it.
+			tenantIDStr := tenantID.String()
+			m.mu.refCount++
+			m.LiveBytes = sm.LiveBytes.AddChild(tenantIDStr)
+			m.KeyBytes = sm.KeyBytes.AddChild(tenantIDStr)
+			m.ValBytes = sm.ValBytes.AddChild(tenantIDStr)
+			m.TotalBytes = sm.TotalBytes.AddChild(tenantIDStr)
+			m.IntentBytes = sm.IntentBytes.AddChild(tenantIDStr)
+			m.LiveCount = sm.LiveCount.AddChild(tenantIDStr)
+			m.KeyCount = sm.KeyCount.AddChild(tenantIDStr)
+			m.ValCount = sm.ValCount.AddChild(tenantIDStr)
+			m.IntentCount = sm.IntentCount.AddChild(tenantIDStr)
+			m.IntentAge = sm.IntentAge.AddChild(tenantIDStr)
+			m.GcBytesAge = sm.GcBytesAge.AddChild(tenantIDStr)
+			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
+			m.LastUpdateNanos = sm.LastUpdateNanos.AddChild(tenantIDStr)
+			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
+			m.mu.Unlock()
+			return
+		}
+	}
+}
+
+// releaseTenant releases the reference to the metrics for this tenant which was
+// acquired with acquireTenant. It will fatally log if no entry exists for this
+// tenant.
+func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, tenantID roachpb.TenantID) {
+	m := sm.getTenant(ctx, tenantID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.refCount--
+	if m.mu.refCount < 0 {
+		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", tenantID, m.mu.refCount)
+	} else if m.mu.refCount > 0 {
+		return
+	}
+
+	// The refCount is zero, delete this instance after destroying its metrics.
+	// Note that concurrent attempts to create an instance will detect the zero
+	// refCount value and construct a new instance.
+	m.LiveBytes.Destroy()
+	m.KeyBytes.Destroy()
+	m.ValBytes.Destroy()
+	m.TotalBytes.Destroy()
+	m.IntentBytes.Destroy()
+	m.LiveCount.Destroy()
+	m.KeyCount.Destroy()
+	m.ValCount.Destroy()
+	m.IntentCount.Destroy()
+	m.IntentAge.Destroy()
+	m.GcBytesAge.Destroy()
+	m.LastUpdateNanos.Destroy()
+	m.SysBytes.Destroy()
+	m.SysCount.Destroy()
+	sm.tenants.Delete(int64(tenantID.ToUint64()))
+}
+
+// getTenant is a helper method used to retrieve the metrics for a tenant. The
+// call will log fatally if no such tenant has been previously acquired.
+func (sm *TenantsStorageMetrics) getTenant(
+	ctx context.Context, tenantID roachpb.TenantID,
+) *tenantStorageMetrics {
+	key := int64(tenantID.ToUint64())
+	mPtr, ok := sm.tenants.Load(key)
+	if !ok {
+		log.Fatalf(ctx, "no metrics exist for tenant %v", tenantID)
+	}
+	return (*tenantStorageMetrics)(mPtr)
+}
+
+type tenantStorageMetrics struct {
+	mu struct {
+		syncutil.Mutex
+		refCount int
+	}
+
+	LiveBytes       *aggmetric.Gauge
+	KeyBytes        *aggmetric.Gauge
+	ValBytes        *aggmetric.Gauge
+	TotalBytes      *aggmetric.Gauge
+	IntentBytes     *aggmetric.Gauge
+	LiveCount       *aggmetric.Gauge
+	KeyCount        *aggmetric.Gauge
+	ValCount        *aggmetric.Gauge
+	IntentCount     *aggmetric.Gauge
+	IntentAge       *aggmetric.Gauge
+	GcBytesAge      *aggmetric.Gauge
+	LastUpdateNanos *aggmetric.Gauge
+	SysBytes        *aggmetric.Gauge
+	SysCount        *aggmetric.Gauge
+}
+
+func newTenantsStorageMetrics() *TenantsStorageMetrics {
+	b := aggmetric.MakeBuilder(tenantrate.TenantIDLabel)
+	sm := &TenantsStorageMetrics{
+		LiveBytes:       b.Gauge(metaLiveBytes),
+		KeyBytes:        b.Gauge(metaKeyBytes),
+		ValBytes:        b.Gauge(metaValBytes),
+		TotalBytes:      b.Gauge(metaTotalBytes),
+		IntentBytes:     b.Gauge(metaIntentBytes),
+		LiveCount:       b.Gauge(metaLiveCount),
+		KeyCount:        b.Gauge(metaKeyCount),
+		ValCount:        b.Gauge(metaValCount),
+		IntentCount:     b.Gauge(metaIntentCount),
+		IntentAge:       b.Gauge(metaIntentAge),
+		GcBytesAge:      b.Gauge(metaGcBytesAge),
+		LastUpdateNanos: b.Gauge(metaLastUpdateNanos),
+		SysBytes:        b.Gauge(metaSysBytes),
+		SysCount:        b.Gauge(metaSysCount),
+	}
+	return sm
+}
+
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	sm := &StoreMetrics{
-		registry: storeRegistry,
+		registry:              storeRegistry,
+		TenantsStorageMetrics: newTenantsStorageMetrics(),
 
 		// Replica metrics.
 		ReplicaCount:                  metric.NewGauge(metaReplicaCount),
@@ -1225,20 +1399,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
 
-		// Storage metrics.
-		LiveBytes:       metric.NewGauge(metaLiveBytes),
-		KeyBytes:        metric.NewGauge(metaKeyBytes),
-		ValBytes:        metric.NewGauge(metaValBytes),
-		TotalBytes:      metric.NewGauge(metaTotalBytes),
-		IntentBytes:     metric.NewGauge(metaIntentBytes),
-		LiveCount:       metric.NewGauge(metaLiveCount),
-		KeyCount:        metric.NewGauge(metaKeyCount),
-		ValCount:        metric.NewGauge(metaValCount),
-		IntentCount:     metric.NewGauge(metaIntentCount),
-		IntentAge:       metric.NewGauge(metaIntentAge),
-		GcBytesAge:      metric.NewGauge(metaGcBytesAge),
-		LastUpdateNanos: metric.NewGauge(metaLastUpdateNanos),
-
+		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
 		ResolveAbortCount:  metric.NewCounter(metaResolveAbort),
 		ResolvePoisonCount: metric.NewCounter(metaResolvePoison),
@@ -1247,8 +1408,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Available: metric.NewGauge(metaAvailable),
 		Used:      metric.NewGauge(metaUsed),
 		Reserved:  metric.NewGauge(metaReserved),
-		SysBytes:  metric.NewGauge(metaSysBytes),
-		SysCount:  metric.NewGauge(metaSysCount),
 
 		// Rebalancing metrics.
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
@@ -1404,7 +1563,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 	}
-
 	storeRegistry.AddMetricStruct(sm)
 
 	return sm
@@ -1414,31 +1572,38 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 // method uses a series of atomic operations without any external locking, so a
 // single snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
-func (sm *StoreMetrics) incMVCCGauges(delta enginepb.MVCCStats) {
-	sm.LiveBytes.Inc(delta.LiveBytes)
-	sm.KeyBytes.Inc(delta.KeyBytes)
-	sm.ValBytes.Inc(delta.ValBytes)
-	sm.TotalBytes.Inc(delta.Total())
-	sm.IntentBytes.Inc(delta.IntentBytes)
-	sm.LiveCount.Inc(delta.LiveCount)
-	sm.KeyCount.Inc(delta.KeyCount)
-	sm.ValCount.Inc(delta.ValCount)
-	sm.IntentCount.Inc(delta.IntentCount)
-	sm.IntentAge.Inc(delta.IntentAge)
-	sm.GcBytesAge.Inc(delta.GCBytesAge)
-	sm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
-	sm.SysBytes.Inc(delta.SysBytes)
-	sm.SysCount.Inc(delta.SysCount)
+func (sm *TenantsStorageMetrics) incMVCCGauges(
+	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+) {
+	tm := sm.getTenant(ctx, tenantID)
+	tm.LiveBytes.Inc(delta.LiveBytes)
+	tm.KeyBytes.Inc(delta.KeyBytes)
+	tm.ValBytes.Inc(delta.ValBytes)
+	tm.TotalBytes.Inc(delta.Total())
+	tm.IntentBytes.Inc(delta.IntentBytes)
+	tm.LiveCount.Inc(delta.LiveCount)
+	tm.KeyCount.Inc(delta.KeyCount)
+	tm.ValCount.Inc(delta.ValCount)
+	tm.IntentCount.Inc(delta.IntentCount)
+	tm.IntentAge.Inc(delta.IntentAge)
+	tm.GcBytesAge.Inc(delta.GCBytesAge)
+	tm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
+	tm.SysBytes.Inc(delta.SysBytes)
+	tm.SysCount.Inc(delta.SysCount)
 }
 
-func (sm *StoreMetrics) addMVCCStats(delta enginepb.MVCCStats) {
-	sm.incMVCCGauges(delta)
+func (sm *TenantsStorageMetrics) addMVCCStats(
+	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+) {
+	sm.incMVCCGauges(ctx, tenantID, delta)
 }
 
-func (sm *StoreMetrics) subtractMVCCStats(delta enginepb.MVCCStats) {
+func (sm *TenantsStorageMetrics) subtractMVCCStats(
+	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+) {
 	var neg enginepb.MVCCStats
 	neg.Subtract(delta)
-	sm.incMVCCGauges(neg)
+	sm.incMVCCGauges(ctx, tenantID, neg)
 }
 
 func (sm *StoreMetrics) updateRocksDBStats(stats storage.Stats) {

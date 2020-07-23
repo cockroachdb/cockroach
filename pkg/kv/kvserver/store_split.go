@@ -173,7 +173,7 @@ func splitPostApply(
 	}
 
 	// Update store stats with difference in stats before and after split.
-	r.store.metrics.addMVCCStats(deltaMS)
+	r.store.metrics.addMVCCStats(ctx, r.tenantID, deltaMS)
 
 	now := r.store.Clock().Now()
 
