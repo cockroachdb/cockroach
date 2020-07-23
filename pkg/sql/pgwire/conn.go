@@ -1077,10 +1077,10 @@ func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffecte
 
 	case tree.CopyIn:
 		// Nothing to do. The CommandComplete message has been sent elsewhere.
-		panic(fmt.Sprintf("CopyIn statements should have been handled elsewhere " +
+		panic(errors.AssertionFailedf("CopyIn statements should have been handled elsewhere " +
 			"and not produce results"))
 	default:
-		panic(fmt.Sprintf("unexpected result type %v", stmtType))
+		panic(errors.AssertionFailedf("unexpected result type %v", stmtType))
 	}
 
 	return tag
@@ -1115,7 +1115,7 @@ func (c *conn) bufferRow(
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
@@ -1123,28 +1123,28 @@ func (c *conn) bufferReadyForQuery(txnStatus byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(txnStatus)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferParseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferBindComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferCloseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCloseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
@@ -1153,28 +1153,28 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	c.msgBuilder.write(tag)
 	c.msgBuilder.nullTerminate()
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferPortalSuspended() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferErr(ctx context.Context, err error) {
 	if err := writeErr(ctx, c.sv,
 		err, &c.msgBuilder, &c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
@@ -1241,14 +1241,14 @@ func (c *conn) bufferParamDesc(types []oid.Oid) {
 		c.msgBuilder.putInt32(int32(t))
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
 func (c *conn) bufferNoDataMsg() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoData)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
 	}
 }
 
@@ -1352,7 +1352,7 @@ func (cl *clientConnLock) ClientPos() sql.CmdPos {
 // RTrim is part of the sql.ClientLock interface.
 func (cl *clientConnLock) RTrim(ctx context.Context, pos sql.CmdPos) {
 	if pos <= cl.lastFlushed {
-		panic(fmt.Sprintf("asked to trim to pos: %d, below the last flush: %d", pos, cl.lastFlushed))
+		panic(errors.AssertionFailedf("asked to trim to pos: %d, below the last flush: %d", pos, cl.lastFlushed))
 	}
 	idx, ok := cl.cmdStarts[pos]
 	if !ok {

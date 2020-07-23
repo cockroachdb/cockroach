@@ -329,6 +329,6 @@ func (m *mergeJoiner) Child(nth int, verbose bool) execinfra.OpNode {
 		}
 		panic("right input to mergeJoiner is not an execinfra.OpNode")
 	default:
-		panic(fmt.Sprintf("invalid index %d", nth))
+		panic(errors.AssertionFailedf("invalid index %d", nth))
 	}
 }

@@ -2780,7 +2780,7 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 				NodeID:    2,
 				StoreID:   2,
 				ReplicaID: 2,
-			}, false)
+			})
 			if r != nil {
 				r.raftMu.Unlock()
 			}

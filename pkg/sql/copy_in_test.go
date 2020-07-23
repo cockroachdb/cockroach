@@ -263,8 +263,10 @@ func TestCopyRandom(t *testing.T) {
 					dt = tree.MakeDTime(timeofday.FromTimeAllow2400(d))
 				} else if typs[i].Family() == types.TimeTZFamily {
 					dt = tree.NewDTimeTZ(timetz.MakeTimeTZFromTimeAllow2400(d))
-				} else {
+				} else if typs[i].Family() == types.TimestampFamily {
 					dt = tree.MustMakeDTimestamp(d, time.Microsecond)
+				} else {
+					dt = tree.MustMakeDTimestampTZ(d, time.Microsecond)
 				}
 				ds = tree.AsStringWithFlags(dt, tree.FmtBareStrings)
 			}

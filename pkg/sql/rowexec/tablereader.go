@@ -326,5 +326,5 @@ func (tr *tableReader) ChildCount(bool) int {
 
 // Child is part of the execinfra.OpNode interface.
 func (tr *tableReader) Child(nth int, _ bool) execinfra.OpNode {
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

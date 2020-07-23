@@ -411,7 +411,7 @@ func resolveSpans(
 
 func onlyReplica(rng roachpb.RangeDescriptor) rngInfo {
 	if len(rng.InternalReplicas) != 1 {
-		panic(fmt.Sprintf("expected one replica in %+v", rng))
+		panic(errors.AssertionFailedf("expected one replica in %+v", rng))
 	}
 	return rngInfo{ReplicaDescriptor: rng.InternalReplicas[0], rngDesc: rng}
 }
@@ -422,7 +422,7 @@ func selectReplica(nodeID roachpb.NodeID, rng roachpb.RangeDescriptor) rngInfo {
 			return rngInfo{ReplicaDescriptor: rep, rngDesc: rng}
 		}
 	}
-	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, &rng))
+	panic(errors.AssertionFailedf("no replica on node %d in: %s", nodeID, &rng))
 }
 
 func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {

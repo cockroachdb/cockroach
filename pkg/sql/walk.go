@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 type observeVerbosity int
@@ -880,7 +881,7 @@ func nodeName(plan planNode) string {
 
 	name, ok := planNodeNames[reflect.TypeOf(plan)]
 	if !ok {
-		panic(fmt.Sprintf("name missing for type %T", plan))
+		panic(errors.AssertionFailedf("name missing for type %T", plan))
 	}
 
 	return name
@@ -901,7 +902,7 @@ func joinTypeStr(t sqlbase.JoinType) string {
 	case sqlbase.LeftAntiJoin:
 		return "anti"
 	}
-	panic(fmt.Sprintf("unknown join type %s", t))
+	panic(errors.AssertionFailedf("unknown join type %s", t))
 }
 
 // planNodeNames is the mapping from node type to strings.  The

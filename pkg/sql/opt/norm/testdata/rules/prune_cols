@@ -235,7 +235,7 @@ project
  │    ├── has-placeholder
  │    ├── scan a
  │    └── filters
- │         └── $1 < '2000-01-01 02:00:00+00:00'
+ │         └── $1 < '2000-01-01 02:00:00'
  └── projections
       └── 1 [as=r:6]
 

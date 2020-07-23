@@ -12,7 +12,6 @@ package pgwire
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -108,7 +107,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	for _, f := range r.flushBeforeCloseFuncs {
 		if err := f(ctx); err != nil {
-			panic(fmt.Sprintf("unexpected err when closing: %s", err))
+			panic(errors.AssertionFailedf("unexpected err when closing: %s", err))
 		}
 	}
 	r.flushBeforeCloseFuncs = nil
@@ -138,7 +137,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	case noCompletionMsg:
 		// nothing to do
 	default:
-		panic(fmt.Sprintf("unknown type: %v", r.typ))
+		panic(errors.AssertionFailedf("unknown type: %v", r.typ))
 	}
 }
 
@@ -167,7 +166,7 @@ func (r *commandResult) SetError(err error) {
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	r.assertNotReleased()
 	if r.err != nil {
-		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
+		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
 			r.err))
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)

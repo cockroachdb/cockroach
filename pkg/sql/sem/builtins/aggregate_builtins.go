@@ -39,16 +39,16 @@ func initAggregateBuiltins() {
 		}
 
 		if v.props.Class != tree.AggregateClass {
-			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
+			panic(errors.AssertionFailedf("%s: aggregate functions should be marked with the tree.AggregateClass "+
 				"function class, found %v", k, v))
 		}
 		for _, a := range v.overloads {
 			if a.AggregateFunc == nil {
-				panic(fmt.Sprintf("%s: aggregate functions should have tree.AggregateFunc constructors, "+
+				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.AggregateFunc constructors, "+
 					"found %v", k, a))
 			}
 			if a.WindowFunc == nil {
-				panic(fmt.Sprintf("%s: aggregate functions should have tree.WindowFunc constructors, "+
+				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.WindowFunc constructors, "+
 					"found %v", k, a))
 			}
 		}
@@ -938,7 +938,7 @@ func newBytesConcatAggregate(
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDBytes(arguments[0]))
 	} else if len(arguments) > 1 {
-		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
+		panic(errors.AssertionFailedf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
 	return concatAgg
 }
@@ -952,7 +952,7 @@ func newStringConcatAggregate(
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
 	} else if len(arguments) > 1 {
-		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
+		panic(errors.AssertionFailedf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
 	return concatAgg
 }
@@ -974,7 +974,7 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 				delimiter = string(tree.MustBeDString(others[0]))
 			}
 		} else if len(others) > 1 {
-			panic(fmt.Sprintf("too many other datums passed in, expected < 2, got %d", len(others)))
+			panic(errors.AssertionFailedf("too many other datums passed in, expected < 2, got %d", len(others)))
 		}
 		if len(delimiter) > 0 {
 			a.result.WriteString(delimiter)
@@ -2933,7 +2933,7 @@ func validateInputFractions(datum tree.Datum) ([]float64, bool, error) {
 			fractions = append(fractions, fraction)
 		}
 	} else {
-		panic(fmt.Sprintf("unexpected input type, %s", datum.ResolvedType()))
+		panic(errors.AssertionFailedf("unexpected input type, %s", datum.ResolvedType()))
 	}
 	return fractions, singleInput, nil
 }
@@ -2978,7 +2978,7 @@ func (a *percentileDiscAggregate) Add(
 		}
 		return a.arr.Append(others[0])
 	} else if len(others) != 1 {
-		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+		panic(errors.AssertionFailedf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
 	}
 	return nil
 }
@@ -3076,7 +3076,7 @@ func (a *percentileContAggregate) Add(
 		}
 		return a.arr.Append(others[0])
 	} else if len(others) != 1 {
-		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+		panic(errors.AssertionFailedf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
 	}
 	return nil
 }
@@ -3135,7 +3135,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 					return nil, err
 				}
 			} else {
-				panic(fmt.Sprintf("argument type must be float or interval, got %s", a.arr.ParamTyp.String()))
+				panic(errors.AssertionFailedf("argument type must be float or interval, got %s", a.arr.ParamTyp.String()))
 			}
 		}
 		if a.singleInput {

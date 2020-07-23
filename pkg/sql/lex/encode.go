@@ -276,7 +276,7 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 		return base64.StdEncoding.EncodeToString([]byte(data))
 
 	default:
-		panic(fmt.Sprintf("unhandled format: %s", be))
+		panic(errors.AssertionFailedf("unhandled format: %s", be))
 	}
 }
 

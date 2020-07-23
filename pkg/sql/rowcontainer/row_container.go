@@ -13,7 +13,6 @@ package rowcontainer
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -946,7 +945,7 @@ func (f *DiskBackedIndexedRowContainer) getRowWithoutCache(
 		if ok, err := f.diskRowIter.Valid(); err != nil {
 			panic(err)
 		} else if !ok {
-			panic(fmt.Sprintf("row at pos %d not found", pos))
+			panic(errors.AssertionFailedf("row at pos %d not found", pos))
 		}
 		if f.idxRowIter == pos {
 			rowWithIdx, err := f.diskRowIter.Row()

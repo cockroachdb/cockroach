@@ -283,7 +283,7 @@ project
       │    └── fd: (1)-->(5)
       └── filters
            ├── d:5 > '2018-07-01' [outer=(5), constraints=(/5: [/'2018-07-02' - ]; tight)]
-           └── d:5 < '2018-07-08 00:00:01+00:00' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+           └── d:5 < '2018-07-08 00:00:01' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # Ranges can be merged with other filters to create new ranges.
 norm expect=ConsolidateSelectFilters disable=InlineConstVar

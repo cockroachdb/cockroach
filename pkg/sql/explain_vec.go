@@ -54,7 +54,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistributionForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
 	)
 	willDistribute := distribution.WillDistribute()

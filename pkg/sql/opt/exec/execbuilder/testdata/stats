@@ -15,11 +15,26 @@ statement ok
 CREATE STATISTICS u ON u FROM uv;
 CREATE STATISTICS v ON v FROM uv
 
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE uv]
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+u                {u}           8          2               0           true
+v                {v}           8          7               0           true
+
 statement ok
 set enable_zigzag_join = false
 
 # Verify we scan index v which has the more selective constraint.
-query TTTTT
+query TTTTT retry
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
 ·          distribution  full         ·       ·
@@ -301,7 +316,7 @@ limit
 statement ok
 CREATE STATISTICS tj FROM tj
 
-query T
+query T retry
 EXPLAIN (OPT, VERBOSE) SELECT DISTINCT j FROM tj WHERE j IS NULL
 ----
 limit

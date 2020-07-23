@@ -266,7 +266,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		defer recv.Release()
 
 		willDistribute := getPlanDistribution(
-			ctx, localPlanner.execCfg.NodeID,
+			ctx, localPlanner, localPlanner.execCfg.NodeID,
 			localPlanner.extendedEvalCtx.SessionData.DistSQLMode,
 			localPlanner.curPlan.main,
 		).WillDistribute()
@@ -1405,7 +1405,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 							// the DELETE_ONLY state.
 							if mutation.Direction != sqlbase.DescriptorMutation_ADD ||
 								mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
-								panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
+								panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 							}
 							log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
 							dropMutations[mutation.MutationID] = struct{}{}
@@ -1462,13 +1462,13 @@ func (sc *SchemaChanger) reverseMutation(
 		}
 
 		if notStarted && mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
-			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
+			panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 		}
 
 	case sqlbase.DescriptorMutation_DROP:
 		mutation.Direction = sqlbase.DescriptorMutation_ADD
 		if notStarted && mutation.State != sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
+			panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 		}
 	}
 	return mutation, columns

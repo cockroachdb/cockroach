@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -117,7 +116,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
-		panic(fmt.Sprintf("%d results returned", l))
+		panic(errors.AssertionFailedf("%d results returned", l))
 	}
 	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
@@ -221,7 +220,7 @@ func (td *tableDeleter) deleteIndexFast(
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
-		panic(fmt.Sprintf("%d results returned, expected 1", l))
+		panic(errors.AssertionFailedf("%d results returned, expected 1", l))
 	}
 	return td.b.Results[0].ResumeSpanAsValue(), nil
 }

@@ -145,6 +145,9 @@ func (p *planner) createDescriptorWithID(
 		if err := mutType.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 			return err
 		}
+		if err := p.Descriptors().AddUncommittedDescriptor(mutType); err != nil {
+			return err
+		}
 	}
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)

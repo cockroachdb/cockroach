@@ -12,7 +12,6 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"sort"
 
@@ -53,7 +52,7 @@ type joinPlanningInfo struct {
 func (info *joinPlanningInfo) makeCoreSpec() execinfrapb.ProcessorCoreUnion {
 	var core execinfrapb.ProcessorCoreUnion
 	if len(info.leftMergeOrd.Columns) != len(info.rightMergeOrd.Columns) {
-		panic(fmt.Sprintf(
+		panic(errors.AssertionFailedf(
 			"unexpectedly different merge join ordering lengths: left %d, right %d",
 			len(info.leftMergeOrd.Columns), len(info.rightMergeOrd.Columns),
 		))
@@ -778,7 +777,7 @@ func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
 	case tree.IntersectOp:
 		return sqlbase.IntersectAllJoin
 	default:
-		panic(fmt.Sprintf("set op type %v unsupported by joins", setOpType))
+		panic(errors.AssertionFailedf("set op type %v unsupported by joins", setOpType))
 	}
 }
 
