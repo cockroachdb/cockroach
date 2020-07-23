@@ -1257,7 +1257,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /10-/10/#
+·     spans         1 span
 
 query TTT
 EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
@@ -1266,7 +1266,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /10-/10/# /20-/20/#
+·     spans         2 spans
 ·     parallel      ·
 
 query TTT
@@ -1276,7 +1276,7 @@ EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /10-/10/# /20-/20/#
+·     spans         2 spans
 ·     parallel      ·
 
 # Verify that consolidated point spans are still parallelized.
@@ -1287,7 +1287,7 @@ EXPLAIN SELECT * FROM a WHERE a in (10, 11)
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /10-/11/#
+·     spans         1 span
 ·     parallel      ·
 
 query TTT
@@ -1297,7 +1297,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /11-/19/#
+·     spans         1 span
 ·     parallel      ·
 
 # This ticks all the boxes for parallelization apart from the fact that there
@@ -1309,7 +1309,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /11-
+·     spans         1 span
 
 # Test non-int types.
 
@@ -1325,7 +1325,7 @@ render           ·             ·
       │          key columns   a
       └── scan   ·             ·
 ·                table         a@item
-·                spans         /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
+·                spans         2 spans
 ·                parallel      ·
 
 # Range queries on non-int types are not parallel due to unbounded number of
@@ -1341,7 +1341,7 @@ render           ·             ·
       │          key columns   a
       └── scan   ·             ·
 ·                table         a@p
-·                spans         /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+·                spans         2 spans
 
 query TTT
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1350,7 +1350,7 @@ EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@primary
-·     spans         /10/10-/10/10/# /20/20-/20/20/#
+·     spans         2 spans
 ·     parallel      ·
 
 # This one isn't parallelizable because it's not a point lookup - only part of
@@ -1362,7 +1362,7 @@ EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@primary
-·     spans         /10-/11 /20-/21
+·     spans         2 spans
 
 # This one isn't parallelizable because it has a LIMIT clause.
 query TTT
@@ -1372,7 +1372,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 ·     vectorized    true
 scan  ·             ·
 ·     table         a@primary
-·     spans         /10-/10/# /20-/20/#
+·     spans         2 spans
 ·     limit         1
 
 statement ok
@@ -1386,7 +1386,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@b_b_idx
-·     spans         /10-/11 /20-/21
+·     spans         2 spans
 
 statement ok
 CREATE UNIQUE INDEX on b(c)
@@ -1400,7 +1400,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@b_c_key
-·     spans         /10-/11 /20-/21
+·     spans         2 spans
 ·     parallel      ·
 
 query TTT
@@ -1410,7 +1410,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@b_c_key
-·     spans         /!NULL-/2 /10-/11
+·     spans         2 spans
 
 statement ok
 CREATE UNIQUE INDEX on b(d DESC)
@@ -1424,7 +1424,7 @@ EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@b_d_key
-·     spans         /10-/9 /1-/NULL
+·     spans         2 spans
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
@@ -1439,7 +1439,7 @@ EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 render     ·             ·
  └── scan  ·             ·
 ·          table         b@b_c_d_key
-·          spans         /NULL/1-/NULL/2 /10/10-/10/11
+·          spans         2 spans
 
 statement ok
 DROP INDEX b_b_idx
@@ -1455,7 +1455,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 ·     vectorized    true
 scan  ·             ·
 ·     table         b@b_b_key
-·     spans         /10-/11 /20-/21
+·     spans         2 spans
 ·     parallel      ·
 
 statement ok

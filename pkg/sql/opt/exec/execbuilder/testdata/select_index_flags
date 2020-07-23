@@ -19,7 +19,7 @@ EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ·     vectorized    true
 scan  ·             ·
 ·     table         abcd@primary
-·     spans         /20-/30/#
+·     spans         1 span
 ·     parallel      ·
 
 # No hint, reverse scan.
@@ -30,7 +30,7 @@ EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ·        vectorized    true
 revscan  ·             ·
 ·        table         abcd@primary
-·        spans         /20-/30/#
+·        spans         1 span
 ·        parallel      ·
 
 # Force primary
@@ -41,7 +41,7 @@ EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 ·     vectorized    true
 scan  ·             ·
 ·     table         abcd@primary
-·     spans         /20-/30/#
+·     spans         1 span
 ·     parallel      ·
 
 # Force primary, reverse scan.
@@ -52,7 +52,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=primary,DESC} WHERE a >= 20 AND a <= 30
 ·        vectorized    true
 revscan  ·             ·
 ·        table         abcd@primary
-·        spans         /20-/30/#
+·        spans         1 span
 ·        parallel      ·
 
 # Force primary, allow reverse scan.
@@ -63,7 +63,7 @@ EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ·        vectorized    true
 revscan  ·             ·
 ·        table         abcd@primary
-·        spans         /20-/30/#
+·        spans         1 span
 ·        parallel      ·
 
 # Force primary, forward scan.
@@ -76,7 +76,7 @@ sort       ·             ·
  │         order         -a
  └── scan  ·             ·
 ·          table         abcd@primary
-·          spans         /20-/30/#
+·          spans         1 span
 ·          parallel      ·
 
 # Force index b
@@ -219,7 +219,7 @@ EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 ·     vectorized    true
 scan  ·             ·
 ·     table         abcd@cd
-·     spans         /20-/40
+·     spans         1 span
 
 # Force primary index
 query TTT
@@ -272,7 +272,7 @@ index-join  ·             ·
  │          key columns   a
  └── scan   ·             ·
 ·           table         abcd@cd
-·           spans         /10-/11
+·           spans         1 span
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10

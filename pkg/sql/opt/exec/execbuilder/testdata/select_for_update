@@ -114,7 +114,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for update
 
 query TTT
@@ -124,7 +124,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for no key update
 
 query TTT
@@ -134,7 +134,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for share
 
 query TTT
@@ -144,7 +144,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for key share
 
 query TTT
@@ -154,7 +154,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for share
 
 query TTT
@@ -164,7 +164,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for no key update
 
 query TTT
@@ -174,7 +174,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FO
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for update
 
 query TTT
@@ -184,7 +184,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             1 span
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -198,7 +198,7 @@ EXPLAIN SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 render     ·                 ·
  └── scan  ·                 ·
 ·          table             t@primary
-·          spans             /1-/1/#
+·          spans             1 span
 ·          locking strength  for update
 
 # ------------------------------------------------------------------------------

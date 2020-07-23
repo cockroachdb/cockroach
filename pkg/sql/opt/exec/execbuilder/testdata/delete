@@ -114,7 +114,7 @@ EXPLAIN DELETE FROM unindexed WHERE k > 0
 ·             vectorized    false
 delete range  ·             ·
 ·             from          unindexed
-·             spans         /1-
+·             spans         1 span
 
 # Check fast DELETE with reverse scans (not supported by optimizer).
 query error DELETE statement requires LIMIT when ORDER BY is used
@@ -133,7 +133,7 @@ count           ·             ·
       │         auto commit   ·
       └── scan  ·             ·
 ·               table         unindexed@primary
-·               spans         /1-
+·               spans         1 span
 ·               limit         1
 
 query TTT
@@ -148,7 +148,7 @@ count           ·             ·
       │         auto commit   ·
       └── scan  ·             ·
 ·               table         indexed@indexed_value_idx
-·               spans         /5-/6
+·               spans         1 span
 ·               limit         10
 
 query TTT
@@ -179,7 +179,7 @@ run             ·             ·
       │         auto commit   ·
       └── scan  ·             ·
 ·               table         indexed@indexed_value_idx
-·               spans         /5-/6
+·               spans         1 span
 ·               limit         10
 
 # Ensure that index hints in DELETE statements force the choice of a specific index
@@ -251,7 +251,7 @@ EXPLAIN DELETE FROM parent WHERE id > 10
 ·             vectorized    false
 delete range  ·             ·
 ·             from          parent
-·             spans         /11-
+·             spans         1 span
 
 statement ok
 CREATE TABLE child (
@@ -269,7 +269,7 @@ EXPLAIN DELETE FROM parent WHERE id > 10
 ·             vectorized    false
 delete range  ·             ·
 ·             from          parent
-·             spans         /11-
+·             spans         1 span
 
 # Delete range should not be used when deleting from the child.
 query TTT
@@ -304,7 +304,7 @@ EXPLAIN DELETE FROM parent WHERE id > 10
 ·             vectorized    false
 delete range  ·             ·
 ·             from          parent
-·             spans         /11-
+·             spans         1 span
 
 statement ok
 CREATE TABLE grandchild (
@@ -323,7 +323,7 @@ EXPLAIN DELETE FROM parent WHERE id > 10
 ·             vectorized    false
 delete range  ·             ·
 ·             from          parent
-·             spans         /11-
+·             spans         1 span
 
 statement ok
 CREATE TABLE external_ref (
@@ -348,7 +348,7 @@ root                        ·             ·
  │              │           label         buffer 1
  │              └── scan    ·             ·
  │                          table         parent@primary
- │                          spans         /11-
+ │                          spans         1 span
  ├── fk-cascade             ·             ·
  │                          fk            fk_pid_ref_parent
  │                          input         buffer 1
@@ -384,7 +384,7 @@ root                                       ·                   ·
  │              │                          label               buffer 1
  │              └── scan                   ·                   ·
  │                                         table               parent@primary
- │                                         spans               /11-
+ │                                         spans               1 span
  ├── fk-cascade                            ·                   ·
  │                                         fk                  fk_pid_ref_parent
  │                                         input               buffer 1
@@ -434,7 +434,7 @@ root                                       ·                   ·
  │              │                          label               buffer 1
  │              └── scan                   ·                   ·
  │                                         table               parent@primary
- │                                         spans               /11-
+ │                                         spans               1 span
  ├── fk-cascade                            ·                   ·
  │                                         fk                  fk_pid_ref_parent
  │                                         input               buffer 1
@@ -483,7 +483,7 @@ root                        ·             ·
  │              │           label         buffer 1
  │              └── scan    ·             ·
  │                          table         parent@primary
- │                          spans         /11-
+ │                          spans         1 span
  ├── fk-cascade             ·             ·
  │                          fk            fk_pid_ref_parent
  │                          input         buffer 1
@@ -522,7 +522,7 @@ root                        ·             ·
  │              │           label         buffer 1
  │              └── scan    ·             ·
  │                          table         ab@primary
- │                          spans         /1-/2
+ │                          spans         1 span
  └── fk-cascade             ·             ·
 ·                           fk            fk_b_ref_ab
 ·                           input         buffer 1

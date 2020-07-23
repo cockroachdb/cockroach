@@ -230,7 +230,7 @@ root                                       ·             ·
  │              │                          label         buffer 1
  │              └── scan                   ·             ·
  │                                         table         parent@primary
- │                                         spans         /3-/3/#
+ │                                         spans         1 span
  ├── fk-check                              ·             ·
  │    └── error if rows                    ·             ·
  │         └── lookup-join                 ·             ·
@@ -267,7 +267,7 @@ root                                       ·             ·
  │              │                          label         buffer 1
  │              └── scan                   ·             ·
  │                                         table         parent@primary
- │                                         spans         /3-/3/#
+ │                                         spans         1 span
  ├── fk-check                              ·             ·
  │    └── error if rows                    ·             ·
  │         └── lookup-join                 ·             ·
@@ -322,7 +322,7 @@ root                                  ·             ·
  │              │                     label         buffer 1
  │              └── scan              ·             ·
  │                                    table         doubleparent@primary
- │                                    spans         /10-/11
+ │                                    spans         1 span
  └── fk-check                         ·             ·
       └── error if rows               ·             ·
            └── lookup-join            ·             ·
@@ -381,7 +381,7 @@ root                                       ·                      ·
  │              └── render                 ·                      ·
  │                   └── scan              ·                      ·
  │                                         table                  child@primary
- │                                         spans                  /10-/10/#
+ │                                         spans                  1 span
  │                                         locking strength       for update
  └── fk-check                              ·                      ·
       └── error if rows                    ·                      ·
@@ -472,7 +472,7 @@ root                                            ·                 ·
  │              └── render                      ·                 ·
  │                   └── scan                   ·                 ·
  │                                              table             parent@parent_other_key
- │                                              spans             /10-/11
+ │                                              spans             1 span
  │                                              locking strength  for update
  ├── fk-check                                   ·                 ·
  │    └── error if rows                         ·                 ·
@@ -959,7 +959,7 @@ render                    ·                   ·
            │    │         filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
            │    └── scan  ·                   ·
            │              table               b@idx
-           │              spans               /!NULL-
+           │              spans               1 span
            └── scan       ·                   ·
 ·                         table               a@primary
 ·                         spans               FULL SCAN

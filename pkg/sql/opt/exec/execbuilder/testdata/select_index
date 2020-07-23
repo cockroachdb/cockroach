@@ -802,7 +802,7 @@ sort                 ·             ·
       └── render     ·             ·
            └── scan  ·             ·
 ·                    table         favorites@favorites_glob_fav_idx
-·                    spans         /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+·                    spans         3 spans
 
 query TI rowsort
 SELECT
@@ -1078,7 +1078,7 @@ index-join  ·             ·
  │          key columns   a
  └── scan   ·             ·
 ·           table         noncover@b
-·           spans         /2-/3
+·           spans         1 span
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
@@ -1105,7 +1105,7 @@ index-join  ·             ·
  │          key columns   a
  └── scan   ·             ·
 ·           table         noncover@c
-·           spans         /6-/7
+·           spans         1 span
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
@@ -1481,7 +1481,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /10/20/0-/10/20/1/2
+·          spans         1 span
 
 statement ok
 SET tracing = on,kv,results; SELECT c FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1504,7 +1504,7 @@ EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+·          spans         2 spans
 
 statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1528,7 +1528,7 @@ EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+·          spans         2 spans
 
 # Optimization should also be applied for updates.
 query TTT
@@ -1545,7 +1545,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             t4@primary
-·                    spans             /10/20/0-/10/20/1/2
+·                    spans             1 span
 ·                    locking strength  for update
 
 # Optimization should not be applied for deletes.
@@ -1557,7 +1557,7 @@ EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 delete range  ·             ·
 ·             from          t4
 ·             auto commit   ·
-·             spans         /10/20-/10/20/#
+·             spans         1 span
 
 # Optimization should not be applied for non point lookups.
 query TTT
@@ -1568,7 +1568,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /10/20-/10/21/#
+·          spans         1 span
 ·          parallel      ·
 
 # Optimization should not be applied for partial primary key filter.
@@ -1580,7 +1580,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /10-/11
+·          spans         1 span
 
 # Regression test for #40890: a point lookup on a single column family of a
 # table should still work properly in the face of a constraint disjunction.
@@ -1592,5 +1592,5 @@ EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
-·          spans         /1/1/0-/1/1/1 /1/5/0-/1/5/1 /5/1/0-/5/1/1 /5/5/0-/5/5/1
+·          spans         4 spans
 ·          parallel      ·

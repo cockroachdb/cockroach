@@ -264,7 +264,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             kv@primary
-·                    spans             -/2/#
+·                    spans             1 span
 ·                    limit             1
 ·                    locking strength  for update
 
@@ -443,7 +443,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             kv@primary
-·                    spans             /3-/3/#
+·                    spans             1 span
 ·                    locking strength  for update
 
 query TTT
@@ -460,7 +460,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             kv@primary
-·                    spans             /2-/9/#
+·                    spans             1 span
 ·                    parallel          ·
 ·                    locking strength  for update
 
@@ -507,7 +507,7 @@ count                      ·                 ·
                 │          key columns       k
                 └── scan   ·                 ·
 ·                          table             kv3@kv3_v_idx
-·                          spans             /10-/11
+·                          spans             1 span
 ·                          locking strength  for update
 
 query TTT
@@ -527,7 +527,7 @@ count                      ·                 ·
                 │          key columns       k
                 └── scan   ·                 ·
 ·                          table             kv3@kv3_v_idx
-·                          spans             /2-/10
+·                          spans             1 span
 ·                          locking strength  for update
 
 statement ok
@@ -547,7 +547,7 @@ count                ·             ·
       └── render     ·             ·
            └── scan  ·             ·
 ·                    table         kv@primary
-·                    spans         /3-/3/#
+·                    spans         1 span
 
 query TTT
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
@@ -563,7 +563,7 @@ count                ·             ·
       └── render     ·             ·
            └── scan  ·             ·
 ·                    table         kv@primary
-·                    spans         /2-/9/#
+·                    spans         1 span
 ·                    parallel      ·
 
 query TTT
@@ -617,7 +617,7 @@ count                ·             ·
       └── render     ·             ·
            └── scan  ·             ·
 ·                    table         kv@primary
-·                    spans         -/2/#
+·                    spans         1 span
 ·                    limit         1
 
 query TTT
@@ -637,7 +637,7 @@ count                      ·             ·
                 │          key columns   k
                 └── scan   ·             ·
 ·                          table         kv3@kv3_v_idx
-·                          spans         /10-/11
+·                          spans         1 span
 
 query TTT
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -656,7 +656,7 @@ count                      ·             ·
                 │          key columns   k
                 └── scan   ·             ·
 ·                          table         kv3@kv3_v_idx
-·                          spans         /2-/10
+·                          spans         1 span
 
 # Update single column family.
 query TTT

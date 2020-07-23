@@ -1296,7 +1296,7 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)",+"(b=b)"
       ├── scan   ·                   ·
       │          table               abcdef@primary
-      │          spans               /1/2/6/9-
+      │          spans               1 span
       └── scan   ·                   ·
 ·                table               abg@primary
 ·                spans               FULL SCAN
@@ -1537,7 +1537,7 @@ filter           ·             ·
       │          key columns   a
       └── scan   ·             ·
 ·                table         zigzag@b_idx
-·                spans         /5-/6
+·                spans         1 span
 
 # Enable zigzag joins.
 statement ok
@@ -1631,7 +1631,7 @@ filter           ·             ·
       │          key columns   rowid
       └── scan   ·             ·
 ·                table         zigzag2@a_b_idx
-·                spans         /1/2-/1/3
+·                spans         1 span
 
 # Test that we can force a merge join.
 query TTT

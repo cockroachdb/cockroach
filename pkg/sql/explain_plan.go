@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -284,12 +285,21 @@ func (e *explainer) spans(
 	spans []roachpb.Span,
 	hardLimitSet bool,
 ) {
-	spanss := sqlbase.PrettySpans(index, spans, 2)
-	if spanss != "" {
-		if spanss == "-" {
-			spanss = getAttrForSpansAll(hardLimitSet)
-		}
-		e.attr(nodeName, fieldName, spanss)
+	if len(spans) == 0 {
+		return
+	}
+	str := sqlbase.PrettySpans(index, spans, 2)
+	if str == "-" {
+		e.attr(nodeName, fieldName, getAttrForSpansAll(hardLimitSet))
+		return
+	}
+	if e.flags.Verbose {
+		e.attr(nodeName, fieldName, str)
+	} else {
+		e.attr(
+			nodeName, fieldName,
+			fmt.Sprintf("%d span%s", len(spans), util.Pluralize(int64(len(spans)))),
+		)
 	}
 }
 

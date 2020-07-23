@@ -508,7 +508,7 @@ EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ·     vectorized    true
 scan  ·             ·
 ·     table         t@primary
-·     spans         /1-/1/# /3-/3/#
+·     spans         2 spans
 ·     parallel      ·
 
 statement ok

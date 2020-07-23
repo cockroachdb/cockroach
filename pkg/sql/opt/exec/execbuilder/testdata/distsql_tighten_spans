@@ -139,7 +139,7 @@ EXPLAIN SELECT * FROM p1 WHERE b <= 3
 ·     vectorized    true
 scan  ·             ·
 ·     table         p1@b
-·     spans         -/4
+·     spans         1 span
 
 # Partial predicate on primary key should not be tightened.
 query TTT
@@ -149,7 +149,7 @@ EXPLAIN SELECT * FROM p1 WHERE a <= 3
 ·     vectorized    true
 scan  ·             ·
 ·     table         p1@primary
-·     spans         -/4
+·     spans         1 span
 
 # Tighten end key if span contains full primary key.
 query TTT
@@ -161,7 +161,7 @@ filter     ·             ·
  │         filter        b <= 3
  └── scan  ·             ·
 ·          table         p1@primary
-·          spans         -/3/3/#
+·          spans         1 span
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
@@ -172,7 +172,7 @@ filter     ·             ·
  │         filter        b < 4
  └── scan  ·             ·
 ·          table         p1@primary
-·          spans         -/3/3/#
+·          spans         1 span
 
 # Mixed bounds.
 query TTT
@@ -184,7 +184,7 @@ filter     ·             ·
  │         filter        b <= 3
  └── scan  ·             ·
 ·          table         p1@primary
-·          spans         /2-
+·          spans         1 span
 
 # Edge cases.
 
@@ -197,7 +197,7 @@ filter     ·             ·
  │         filter        b <= 0
  └── scan  ·             ·
 ·          table         p1@primary
-·          spans         -/0/0/#
+·          spans         1 span
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
@@ -208,7 +208,7 @@ filter     ·             ·
  │         filter        b <= -1
  └── scan  ·             ·
 ·          table         p1@primary
-·          spans         -/-1/-1/#
+·          spans         1 span
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
@@ -217,7 +217,7 @@ EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
 ·     vectorized    true
 scan  ·             ·
 ·     table         p1@primary
-·     spans         /1-/1/-9223372036854775808/#
+·     spans         1 span
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
@@ -226,7 +226,7 @@ EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
 ·     vectorized    true
 scan  ·             ·
 ·     table         p1@primary
-·     spans         /1-/1/9223372036854775807/#
+·     spans         1 span
 
 # Table c1 (interleaved table)
 
@@ -239,7 +239,7 @@ EXPLAIN SELECT * FROM c1 WHERE a <= 3
 ·     vectorized    true
 scan  ·             ·
 ·     table         c1@primary
-·     spans         -/4
+·     spans         1 span
 
 # Tighten span on fully primary key.
 query TTT
@@ -251,7 +251,7 @@ filter     ·             ·
  │         filter        b <= 3
  └── scan  ·             ·
 ·          table         c1@primary
-·          spans         -/3/3/#/54/1/#
+·          spans         1 span
 
 # Table p2 with interleaved index.
 
@@ -265,7 +265,7 @@ EXPLAIN SELECT * FROM p2 WHERE i >= 2
 ·     vectorized    true
 scan  ·             ·
 ·     table         p2@primary
-·     spans         /2-
+·     spans         1 span
 
 # Upper bound (i <= 5)
 
@@ -276,7 +276,7 @@ EXPLAIN SELECT * FROM p2 WHERE i <= 5
 ·     vectorized    true
 scan  ·             ·
 ·     table         p2@primary
-·     spans         -/5/#
+·     spans         1 span
 
 # From the interleaved index: no tightening at all.
 
@@ -292,7 +292,7 @@ filter     ·             ·
  │         filter        d >= 2
  └── scan  ·             ·
 ·          table         p2@p2_id
-·          spans         /1/#/55/2/2-
+·          spans         1 span
 
 # Upper bound (i <= 6 AND d <= 5)
 
@@ -305,7 +305,7 @@ filter     ·             ·
  │         filter        d <= 5
  └── scan  ·             ·
 ·          table         p2@p2_id
-·          spans         -/6/#/55/2/6
+·          spans         1 span
 
 # IS NULL
 
@@ -318,7 +318,7 @@ filter     ·             ·
  │         filter        d IS NULL
  └── scan  ·             ·
 ·          table         p2@p2_id
-·          spans         /1/#/55/2/NULL-
+·          spans         1 span
 
 # IS NOT NULL
 
@@ -331,7 +331,7 @@ filter     ·             ·
  │         filter        d IS NOT NULL
  └── scan  ·             ·
 ·          table         p2@p2_id
-·          spans         /1/#/55/2/!NULL-
+·          spans         1 span
 
 # String table
 
@@ -343,7 +343,7 @@ tree  field         description
 ·     vectorized    true
 scan  ·             ·
 ·     table         bytes_t@primary
-·     spans         /"a"-/"a"/#
+·     spans         1 span
 
 # No tightening.
 
@@ -355,7 +355,7 @@ tree  field         description
 ·     vectorized    true
 scan  ·             ·
 ·     table         bytes_t@primary
-·     spans         -/"aa"
+·     spans         1 span
 
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
@@ -365,7 +365,7 @@ tree  field         description
 ·     vectorized    true
 scan  ·             ·
 ·     table         decimal_t@primary
-·     spans         /1-/1/#
+·     spans         1 span
 
 # No tightening.
 
@@ -377,4 +377,4 @@ tree  field         description
 ·     vectorized    true
 scan  ·             ·
 ·     table         decimal_t@primary
-·     spans         -/2
+·     spans         1 span

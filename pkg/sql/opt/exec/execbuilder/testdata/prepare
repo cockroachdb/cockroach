@@ -29,7 +29,7 @@ EXECUTE change_index
 ·     vectorized    true
 scan  ·             ·
 ·     table         ab@bindex
-·     spans         /10-/11
+·     spans         1 span
 
 statement ok
 DROP INDEX bindex
