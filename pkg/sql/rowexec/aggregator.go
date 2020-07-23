@@ -138,11 +138,12 @@ func (ag *aggregatorBase) init(
 			argTypes[j] = ag.inputTypes[c]
 		}
 
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 		arguments := make(tree.Datums, len(aggInfo.Arguments))
 		for j, argument := range aggInfo.Arguments {
 			h := execinfra.ExprHelper{}
 			// Pass nil types and row - there are no variables in these expressions.
-			if err := h.Init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
+			if err := h.Init(argument, nil /* types */, semaCtx, flowCtx.EvalCtx); err != nil {
 				return errors.Wrapf(err, "%s", argument)
 			}
 			d, err := h.Eval(nil /* row */)
