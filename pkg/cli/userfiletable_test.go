@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Example_userfile() {
+func Example_userfile_upload() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
