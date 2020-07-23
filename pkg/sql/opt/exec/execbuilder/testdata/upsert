@@ -365,8 +365,8 @@ root                                               ·             ·            
            └── spool                               ·             ·                                                    (z)                           ·
                 └── render                         ·             ·                                                    (z)                           ·
                      │                             render 0      z                                                    ·                             ·
-                     └── run                       ·             ·                                                    (z, rowid[hidden])            ·
-                          └── upsert               ·             ·                                                    (z, rowid[hidden])            ·
+                     └── run                       ·             ·                                                    (z, rowid)                    ·
+                          └── upsert               ·             ·                                                    (z, rowid)                    ·
                                │                   into          xyz(x, y, z, rowid)                                  ·                             ·
                                │                   strategy      opt upserter                                         ·                             ·
                                └── render          ·             ·                                                    (a, b, c, column11, a, b, c)  ·

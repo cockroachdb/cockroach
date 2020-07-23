@@ -59,8 +59,8 @@ root                                       ·              ·                   
            └── spool                       ·              ·                                     (a)                 ·
                 └── render                 ·              ·                                     (a)                 ·
                      │                     render 0       a                                     ·                   ·
-                     └── run               ·              ·                                     (a, rowid[hidden])  ·
-                          └── insert       ·              ·                                     (a, rowid[hidden])  ·
+                     └── run               ·              ·                                     (a, rowid)          ·
+                          └── insert       ·              ·                                     (a, rowid)          ·
                                │           into           x(a, rowid)                           ·                   ·
                                │           strategy       inserter                              ·                   ·
                                └── values  ·              ·                                     (column1, column5)  ·

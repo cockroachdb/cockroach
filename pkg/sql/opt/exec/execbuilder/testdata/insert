@@ -428,8 +428,8 @@ INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETU
 ·                                        vectorized    false                   ·                               ·
 render                                   ·             ·                       ("?column?")                    ·
  │                                       render 0      x + v                   ·                               ·
- └── run                                 ·             ·                       (x, v, rowid[hidden])           ·
-      └── insert                         ·             ·                       (x, v, rowid[hidden])           ·
+ └── run                                 ·             ·                       (x, v, rowid)                   ·
+      └── insert                         ·             ·                       (x, v, rowid)                   ·
            │                             into          insert_t(x, v, rowid)   ·                               ·
            │                             strategy      inserter                ·                               ·
            └── render                    ·             ·                       (length, "?column?", column11)  ·
@@ -462,18 +462,18 @@ BEGIN; ALTER TABLE mutation DROP COLUMN y
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 ----
-·                           distribution   local                  ·                   ·
-·                           vectorized     false                  ·                   ·
-render                      ·              ·                      (x)                 ·
- │                          render 0       x                      ·                   ·
- └── run                    ·              ·                      (x, rowid[hidden])  ·
-      └── insert-fast-path  ·              ·                      (x, rowid[hidden])  ·
-·                           into           mutation(x, rowid, y)  ·                   ·
-·                           strategy       inserter               ·                   ·
-·                           size           3 columns, 1 row       ·                   ·
-·                           row 0, expr 0  2                      ·                   ·
-·                           row 0, expr 1  unique_rowid()         ·                   ·
-·                           row 0, expr 2  10                     ·                   ·
+·                           distribution   local                  ·           ·
+·                           vectorized     false                  ·           ·
+render                      ·              ·                      (x)         ·
+ │                          render 0       x                      ·           ·
+ └── run                    ·              ·                      (x, rowid)  ·
+      └── insert-fast-path  ·              ·                      (x, rowid)  ·
+·                           into           mutation(x, rowid, y)  ·           ·
+·                           strategy       inserter               ·           ·
+·                           size           3 columns, 1 row       ·           ·
+·                           row 0, expr 0  2                      ·           ·
+·                           row 0, expr 1  unique_rowid()         ·           ·
+·                           row 0, expr 2  10                     ·           ·
 
 statement ok
 ROLLBACK
@@ -527,8 +527,8 @@ root                                          ·             ·                 
            └── spool                          ·             ·                                                    (z)                  ·
                 └── render                    ·             ·                                                    (z)                  ·
                      │                        render 0      z                                                    ·                    ·
-                     └── run                  ·             ·                                                    (z, rowid[hidden])   ·
-                          └── insert          ·             ·                                                    (z, rowid[hidden])   ·
+                     └── run                  ·             ·                                                    (z, rowid)           ·
+                          └── insert          ·             ·                                                    (z, rowid)           ·
                                │              into          xyz(x, y, z, rowid)                                  ·                    ·
                                │              strategy      inserter                                             ·                    ·
                                └── render     ·             ·                                                    (a, b, c, column11)  ·

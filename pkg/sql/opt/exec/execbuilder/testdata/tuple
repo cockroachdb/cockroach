@@ -87,16 +87,16 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8, 9, 10)
 ----
-·                distribution  local                                                 ·                      ·
-·                vectorized    true                                                  ·                      ·
-filter           ·             ·                                                     (a, b, c)              ·
- │               filter        ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                      ·
- └── index-join  ·             ·                                                     (a, b, c)              ·
-      │          table         abc@primary                                           ·                      ·
-      │          key columns   rowid                                                 ·                      ·
-      └── scan   ·             ·                                                     (a, b, rowid[hidden])  ·
-·                table         abc@abc_a_b_idx                                       ·                      ·
-·                spans         /1/2-/8/10                                            ·                      ·
+·                distribution  local                                                 ·              ·
+·                vectorized    true                                                  ·              ·
+filter           ·             ·                                                     (a, b, c)      ·
+ │               filter        ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·              ·
+ └── index-join  ·             ·                                                     (a, b, c)      ·
+      │          table         abc@primary                                           ·              ·
+      │          key columns   rowid                                                 ·              ·
+      └── scan   ·             ·                                                     (a, b, rowid)  ·
+·                table         abc@abc_a_b_idx                                       ·              ·
+·                spans         /1/2-/8/10                                            ·              ·
 
 statement ok
 DROP TABLE abc
