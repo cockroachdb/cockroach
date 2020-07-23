@@ -355,6 +355,12 @@ func (n *insertFastPathNode) enableAutoCommit() {
 func interceptAlterColumnTypeParseError(
 	insertCols []sqlbase.ColumnDescriptor, colNum int, err error,
 ) error {
+	// Only intercept the error if the column being inserted into
+	// is an actual column. This is to avoid checking on values that don't
+	// correspond to an actual column, for example a check constraint.
+	if colNum >= len(insertCols) {
+		return err
+	}
 	var insertCol sqlbase.ColumnDescriptor
 
 	// wrapParseError is a helper function that checks if an insertCol has the

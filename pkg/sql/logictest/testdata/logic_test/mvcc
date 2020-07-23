@@ -95,6 +95,11 @@ SELECT x, y, crdb_internal_mvcc_timestamp IS NOT NULL AS foo FROM t ORDER BY foo
 ----
 1 2 true
 
+query B
+SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) < now() FROM t
+----
+true
+
 # Ensure that standard lookup joins can produce the timestamp column.
 statement ok
 CREATE TABLE t2 (x INT, INDEX (x));

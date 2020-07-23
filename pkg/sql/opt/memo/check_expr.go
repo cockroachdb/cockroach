@@ -202,6 +202,18 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if len(t.LeftEqCols) != len(t.RightEqCols) {
 			panic(errors.AssertionFailedf("zigzag join with mismatching eq columns"))
 		}
+		meta := m.Metadata()
+		left, right := meta.Table(t.LeftTable), meta.Table(t.RightTable)
+		for i := 0; i < left.ColumnCount(); i++ {
+			if cat.IsSystemColumn(left, i) && t.Cols.Contains(t.LeftTable.ColumnID(i)) {
+				panic(errors.AssertionFailedf("zigzag join should not contain system column"))
+			}
+		}
+		for i := 0; i < right.ColumnCount(); i++ {
+			if cat.IsSystemColumn(right, i) && t.Cols.Contains(t.RightTable.ColumnID(i)) {
+				panic(errors.AssertionFailedf("zigzag join should not contain system column"))
+			}
+		}
 
 	case *AggDistinctExpr:
 		if t.Input.Op() == opt.AggFilterOp {
