@@ -1,0 +1,2 @@
+create_type_stmt ::=
+	'CREATE' 'TYPE' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
