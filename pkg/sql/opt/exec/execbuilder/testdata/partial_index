@@ -286,9 +286,8 @@ InitPut /Table/53/4/"foo"/22/0 -> /BYTES/
 query TTT
 EXPLAIN SELECT b FROM t WHERE b > 10
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     table          t@b_partial
-·     spans          FULL SCAN
-·     partial index  ·
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@b_partial (partial index)
+·     spans         FULL SCAN
