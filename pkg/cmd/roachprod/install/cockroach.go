@@ -133,7 +133,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	h.distributeCerts()
 
 	display := fmt.Sprintf("%s: starting", c.Name)
-	host1 := c.host(1)
 	nodes := c.ServerNodes()
 
 	p := 0
@@ -152,46 +151,13 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		defer sess.Close()
 
-		port := r.NodePort(c, nodes[nodeIdx])
+		args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+		if err != nil {
+			return nil, err
+		}
 
-		var args []string
-		if c.Secure {
-			args = append(args, "--certs-dir="+c.Impl.CertsDir(c, nodes[nodeIdx]))
-		} else {
-			args = append(args, "--insecure")
-		}
-		dir := c.Impl.NodeDir(c, nodes[nodeIdx])
-		logDir := c.Impl.LogDir(c, nodes[nodeIdx])
-		if idx := argExists(extraArgs, "--store"); idx == -1 {
-			args = append(args, "--store=path="+dir)
-		}
-		args = append(args, "--log-dir="+logDir)
-		args = append(args, "--background")
-		if vers.AtLeast(version.MustParse("v1.1.0")) {
-			cache := 25
-			if c.IsLocal() {
-				cache /= len(nodes)
-				if cache == 0 {
-					cache = 1
-				}
-			}
-			args = append(args, fmt.Sprintf("--cache=%d%%", cache))
-			args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
-		}
-		if c.IsLocal() {
-			// This avoids annoying firewall prompts on Mac OS X.
-			if vers.AtLeast(version.MustParse("v2.1.0")) {
-				args = append(args, "--listen-addr=127.0.0.1")
-			} else {
-				args = append(args, "--host=127.0.0.1")
-			}
-		}
-		args = append(args, fmt.Sprintf("--port=%d", port))
-		args = append(args, fmt.Sprintf("--http-port=%d", GetAdminUIPort(port)))
-		if locality := c.locality(nodes[nodeIdx]); locality != "" {
-			if idx := argExists(extraArgs, "--locality"); idx == -1 {
-				args = append(args, "--locality="+locality)
-			}
+		if h.useStartSingleNode(vers) {
+			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
 		}
 
 		// For a one-node cluster, use `start-single-node` to disable replication.
@@ -199,55 +165,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		var startCmd string
 		if h.useStartSingleNode(vers) {
 			startCmd = "start-single-node"
-			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
 		} else {
 			startCmd = "start"
-
-			// `cockroach start` without `--join` is no longer supported as 20.1.
-			if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
-				args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
-			}
 		}
-
-		if h.shouldAdvertisePublicIP() {
-			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(nodeIdx+1)))
-		} else if !c.IsLocal() {
-			// Explicitly advertise by IP address so that we don't need to
-			// deal with cross-region name resolution. The `hostname -I`
-			// prints all IP addresses for the host and then we'll select
-			// the first from the list.
-			args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
-		}
-
-		if StartOpts.Encrypt {
-			// Encryption at rest is turned on for the cluster.
-			// TODO(windchan7): allow key size to be specified through flags.
-			encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
-			var storeDir string
-			if idx := argExists(extraArgs, "--store"); idx == -1 {
-				storeDir = dir
-			} else {
-				storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
-			}
-			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
-			args = append(args, encryptArgs)
-		}
-
-		// Argument template expansion is node specific (e.g. for {store-dir}).
-		e := expander{
-			node: nodes[nodeIdx],
-		}
-		for _, arg := range extraArgs {
-			expandedArg, err := e.expand(c, arg)
-			if err != nil {
-				return nil, err
-			}
-			args = append(args, strings.Split(expandedArg, " ")...)
-		}
-
 		binary := cockroachNodeBinary(c, nodes[nodeIdx])
-
 		keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
+		logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
 
 		// NB: this is awkward as when the process fails, the test runner will show an
 		// unhelpful empty error (since everything has been redirected away). This is
@@ -426,6 +349,104 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) generateStartArgs(
+	nodeIdx int, extraArgs []string, vers *version.Version,
+) ([]string, error) {
+	var args []string
+	nodes := h.c.ServerNodes()
+
+	args = append(args, "--background")
+	if h.c.Secure {
+		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
+	} else {
+		args = append(args, "--insecure")
+	}
+
+	dir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx])
+	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
+	if idx := argExists(extraArgs, "--store"); idx == -1 {
+		args = append(args, "--store=path="+dir)
+	}
+	args = append(args, "--log-dir="+logDir)
+
+	if vers.AtLeast(version.MustParse("v1.1.0")) {
+		cache := 25
+		if h.c.IsLocal() {
+			cache /= len(nodes)
+			if cache == 0 {
+				cache = 1
+			}
+		}
+		args = append(args, fmt.Sprintf("--cache=%d%%", cache))
+		args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
+	}
+	if h.c.IsLocal() {
+		// This avoids annoying firewall prompts on Mac OS X.
+		if vers.AtLeast(version.MustParse("v2.1.0")) {
+			args = append(args, "--listen-addr=127.0.0.1")
+		} else {
+			args = append(args, "--host=127.0.0.1")
+		}
+	}
+
+	port := h.r.NodePort(h.c, nodes[nodeIdx])
+	args = append(args, fmt.Sprintf("--port=%d", port))
+	args = append(args, fmt.Sprintf("--http-port=%d", GetAdminUIPort(port)))
+	if locality := h.c.locality(nodes[nodeIdx]); locality != "" {
+		if idx := argExists(extraArgs, "--locality"); idx == -1 {
+			args = append(args, "--locality="+locality)
+		}
+	}
+
+	if !h.useStartSingleNode(vers) {
+		// Every node points to node 1. For clusters <20.1, node 1 does not
+		// point to anything (which itself is used to trigger bootstrap). For
+		// clusters >20.1, node 1 also points to itself, and an explicit
+		// `cockroach init` is needed.
+		if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
+			args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1), h.r.NodePort(h.c, 1)))
+		}
+	}
+
+	if h.shouldAdvertisePublicIP() {
+		args = append(args, fmt.Sprintf("--advertise-host=%s", h.c.host(nodeIdx+1)))
+	} else if !h.c.IsLocal() {
+		// Explicitly advertise by IP address so that we don't need to
+		// deal with cross-region name resolution. The `hostname -I`
+		// prints all IP addresses for the host and then we'll select
+		// the first from the list.
+		args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
+	}
+
+	if StartOpts.Encrypt {
+		// Encryption at rest is turned on for the cluster.
+		// TODO(windchan7): allow key size to be specified through flags.
+		encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
+		var storeDir string
+		if idx := argExists(extraArgs, "--store"); idx == -1 {
+			storeDir = dir
+		} else {
+			storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
+		}
+		encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
+		args = append(args, encryptArgs)
+	}
+
+	// Argument template expansion is node specific (e.g. for {store-dir}).
+	e := expander{
+		node: nodes[nodeIdx],
+	}
+	for _, arg := range extraArgs {
+		expandedArg, err := e.expand(h.c, arg)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, strings.Split(expandedArg, " ")...)
+	}
+
+	return args, nil
 }
 
 func (h *crdbStartHelper) initializeCluster(nodeIdx int) (string, error) {
