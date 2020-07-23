@@ -12,6 +12,7 @@ package install
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -284,57 +285,26 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		return
 	}
 
-	var initOut string
-	display = fmt.Sprintf("%s: bootstrapping cluster", c.Name)
-	c.Parallel(display, 1, 0, func(nodeIdx int) ([]byte, error) {
-		vers, err := getCockroachVersion(c, nodes[nodeIdx])
-		if err != nil {
-			return nil, err
-		}
-		if !vers.AtLeast(version.MustParse("v20.1.0")) {
-			// `cockroach start` without `--join` is no longer supported as v20.1.
-			return nil, nil
-		}
-		sess, err := c.newSession(1)
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-
-		initCmd := h.generateInitCmd(nodeIdx)
-		out, err := sess.CombinedOutput(initCmd)
-		if err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", initCmd, out)
-		}
-		initOut = strings.TrimSpace(string(out))
-		return nil, nil
-	})
-
-	if initOut != "" {
-		fmt.Println(initOut)
+	// ServerNodes returns an ordered list, and given we're cleared to bootstrap
+	// this cluster, we expect to be doing it through node 1.
+	nodeIdx := 0
+	if node := nodes[nodeIdx]; node != 1 {
+		log.Fatalf("programming error: expecting to initialization/set cluster settings through node 1, found node %d", node)
 	}
 
-	var clusterSettingsOut string
-	display = fmt.Sprintf("%s: initializing cluster settings", c.Name)
-	c.Parallel(display, 1, 0, func(nodeIdx int) ([]byte, error) {
-		sess, err := c.newSession(1)
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-
-		clusterSettingCmd := h.generateClusterSettingCmd(nodeIdx)
-		out, err := sess.CombinedOutput(clusterSettingCmd)
-		if err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
-		}
-		clusterSettingsOut = strings.TrimSpace(string(out))
-		return nil, nil
-	})
-
-	if clusterSettingsOut != "" {
-		fmt.Println(clusterSettingsOut)
+	fmt.Printf("%s: bootstrapping cluster", h.c.Name)
+	initOut, err := h.initializeCluster(nodeIdx)
+	if err != nil {
+		log.Fatalf("unable to bootstrap cluster: %v", err)
 	}
+	fmt.Println(initOut)
+
+	fmt.Printf("%s: initializing cluster settings", h.c.Name)
+	clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
+	if err != nil {
+		log.Fatalf("unable to set cluster settings: %v", err)
+	}
+	fmt.Println(clusterSettingsOut)
 }
 
 // NodeDir implements the ClusterImpl.NodeDir interface.
@@ -456,6 +426,40 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) initializeCluster(nodeIdx int) (string, error) {
+	nodes := h.c.ServerNodes()
+	initCmd := h.generateInitCmd(nodeIdx)
+
+	sess, err := h.c.newSession(nodes[nodeIdx])
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(initCmd)
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", initCmd, out)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (h *crdbStartHelper) setClusterSettings(nodeIdx int) (string, error) {
+	nodes := h.c.ServerNodes()
+	clusterSettingCmd := h.generateClusterSettingCmd(nodeIdx)
+
+	sess, err := h.c.newSession(nodes[nodeIdx])
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(clusterSettingCmd)
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (h *crdbStartHelper) generateClusterSettingCmd(nodeIdx int) string {
