@@ -301,23 +301,10 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		defer sess.Close()
 
-		var cmd string
-		if c.IsLocal() {
-			cmd = `cd ${HOME}/local/1 ; `
-		}
-
-		binary := cockroachNodeBinary(c, 1)
-		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[nodeIdx]), "cluster-bootstrapped")
-		url := r.NodeURL(c, "localhost", r.NodePort(c, 1))
-
-		cmd += fmt.Sprintf(`
-			if ! test -e %s ; then
-				COCKROACH_CONNECT_TIMEOUT=0 %s init --url %s && touch %s
-			fi`, path, binary, url, path)
-
-		out, err := sess.CombinedOutput(cmd)
+		initCmd := h.generateInitCmd(nodeIdx)
+		out, err := sess.CombinedOutput(initCmd)
 		if err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+			return nil, errors.Wrapf(err, "~ %s\n%s", initCmd, out)
 		}
 		initOut = strings.TrimSpace(string(out))
 		return nil, nil
@@ -325,12 +312,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 	if initOut != "" {
 		fmt.Println(initOut)
-	}
-
-	license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
-	if license == "" {
-		fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
-			c.Name)
 	}
 
 	var clusterSettingsOut string
@@ -342,27 +323,10 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		defer sess.Close()
 
-		var cmd string
-		if c.IsLocal() {
-			cmd = `cd ${HOME}/local/1 ; `
-		}
-
-		binary := cockroachNodeBinary(c, 1)
-		path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[nodeIdx]), "settings-initialized")
-		url := r.NodeURL(c, "localhost", r.NodePort(c, 1))
-
-		cmd += fmt.Sprintf(`
-			if ! test -e %s ; then
-				COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e "
-				    SET CLUSTER SETTING server.remote_debugging.mode = 'any';
-					SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
-					SET CLUSTER SETTING enterprise.license = '%s';" \
-				&& touch %s
-			fi`, path, binary, url, license, path)
-
-		out, err := sess.CombinedOutput(cmd)
+		clusterSettingCmd := h.generateClusterSettingCmd(nodeIdx)
+		out, err := sess.CombinedOutput(clusterSettingCmd)
 		if err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+			return nil, errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
 		}
 		clusterSettingsOut = strings.TrimSpace(string(out))
 		return nil, nil
@@ -492,6 +456,53 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) generateClusterSettingCmd(nodeIdx int) string {
+	nodes := h.c.ServerNodes()
+	license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
+	if license == "" {
+		fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
+			h.c.Name)
+	}
+
+	var clusterSettingCmd string
+	if h.c.IsLocal() {
+		clusterSettingCmd = `cd ${HOME}/local/1 ; `
+	}
+
+	binary := cockroachNodeBinary(h.c, nodeIdx)
+	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "settings-initialized")
+	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, 1))
+
+	clusterSettingCmd += fmt.Sprintf(`
+		if ! test -e %s ; then
+			COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e "
+				SET CLUSTER SETTING server.remote_debugging.mode = 'any';
+				SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
+				SET CLUSTER SETTING enterprise.license = '%s';" \
+			&& touch %s
+		fi`, path, binary, url, license, path)
+	return clusterSettingCmd
+}
+
+func (h *crdbStartHelper) generateInitCmd(nodeIdx int) string {
+	nodes := h.c.ServerNodes()
+
+	var initCmd string
+	if h.c.IsLocal() {
+		initCmd = `cd ${HOME}/local/1 ; `
+	}
+
+	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "cluster-bootstrapped")
+	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, nodes[nodeIdx]))
+	binary := cockroachNodeBinary(h.c, nodeIdx)
+
+	initCmd += fmt.Sprintf(`
+		if ! test -e %s ; then
+			COCKROACH_CONNECT_TIMEOUT=0 %s init --url %s && touch %s
+		fi`, path, binary, url, path)
+	return initCmd
 }
 
 func (h *crdbStartHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
