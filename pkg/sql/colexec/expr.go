@@ -26,7 +26,7 @@ import (
 type ExprHelper interface {
 	// ProcessExpr processes the given expression and returns a well-typed
 	// expression.
-	ProcessExpr(execinfrapb.Expression, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
+	ProcessExpr(execinfrapb.Expression, *tree.SemaContext, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
 }
 
 // ExprDeserialization describes how expression deserialization should be
@@ -73,14 +73,17 @@ func NewDefaultExprHelper() ExprHelper {
 }
 
 func (h *defaultExprHelper) ProcessExpr(
-	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
+	expr execinfrapb.Expression,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	typs []*types.T,
 ) (tree.TypedExpr, error) {
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
-	return execinfra.DeserializeExpr(expr.Expr, evalCtx, &tempVars)
+	return execinfra.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
 }
 
 // forcedDeserializationExprHelper is an ExprHelper that always deserializes
@@ -93,11 +96,14 @@ type forcedDeserializationExprHelper struct {
 var _ ExprHelper = &forcedDeserializationExprHelper{}
 
 func (h *forcedDeserializationExprHelper) ProcessExpr(
-	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
+	expr execinfrapb.Expression,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	typs []*types.T,
 ) (tree.TypedExpr, error) {
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
-	return execinfra.DeserializeExpr(expr.Expr, evalCtx, &tempVars)
+	return execinfra.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
 }
 
 // Remove unused warning.

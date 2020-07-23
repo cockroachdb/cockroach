@@ -74,21 +74,14 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 	}}
 }
 
-// MakeTypeNameFromPrefix creates a type name from an unqualified name
-// and a resolved prefix.
-func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
-	return TypeName{objName{
-		ObjectNamePrefix: prefix,
-		ObjectName:       object,
-	}}
-}
-
 // MakeNewQualifiedTypeName creates a fully qualified type name.
 func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	return TypeName{objName{
 		ObjectNamePrefix: ObjectNamePrefix{
-			CatalogName: Name(db),
-			SchemaName:  Name(schema),
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+			CatalogName:     Name(db),
+			SchemaName:      Name(schema),
 		},
 		ObjectName: Name(typ),
 	}}

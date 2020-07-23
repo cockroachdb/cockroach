@@ -97,21 +97,14 @@ func newProjectSetProcessor(
 	); err != nil {
 		return nil, err
 	}
-	return ps, nil
-}
-
-// Start is part of the RowSource interface.
-func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
-	ps.input.Start(ctx)
-	ctx = ps.StartInternal(ctx, projectSetProcName)
 
 	// Initialize exprHelpers.
+	semaCtx := ps.FlowCtx.TypeResolverFactory.NewSemaContext(ps.EvalCtx.Txn)
 	for i, expr := range ps.spec.Exprs {
 		var helper execinfra.ExprHelper
-		err := helper.Init(expr, ps.input.OutputTypes(), ps.EvalCtx)
+		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
 		if err != nil {
-			ps.MoveToDraining(err)
-			return ctx
+			return nil, err
 		}
 		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
 			// Expr is a set-generating function.
@@ -119,7 +112,13 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 		}
 		ps.exprHelpers[i] = &helper
 	}
-	return ctx
+	return ps, nil
+}
+
+// Start is part of the RowSource interface.
+func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
+	ctx = ps.input.Start(ctx)
+	return ps.StartInternal(ctx, projectSetProcName)
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also

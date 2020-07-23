@@ -419,6 +419,11 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 
+	// Release any descriptors accessed by this flow
+	if f.TypeResolverFactory != nil {
+		f.TypeResolverFactory.CleanupFunc(ctx)
+	}
+
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {

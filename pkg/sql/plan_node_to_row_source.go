@@ -69,13 +69,13 @@ var _ execinfra.LocalProcessor = &planNodeToRowSource{}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
+	flowCtx *execinfra.FlowCtx, post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
 		p,
 		post,
 		p.outputTypes,
-		nil, /* flowCtx */
+		flowCtx,
 		p.params.EvalContext(),
 		0, /* processorID */
 		output,
