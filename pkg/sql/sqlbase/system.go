@@ -404,7 +404,8 @@ func MakeSystemDatabaseDesc() *ImmutableDatabaseDescriptor {
 		keys.SystemDatabaseID,
 		SystemDatabaseName,
 		// Assign max privileges to root user.
-		NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+		NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUser),
 	)
 }
 
@@ -448,8 +449,10 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID],
+			security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -493,17 +496,19 @@ var (
 			ColumnIDs:        []ColumnID{1, 2, 3},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
 
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = NewImmutableTableDescriptor(TableDescriptor{
-		Name:                    "descriptor",
-		ID:                      keys.DescriptorTableID,
-		Privileges:              NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
+		Name: "descriptor",
+		ID:   keys.DescriptorTableID,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.DescriptorTableID], security.NodeUser),
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
 		Version:                 1,
@@ -547,10 +552,11 @@ var (
 			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
-		PrimaryIndex:   pk("username"),
-		NextFamilyID:   4,
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
+		PrimaryIndex: pk("username"),
+		NextFamilyID: 4,
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.UsersTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -581,9 +587,10 @@ var (
 			ColumnIDs:        []ColumnID{keys.ZonesTablePrimaryIndexID},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   3,
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
+		NextFamilyID: 3,
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ZonesTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -611,10 +618,11 @@ var (
 				ColumnIDs:   []ColumnID{1, 2, 3, 4},
 			},
 		},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("name"),
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("name"),
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.SettingsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -649,7 +657,8 @@ var (
 			MaxValue:  math.MaxInt64,
 			Start:     1,
 		},
-		Privileges:    NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescIDSequenceID]),
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.DescIDSequenceID], security.NodeUser),
 		FormatVersion: InterleavedFormatVersion,
 	})
 
@@ -676,10 +685,11 @@ var (
 			ColumnNames: []string{"id", "active", "info"},
 			ColumnIDs:   []ColumnID{1, 2, 3},
 		}},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("id"),
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TenantsTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.TenantsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -717,9 +727,10 @@ var (
 			ColumnIDs:        []ColumnID{1, 2, 4, 3},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   1,
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
+		NextFamilyID: 1,
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.LeaseTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -758,9 +769,10 @@ var (
 			ColumnIDs:        []ColumnID{1, 6},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   6,
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
+		NextFamilyID: 6,
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.EventLogTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -801,9 +813,10 @@ var (
 			ColumnIDs:        []ColumnID{1, 7},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   7,
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
+		NextFamilyID: 7,
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.RangeEventTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -826,10 +839,11 @@ var (
 			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
-		NextFamilyID:   4,
-		PrimaryIndex:   pk("key"),
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
+		NextFamilyID: 4,
+		PrimaryIndex: pk("key"),
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.UITableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -898,8 +912,9 @@ var (
 				Version:          SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
+		NextIndexID: 4,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.JobsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -963,8 +978,9 @@ var (
 				Version:          SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
+		NextIndexID: 4,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.WebSessionsTableID], security.NodeUser),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	})
@@ -1016,8 +1032,9 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.TableStatisticsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1056,8 +1073,9 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.LocationsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1122,8 +1140,9 @@ var (
 				Version:          SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleMembersTableID]),
+		NextIndexID: 4,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.RoleMembersTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1193,8 +1212,9 @@ var (
 			ColumnIDs: []ColumnID{1},
 			Version:   SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReportsMetaTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ReportsMetaTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1247,8 +1267,9 @@ var (
 			ColumnIDs: []ColumnID{1, 2, 3, 4},
 			Version:   SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1296,8 +1317,9 @@ var (
 			ColumnIDs: []ColumnID{1, 2, 3},
 			Version:   SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1348,8 +1370,9 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ReplicationStatsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1399,8 +1422,9 @@ var (
 				IndexDescriptor_ASC,
 			},
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ReplicationStatsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1440,8 +1464,9 @@ var (
 				IndexDescriptor_ASC,
 			},
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1477,8 +1502,9 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleOptionsTableID]),
+		NextIndexID: 2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.RoleOptionsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1502,10 +1528,11 @@ var (
 				ColumnIDs:   []ColumnID{1, 2, 3},
 			},
 		},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("id"),
-		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.StatementBundleChunksTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.StatementBundleChunksTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1551,7 +1578,7 @@ var (
 		},
 		NextIndexID: 3,
 		Privileges: NewCustomSuperuserPrivilegeDescriptor(
-			SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID]),
+			SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1584,7 +1611,7 @@ var (
 		PrimaryIndex: pk("id"),
 		NextIndexID:  2,
 		Privileges: NewCustomSuperuserPrivilegeDescriptor(
-			SystemAllowedPrivileges[keys.StatementDiagnosticsTableID]),
+			SystemAllowedPrivileges[keys.StatementDiagnosticsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1639,8 +1666,9 @@ var (
 				Version:          SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    3,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ScheduledJobsTableID]),
+		NextIndexID: 3,
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(
+			SystemAllowedPrivileges[keys.ScheduledJobsTableID], security.NodeUser),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

@@ -449,7 +449,7 @@ func WriteDescriptors(
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
+				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor(sqlbase.AdminRole)
 			}
 			wroteDBs[desc.GetID()] = desc
 			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
@@ -972,7 +972,7 @@ func createImportingDescriptors(
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
-			sqlbase.ID(tempSystemDBID), restoreTempSystemDB))
+			sqlbase.ID(tempSystemDBID), restoreTempSystemDB, sqlbase.AdminRole))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,

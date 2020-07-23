@@ -7,6 +7,7 @@ rm -f "${dir_n}"/*.{crt,key}
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-node 127.0.0.1 ::1 localhost *.local
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client root
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client testuser
+./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client testuser2
 
 # Tenant certs
 dir_mt="${dir_n}/mt"

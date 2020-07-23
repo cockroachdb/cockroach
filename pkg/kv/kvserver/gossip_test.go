@@ -219,13 +219,13 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txB := db.NewTxn(ctx, "b")
 
 	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db1000 := sqlbase.NewInitialDatabaseDescriptor(1000, "1000")
+	db1000 := sqlbase.NewInitialDatabaseDescriptor(1000, "1000", sqlbase.AdminRole)
 	require.NoError(t, txA.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(1000),
 		db1000.DescriptorProto()))
 
 	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db2000 := sqlbase.NewInitialDatabaseDescriptor(2000, "2000")
+	db2000 := sqlbase.NewInitialDatabaseDescriptor(2000, "2000", sqlbase.AdminRole)
 	require.NoError(t, txB.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(2000),
 		db2000.DescriptorProto()))

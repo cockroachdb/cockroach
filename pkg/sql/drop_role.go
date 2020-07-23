@@ -86,11 +86,25 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	defer f.Close()
 
-	// Now check whether the user still has permission on any object in the database.
+	// Now check whether the user still has permission or ownership on any
+	// object in the database.
+	type objectAndType struct {
+		ObjectType string
+		ObjectName string
+	}
+
+	// ownedObjects is a list of objects that are owned by the user being dropped.
+	var ownedObjects []objectAndType
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
 		func(db *sqlbase.ImmutableDatabaseDescriptor) error {
+			if _, ok := userNames[db.GetPrivileges().Owner]; ok {
+				ownedObjects = append(ownedObjects, objectAndType{
+					ObjectType: "database",
+					ObjectName: db.GetName(),
+				})
+			}
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
 					if f.Len() > 0 {
@@ -115,11 +129,21 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
 	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
+	// TODO(richardjcai): Also need to add privilege checking for types and
+	// user defined schemas when they are added.
+	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		if !tableIsVisible(table.TableDesc(), true /*allowAdding*/) {
 			continue
+		}
+		if _, ok := userNames[table.GetPrivileges().Owner]; ok {
+			ownedObjects = append(ownedObjects, objectAndType{
+				ObjectType: "table",
+				ObjectName: table.GetName(),
+			})
 		}
 		for _, u := range table.GetPrivileges().Users {
 			if _, ok := userNames[u.User]; ok {
@@ -149,6 +173,26 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
 			fnl.String(), f.String(),
 		)
+	}
+
+	// Did the user own any objects?
+	if len(ownedObjects) > 0 {
+		fnl := tree.NewFmtCtx(tree.FmtSimple)
+		defer fnl.Close()
+		for i, name := range names {
+			if i > 0 {
+				fnl.WriteString(", ")
+			}
+			fnl.FormatName(name)
+		}
+		objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
+		defer objectsMsg.Close()
+		for _, obj := range ownedObjects {
+			objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+		}
+		return pgerror.Newf(pgcode.Grouping,
+			"role%s %s cannot be dropped because some objects depend on it%s",
+			util.Pluralize(int64(len(names))), fnl.String(), objectsMsg.String())
 	}
 
 	// All safe - do the work.

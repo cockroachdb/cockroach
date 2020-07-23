@@ -31,8 +31,10 @@ type renameDatabaseNode struct {
 }
 
 // RenameDatabase renames the database.
-// Privileges: superuser, DROP on source database.
+// Privileges: Ownership or superuser + DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
+//          Postgres requires non-superuser owners to have
+//          CREATEDB privilege to rename a DB.
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
@@ -43,17 +45,26 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... RENAME"); err != nil {
-		return nil, err
-	}
-
 	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true /*required*/)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
+	hasOwnership, err := p.HasOwnership(ctx, dbDesc)
+	if err != nil {
 		return nil, err
+	}
+
+	// If the user is not the db owner, they must have admin privilege and have
+	//  drop privilege on the db.
+	if !hasOwnership {
+		if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... RENAME"); err != nil {
+			return nil, err
+		}
+
+		if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
+			return nil, err
+		}
 	}
 
 	if n.Name == n.NewName {

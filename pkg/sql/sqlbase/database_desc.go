@@ -43,9 +43,8 @@ type MutableDatabaseDescriptor struct {
 
 // NewInitialDatabaseDescriptor constructs a new DatabaseDescriptor for an
 // initial version from an id and name.
-func NewInitialDatabaseDescriptor(id ID, name string) *ImmutableDatabaseDescriptor {
-	return NewInitialDatabaseDescriptorWithPrivileges(id, name,
-		NewDefaultPrivilegeDescriptor())
+func NewInitialDatabaseDescriptor(id ID, name string, owner string) *ImmutableDatabaseDescriptor {
+	return NewInitialDatabaseDescriptorWithPrivileges(id, name, NewDefaultPrivilegeDescriptor(owner))
 }
 
 // NewInitialDatabaseDescriptorWithPrivileges constructs a new DatabaseDescriptor for an

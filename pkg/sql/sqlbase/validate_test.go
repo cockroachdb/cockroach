@@ -108,6 +108,11 @@ var validationMap = []struct {
 			"OutboundFKs":    {status: iSolemnlySwearThisFieldIsValidated},
 			"InboundFKs":     {status: iSolemnlySwearThisFieldIsValidated},
 			"Temporary":      {status: thisFieldReferencesNoObjects},
+			"Owner": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "Need a format version field on the descriptor in order to " +
+					"perform validation. Need to know which version the descriptor is " +
+					"in order to determine if an empty field is valid or not. " +
+					"TODO(richardjcai): Add this field after implementing 51930."},
 		},
 	},
 	{

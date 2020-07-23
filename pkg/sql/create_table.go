@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -267,11 +268,13 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	privs := n.dbDesc.GetPrivileges()
+	privs.SetOwner(params.SessionData().User)
+
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
-	privs := n.dbDesc.GetPrivileges()
 	if n.dbDesc.GetID() == keys.SystemDatabaseID {
-		privs = sqlbase.NewDefaultPrivilegeDescriptor()
+		privs = sqlbase.NewDefaultPrivilegeDescriptor(security.NodeUser)
 	}
 
 	var asCols sqlbase.ResultColumns
@@ -1849,6 +1852,7 @@ func makeTableDesc(
 			temporary,
 		)
 	})
+
 	return ret, err
 }
 

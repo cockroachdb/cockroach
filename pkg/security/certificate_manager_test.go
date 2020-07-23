@@ -40,7 +40,7 @@ func TestManagerWithEmbedded(t *testing.T) {
 		t.Error("expected non-nil NodeCert")
 	}
 	clientCerts := cm.ClientCerts()
-	if a, e := len(clientCerts), 2; a != e {
+	if a, e := len(clientCerts), 3; a != e {
 		t.Errorf("expected %d client certs, found %d", e, a)
 	}
 
@@ -59,6 +59,9 @@ func TestManagerWithEmbedded(t *testing.T) {
 		t.Error(err)
 	}
 	if _, err := cm.GetClientTLSConfig("testuser"); err != nil {
+		t.Error(err)
+	}
+	if _, err := cm.GetClientTLSConfig("testuser2"); err != nil {
 		t.Error(err)
 	}
 	if _, err := cm.GetClientTLSConfig("my-random-user"); err == nil {
