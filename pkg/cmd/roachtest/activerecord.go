@@ -166,7 +166,7 @@ func registerActiveRecord(r *testRegistry) {
 		// will fail. And it is safe to swallow it here.
 		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
 			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
-				`RUBYOPT="-W0" TESTOPTS="-v" sudo bundle exec rake test`,
+				`sudo RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`,
 		)
 
 		c.l.Printf("Test Results:\n%s", rawResults)
