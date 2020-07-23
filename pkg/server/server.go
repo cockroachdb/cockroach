@@ -982,6 +982,15 @@ func (s *Server) startPersistingHLCUpperBound(
 	return nil
 }
 
+// collectCallCounts is a middleware to collect telemetry on the call counts
+// of paths served by `inner`.
+func collectCallCounts(inner http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		telemetry.Count(fmt.Sprintf("HTTP: %s -> %s", req.Method, req.URL.EscapedPath()))
+		inner.ServeHTTP(w, req)
+	})
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1240,7 +1249,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// because it needs to be available before the cluster is up and can
 	// serve authentication requests, and also because it must work for
 	// monitoring tools which operate without authentication.
-	s.mux.Handle("/health", gwMux)
+	s.mux.Handle("/health", collectCallCounts(gwMux))
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
@@ -1576,18 +1585,18 @@ func (s *Server) Start(ctx context.Context) error {
 		authHandler = newAuthenticationMux(s.authentication, authHandler)
 	}
 
-	s.mux.Handle(adminPrefix, authHandler)
+	s.mux.Handle(adminPrefix, collectCallCounts(authHandler))
 	// Exempt the health check endpoint from authentication.
 	// This mirrors the handling of /health above.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
+	s.mux.Handle("/_admin/v1/health", collectCallCounts(gwMux))
+	s.mux.Handle(ts.URLPrefix, collectCallCounts(authHandler))
+	s.mux.Handle(statusPrefix, collectCallCounts(authHandler))
 	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(loginPath, gwMux)
 	s.mux.Handle(logoutPath, authHandler)
 
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	s.mux.Handle(statusVars, collectCallCounts(http.HandlerFunc(s.status.handleVars)))
 
 	// Register debugging endpoints.
 	var debugHandler http.Handler = s.debug
@@ -1612,7 +1621,7 @@ func (s *Server) Start(ctx context.Context) error {
 				s.debug.ServeHTTP(w, req)
 			}))
 	}
-	s.mux.Handle(debug.Endpoint, debugHandler)
+	s.mux.Handle(debug.Endpoint, collectCallCounts(debugHandler))
 
 	log.Event(ctx, "added http endpoints")
 
