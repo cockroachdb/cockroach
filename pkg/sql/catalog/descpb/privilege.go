@@ -77,8 +77,9 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 
 // NewCustomSuperuserPrivilegeDescriptor returns a privilege descriptor for the root user
 // and the admin role with specified privileges.
-func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List, owner string) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
+		Owner: owner,
 		Users: []UserPrivileges{
 			{
 				User:       security.AdminRole,
@@ -94,8 +95,9 @@ func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List) *PrivilegeDescri
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
-func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
+func NewPrivilegeDescriptor(user string, priv privilege.List, owner string) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
+		Owner: owner,
 		Users: []UserPrivileges{
 			{
 				User:       user,
@@ -111,8 +113,8 @@ var DefaultSuperuserPrivileges = privilege.List{privilege.ALL}
 
 // NewDefaultPrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user and admin role.
-func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
-	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges)
+func NewDefaultPrivilegeDescriptor(owner string) *PrivilegeDescriptor {
+	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges, owner)
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
@@ -378,4 +380,9 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
 	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
+}
+
+// SetOwner sets the owner of the privilege descriptor to the provided string.
+func (p *PrivilegeDescriptor) SetOwner(owner string) {
+	p.Owner = owner
 }

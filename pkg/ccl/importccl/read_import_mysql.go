@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -395,8 +396,8 @@ func mysqlTableToCockroach(
 
 	var seqDesc *sqlbase.MutableTableDescriptor
 	// If we have an auto-increment seq, create it and increment the id.
+	owner := security.AdminRole
 	if seqName != "" {
-		priv := descpb.NewDefaultPrivilegeDescriptor()
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
@@ -406,6 +407,10 @@ func mysqlTableToCockroach(
 		var err error
 		if p != nil {
 			params := p.RunParams(ctx)
+			if params.SessionData() != nil {
+				owner = params.SessionData().User
+			}
+			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,
@@ -418,6 +423,7 @@ func mysqlTableToCockroach(
 				&params,
 			)
 		} else {
+			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,

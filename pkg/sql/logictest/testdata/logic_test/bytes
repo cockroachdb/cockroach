@@ -144,3 +144,13 @@ SELECT b, b::STRING FROM t
 
 statement ok
 DROP TABLE t
+
+subtest Regression_4312
+
+statement ok
+PREPARE r1(bytes) AS SELECT descriptor::STRING FROM system.descriptor WHERE descriptor != $1 ORDER BY descriptor DESC LIMIT 1
+
+query T
+EXECUTE r1('abc')
+----
+\022.\012\011defaultdb\0202\032\033\012\011\012\005admin\020\002\012\010\012\004root\020\002\022\004root"\000(\001

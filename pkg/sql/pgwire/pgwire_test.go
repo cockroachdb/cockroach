@@ -528,9 +528,6 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW DATABASE", []preparedQueryTest{
 			baseTest.Results("defaultdb"),
 		}},
-		{"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1", []preparedQueryTest{
-			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12%\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100\"\x00(\x01")),
-		}},
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).

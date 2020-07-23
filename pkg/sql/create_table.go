@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -290,12 +291,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// If a new system table is being created (which should only be doable by
-	// an internal user account), make sure it gets the correct privileges.
-	privs := n.dbDesc.GetPrivileges()
-	if n.dbDesc.GetID() == keys.SystemDatabaseID {
-		privs = descpb.NewDefaultPrivilegeDescriptor()
-	}
+	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
@@ -1888,6 +1884,7 @@ func makeTableDesc(
 			temporary,
 		)
 	})
+
 	return ret, err
 }
 
@@ -2146,4 +2143,19 @@ func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
 	if d.Unique {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
 	}
+}
+
+func createInheritedPrivilegesFromDBDesc(
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor, user string,
+) *descpb.PrivilegeDescriptor {
+	// If a new system table is being created (which should only be doable by
+	// an internal user account), make sure it gets the correct privileges.
+	if dbDesc.GetID() == keys.SystemDatabaseID {
+		return descpb.NewDefaultPrivilegeDescriptor(security.NodeUser)
+	}
+
+	privs := dbDesc.GetPrivileges()
+	privs.SetOwner(user)
+
+	return privs
 }

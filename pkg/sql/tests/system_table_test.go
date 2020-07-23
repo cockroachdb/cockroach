@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -63,7 +64,7 @@ func TestInitialKeys(t *testing.T) {
 			keys.SystemDatabaseID,
 			keys.MaxReservedDescID,
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			descpb.NewDefaultPrivilegeDescriptor(),
+			descpb.NewDefaultPrivilegeDescriptor(security.NodeUser),
 		)
 		if err != nil {
 			t.Fatal(err)

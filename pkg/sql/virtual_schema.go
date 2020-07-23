@@ -660,7 +660,9 @@ func NewVirtualSchemaHolder(
 // all users. However, virtual schemas have more fine-grained access control.
 // For instance, information_schema will only expose rows to a given user which that
 // user has access to.
-var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(security.PublicRole, privilege.List{privilege.SELECT})
+var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
+	security.PublicRole, privilege.List{privilege.SELECT}, security.NodeUser,
+)
 
 func initVirtualDatabaseDesc(id descpb.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
 	return sqlbase.NewInitialDatabaseDescriptorWithPrivileges(id, name, publicSelectPrivileges)

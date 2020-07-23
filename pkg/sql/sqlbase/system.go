@@ -362,7 +362,8 @@ func MakeSystemDatabaseDesc() *ImmutableDatabaseDescriptor {
 		keys.SystemDatabaseID,
 		SystemDatabaseName,
 		// Assign max privileges to root user.
-		descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.SystemDatabaseID]),
+		descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUser),
 	)
 }
 
@@ -406,8 +407,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -451,17 +453,20 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID], security.NodeUser,
+		),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
 
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = NewImmutableTableDescriptor(descpb.TableDescriptor{
-		Name:                    "descriptor",
-		ID:                      keys.DescriptorTableID,
-		Privileges:              descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.DescriptorTableID]),
+		Name: "descriptor",
+		ID:   keys.DescriptorTableID,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.DescriptorTableID], security.NodeUser),
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
 		Version:                 1,
@@ -508,10 +513,11 @@ var (
 			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
 		},
-		PrimaryIndex:   pk("username"),
-		NextFamilyID:   4,
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.UsersTableID]),
+		PrimaryIndex: pk("username"),
+		NextFamilyID: 4,
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.UsersTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -542,9 +548,10 @@ var (
 			ColumnIDs:        []descpb.ColumnID{keys.ZonesTablePrimaryIndexID},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   3,
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ZonesTableID]),
+		NextFamilyID: 3,
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ZonesTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -572,10 +579,11 @@ var (
 				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
 			},
 		},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("name"),
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.SettingsTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("name"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SettingsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -610,7 +618,8 @@ var (
 			MaxValue:  math.MaxInt64,
 			Start:     1,
 		},
-		Privileges:    descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.DescIDSequenceID]),
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.DescIDSequenceID], security.NodeUser),
 		FormatVersion: descpb.InterleavedFormatVersion,
 	})
 
@@ -637,10 +646,11 @@ var (
 			ColumnNames: []string{"id", "active", "info"},
 			ColumnIDs:   []descpb.ColumnID{1, 2, 3},
 		}},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("id"),
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.TenantsTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.TenantsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -678,9 +688,10 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   1,
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.LeaseTableID]),
+		NextFamilyID: 1,
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.LeaseTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -719,9 +730,10 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 6},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   6,
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.EventLogTableID]),
+		NextFamilyID: 6,
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.EventLogTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -762,9 +774,10 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 7},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextFamilyID:   7,
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.RangeEventTableID]),
+		NextFamilyID: 7,
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.RangeEventTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -787,10 +800,11 @@ var (
 			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
 		},
-		NextFamilyID:   4,
-		PrimaryIndex:   pk("key"),
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.UITableID]),
+		NextFamilyID: 4,
+		PrimaryIndex: pk("key"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.UITableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -859,8 +873,9 @@ var (
 				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.JobsTableID]),
+		NextIndexID: 4,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -924,8 +939,9 @@ var (
 				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.WebSessionsTableID]),
+		NextIndexID: 4,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.WebSessionsTableID], security.NodeUser),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	})
@@ -977,8 +993,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.TableStatisticsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.TableStatisticsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1017,8 +1034,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.LocationsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.LocationsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1083,8 +1101,9 @@ var (
 				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    4,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.RoleMembersTableID]),
+		NextIndexID: 4,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.RoleMembersTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1154,8 +1173,9 @@ var (
 			ColumnIDs: []descpb.ColumnID{1},
 			Version:   descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ReportsMetaTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ReportsMetaTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1208,8 +1228,9 @@ var (
 			ColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
 			Version:   descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1257,8 +1278,9 @@ var (
 			ColumnIDs: []descpb.ColumnID{1, 2, 3},
 			Version:   descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1309,8 +1331,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ReplicationStatsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1360,8 +1383,9 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ReplicationStatsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1401,8 +1425,9 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1438,8 +1463,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.RoleOptionsTableID]),
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.RoleOptionsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1463,10 +1489,11 @@ var (
 				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
 			},
 		},
-		NextFamilyID:   1,
-		PrimaryIndex:   pk("id"),
-		NextIndexID:    2,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.StatementBundleChunksTableID]),
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.StatementBundleChunksTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1512,7 +1539,7 @@ var (
 		},
 		NextIndexID: 3,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID]),
+			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1545,7 +1572,7 @@ var (
 		PrimaryIndex: pk("id"),
 		NextIndexID:  2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsTableID]),
+			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1600,8 +1627,9 @@ var (
 				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
 		},
-		NextIndexID:    3,
-		Privileges:     descpb.NewCustomSuperuserPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.ScheduledJobsTableID]),
+		NextIndexID: 3,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.ScheduledJobsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

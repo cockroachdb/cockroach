@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -290,7 +291,7 @@ func WriteDescriptors(
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				desc.Privileges = descpb.NewDefaultPrivilegeDescriptor()
+				desc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 			}
 			wroteDBs[desc.GetID()] = desc
 			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
@@ -806,7 +807,7 @@ func createImportingDescriptors(
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
-			descpb.ID(tempSystemDBID), restoreTempSystemDB))
+			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
