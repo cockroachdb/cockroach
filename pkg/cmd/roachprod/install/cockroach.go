@@ -128,43 +128,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 	}
 
-	if c.Secure && bootstrap {
-		c.DistributeCerts()
-	}
+	h := &crdbStartHelper{c: c, r: r}
+	h.distributeCerts()
 
 	display := fmt.Sprintf("%s: starting", c.Name)
 	host1 := c.host(1)
 	nodes := c.ServerNodes()
-
-	// If we're creating nodes that span VPC (e.g. AWS multi-region or
-	// multi-cloud), we'll tell the nodes to advertise their public IPs
-	// so that attaching nodes to the cluster Just Works.
-	var advertisePublicIP bool
-	for i, vpc := range c.VPCs {
-		if i > 0 && vpc != c.VPCs[0] {
-			advertisePublicIP = true
-			break
-		}
-	}
-
-	env := func() string {
-		var buf strings.Builder
-		for _, v := range os.Environ() {
-			if strings.HasPrefix(v, "COCKROACH_") {
-				if buf.Len() > 0 {
-					buf.WriteString(" ")
-				}
-				buf.WriteString(v)
-			}
-		}
-		if len(c.Env) > 0 {
-			if buf.Len() > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(c.Env)
-		}
-		return buf.String()
-	}()
 
 	p := 0
 	if StartOpts.Sequential {
@@ -227,7 +196,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		// For a one-node cluster, use `start-single-node` to disable replication.
 		// For everything else we'll fall back to using `cockroach start`.
 		var startCmd string
-		if len(c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0")) {
+		if h.useStartSingleNode(vers) {
 			startCmd = "start-single-node"
 			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
 		} else {
@@ -239,7 +208,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			}
 		}
 
-		if advertisePublicIP {
+		if h.shouldAdvertisePublicIP() {
 			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(nodeIdx+1)))
 		} else if !c.IsLocal() {
 			// Explicitly advertise by IP address so that we don't need to
@@ -301,7 +270,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
 			//
 			// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
-			env + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
+			h.getEnvVars() + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
 		if out, err := sess.CombinedOutput(cmd); err != nil {
@@ -519,4 +488,57 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	}
 
 	return nil
+}
+
+type crdbStartHelper struct {
+	c *SyncedCluster
+	r Cockroach
+}
+
+func (h *crdbStartHelper) useStartSingleNode(vers *version.Version) bool {
+	return len(h.c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0"))
+}
+
+// distributeCerts, like the name suggests, distributes certs if it's a secure
+// cluster and we're starting n1.
+func (h *crdbStartHelper) distributeCerts() {
+	for _, node := range h.c.ServerNodes() {
+		if node == 1 && h.c.Secure {
+			h.c.DistributeCerts()
+			break
+		}
+	}
+}
+
+func (h *crdbStartHelper) shouldAdvertisePublicIP() bool {
+	// If we're creating nodes that span VPC (e.g. AWS multi-region or
+	// multi-cloud), we'll tell the nodes to advertise their public IPs
+	// so that attaching nodes to the cluster Just Works.
+	var advertisePublicIP bool
+	for i, vpc := range h.c.VPCs {
+		if i > 0 && vpc != h.c.VPCs[0] {
+			advertisePublicIP = true
+			break
+		}
+	}
+	return advertisePublicIP
+}
+
+func (h *crdbStartHelper) getEnvVars() string {
+	var buf strings.Builder
+	for _, v := range os.Environ() {
+		if strings.HasPrefix(v, "COCKROACH_") {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(v)
+		}
+	}
+	if len(h.c.Env) > 0 {
+		if buf.Len() > 0 {
+			buf.WriteString(" ")
+		}
+		buf.WriteString(h.c.Env)
+	}
+	return buf.String()
 }
