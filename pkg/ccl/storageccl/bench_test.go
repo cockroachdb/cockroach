@@ -11,7 +11,6 @@ package storageccl_test
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -38,8 +37,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 	for _, numEntries := range []int{100, 1000, 10000, 300000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
-			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir, strconv.Itoa(numEntries))
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
@@ -96,8 +94,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 	for _, numEntries := range []int{100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
-			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir, strconv.Itoa(numEntries))
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
@@ -148,8 +145,7 @@ func BenchmarkImport(b *testing.B) {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
 			subdir := strconv.Itoa(numEntries)
-			backupDir := filepath.Join(tempDir, subdir)
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir, subdir)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}

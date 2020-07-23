@@ -95,19 +95,19 @@ func getDescriptorFromDB(
 }
 
 // Load converts r into SSTables and backup descriptors. database is the name
-// of the database into which the SSTables will eventually be written. uri
-// is the storage location. ts is the time at which the MVCC data will
-// be set. loadChunkBytes is the size at which to create a new SSTable
+// of the database into which the SSTables will eventually be written.
+// - uri is the storage location (e.g. nodelocal://0/my/dir).
+// - ts is the time at which the MVCC data will be set.
+// - loadChunkBytes is the size at which to create a new SSTable
 // (which will translate into a new range during restore); set to 0 to use
 // the zone's default range max / 2.
 func Load(
 	ctx context.Context,
 	db *gosql.DB,
 	r io.Reader,
-	database, uri string,
+	database, user, externalIODir, uri string,
 	ts hlc.Timestamp,
 	loadChunkBytes int64,
-	tempPrefix, writeToDir, user string,
 ) (backupccl.BackupManifest, error) {
 	if loadChunkBytes == 0 {
 		loadChunkBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes / 2
@@ -121,7 +121,7 @@ func Load(
 	evalCtx.Codec = keys.TODOSQLCodec
 	semaCtx := tree.MakeSemaContext()
 
-	blobClientFactory := blobs.TestBlobServiceClient(writeToDir)
+	blobClientFactory := blobs.TestBlobServiceClient(externalIODir)
 	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
@@ -179,7 +179,7 @@ func Load(
 		switch s := stmt.AST.(type) {
 		case *tree.CreateTable:
 			if tableDesc != nil {
-				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 					return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -270,7 +270,7 @@ func Load(
 			}
 
 			if kvBytes > loadChunkBytes {
-				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 					return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -283,7 +283,7 @@ func Load(
 	}
 
 	if tableDesc != nil {
-		if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+		if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 			return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 		}
 	}
@@ -386,7 +386,6 @@ func writeSST(
 	ctx context.Context,
 	backup *backupccl.BackupManifest,
 	base cloud.ExternalStorage,
-	tempPrefix string,
 	kvs []storage.MVCCKeyValue,
 	ts hlc.Timestamp,
 ) error {

@@ -13,7 +13,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,10 +38,7 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	return &buf
 }
 
-func BenchmarkClusterBackup(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+func BenchmarkDatabaseBackup(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -52,11 +48,11 @@ func BenchmarkClusterBackup(b *testing.B) {
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := bank.FromRows(b.N).Tables()[0]
-	loadDir := filepath.Join(dir, "load")
-	if _, err := sampledataccl.ToBackup(b, bankData, loadDir); err != nil {
+	loadURI := "nodelocal://0/load"
+	if _, err := sampledataccl.ToBackup(b, bankData, dir, "load"); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadDir))
+	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadURI))
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -68,14 +64,14 @@ func BenchmarkClusterBackup(b *testing.B) {
 	b.ResetTimer()
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
-		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
+	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, backupccl.LocalFoo)).Scan(
+		&unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()
 	b.SetBytes(dataSize / int64(b.N))
 }
 
-func BenchmarkClusterRestore(b *testing.B) {
+func BenchmarkDatabaseRestore(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -85,7 +81,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := bank.FromRows(b.N).Tables()[0]
-	backup, err := sampledataccl.ToBackup(b, bankData, filepath.Join(dir, "foo"))
+	backup, err := sampledataccl.ToBackup(b, bankData, dir, "foo")
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
@@ -97,9 +93,6 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -112,11 +105,11 @@ func BenchmarkLoadRestore(b *testing.B) {
 	b.SetBytes(int64(buf.Len() / b.N))
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	b.ResetTimer()
-	if _, err := importccl.Load(ctx, sqlDB.DB.(*gosql.DB), buf, "data", dir, ts,
-		0, dir, dir, security.RootUser); err != nil {
+	if _, err := importccl.Load(ctx, sqlDB.DB.(*gosql.DB), buf, "data", security.RootUser,
+		dir, backupccl.LocalFoo, ts, 0); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
+	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, backupccl.LocalFoo))
 	b.StopTimer()
 }
 
@@ -148,30 +141,27 @@ func BenchmarkLoadSQL(b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+func BenchmarkEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
-	_, _, sqlDB, _, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode, 0, backupccl.InitNone)
+	_, _, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode, 0, backupccl.InitNone)
 	defer cleanupFn()
 
-	restoreDir := filepath.Join(backupccl.LocalFoo, "restore")
-	fullDir := filepath.Join(backupccl.LocalFoo, "full")
+	restoreURI := backupccl.LocalFoo + "/restore"
+	fullURI := backupccl.LocalFoo + "/full"
 
 	bankData := bank.FromRows(numStatements).Tables()[0]
-	_, err := sampledataccl.ToBackup(b, bankData, restoreDir)
+	_, err := sampledataccl.ToBackup(b, bankData, dir, "foo/restore")
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
-	sqlDB.Exec(b, `RESTORE data.* FROM $1`, restoreDir)
+	sqlDB.Exec(b, `RESTORE data.* FROM $1`, restoreURI)
 
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(b, `BACKUP DATABASE data TO $1`, fullDir).Scan(
-		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
+	sqlDB.QueryRow(b, `BACKUP DATABASE data TO $1`, fullURI).Scan(
+		&unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 
 	// We intentionally don't write anything to the database between the full and
@@ -179,8 +169,46 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		incrementalDir := filepath.Join(backupccl.LocalFoo, fmt.Sprintf("incremental%d", i))
-		sqlDB.Exec(b, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
+		incrementalDir := backupccl.LocalFoo + fmt.Sprintf("/incremental%d", i)
+		sqlDB.Exec(b, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullURI)
+	}
+	b.StopTimer()
+
+	// We report the number of bytes that incremental backup was able to
+	// *skip*--i.e., the number of bytes in the full backup.
+	b.SetBytes(int64(b.N) * dataSize)
+}
+
+func BenchmarkDatabaseFullBackup(b *testing.B) {
+	const numStatements = 100000
+
+	_, _, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode, 0, backupccl.InitNone)
+	defer cleanupFn()
+
+	restoreURI := backupccl.LocalFoo + "/restore"
+	fullURI := backupccl.LocalFoo + "/full"
+
+	bankData := bank.FromRows(numStatements).Tables()[0]
+	_, err := sampledataccl.ToBackup(b, bankData, dir, "foo/restore")
+	if err != nil {
+		b.Fatalf("%+v", err)
+	}
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
+	sqlDB.Exec(b, `RESTORE data.* FROM $1`, restoreURI)
+
+	var unused string
+	var dataSize int64
+	sqlDB.QueryRow(b, `BACKUP DATABASE data TO $1`, fullURI).Scan(
+		&unused, &unused, &unused, &unused, &unused, &dataSize,
+	)
+
+	// We intentionally don't write anything to the database between the full and
+	// incremental backup.
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		backupDir := backupccl.LocalFoo + fmt.Sprintf("/backup%d", i)
+		sqlDB.Exec(b, `BACKUP DATABASE data TO $1`, backupDir)
 	}
 	b.StopTimer()
 

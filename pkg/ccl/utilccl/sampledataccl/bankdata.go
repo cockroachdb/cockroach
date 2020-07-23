@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -35,15 +34,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ToBackup creates an enterprise backup in `dir`.
-func ToBackup(t testing.TB, data workload.Table, dir string) (*Backup, error) {
-	return toBackup(t, data, dir, 0)
+// ToBackup creates an enterprise backup in `<externalIODir>/<path>`.
+func ToBackup(t testing.TB, data workload.Table, externalIODir, path string) (*Backup, error) {
+	return toBackup(t, data, externalIODir, path, 0)
 }
 
-func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (*Backup, error) {
-	tempDir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-
+func toBackup(
+	t testing.TB, data workload.Table, externalIODir, path string, chunkBytes int64,
+) (*Backup, error) {
 	// TODO(dan): Get rid of the `t testing.TB` parameter and this `TestServer`.
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -63,12 +61,12 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal://0/`,
-		ts, chunkBytes, tempDir, dir, security.RootUser)
+	desc, err := importccl.Load(ctx, db, &stmts, `data`, security.RootUser,
+		externalIODir, "nodelocal://0/"+path, ts, chunkBytes)
 	if err != nil {
 		return nil, err
 	}
-	return &Backup{BaseDir: dir, Desc: desc}, nil
+	return &Backup{BaseDir: filepath.Join(externalIODir, path), Desc: desc}, nil
 }
 
 // Backup is a representation of an enterprise BACKUP.
