@@ -219,18 +219,10 @@ func (e *EnumMetadata) debugString() string {
 // private. Rather than expose private members of higher level packages,
 // we define a separate type here to be safe.
 type UserDefinedTypeName struct {
-	Catalog string
-	Schema  string
-	Name    string
-}
-
-// MakeUserDefinedTypeName creates a user defined type name.
-func MakeUserDefinedTypeName(catalog, schema, name string) *UserDefinedTypeName {
-	return &UserDefinedTypeName{
-		Catalog: catalog,
-		Schema:  schema,
-		Name:    name,
-	}
+	Catalog        string
+	ExplicitSchema bool
+	Schema         string
+	Name           string
 }
 
 // Basename returns the unqualified name.
@@ -243,8 +235,10 @@ func (u UserDefinedTypeName) FQName() string {
 	var sb strings.Builder
 	// Note that cross-database type references are disabled, so we only
 	// format the qualified name with the schema.
-	sb.WriteString(u.Schema)
-	sb.WriteString(".")
+	if u.ExplicitSchema {
+		sb.WriteString(u.Schema)
+		sb.WriteString(".")
+	}
 	sb.WriteString(u.Name)
 	return sb.String()
 }
@@ -1547,7 +1541,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case UuidFamily:
 		return "uuid"
 	case EnumFamily:
-		return t.TypeMeta.Name.FQName()
+		return t.TypeMeta.Name.Basename()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}

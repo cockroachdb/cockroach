@@ -138,7 +138,7 @@ func ResolveMutableType(
 	if err != nil || desc == nil {
 		return nil, nil, err
 	}
-	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(un.Object()))
+	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), un.Object())
 	return &tn, desc.(*sqlbase.MutableTypeDescriptor), nil
 }
 

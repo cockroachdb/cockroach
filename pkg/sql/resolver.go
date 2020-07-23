@@ -169,7 +169,7 @@ func (p *planner) ResolveType(
 	if err != nil {
 		return nil, err
 	}
-	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
+	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 
 	// Disllow cross-database type resolution. Note that we check

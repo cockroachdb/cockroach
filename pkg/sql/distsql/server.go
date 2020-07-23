@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -324,9 +326,6 @@ func (ds *ServerImpl) setupFlow(
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
 		}
-		// Since we are constructing an EvalContext on a remote node, outfit it
-		// with a DistSQLTypeResolver.
-		evalCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCtx}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		var haveSequences bool
@@ -350,6 +349,26 @@ func (ds *ServerImpl) setupFlow(
 		TraceKV:        req.TraceKV,
 		Local:          localState.IsLocal,
 	}
+
+	if localState.IsLocal && localState.Collection != nil {
+		// If we were passed a descs.Collection to use, then take it. In this case,
+		// the caller will handle releasing the used descriptors, so we don't need
+		// to cleanup the descriptors when cleaning up the flow.
+		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+			Descriptors:  localState.Collection,
+			NeedsCleanup: false,
+		}
+	} else {
+		// If we weren't passed a descs.Collection, then make a new one. We are
+		// responsible for cleaning it up and releasing any accessed descriptors
+		// on flow cleanup.
+		collection := descs.NewCollection(ds.ServerConfig.LeaseManager.(*lease.Manager), ds.ServerConfig.Settings)
+		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+			Descriptors:  collection,
+			NeedsCleanup: true,
+		}
+	}
+
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
 	// itself when the vectorize mode needs to be changed because we would need
@@ -452,6 +471,11 @@ func (ds *ServerImpl) SetupSyncFlow(
 // planNodes.
 type LocalState struct {
 	EvalContext *tree.EvalContext
+
+	// Collection is set if this flow is running on the gateway as part of user
+	// SQL session. It is the current descs.Collection of the planner executing
+	// the flow.
+	Collection *descs.Collection
 
 	// IsLocal is set if the flow is running on the gateway and there are no
 	// remote flows.

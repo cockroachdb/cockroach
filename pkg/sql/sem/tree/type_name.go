@@ -13,6 +13,7 @@ package tree
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -74,21 +75,14 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 	}}
 }
 
-// MakeTypeNameFromPrefix creates a type name from an unqualified name
-// and a resolved prefix.
-func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
-	return TypeName{objName{
-		ObjectNamePrefix: prefix,
-		ObjectName:       object,
-	}}
-}
-
 // MakeNewQualifiedTypeName creates a fully qualified type name.
 func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	return TypeName{objName{
 		ObjectNamePrefix: ObjectNamePrefix{
-			CatalogName: Name(db),
-			SchemaName:  Name(schema),
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+			CatalogName:     Name(db),
+			SchemaName:      Name(schema),
 		},
 		ObjectName: Name(typ),
 	}}
@@ -139,6 +133,7 @@ func ResolveType(
 		return resolver.ResolveType(ctx, t)
 	case *IDTypeReference:
 		if resolver == nil {
+			debug.PrintStack()
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type id %d does not exist", t.ID)
 		}
 		return resolver.ResolveTypeByID(ctx, t.ID)

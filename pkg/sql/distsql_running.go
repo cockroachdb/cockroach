@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -163,19 +165,53 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// vectorized. If any of them can't, turn off the setting.
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
+
 			for scheduledOnNodeID, spec := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
+
+				// TODO (rohany): Why does each flow need its own FlowCtx if we aren't
+				//  actually running the flow created from supportsVectorized?
+				flowCtx := &execinfra.FlowCtx{
+					EvalCtx: &evalCtx.EvalContext,
+					Cfg: &execinfra.ServerConfig{
+						DiskMonitor:    &mon.BytesMonitor{},
+						Settings:       dsp.st,
+						ClusterID:      &dsp.rpcCtx.ClusterID,
+						VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
+					},
+					NodeID: evalCtx.NodeID,
+				}
+
+				// TODO (rohany): This is unfortunate that this call to setup vectorize makes
+				//  it's own flow context rather than being able to use the one that is made
+				//  later.
+				if localState.IsLocal && localState.Collection != nil {
+					// If we were passed a descs.Collection to use, then take it. In this case,
+					// the caller will handle releasing the used descriptors, so we don't need
+					// to cleanup the descriptors when cleaning up the flow.
+					flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+						Descriptors:  localState.Collection,
+						NeedsCleanup: false,
+					}
+				} else {
+					// If we weren't passed a descs.Collection, then make a new one. We are
+					// responsible for cleaning it up and releasing any accessed descriptors
+					// on flow cleanup.
+					collection := descs.NewCollection(dsp.distSQLSrv.LeaseManager.(*lease.Manager), dsp.distSQLSrv.Settings)
+					flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+						Descriptors:  collection,
+						NeedsCleanup: true,
+					}
+				}
+
+				defer func() {
+					if flowCtx.TypeResolverFactory.NeedsCleanup {
+						flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+					}
+				}()
+
 				if _, err := colflow.SupportsVectorized(
-					ctx, &execinfra.FlowCtx{
-						EvalCtx: &evalCtx.EvalContext,
-						Cfg: &execinfra.ServerConfig{
-							DiskMonitor:    &mon.BytesMonitor{},
-							Settings:       dsp.st,
-							ClusterID:      &dsp.rpcCtx.ClusterID,
-							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
-						},
-						NodeID: evalCtx.NodeID,
-					}, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
+					ctx, flowCtx, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
@@ -306,6 +342,16 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = &evalCtx.EvalContext
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
+	// If we have access to a planner and are currently being used to plan
+	// statements in a user transaction, then take the descs.Collection to resolve
+	// types with during flow execution. This is necessary to do in the case of
+	// a transaction that has already created or updated some types. If we do not
+	// use the local descs.Collection, we would attempt to acquire a lease on
+	// modified types when accessing them, which would error out.
+	if planCtx.planner != nil && !planCtx.planner.isInternalPlanner {
+		localState.Collection = planCtx.planner.Descriptors()
+	}
+
 	if planCtx.isLocal {
 		localState.IsLocal = true
 	} else if txn != nil {

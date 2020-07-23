@@ -79,11 +79,22 @@ func newIndexBackfiller(
 	}
 	ib.backfiller.chunks = ib
 
-	// Copy in the DB pointer from flowCtx into evalCtx, because the Init
-	// step needs access to the DB.
-	evalCtx := flowCtx.NewEvalCtx()
-	evalCtx.DB = flowCtx.Cfg.DB
-	if err := ib.IndexBackfiller.Init(evalCtx, ib.desc); err != nil {
+	// TODO (rohany): When marcus implements backfills for partial indexes, we'll
+	//  most likely have to split up the index backfiller init into two functions
+	//  like the column backfiller.
+	// Install type metadata into any types present in the target descriptor.
+	if err := flowCtx.Cfg.DB.Txn(flowCtx.EvalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		return sqlbase.HydrateTypesInTableDescriptor(ctx, ib.desc.TableDesc(), resolver)
+	}); err != nil {
+		return nil, err
+	}
+	// Release leases on any accessed types now that type metadata is installed.
+	// We do this so that leases on any accessed types are not held for the
+	// entire backfill process.
+	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(flowCtx.EvalCtx.Context)
+
+	if err := ib.IndexBackfiller.Init(flowCtx.NewEvalCtx(), ib.desc); err != nil {
 		return nil, err
 	}
 

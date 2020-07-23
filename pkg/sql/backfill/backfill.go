@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -54,23 +54,18 @@ type backfiller struct {
 type ColumnBackfiller struct {
 	backfiller
 
-	added []sqlbase.ColumnDescriptor
+	added   []sqlbase.ColumnDescriptor
+	dropped []sqlbase.ColumnDescriptor
+
 	// updateCols is a slice of all column descriptors that are being modified.
 	updateCols  []sqlbase.ColumnDescriptor
 	updateExprs []tree.TypedExpr
 	evalCtx     *tree.EvalContext
 }
 
-// Init initializes a column backfiller.
-func (cb *ColumnBackfiller) Init(
-	ctx context.Context, evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
-) error {
-	cols := desc.Columns
-	cb.evalCtx = evalCtx
-	var dropped []sqlbase.ColumnDescriptor
+// initCols is a helper to populate some column metadata on a ColumnBackfiller.
+func (cb *ColumnBackfiller) initCols(desc *sqlbase.ImmutableTableDescriptor) {
 	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
-		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
 				desc := *m.GetColumn()
@@ -78,72 +73,23 @@ func (cb *ColumnBackfiller) Init(
 				case sqlbase.DescriptorMutation_ADD:
 					cb.added = append(cb.added, desc)
 				case sqlbase.DescriptorMutation_DROP:
-					dropped = append(dropped, desc)
+					cb.dropped = append(cb.dropped, desc)
 				}
-				cols = append(cols, desc)
 			}
 		}
 	}
+}
 
-	colTyps := make([]*types.T, len(cols))
-	for i := range cols {
-		colTyps[i] = cols[i].Type
-	}
-
-	var defaultExprs, computedExprs []tree.TypedExpr
-	// Set up a closure to hydrate and preprocess expressions needed for
-	// the backfill.
-	hydrateTypes := func(ctx context.Context, evalCtx *tree.EvalContext) error {
-		// Hydrate all the types present in the table.
-		if err := execinfrapb.HydrateTypeSlice(cb.evalCtx, colTyps); err != nil {
-			return err
-		}
-		// Set up a SemaContext to type check the default and computed expressions.
-		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = cb.evalCtx.TypeResolver
-		var err error
-		defaultExprs, err = sqlbase.MakeDefaultExprs(
-			ctx, cb.added, &transform.ExprTransformContext{}, cb.evalCtx, &semaCtx,
-		)
-		if err != nil {
-			return err
-		}
-		var txCtx transform.ExprTransformContext
-		computedExprs, err = schemaexpr.MakeComputedExprs(
-			ctx,
-			cb.added,
-			desc,
-			tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
-			&txCtx,
-			cb.evalCtx,
-			&semaCtx,
-			true, /* addingCols */
-		)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if cb.evalCtx.Txn != nil {
-		// If we have a txn, then use it.
-		if err := hydrateTypes(ctx, cb.evalCtx); err != nil {
-			return err
-		}
-	} else {
-		// Otherwise, create one. We fall into this case when performing
-		// a distributed backfill outside of a transaction.
-		if err := cb.evalCtx.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			cb.evalCtx.Txn = txn
-			return hydrateTypes(ctx, cb.evalCtx)
-		}); err != nil {
-			return err
-		}
-		// Reset the evalCtx's transaction after type the expressions are processed.
-		cb.evalCtx.Txn = nil
-	}
-
-	cb.updateCols = append(cb.added, dropped...)
+// init performs initialization operations that are shared across the local
+// and distributed initialization procedures for the ColumnBackfiller.
+func (cb *ColumnBackfiller) init(
+	evalCtx *tree.EvalContext,
+	defaultExprs []tree.TypedExpr,
+	computedExprs []tree.TypedExpr,
+	desc *sqlbase.ImmutableTableDescriptor,
+) error {
+	cb.evalCtx = evalCtx
+	cb.updateCols = append(cb.added, cb.dropped...)
 	// Populate default or computed values.
 	cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
 	for j := range cb.added {
@@ -156,7 +102,7 @@ func (cb *ColumnBackfiller) Init(
 			cb.updateExprs[j] = defaultExprs[j]
 		}
 	}
-	for j := range dropped {
+	for j := range cb.dropped {
 		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
@@ -179,6 +125,94 @@ func (cb *ColumnBackfiller) Init(
 		&cb.alloc,
 		tableArgs,
 	)
+}
+
+// InitForLocalUse initializes a ColumnBackfiller for use during local
+// execution within a transaction. In this case, the entire backfill process
+// is occuring on the gateway as part of the user's transaction.
+func (cb *ColumnBackfiller) InitForLocalUse(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	desc *sqlbase.ImmutableTableDescriptor,
+) error {
+	cb.initCols(desc)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, semaCtx,
+	)
+	if err != nil {
+		return err
+	}
+	var txCtx transform.ExprTransformContext
+	computedExprs, err := schemaexpr.MakeComputedExprs(
+		ctx,
+		cb.added,
+		desc,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
+		&txCtx,
+		evalCtx,
+		semaCtx,
+		true, /* addingCols */
+	)
+	if err != nil {
+		return err
+	}
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc)
+}
+
+// InitForDistributedUse initializes a ColumnBackfiller for use as part of a
+// backfill operation executing as part of a distributed flow. In this use,
+// the backfill operation manages its own transactions. This separation is
+// necessary due to the different procedure for accessing user defined type
+// metadata as part of a distributed flow.
+func (cb *ColumnBackfiller) InitForDistributedUse(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *sqlbase.ImmutableTableDescriptor,
+) error {
+	cb.initCols(desc)
+	evalCtx := flowCtx.NewEvalCtx()
+	var defaultExprs, computedExprs []tree.TypedExpr
+	// Install type metadata in the target descriptors, as well as resolve any
+	// user defined types in the column expressions.
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		// Hydrate all the types present in the table.
+		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
+			return err
+		}
+		// Set up a SemaContext to type check the default and computed expressions.
+		semaCtx := tree.MakeSemaContext()
+		semaCtx.TypeResolver = resolver
+		var err error
+		defaultExprs, err = sqlbase.MakeDefaultExprs(
+			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
+		)
+		if err != nil {
+			return err
+		}
+		var txCtx transform.ExprTransformContext
+		computedExprs, err = schemaexpr.MakeComputedExprs(
+			ctx,
+			cb.added,
+			desc,
+			tree.NewUnqualifiedTableName(tree.Name(desc.Name)),
+			&txCtx,
+			evalCtx,
+			&semaCtx,
+			true, /* addingCols */
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Release leases on any accessed types now that type metadata is installed.
+	// We do this so that leases on any accessed types are not held for the
+	// entire backfill process.
+	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc)
 }
 
 // RunColumnBackfillChunk runs column backfill over a chunk of the table using
@@ -380,26 +414,6 @@ func (ib *IndexBackfiller) Init(
 	for i := range cols {
 		ib.types[i] = cols[i].Type
 	}
-
-	// Hydrate types used by the backfiller.
-	// TODO (rohany): As part of #49261, this needs to use cached enum data.
-	if evalCtx.Txn != nil {
-		// If the evalCtx has a transaction (if the schema change is running on a
-		// new table within a transaction), then use that.
-		if err := execinfrapb.HydrateTypeSlice(evalCtx, ib.types); err != nil {
-			return err
-		}
-	} else {
-		// Otherwise, make a new transaction. This case will happen when we are
-		// performing a distributed schema change outside of a transaction.
-		if err := ib.evalCtx.DB.Txn(evalCtx.Context, func(_ context.Context, txn *kv.Txn) error {
-			evalCtx.Txn = txn
-			return execinfrapb.HydrateTypeSlice(evalCtx, ib.types)
-		}); err != nil {
-			return err
-		}
-	}
-
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
 	for i := range cols {
 		ib.colIdxMap[cols[i].ID] = i

@@ -714,9 +714,14 @@ func (s *vectorizedFlowCreator) setupInput(
 	// don't do that. However, all operators (apart from the colBatchScan) get
 	// their types from InputSyncSpec, so this is a convenient place to do the
 	// hydration so that all operators get the valid types.
-	if err := execinfrapb.HydrateTypeSlice(flowCtx.EvalCtx, input.ColumnTypes); err != nil {
-		return nil, nil, nil, err
+	// TODO (rohany): This is nil in some explain contexts?
+	if flowCtx.TypeResolverFactory != nil {
+		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn)
+		if err := resolver.HydrateTypeSlice(ctx, input.ColumnTypes); err != nil {
+			return nil, nil, nil, err
+		}
 	}
+
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
 		case execinfrapb.StreamEndpointSpec_LOCAL:

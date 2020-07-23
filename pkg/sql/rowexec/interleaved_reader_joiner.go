@@ -332,8 +332,10 @@ func newInterleavedReaderJoiner(
 		if table.Post.Limit != 0 || table.Post.Offset != 0 {
 			return nil, errors.AssertionFailedf("interleaved joiner cannot be used with limits")
 		}
+		evalCtx := flowCtx.NewEvalCtx()
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		if err := tables[i].post.Init(
-			&table.Post, table.Desc.ColumnTypes(), flowCtx.NewEvalCtx(), nil, /*output*/
+			&table.Post, table.Desc.ColumnTypes(), semaCtx, evalCtx, nil, /*output*/
 		); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to initialize post-processing helper")

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -142,18 +143,22 @@ func NewColBatchScan(
 		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
 	}
 
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := flowCtx.NewEvalCtx()
 	// Before we can safely use types from the table descriptor, we need to
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
-	if err := execinfrapb.HydrateTypeSlice(evalCtx, typs); err != nil {
+	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.Txn)
+	semaCtx.TypeResolver = resolver
+	if err := resolver.HydrateTypeSlice(evalCtx.Context, typs); err != nil {
 		return nil, err
 	}
 	helper := execinfra.ProcOutputHelper{}
 	if err := helper.Init(
 		post,
 		typs,
+		&semaCtx,
 		evalCtx,
 		nil, /* output */
 	); err != nil {

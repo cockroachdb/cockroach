@@ -428,7 +428,7 @@ SELECT * FROM enum_array
 query TTT
 SELECT pg_typeof(x), pg_typeof(x[1]), pg_typeof(ARRAY['hello']::_greeting) FROM enum_array LIMIT 1
 ----
-public.greeting[]  public.greeting  public.greeting[]
+greeting[]  greeting  greeting[]
 
 # Ensure that the implicitly created array type will tolerate collisions.
 # _collision will create __collision as its implicit array type, so the
@@ -593,7 +593,7 @@ statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::public.gr
 INSERT INTO enum_checks VALUES ('hello')
 
 # Try adding a check that fails validation.
-statement error pq: validation of CHECK "x = 'hello':::public.greeting" failed
+statement error pq: validation of CHECK "x = 'hello':::greeting" failed
 ALTER TABLE enum_checks ADD CHECK (x = 'hello')
 
 # Check the above cases, but in a transaction.
@@ -1100,3 +1100,18 @@ SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 
 statement ok
 ROLLBACK
+
+statement ok
+BEGIN;
+CREATE TYPE local_type AS ENUM ('local');
+CREATE TABLE local_table (x local_type);
+INSERT INTO local_table VALUES ('local')
+
+query T
+SELECT * FROM local_table
+----
+local
+
+statement ok
+ROLLBACK
+

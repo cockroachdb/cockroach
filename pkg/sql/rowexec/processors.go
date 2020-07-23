@@ -311,7 +311,7 @@ func NewProcessor(
 			return nil, err
 		}
 		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
-		if err := processor.InitWithOutput(post, outputs[0]); err != nil {
+		if err := processor.InitWithOutput(flowCtx, post, outputs[0]); err != nil {
 			return nil, err
 		}
 		if numInputs == 1 {

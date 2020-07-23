@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -421,7 +422,7 @@ func (tc *Collection) getObjectVersion(
 func (tc *Collection) GetTableVersionByID(
 	ctx context.Context, txn *kv.Txn, tableID sqlbase.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedRelationError(
@@ -438,7 +439,11 @@ func (tc *Collection) GetTableVersionByID(
 }
 
 func (tc *Collection) getDescriptorVersionByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	id sqlbase.ID,
+	flags tree.ObjectLookupFlags,
+	setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id)
@@ -489,11 +494,13 @@ func (tc *Collection) getDescriptorVersionByID(
 	tc.leasedDescriptors = append(tc.leasedDescriptors, desc)
 	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
 
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
+	if setTxnDeadline {
+		// If the descriptor we just acquired expires before the txn's deadline,
+		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
+		// timestamp, so we need to set a deadline on the transaction to prevent it
+		// from committing beyond the version's expiration time.
+		txn.UpdateDeadlineMaybe(ctx, expiration)
+	}
 	return desc, nil
 }
 
@@ -990,4 +997,95 @@ type DatabaseCacheSubscriber interface {
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
 	WaitForCacheState(cond func(*database.Cache) bool)
+}
+
+// DistSQLTypeResolverFactory is an object that constructs TypeResolver objects
+// that are bound under a transaction. These TypeResolvers access descriptors
+// through the descs.Collection and eventually the lease.Manager. It cannot be
+// used concurrently, and neither can the constructed TypeResolvers. After the
+// DistSQLTypeResolverFactory is finished being used, all descriptors need to
+// be released from Descriptors. It is intended to be used to resolve type
+// references during the initialization of DistSQL flows.
+type DistSQLTypeResolverFactory struct {
+	Descriptors  *Collection
+	NeedsCleanup bool
+}
+
+// NewTypeResolver creates a new TypeResolver that is bound under the input
+// transaction.
+func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) *DistSQLTypeResolver {
+	return NewDistSQLTypeResolver(df.Descriptors, txn)
+}
+
+// NewSemaContext creates a new SemaContext with a TypeResolver bound to the
+// input transaction.
+func (df *DistSQLTypeResolverFactory) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.TypeResolver = df.NewTypeResolver(txn)
+	return &semaCtx
+}
+
+// DistSQLTypeResolver is a TypeResolver that accesses TypeDescriptors through
+// a given descs.Collection and transaction.
+type DistSQLTypeResolver struct {
+	descriptors *Collection
+	txn         *kv.Txn
+}
+
+// NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
+func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) *DistSQLTypeResolver {
+	return &DistSQLTypeResolver{
+		descriptors: descs,
+		txn:         txn,
+	}
+}
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (dt *DistSQLTypeResolver) ResolveType(
+	context.Context, *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
+}
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (dt *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
+	name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return desc.MakeTypesT(ctx, name, dt)
+}
+
+// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
+func (dt *DistSQLTypeResolver) GetTypeDescriptor(
+	ctx context.Context, id sqlbase.ID,
+) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	desc, err := dt.descriptors.getDescriptorVersionByID(
+		ctx,
+		dt.txn,
+		id,
+		tree.ObjectLookupFlagsWithRequired(),
+		false, /* setTxnDeadline */
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	name := tree.NewUnqualifiedTypeName(tree.Name(desc.GetName()))
+	return name, desc.(*sqlbase.ImmutableTypeDescriptor), nil
+}
+
+// HydrateTypeSlice installs metadata into a slice of types.T's.
+func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
+	for _, t := range typs {
+		if t.UserDefined() {
+			name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.ID(t.StableTypeID()))
+			if err != nil {
+				return err
+			}
+			if err := desc.HydrateTypeInfoWithName(ctx, t, name, dt); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -105,10 +105,13 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 	ps.input.Start(ctx)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 
+	// TODO (rohany): Why is this initialization done in Start and not in newProjectSetProcessor?
+	//  I'm worried that there could be concurrent use of the FlowContext here.
+	semaCtx := ps.FlowCtx.TypeResolverFactory.NewSemaContext(ps.EvalCtx.Txn)
 	// Initialize exprHelpers.
 	for i, expr := range ps.spec.Exprs {
 		var helper execinfra.ExprHelper
-		err := helper.Init(expr, ps.input.OutputTypes(), ps.EvalCtx)
+		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
 		if err != nil {
 			ps.MoveToDraining(err)
 			return ctx

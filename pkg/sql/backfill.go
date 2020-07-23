@@ -561,9 +561,13 @@ func (sc *SchemaChanger) validateConstraints(
 				// need a semaContext set up that can resolve types in order to pretty
 				// print the check expression back to the user.
 				evalCtx.Txn = txn
-				semaCtx := tree.MakeSemaContext()
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
-				semaCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: &evalCtx.EvalContext}
+				semaCtx := tree.MakeSemaContext()
+				collection := descs.NewCollection(sc.leaseMgr, sc.settings)
+				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
+				// TODO (rohany): When to release this? As of now this is only going to get released
+				//  after the check is validated.
+				defer func() { collection.ReleaseAll(ctx) }()
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
 					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
@@ -1390,7 +1394,7 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.Descriptors(), planner.EvalContext(), immutDesc, traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
@@ -1451,7 +1455,7 @@ func runSchemaChangesInTxn(
 					break
 				}
 				if err := columnBackfillInTxn(
-					ctx, planner.Txn(), planner.Descriptors(), planner.EvalContext(), immutDesc, traceKV,
+					ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
 				); err != nil {
 					return err
 				}
@@ -1691,8 +1695,8 @@ func validateFkInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	tc *descs.Collection,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
@@ -1701,7 +1705,7 @@ func columnBackfillInTxn(
 		return nil
 	}
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.Init(ctx, evalCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
