@@ -12,7 +12,6 @@ package resolver
 
 import (
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -216,8 +215,8 @@ func ResolveExistingObject(
 // prefix for the input object.
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
-) (*sqlbase.ImmutableDatabaseDescriptor, tree.ObjectNamePrefix, error) {
-	found, prefix, descI, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+) (*catalog.ResolvedObjectPrefix, tree.ObjectNamePrefix, error) {
+	found, prefix, scMeta, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
 	}
@@ -231,11 +230,12 @@ func ResolveTargetObject(
 		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
 		return nil, prefix, err
 	}
-	if prefix.Schema() != tree.PublicSchema && !strings.HasPrefix(prefix.Schema(), sessiondata.PgTempSchemaName) {
-		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
+	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
+	if scInfo.Schema.Kind == sqlbase.SchemaVirtual {
+		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
-	return descI.(*sqlbase.ImmutableDatabaseDescriptor), prefix, nil
+	return scInfo, prefix, nil
 }
 
 var staticSchemaIDMap = map[sqlbase.ID]string{

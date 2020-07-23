@@ -435,7 +435,7 @@ func (StubFactory) ConstructCancelSessions(input Node, ifExists bool) (Node, err
 // ConstructCreateView is part of the exec.Factory interface.
 func (StubFactory) ConstructCreateView(
 	schema cat.Schema,
-	viewName string,
+	viewName *tree.TableName,
 	ifNotExists bool,
 	replace bool,
 	temporary bool,

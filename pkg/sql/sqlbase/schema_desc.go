@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// SchemaDescriptorInterface will eventually be called dbdesc.Descriptor.
+// SchemaDescriptorInterface will eventually be called schemadesc.Descriptor.
 // It is implemented by ImmutableSchemaDescriptor.
 type SchemaDescriptorInterface interface {
 	BaseDescriptorInterface
@@ -25,6 +25,36 @@ type SchemaDescriptorInterface interface {
 
 var _ SchemaDescriptorInterface = (*ImmutableSchemaDescriptor)(nil)
 var _ SchemaDescriptorInterface = (*MutableSchemaDescriptor)(nil)
+
+// ResolvedSchemaKind is an enum that represents what kind of schema
+// has been resolved.
+type ResolvedSchemaKind int
+
+const (
+	// SchemaPublic represents the public schema.
+	SchemaPublic ResolvedSchemaKind = iota
+	// SchemaVirtual represents a virtual schema.
+	SchemaVirtual
+	// SchemaTemporary represents a temporary schema.
+	SchemaTemporary
+	// SchemaUserDefined represents a user defined schema.
+	SchemaUserDefined
+)
+
+// ResolvedSchema represents the result of resolving a schema name, or an
+// object prefix of <db>.<schema>. Due to historical reasons, some schemas
+// don't have unique IDs (public and virtual schemas), and others aren't backed
+// by descriptors. The ResolvedSchema struct encapsulates the different cases.
+type ResolvedSchema struct {
+	// Marks what kind of schema this is. It is always set.
+	Kind ResolvedSchemaKind
+	// The ID of the resolved schema. This field is only set for schema kinds
+	// SchemaPublic and SchemaUserDefined.
+	ID ID
+	// The descriptor backing the resolved schema. It is only set for
+	// SchemaUserDefined.
+	Desc *ImmutableSchemaDescriptor
+}
 
 // ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
 // on it.
