@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -86,35 +87,80 @@ func (p *planner) CheckPrivilege(
 	// permission check).
 	p.maybeAudit(descriptor, privilege)
 
-	user := p.SessionData().User
 	privs := descriptor.GetPrivileges()
-
-	// Check if 'user' itself has privileges.
-	if privs.CheckPrivilege(user, privilege) {
-		return nil
-	}
 
 	// Check if the 'public' pseudo-role has privileges.
 	if privs.CheckPrivilege(security.PublicRole, privilege) {
 		return nil
 	}
 
-	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	user := p.SessionData().User
+
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
+		return isOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+	})
 	if err != nil {
 		return err
 	}
-
-	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
-	for role := range memberOf {
-		if privs.CheckPrivilege(role, privilege) {
-			return nil
-		}
+	if hasPriv {
+		return nil
 	}
-
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
+}
+
+// TODO(richardjcai): Add checks for if the user owns the parent of the object.
+// Ie, being the owner of a database gives access to all tables in the db.
+// Issue #51931.
+// isOwner returns if the role has ownership privilege of the descriptor.
+func isOwner(desc sqlbase.Descriptor, role string) bool {
+	// Descriptors created prior to 20.2 do not have owners set.
+	owner := desc.GetPrivileges().Owner
+
+	if owner == "" {
+		// If the descriptor is ownerless and the descriptor is part of the system db,
+		// node is the owner.
+		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
+			owner = security.NodeUser
+		} else {
+			// This check is redundant in this case since admin already has privilege
+			// on all non-system objects.
+			owner = security.AdminRole
+		}
+	}
+
+	return role == owner
+}
+
+// HasOwnership returns if the role or any role the role is a member of
+// has ownership privilege of the desc.
+func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descriptor) (bool, error) {
+	user := p.SessionData().User
+
+	return p.checkRolePredicate(ctx, user, func(role string) bool {
+		return isOwner(descriptor, role)
+	})
+}
+
+// checkRolePredicate checks if the predicate is true for the user or
+// any roles the user is a member of.
+func (p *planner) checkRolePredicate(
+	ctx context.Context, user string, predicate func(role string) bool,
+) (bool, error) {
+	if ok := predicate(user); ok {
+		return ok, nil
+	}
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+	for role := range memberOf {
+		if ok := predicate(role); ok {
+			return ok, nil
+		}
+	}
+	return false, nil
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.

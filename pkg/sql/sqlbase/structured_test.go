@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -69,7 +70,7 @@ func TestAllocateIDs(t *testing.T) {
 				return idx
 			}(),
 		},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(),
+		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
 		FormatVersion: descpb.FamilyFormatVersion,
 	})
 	if err := desc.AllocateIDs(); err != nil {
@@ -110,7 +111,7 @@ func TestAllocateIDs(t *testing.T) {
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:     descpb.PrimaryIndexEncoding},
 		},
-		Privileges:     descpb.NewDefaultPrivilegeDescriptor(),
+		Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
 		NextColumnID:   4,
 		NextFamilyID:   1,
 		NextIndexID:    5,
@@ -931,7 +932,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	for i, test := range tests {
 		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor()
+			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 			var v roachpb.Value
 			desc := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &otherDesc}}
 			if err := v.SetProto(desc); err != nil {
@@ -1331,7 +1332,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: descpb.FamilyFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    descpb.NewDefaultPrivilegeDescriptor(),
+		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
 				Name:              "fk",
