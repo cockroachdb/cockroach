@@ -60,7 +60,7 @@ type Oracle interface {
 	// already handled by each node for the current SQL query. The state is not
 	// updated with the result of this method; the caller is in charge of that.
 	//
-	// When the range's leaseholder is known, lease info is passed in; the lease
+	// When the range's leaseholder is known, leaseHolder is passed in; leaseHolder
 	// is nil otherwise. Implementors are free to use it, or ignore it if they
 	// don't care about the leaseholder (e.g. when we're planning for follower
 	// reads).
@@ -68,7 +68,7 @@ type Oracle interface {
 	// A RangeUnavailableError can be returned if there's no information in gossip
 	// about any of the nodes that might be tried.
 	ChoosePreferredReplica(
-		context.Context, *roachpb.RangeDescriptor, *roachpb.Lease, QueryState,
+		ctx context.Context, rng *roachpb.RangeDescriptor, leaseHolder *roachpb.ReplicaDescriptor, qState QueryState,
 	) (roachpb.ReplicaDescriptor, error)
 }
 
@@ -135,7 +135,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *randomOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.Lease, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
 	if err != nil {
@@ -165,7 +165,7 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *closestOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.Lease, _ QueryState,
+	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
 	if err != nil {
@@ -216,11 +216,14 @@ func (o *binPackingOracle) Oracle(_ *kv.Txn) Oracle {
 }
 
 func (o *binPackingOracle) ChoosePreferredReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, lease *roachpb.Lease, queryState QueryState,
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	leaseHolder *roachpb.ReplicaDescriptor,
+	queryState QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
 	// If we know the leaseholder, we choose it.
-	if lease != nil {
-		return lease.Replica, nil
+	if leaseHolder != nil {
+		return *leaseHolder, nil
 	}
 
 	replicas, err := replicaSliceOrErr(ctx, o.gossip, desc)

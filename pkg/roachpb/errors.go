@@ -421,7 +421,7 @@ func (e *RangeKeyMismatchError) Ranges() []RangeInfo {
 	if len(e.rangesInternal) != 0 {
 		return e.rangesInternal
 	}
-	// Fallback for 20.1 errors. Remove in 20.3.
+	// Fallback for 20.1 errors. Remove in 21.1.
 	ranges := []RangeInfo{{Desc: e.DeprecatedMismatchedRange}}
 	if e.DeprecatedSuggestedRange != nil {
 		ranges = append(ranges, RangeInfo{Desc: *e.DeprecatedSuggestedRange})
