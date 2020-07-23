@@ -110,7 +110,13 @@ func argExists(args []string, target string) int {
 	return -1
 }
 
-// Start implements the ClusterImpl.NodeDir interface.
+// Start implements the ClusterImpl.NodeDir interface, and powers `roachprod
+// start`. Starting the first node is special-cased quite a bit, it's used to
+// distribute certs, set cluster settings, and initialize the cluster. Also,
+// if we're only starting a single node in the cluster and it happens to be the
+// "first" node (node 1, as understood by SyncedCluster.ServerNodes), we use
+// `start-single-node` (this was written to provide a short hand to start a
+// single node cluster with a replication factor of one).
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 	// Check to see if node 1 was started, indicating the cluster is to be
 	// bootstrapped.

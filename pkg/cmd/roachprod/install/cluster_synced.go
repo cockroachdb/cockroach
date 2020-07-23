@@ -102,7 +102,13 @@ func (c *SyncedCluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
-// ServerNodes TODO(peter): document
+// ServerNodes is the fully expanded, ordered list of nodes that any given
+// roachprod command is intending to target.
+//
+//  $ roachprod create local -n 4
+//  $ roachprod start local          # [1, 2, 3, 4]
+//  $ roachprod start local:2-4      # [2, 3, 4]
+//  $ roachprod start local:2,1,4    # [1, 2, 4]
 func (c *SyncedCluster) ServerNodes() []int {
 	return append([]int{}, c.Nodes...)
 }
