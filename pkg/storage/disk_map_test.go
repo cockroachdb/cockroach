@@ -442,45 +442,6 @@ func TestPebbleMapClose(t *testing.T) {
 
 	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
 
-	getLSM := func() string {
-		var buf bytes.Buffer
-		for l, ssts := range e.db.SSTables() {
-			if len(ssts) == 0 {
-				continue
-			}
-			fmt.Fprintf(&buf, "L%d:\n", l)
-			for _, sst := range ssts {
-				fmt.Fprintf(&buf, "  %s: %d bytes, %x (%s) - %x (%s)\n", sst.FileNum, sst.Size,
-					sst.Smallest.UserKey, bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix),
-					sst.Largest.UserKey, bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix))
-			}
-		}
-		return buf.String()
-	}
-
-	getSSTables := func() string {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "\n")
-		for l, ssts := range e.db.SSTables() {
-			for _, sst := range ssts {
-				sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
-				la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
-				fmt.Fprintf(&buf, "%d: %s - %s\n", l, sm, la)
-			}
-		}
-		return buf.String()
-	}
-
-	verifySSTables := func(expected string) {
-		actual := getSSTables()
-		if expected != actual {
-			t.Fatalf("expected%sgot%s", expected, actual)
-		}
-		if testing.Verbose() {
-			fmt.Printf("%s", actual)
-		}
-	}
-
 	// Put a small amount of data into the disk map.
 	bw := diskMap.NewBatchWriter()
 	const letters = "abcdefghijklmnopqrstuvwxyz"
@@ -506,22 +467,58 @@ func TestPebbleMapClose(t *testing.T) {
 	}
 
 	// Verify we have a single sstable.
-	verifySSTables(`
-6: a - z
-`)
+	var buf bytes.Buffer
+	fileNums := map[pebble.FileNum]bool{}
+	for l, ssts := range e.db.SSTables() {
+		for _, sst := range ssts {
+			sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
+			la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
+			fmt.Fprintf(&buf, "%d: %s - %s\n", l, sm, la)
+			fileNums[sst.FileNum] = true
+		}
+	}
+	const expected = "6: a - z\n"
+	actual := buf.String()
+	if expected != actual {
+		t.Fatalf("expected\n%sgot\n%s", expected, actual)
+	}
+	if testing.Verbose() {
+		fmt.Printf("%s", actual)
+	}
 
 	// Close the disk map. This should both delete the data, and initiate
 	// compactions for the deleted data.
 	diskMap.Close(ctx)
 
-	// Wait for the data stored in the engine to disappear.
+	// Wait for the previously-observed sstables to be removed. We can't
+	// assert that the LSM is completely empty because the range tombstone's
+	// sstable will not necessarily be compacted.
+	var lsmBuf bytes.Buffer
+	var stillExistBuf bytes.Buffer
 	testutils.SucceedsSoon(t, func() error {
-		actual := getLSM()
-		if testing.Verbose() {
-			fmt.Println(actual)
+		lsmBuf.Reset()
+		stillExistBuf.Reset()
+		for l, ssts := range e.db.SSTables() {
+			if len(ssts) == 0 {
+				continue
+			}
+
+			fmt.Fprintf(&lsmBuf, "L%d:\n", l)
+			for _, sst := range ssts {
+				if fileNums[sst.FileNum] {
+					fmt.Fprintf(&stillExistBuf, "%s\n", sst.FileNum)
+				}
+				fmt.Fprintf(&lsmBuf, "  %s: %d bytes, %x (%s) - %x (%s)\n", sst.FileNum, sst.Size,
+					sst.Smallest.UserKey, bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix),
+					sst.Largest.UserKey, bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix))
+			}
 		}
-		if actual != "" {
-			return fmt.Errorf("%s", actual)
+
+		if testing.Verbose() {
+			fmt.Println(buf.String())
+		}
+		if stillExist := stillExistBuf.String(); stillExist != "" {
+			return fmt.Errorf("%s", stillExist)
 		}
 		return nil
 	})
