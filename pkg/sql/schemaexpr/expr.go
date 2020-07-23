@@ -49,10 +49,14 @@ func DeserializeTableDescExpr(
 	return typed, nil
 }
 
-// DequalifyAndValidateExpr takes an expr de-qualifies the column names and
-// validates that expression is valid, has the correct type and
-// has no impure functions if allowImpure is false.
-// Returns the type-checked and constant-folded expression.
+// DequalifyAndValidateExpr validates that an expression has the given type
+// and contains no functions with a volatility greater than maxVolatility. The
+// type-checked and constant-folded expression and the set of column IDs within
+// the expression are returned, if valid.
+// TODO(mgartner): Ideally this should return a serialized expression string on
+// success. Returning a tree.TypedExpr is dangerous because variables have been
+// replaced with dummyColumns which are not useful outside the context of
+// type-checking the expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
 	desc sqlbase.TableDescriptorInterface,
@@ -130,4 +134,85 @@ func ExtractColumnIDs(
 	})
 
 	return colIDs, err
+}
+
+// NameResolver is used to replace unresolved names in expressions with
+// IndexedVars.
+type NameResolver struct {
+	evalCtx    *tree.EvalContext
+	tableID    sqlbase.ID
+	cols       []sqlbase.ColumnDescriptor
+	source     *sqlbase.DataSourceInfo
+	nrc        *nameResolverIVarContainer
+	ivarHelper *tree.IndexedVarHelper
+}
+
+// NewNameResolver creates and returns a NameResolver.
+func NewNameResolver(
+	evalCtx *tree.EvalContext,
+	tableID sqlbase.ID,
+	tn *tree.TableName,
+	cols []sqlbase.ColumnDescriptor,
+) *NameResolver {
+	source := sqlbase.NewSourceInfoForSingleTable(
+		*tn,
+		sqlbase.ResultColumnsFromColDescs(tableID, cols),
+	)
+	nrc := &nameResolverIVarContainer{cols}
+	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
+
+	return &NameResolver{
+		evalCtx:    evalCtx,
+		tableID:    tableID,
+		cols:       cols,
+		source:     source,
+		nrc:        nrc,
+		ivarHelper: &ivarHelper,
+	}
+}
+
+// ResolveNames returns an expression equivalent to the input expression with
+// unresolved names replaced with IndexedVars.
+func (nr *NameResolver) ResolveNames(expr tree.Expr) (tree.Expr, error) {
+	return sqlbase.ResolveNames(expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
+}
+
+// AddColumn adds a new column to the NameResolver so that it can be resolved in
+// future calls to ResolveNames.
+func (nr *NameResolver) AddColumn(col *sqlbase.ColumnDescriptor) {
+	nr.ivarHelper.AppendSlot()
+	nr.cols = append(nr.cols, *col)
+	newCols := sqlbase.ResultColumnsFromColDescs(nr.tableID, []sqlbase.ColumnDescriptor{*col})
+	nr.source.SourceColumns = append(nr.source.SourceColumns, newCols...)
+}
+
+// AddIVarContainerToSemaCtx assigns semaCtx's IVarContainer as the
+// NameResolver's internal indexed var container.
+func (nr *NameResolver) AddIVarContainerToSemaCtx(semaCtx *tree.SemaContext) {
+	semaCtx.IVarContainer = nr.nrc
+}
+
+// nameResolverIVarContainer is a help type that implements
+// tree.IndexedVarContainer. It is used to resolve and type check columns in
+// expressions. It does not support evaluation.
+type nameResolverIVarContainer struct {
+	cols []sqlbase.ColumnDescriptor
+}
+
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+// Evaluation is not support, so this function panics.
+func (nrc *nameResolverIVarContainer) IndexedVarEval(
+	idx int, ctx *tree.EvalContext,
+) (tree.Datum, error) {
+	panic("unsupported")
+}
+
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
+	return nrc.cols[idx].Type
+}
+
+// IndexVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (nrc *nameResolverIVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
 }

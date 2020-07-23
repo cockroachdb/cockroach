@@ -1714,7 +1714,7 @@ func indexBackfillInTxn(
 	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+	if err := backfiller.Init(ctx, evalCtx, tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)

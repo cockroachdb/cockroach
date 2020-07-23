@@ -23,16 +23,17 @@ import (
 type IndexPredicateValidator struct {
 	ctx       context.Context
 	tableName tree.TableName
-	desc      *sqlbase.MutableTableDescriptor
+	desc      sqlbase.TableDescriptorInterface
 	semaCtx   *tree.SemaContext
 }
 
-// NewIndexPredicateValidator returns an IndexPredicateValidator struct that can
-// be used to validate partial index predicates. See Validate for more details.
-func NewIndexPredicateValidator(
+// MakeIndexPredicateValidator returns an IndexPredicateValidator struct that
+// can be used to validate partial index predicates. See Validate for more
+// details.
+func MakeIndexPredicateValidator(
 	ctx context.Context,
 	tableName tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
+	desc sqlbase.TableDescriptorInterface,
 	semaCtx *tree.SemaContext,
 ) IndexPredicateValidator {
 	return IndexPredicateValidator{

@@ -60,6 +60,7 @@ var backillerSSTSize = settings.RegisterByteSizeSetting(
 )
 
 func newIndexBackfiller(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
@@ -83,7 +84,7 @@ func newIndexBackfiller(
 	// step needs access to the DB.
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.DB = flowCtx.Cfg.DB
-	if err := ib.IndexBackfiller.Init(evalCtx, ib.desc); err != nil {
+	if err := ib.IndexBackfiller.Init(ctx, evalCtx, ib.desc); err != nil {
 		return nil, err
 	}
 

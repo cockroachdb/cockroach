@@ -94,7 +94,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 		inuseNames[k] = struct{}{}
 	}
 
-	ckBuilder := schemaexpr.NewCheckConstraintBuilder(ctx, p.tableName, tableDesc, &p.semaCtx)
+	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, p.tableName, tableDesc, &p.semaCtx)
 	ckName, err := ckBuilder.DefaultName(ckDef.Expr)
 	if err != nil {
 		return err
@@ -211,7 +211,7 @@ func MakeIndexDescriptor(
 			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
 		}
 
-		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
+		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
 		expr, err := idxValidator.Validate(n.Predicate)
 		if err != nil {
 			return nil, err

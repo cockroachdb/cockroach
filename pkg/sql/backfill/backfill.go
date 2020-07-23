@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -326,6 +327,11 @@ type IndexBackfiller struct {
 	types   []*types.T
 	rowVals tree.Datums
 	evalCtx *tree.EvalContext
+	cols    []sqlbase.ColumnDescriptor
+
+	// predicates is a map of indexes to partial index predicate expressions. It
+	// includes entries for partial indexes only.
+	predicates map[sqlbase.IndexID]tree.TypedExpr
 }
 
 // ContainsInvertedIndex returns true if backfilling an inverted index.
@@ -340,24 +346,31 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 
 // Init initializes an IndexBackfiller.
 func (ib *IndexBackfiller) Init(
-	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
 ) error {
 	ib.evalCtx = evalCtx
 	numCols := len(desc.Columns)
-	cols := desc.Columns
+	ib.cols = desc.Columns
 	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
-		cols = append(cols, desc.Columns...)
+		ib.cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
+		ib.cols = append(ib.cols, desc.Columns...)
 		for _, m := range desc.Mutations {
 			if column := m.GetColumn(); column != nil &&
 				m.Direction == sqlbase.DescriptorMutation_ADD &&
 				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
-				cols = append(cols, *column)
+				ib.cols = append(ib.cols, *column)
 			}
 		}
 	}
 
+	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(ib.cols))
+	for i := range ib.cols {
+		ib.colIdxMap[ib.cols[i].ID] = i
+	}
+
 	var valNeededForCol util.FastIntSet
+	semaCtx := tree.MakeSemaContext()
+	var nr *schemaexpr.NameResolver
 	mutationID := desc.Mutations[0].MutationID
 	for _, m := range desc.Mutations {
 		if m.MutationID != mutationID {
@@ -366,19 +379,65 @@ func (ib *IndexBackfiller) Init(
 		if IndexMutationFilter(m) {
 			idx := m.GetIndex()
 			ib.added = append(ib.added, *idx)
-			for i := range cols {
-				id := cols[i].ID
+			for i := range ib.cols {
+				id := ib.cols[i].ID
 				if idx.ContainsColumnID(id) ||
 					idx.GetEncodingType(desc.PrimaryIndex.ID) == sqlbase.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}
+
+			// If the index is a partial index, convert and store the predicate
+			// as a TypedExpr.
+			if idx.IsPartial() {
+				expr, err := parser.ParseExpr(idx.Predicate)
+				if err != nil {
+					return err
+				}
+
+				colIDs, err := schemaexpr.ExtractColumnIDs(desc, expr)
+				if err != nil {
+					return err
+				}
+
+				// Add the columns referenced in the predicate to
+				// valNeededForCol so that columns necessary to evaluate the
+				// predicate expression are fetched.
+				colIDs.ForEach(func(col sqlbase.ColumnID) {
+					valNeededForCol.Add(ib.colIdxMap[col])
+				})
+
+				// Initialize nr once.
+				if nr == nil {
+					tn := tree.NewUnqualifiedTableName(tree.Name(desc.Name))
+					nr = schemaexpr.NewNameResolver(evalCtx, desc.ID, tn, ib.cols)
+					nr.AddIVarContainerToSemaCtx(&semaCtx)
+				}
+
+				expr, err = nr.ResolveNames(expr)
+				if err != nil {
+					return err
+				}
+
+				texpr, err := tree.TypeCheckAndRequire(ctx, expr, &semaCtx, types.Bool, "partial index predicate")
+				if err != nil {
+					return err
+				}
+
+				// Add the typed predicate expression to the map of predicate
+				// expressions to be evaluated for each row in
+				// BuildIndexEntriesChunk.
+				if ib.predicates == nil {
+					ib.predicates = make(map[sqlbase.IndexID]tree.TypedExpr)
+				}
+				ib.predicates[idx.ID] = texpr
+			}
 		}
 	}
 
-	ib.types = make([]*types.T, len(cols))
-	for i := range cols {
-		ib.types[i] = cols[i].Type
+	ib.types = make([]*types.T, len(ib.cols))
+	for i := range ib.cols {
+		ib.types[i] = ib.cols[i].Type
 	}
 
 	// Hydrate types used by the backfiller.
@@ -400,16 +459,11 @@ func (ib *IndexBackfiller) Init(
 		}
 	}
 
-	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
-	for i := range cols {
-		ib.colIdxMap[cols[i].ID] = i
-	}
-
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       ib.colIdxMap,
-		Cols:            cols,
+		Cols:            ib.cols,
 		ValNeededForCol: valNeededForCol,
 	}
 	return ib.fetcher.Init(
@@ -452,6 +506,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil, nil, err
 	}
 
+	iv := &sqlbase.RowIndexedVarContainer{
+		Cols:    ib.cols,
+		Mapping: ib.colIdxMap,
+	}
+	ib.evalCtx.IVarContainer = iv
+
 	buffer := make([]sqlbase.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
@@ -468,6 +528,36 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			return nil, nil, err
 		}
 
+		iv.CurSourceRow = ib.rowVals
+
+		// For the current row, make a list of the indexes to encode entries
+		// for.
+		indexesToEncode := ib.added
+		if len(ib.predicates) > 0 {
+			indexesToEncode = make([]sqlbase.IndexDescriptor, 0, len(ib.added))
+			for i := range ib.added {
+				idx := &ib.added[i]
+				if !idx.IsPartial() {
+					// If the index is not a partial index, it should always be
+					// included in the list of indexes to create entries for.
+					indexesToEncode = append(indexesToEncode, *idx)
+				}
+
+				// If the index is a partial index, only include it if the
+				// predicate expression evaluates to true.
+				texpr := ib.predicates[idx.ID]
+
+				val, err := texpr.Eval(ib.evalCtx)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				if val == tree.DBoolTrue {
+					indexesToEncode = append(indexesToEncode, *idx)
+				}
+			}
+		}
+
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
 		// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
@@ -477,7 +567,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
 			ib.evalCtx.Codec,
 			tableDesc.TableDesc(),
-			ib.added,
+			indexesToEncode,
 			ib.colIdxMap,
 			ib.rowVals,
 			buffer,

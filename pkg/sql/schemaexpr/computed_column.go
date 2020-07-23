@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,9 +31,9 @@ type ComputedColumnValidator struct {
 	tableName *tree.TableName
 }
 
-// NewComputedColumnValidator returns an ComputedColumnValidator struct that can
-// be used to validate computed columns. See Validate for more details.
-func NewComputedColumnValidator(
+// MakeComputedColumnValidator returns an ComputedColumnValidator struct that
+// can be used to validate computed columns. See Validate for more details.
+func MakeComputedColumnValidator(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
 	semaCtx *tree.SemaContext,
@@ -191,24 +190,6 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescri
 	return nil
 }
 
-// descContainer is a helper type that implements tree.IndexedVarContainer; it
-// is used to type check computed columns and does not support evaluation.
-type descContainer struct {
-	cols []sqlbase.ColumnDescriptor
-}
-
-func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("unsupported")
-}
-
-func (j *descContainer) IndexedVarResolvedType(idx int) *types.T {
-	return j.cols[idx].Type
-}
-
-func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}
-
 // MakeComputedExprs returns a slice of the computed expressions for the
 // slice of input column descriptors, or nil if none of the input column
 // descriptors have computed expressions.
@@ -251,27 +232,14 @@ func MakeComputedExprs(
 			exprStrings = append(exprStrings, *col.ComputeExpr)
 		}
 	}
+
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, err
 	}
 
-	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
-	// columns can reference other columns and thus need to be able to resolve
-	// column names (at this stage they only need to resolve the types so that
-	// the expressions can be typechecked - we have no need to evaluate them).
-	iv := &descContainer{tableDesc.Columns}
-	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
-
-	source := sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
-	semaCtx.IVarContainer = iv
-
-	addColumnInfo := func(col *sqlbase.ColumnDescriptor) {
-		ivarHelper.AppendSlot()
-		iv.cols = append(iv.cols, *col)
-		newCols := sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), []sqlbase.ColumnDescriptor{*col})
-		source.SourceColumns = append(source.SourceColumns, newCols...)
-	}
+	nr := NewNameResolver(evalCtx, tableDesc.ID, tn, tableDesc.Columns)
+	nr.AddIVarContainerToSemaCtx(semaCtx)
 
 	compExprIdx := 0
 	for i := range cols {
@@ -279,12 +247,11 @@ func MakeComputedExprs(
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
 			if addingCols {
-				addColumnInfo(col)
+				nr.AddColumn(col)
 			}
 			continue
 		}
-		expr, err := sqlbase.ResolveNames(
-			exprs[compExprIdx], source, ivarHelper, evalCtx.SessionData.SearchPath)
+		expr, err := nr.ResolveNames(exprs[compExprIdx])
 		if err != nil {
 			return nil, err
 		}
@@ -299,7 +266,7 @@ func MakeComputedExprs(
 		computedExprs = append(computedExprs, typedExpr)
 		compExprIdx++
 		if addingCols {
-			addColumnInfo(col)
+			nr.AddColumn(col)
 		}
 	}
 	return computedExprs, nil

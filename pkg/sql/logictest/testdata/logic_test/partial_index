@@ -455,3 +455,41 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 100  110  100  foo  true
 300  330  300  foo  true
 400  400  400  foo  true
+
+#### Backfill a partial index.
+
+statement ok
+CREATE TABLE e (a INT, b INT)
+
+statement ok
+INSERT INTO e VALUES (1, 10);
+INSERT INTO e VALUES (2, 20);
+INSERT INTO e VALUES (3, 30);
+INSERT INTO e VALUES (4, 40);
+INSERT INTO e VALUES (5, 50);
+INSERT INTO e VALUES (6, 60);
+
+statement ok
+CREATE INDEX c_a_b_gt_30_idx ON e (a) WHERE b > 30
+
+query II
+SELECT * FROM e@c_a_b_gt_30_idx WHERE b > 30
+----
+4  40
+5  50
+6  60
+
+# Insert some rows after the backfill and check that the partial index remains
+# consistent.
+
+statement ok
+INSERT INTO e VALUES (21, 21);
+INSERT INTO e VALUES (61, 61);
+
+query II
+SELECT * FROM e@c_a_b_gt_30_idx WHERE b > 30
+----
+4   40
+5   50
+6   60
+61  61
