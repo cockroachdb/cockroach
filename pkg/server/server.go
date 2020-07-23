@@ -110,28 +110,6 @@ var (
 	)
 )
 
-// TODO(peter): Until go1.11, ServeMux.ServeHTTP was not safe to call
-// concurrently with ServeMux.Handle. So we provide our own wrapper with proper
-// locking. Slightly less efficient because it locks unnecessarily, but
-// safe. See TestServeMuxConcurrency. Should remove once we've upgraded to
-// go1.11.
-type safeServeMux struct {
-	mu  syncutil.RWMutex
-	mux http.ServeMux
-}
-
-func (mux *safeServeMux) Handle(pattern string, handler http.Handler) {
-	mux.mu.Lock()
-	mux.mux.Handle(pattern, handler)
-	mux.mu.Unlock()
-}
-
-func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mux.mu.RLock()
-	mux.mux.ServeHTTP(w, r)
-	mux.mu.RUnlock()
-}
-
 // Server is the cockroach server node.
 type Server struct {
 	// The following fields are populated in NewServer.
@@ -139,7 +117,7 @@ type Server struct {
 	nodeIDContainer *base.NodeIDContainer
 	cfg             Config
 	st              *cluster.Settings
-	mux             safeServeMux
+	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
