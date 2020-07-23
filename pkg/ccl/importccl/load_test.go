@@ -57,8 +57,8 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	aliceDesc := sqlbase.NewInitialDatabaseDescriptor(10000, "alice")
-	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob")
+	aliceDesc := sqlbase.NewInitialDatabaseDescriptor(10000, "alice", sqlbase.AdminRole)
+	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob", sqlbase.AdminRole)
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {

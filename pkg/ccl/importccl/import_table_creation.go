@@ -162,7 +162,7 @@ func MakeSimpleTableDescriptor(
 		keys.PublicSchemaID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
-		sqlbase.NewDefaultPrivilegeDescriptor(),
+		sqlbase.NewDefaultPrivilegeDescriptor(sqlbase.AdminRole),
 		affected,
 		semaCtx,
 		&evalCtx,

@@ -50,7 +50,7 @@ func descForTable(
 		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		priv := sqlbase.NewDefaultPrivilegeDescriptor(sqlbase.AdminRole)
 		desc, err := sql.MakeSequenceTableDesc(
 			name,
 			tree.SequenceOptions{},
