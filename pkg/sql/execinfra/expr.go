@@ -142,15 +142,13 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // DeserializeExpr deserializes expr, binds the indexed variables to the
 // provided IndexedVarHelper, and evaluates any constants in the expression.
 func DeserializeExpr(
-	expr string, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
+	expr string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if expr == "" {
 		return nil, nil
 	}
 
-	semaContext := tree.MakeSemaContext()
-	semaContext.TypeResolver = evalCtx.TypeResolver
-	deserializedExpr, err := processExpression(execinfrapb.Expression{Expr: expr}, evalCtx, &semaContext, vars)
+	deserializedExpr, err := processExpression(execinfrapb.Expression{Expr: expr}, evalCtx, semaCtx, vars)
 	if err != nil {
 		return deserializedExpr, err
 	}
@@ -163,7 +161,10 @@ func DeserializeExpr(
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr execinfrapb.Expression, types []*types.T, evalCtx *tree.EvalContext,
+	expr execinfrapb.Expression,
+	types []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil
@@ -179,7 +180,7 @@ func (eh *ExprHelper) Init(
 		return nil
 	}
 	var err error
-	eh.Expr, err = DeserializeExpr(expr.Expr, evalCtx, &eh.Vars)
+	eh.Expr, err = DeserializeExpr(expr.Expr, semaCtx, evalCtx, &eh.Vars)
 	return err
 }
 

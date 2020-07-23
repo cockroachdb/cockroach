@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,6 +61,15 @@ type FlowCtx struct {
 
 	// Local is true if this flow is being run as part of a local-only query.
 	Local bool
+
+	// TypeResolverFactory is used to construct transaction bound TypeResolvers
+	// to resolve type references during flow setup. It is not safe for concurrent
+	// use and is intended to be used only during flow setup and initialization.
+	// The TypeResolverFactory is initialized when the FlowContext is created
+	// on the gateway node using the planner's descs.Collection and is created
+	// on remote nodes with a new descs.Collection. After the flow is complete,
+	// all descriptors leased from the factory must be released.
+	TypeResolverFactory *descs.DistSQLTypeResolverFactory
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
@@ -71,7 +81,6 @@ type FlowCtx struct {
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	evalCopy := ctx.EvalCtx.Copy()
-	evalCopy.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCopy}
 	return evalCopy
 }
 

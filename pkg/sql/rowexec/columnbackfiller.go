@@ -55,9 +55,7 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	evalCtx := cb.flowCtx.NewEvalCtx()
-	evalCtx.DB = cb.flowCtx.Cfg.DB
-	if err := cb.ColumnBackfiller.Init(ctx, evalCtx, cb.desc); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc); err != nil {
 		return nil, err
 	}
 

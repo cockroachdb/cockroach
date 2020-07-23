@@ -1130,7 +1130,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		ColumnTypes: r.ColumnTypes,
 	}
 	if err := ppr.planFilterExpr(
-		ctx, flowCtx.NewEvalCtx(), onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
+		ctx, flowCtx, flowCtx.NewEvalCtx(), onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
@@ -1183,7 +1183,7 @@ func (r *postProcessResult) planPostProcessSpec(
 ) error {
 	if !post.Filter.Empty() {
 		if err := r.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
+			ctx, flowCtx, flowCtx.NewEvalCtx(), post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
 		); err != nil {
 			return err
 		}
@@ -1193,10 +1193,11 @@ func (r *postProcessResult) planPostProcessSpec(
 		r.addProjection(post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
 			var renderInternalMem int
-			expr, err := args.ExprHelper.ProcessExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes)
+			expr, err := args.ExprHelper.ProcessExpr(renderExpr, semaCtx, flowCtx.EvalCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
@@ -1327,6 +1328,7 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 
 func (r *postProcessResult) planFilterExpr(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
@@ -1334,7 +1336,8 @@ func (r *postProcessResult) planFilterExpr(
 	helper colexec.ExprHelper,
 ) error {
 	var selectionInternalMem int
-	expr, err := helper.ProcessExpr(filter, evalCtx, r.ColumnTypes)
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, r.ColumnTypes)
 	if err != nil {
 		return err
 	}

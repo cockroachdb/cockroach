@@ -562,7 +562,12 @@ func HydrateTypesInTableDescriptor(
 func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver,
 ) error {
-	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
+	typ.TypeMeta.Name = &types.UserDefinedTypeName{
+		Catalog:        name.Catalog(),
+		ExplicitSchema: name.ExplicitSchema,
+		Schema:         name.Schema(),
+		Name:           name.Object(),
+	}
 	typ.TypeMeta.Version = uint32(desc.Version)
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:

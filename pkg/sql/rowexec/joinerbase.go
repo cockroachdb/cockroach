@@ -109,7 +109,8 @@ func (jb *joinerBase) init(
 	); err != nil {
 		return err
 	}
-	return jb.onCond.Init(onExpr, condTypes, jb.EvalCtx)
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	return jb.onCond.Init(onExpr, condTypes, semaCtx, jb.EvalCtx)
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.
