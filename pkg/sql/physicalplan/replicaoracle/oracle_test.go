@@ -57,7 +57,7 @@ func TestClosest(t *testing.T) {
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},
 		},
-	}, nil /* lease */, QueryState{})
+	}, nil /* leaseHolder */, QueryState{})
 	if err != nil {
 		t.Fatalf("Failed to choose closest replica: %v", err)
 	}
