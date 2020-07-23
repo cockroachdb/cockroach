@@ -141,7 +141,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		stopper:         stop.NewStopper(),
 		replicationMode: args.ReplicationMode,
 	}
-	tc.stopper = stop.NewStopper()
 
 	// Check if any of the args have a locality set.
 	noLocalities := true
