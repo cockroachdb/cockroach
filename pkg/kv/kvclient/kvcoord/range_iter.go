@@ -71,21 +71,13 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 	return ri.token.Desc()
 }
 
-// Lease returns information about the lease of the range at which the iterator
-// is currently positioned. The iterator must be valid.
+// Leaseholder returns information about the leaseholder of the range at which
+// the iterator is currently positioned. The iterator must be valid.
 //
 // The lease information comes from a cache, and so it can be stale. Returns nil
 // if no lease information is known.
 //
 // The returned lease is immutable.
-func (ri *RangeIterator) Lease() *roachpb.Lease {
-	if !ri.Valid() {
-		panic(ri.Error())
-	}
-	return ri.token.Lease()
-}
-
-// Leaseholder returns the current leaseholder, if one is known. Nil otherwise.
 func (ri *RangeIterator) Leaseholder() *roachpb.ReplicaDescriptor {
 	if !ri.Valid() {
 		panic(ri.Error())
