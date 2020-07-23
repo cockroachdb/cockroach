@@ -146,7 +146,25 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 
 		if h.useStartSingleNode(vers) {
-			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
+			// `cockroach start-single-node` auto-bootstraps, so we skip doing
+			// so ourselves.
+			//
+			// TODO(irfansharif): We don't seem to be setting cluster settings
+			// for clusters started using `start-single-node`, we should.
+			//
+			// TODO(irfansharif): We shouldn't explicitly bootstrap clusters
+			// running versions <20.1, as the join flags are constructed in a
+			// way such that node 1 is started with an empty join flag, and thus
+			// auto-bootstraps.
+			//
+			// TODO(irfansharif): `roachprod start --sequential` is broken.
+			// Given we bootstrap the cluster after having started all the
+			// servers in parallel, there's no longer any guarantee that node
+			// IDs will have been allocated in sequential order. What we should
+			// do here instead is initialize the cluster as soon as we start
+			// node 1, that way subsequent node additions will be allocated the
+			// right node IDs.
+			bootstrap = false
 		}
 
 		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
