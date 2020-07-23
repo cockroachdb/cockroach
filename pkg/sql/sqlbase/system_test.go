@@ -21,7 +21,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 	for inner, should := range map[DescriptorInterface]bool{
 		NewImmutableTableDescriptor(TableDescriptor{}):                    true,
 		NewImmutableTableDescriptor(TableDescriptor{ViewQuery: "SELECT"}): false,
-		NewInitialDatabaseDescriptor(42, "db"):                            false,
+		NewInitialDatabaseDescriptor(42, "db", AdminRole):                 false,
 		NewMutableCreatedTypeDescriptor(TypeDescriptor{}):                 false,
 		NewImmutableSchemaDescriptor(SchemaDescriptor{}):                  false,
 	} {

@@ -627,9 +627,12 @@ admin     newgroup  false
 admin     root      true
 newgroup  testuser  false
 
+
+user root
 statement ok
 CREATE DATABASE db2
 
+user testuser
 statement ok
 DROP DATABASE db1
 

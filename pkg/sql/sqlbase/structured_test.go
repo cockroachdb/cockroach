@@ -67,7 +67,7 @@ func TestAllocateIDs(t *testing.T) {
 				return idx
 			}(),
 		},
-		Privileges:    NewDefaultPrivilegeDescriptor(),
+		Privileges:    NewDefaultPrivilegeDescriptor(AdminRole),
 		FormatVersion: FamilyFormatVersion,
 	})
 	if err := desc.AllocateIDs(); err != nil {
@@ -108,7 +108,7 @@ func TestAllocateIDs(t *testing.T) {
 				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				EncodingType:     PrimaryIndexEncoding},
 		},
-		Privileges:     NewDefaultPrivilegeDescriptor(),
+		Privileges:     NewDefaultPrivilegeDescriptor(AdminRole),
 		NextColumnID:   4,
 		NextFamilyID:   1,
 		NextIndexID:    5,
@@ -926,7 +926,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	for i, test := range tests {
 		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = NewDefaultPrivilegeDescriptor()
+			otherDesc.Privileges = NewDefaultPrivilegeDescriptor(AdminRole)
 			var v roachpb.Value
 			desc := &Descriptor{Union: &Descriptor_Table{Table: &otherDesc}}
 			if err := v.SetProto(desc); err != nil {
@@ -1324,7 +1324,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: FamilyFormatVersion,
 		Indexes:       []IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    NewDefaultPrivilegeDescriptor(),
+		Privileges:    NewDefaultPrivilegeDescriptor(AdminRole),
 		OutboundFKs: []ForeignKeyConstraint{
 			{
 				Name:              "fk",

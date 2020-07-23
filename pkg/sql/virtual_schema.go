@@ -16,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -657,10 +658,12 @@ func NewVirtualSchemaHolder(
 // all users. However, virtual schemas have more fine-grained access control.
 // For instance, information_schema will only expose rows to a given user which that
 // user has access to.
-var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
+var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(
+	sqlbase.PublicRole, privilege.List{privilege.SELECT}, security.NodeUser)
 
 func initVirtualDatabaseDesc(id sqlbase.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
-	return sqlbase.NewInitialDatabaseDescriptorWithPrivileges(id, name, publicSelectPrivileges)
+	return sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
+		id, name, publicSelectPrivileges)
 }
 
 // getEntries is part of the VirtualTabler interface.

@@ -108,6 +108,9 @@ var validationMap = []struct {
 			"OutboundFKs":    {status: iSolemnlySwearThisFieldIsValidated},
 			"InboundFKs":     {status: iSolemnlySwearThisFieldIsValidated},
 			"Temporary":      {status: thisFieldReferencesNoObjects},
+			"Owner": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "Unsure how to handle validation as descriptors created before " +
+					"20.1 will have no owner."},
 		},
 	},
 	{

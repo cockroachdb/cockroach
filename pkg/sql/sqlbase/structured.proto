@@ -1062,7 +1062,6 @@ message TypeDescriptor {
   optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
   repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
 
-
   // Fields that are shared among all kinds of user defined types.
 
   // parent_id represents the ID of the database that this type resides in.

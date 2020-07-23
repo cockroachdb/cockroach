@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -86,6 +87,14 @@ func (p *planner) CheckPrivilege(
 	p.maybeAudit(descriptor, privilege)
 
 	user := p.SessionData().User
+
+	// If the user is the owner of the object being checked, they have all
+	// privileges.
+	// TODO(richardjcai): Add checks for if the user owns the parent of the object.
+	// Ie, being the owner of a database gives access to all tables in the db.
+	if isOwner(descriptor, user) {
+		return nil
+	}
 	privs := descriptor.GetPrivileges()
 
 	// Check if 'user' itself has privileges.
@@ -106,6 +115,9 @@ func (p *planner) CheckPrivilege(
 
 	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
 	for role := range memberOf {
+		if isOwner(descriptor, role) {
+			return nil
+		}
 		if privs.CheckPrivilege(role, privilege) {
 			return nil
 		}
@@ -114,6 +126,52 @@ func (p *planner) CheckPrivilege(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
+}
+
+// isOwner returns if the role has ownership privilege of the descriptor.
+func isOwner(desc sqlbase.DescriptorInterface, role string) bool {
+	// Descriptors created prior to 20.2 do not have owners set.
+	owner := desc.GetPrivileges().Owner
+
+	if owner == "" {
+		// If the descriptor is ownerless and the descriptor is part of the system db,
+		// node is the owner.
+		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
+			owner = security.NodeUser
+		} else {
+			// This check is redundant in this case since admin already has privilege
+			// on all non-system objects.
+			owner = sqlbase.AdminRole
+		}
+	}
+
+	return role == owner
+}
+
+// HasOwnership returns if the role or any role the role is a member of
+// has ownership privilege of the desc.
+func (p *planner) HasOwnership(
+	ctx context.Context, descriptor sqlbase.DescriptorInterface,
+) (bool, error) {
+	user := p.SessionData().User
+
+	if isOwner(descriptor, user) {
+		return true, nil
+	}
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	for role := range memberOf {
+		if isOwner(descriptor, role) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
