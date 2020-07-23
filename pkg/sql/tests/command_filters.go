@@ -11,12 +11,11 @@
 package tests
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // CommandFilters provides facilities for registering "TestingCommandFilters"
@@ -108,5 +107,5 @@ func (c *CommandFilters) removeFilter(id int) {
 			return
 		}
 	}
-	panic(fmt.Sprintf("failed to find filter with id: %d.", id))
+	panic(errors.AssertionFailedf("failed to find filter with id: %d.", id))
 }

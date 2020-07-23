@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,6 +47,10 @@ func registerDiskStalledDetection(r *testRegistry) {
 func runDiskStalledDetection(
 	ctx context.Context, t *test, c *cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
+	if local && runtime.GOOS != "linux" {
+		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
+	}
+
 	n := c.Node(1)
 
 	c.Put(ctx, cockroach, "./cockroach")
@@ -100,7 +105,7 @@ func runDiskStalledDetection(
 		out, err := c.RunWithBuffer(ctx, l, n,
 			fmt.Sprintf("timeout --signal 9 %ds env COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL=true "+
 				"COCKROACH_ENGINE_MAX_SYNC_DURATION=%s COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
-				"./cockroach start --insecure --logtostderr=INFO --store {store-dir}/%s --log-dir {store-dir}/%s",
+				"./cockroach start-single-node --insecure --logtostderr=INFO --store {store-dir}/%s --log-dir {store-dir}/%s",
 				int(dur.Seconds()), maxDataSync, maxLogSync, dataDir, logDir,
 			),
 		)

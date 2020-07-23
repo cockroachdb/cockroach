@@ -152,7 +152,7 @@ func (fr *FlowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 		entry.refCount--
 	} else {
 		if entry.refCount != 1 {
-			panic(fmt.Sprintf("invalid refCount: %d", entry.refCount))
+			panic(errors.AssertionFailedf("invalid refCount: %d", entry.refCount))
 		}
 		delete(fr.flows, id)
 		fr.flowDone.Signal()

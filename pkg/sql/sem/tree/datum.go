@@ -2153,8 +2153,10 @@ var dZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
-	// TimestampOutputFormat is used to output all timestamps.
-	TimestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+	// TimestampTZOutputFormat is used to output all TimestampTZs.
+	TimestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+	// TimestampOutputFormat is used to output all Timestamps.
+	TimestampOutputFormat = "2006-01-02 15:04:05.999999"
 )
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
@@ -2498,7 +2500,7 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Time.Format(TimestampOutputFormat))
+	ctx.WriteString(d.Time.Format(TimestampTZOutputFormat))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}

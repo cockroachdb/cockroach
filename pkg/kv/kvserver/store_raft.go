@@ -61,9 +61,6 @@ func (s *Store) HandleSnapshot(
 	})
 }
 
-// learnerType exists to avoid allocating on every coalesced beat to a learner.
-var learnerType = roachpb.LEARNER
-
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []RaftHeartbeat,
@@ -100,9 +97,6 @@ func (s *Store) uncoalesceBeats(
 			},
 			Message: msg,
 			Quiesce: beat.Quiesce,
-		}
-		if beat.ToIsLearner {
-			beatReqs[i].ToReplica.Type = &learnerType
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -190,7 +184,6 @@ func (s *Store) withReplicaForRequest(
 		req.RangeID,
 		req.ToReplica.ReplicaID,
 		&req.FromReplica,
-		req.ToReplica.GetType() == roachpb.LEARNER,
 	)
 	if err != nil {
 		return roachpb.NewError(err)

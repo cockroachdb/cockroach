@@ -345,7 +345,7 @@ func explainGetDistributedAndVectorized(
 	// special rows.
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution = getPlanDistributionForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
 	willDistribute := distribution.WillDistribute()

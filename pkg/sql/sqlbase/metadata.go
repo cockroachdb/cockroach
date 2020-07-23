@@ -12,7 +12,6 @@ package sqlbase
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // DescriptorKey is the interface implemented by both
@@ -52,7 +52,7 @@ func wrapDescriptor(descriptor protoutil.Message) *Descriptor {
 	case *SchemaDescriptor:
 		desc.Union = &Descriptor_Schema{Schema: t}
 	default:
-		panic(fmt.Sprintf("unknown descriptor type: %T", descriptor))
+		panic(errors.AssertionFailedf("unknown descriptor type: %T", descriptor))
 	}
 	return desc
 }
@@ -90,7 +90,7 @@ func MakeMetadataSchema(
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorInterface) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
-		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
+		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
 	for _, d := range ms.descs {
 		if d.desc.GetID() == desc.GetID() {

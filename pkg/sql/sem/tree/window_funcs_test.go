@@ -50,7 +50,7 @@ func testRangeMode(t *testing.T, count int) {
 	testEndPreceding(t, evalCtx, wfr, types.Float)
 	testEndFollowing(t, evalCtx, wfr, types.Float)
 
-	wfr.Rows = makeDecimalSortedPartition(count)
+	wfr.Rows = makeDecimalSortedPartition(t, count)
 	wfr.PlusOp, wfr.MinusOp, _ = WindowFrameRangeOps{}.LookupImpl(types.Decimal, types.Decimal)
 	testStartPreceding(t, evalCtx, wfr, types.Decimal)
 	testStartFollowing(t, evalCtx, wfr, types.Decimal)
@@ -77,7 +77,7 @@ func testStartPreceding(
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
 		default:
-			panic("unsupported offset type")
+			t.Fatal("unsupported offset type")
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -99,7 +99,7 @@ func testStartPreceding(
 						t.Errorf("FrameStartIdx returned wrong result on Preceding: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
-						panic("")
+						t.Fatal("")
 					}
 					break
 				}
@@ -127,7 +127,7 @@ func testStartFollowing(
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
 		default:
-			panic("unsupported offset type")
+			t.Fatal("unsupported offset type")
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -145,7 +145,7 @@ func testStartFollowing(
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
-						panic("")
+						t.Fatal("")
 					}
 					break
 				}
@@ -158,7 +158,7 @@ func testStartFollowing(
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
-						panic("")
+						t.Fatal("")
 					}
 					break
 				}
@@ -186,7 +186,7 @@ func testEndPreceding(
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
 		default:
-			panic("unsupported offset type")
+			t.Fatal("unsupported offset type")
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -208,7 +208,7 @@ func testEndPreceding(
 						t.Errorf("FrameEndIdx returned wrong result on Preceding: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
-						panic("")
+						t.Fatal("")
 					}
 					break
 				}
@@ -236,7 +236,7 @@ func testEndFollowing(
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
 		default:
-			panic("unsupported offset type")
+			t.Fatal("unsupported offset type")
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -258,7 +258,7 @@ func testEndFollowing(
 						t.Errorf("FrameEndIdx returned wrong result on Following: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
-						panic("")
+						t.Fatal("")
 					}
 					break
 				}
@@ -293,7 +293,7 @@ func makeFloatSortedPartition(count int) indexedRows {
 	return partition
 }
 
-func makeDecimalSortedPartition(count int) indexedRows {
+func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	number := &DDecimal{}
@@ -302,21 +302,21 @@ func makeDecimalSortedPartition(count int) indexedRows {
 		if r.Float64() < probabilityOfNewNumber {
 			_, err := tmp.SetFloat64(r.Float64() * 10)
 			if err != nil {
-				panic(fmt.Sprintf("unexpected error: %v", err))
+				t.Fatalf("unexpected error: %v", err)
 			}
 			_, err = ExactCtx.Add(&number.Decimal, &number.Decimal, &tmp)
 			if err != nil {
-				panic(fmt.Sprintf("unexpected error: %v", err))
+				t.Fatalf("unexpected error: %v", err)
 			}
 		}
 		value := &DDecimal{}
 		_, err := tmp.SetFloat64(0)
 		if err != nil {
-			panic(fmt.Sprintf("unexpected error: %v", err))
+			t.Fatalf("unexpected error: %v", err)
 		}
 		_, err = ExactCtx.Add(&value.Decimal, &number.Decimal, &tmp)
 		if err != nil {
-			panic(fmt.Sprintf("unexpected error: %v", err))
+			t.Fatalf("unexpected error: %v", err)
 		}
 		partition.rows[idx] = indexedRow{idx: idx, row: Datums{value}}
 	}

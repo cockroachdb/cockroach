@@ -11,8 +11,6 @@
 package sqlbase
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -50,7 +48,7 @@ func ToScanLockingStrength(s tree.LockingStrength) ScanLockingStrength {
 	case tree.ForUpdate:
 		return ScanLockingStrength_FOR_UPDATE
 	default:
-		panic(fmt.Sprintf("unknown locking strength %s", s))
+		panic(errors.AssertionFailedf("unknown locking strength %s", s))
 	}
 }
 
@@ -79,6 +77,6 @@ func ToScanLockingWaitPolicy(wp tree.LockingWaitPolicy) ScanLockingWaitPolicy {
 	case tree.LockWaitError:
 		return ScanLockingWaitPolicy_ERROR
 	default:
-		panic(fmt.Sprintf("unknown locking wait policy %s", wp))
+		panic(errors.AssertionFailedf("unknown locking wait policy %s", wp))
 	}
 }

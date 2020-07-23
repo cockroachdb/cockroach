@@ -119,7 +119,7 @@ func (ex *connExecutor) execStmt(
 	case stateCommitWait:
 		ev, payload = ex.execStmtInCommitWaitState(stmt, res)
 	default:
-		panic(fmt.Sprintf("unexpected txn state: %#v", ex.machine.CurState()))
+		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
 
 	if ex.sessionData.IdleInSessionTimeout > 0 {
@@ -789,7 +789,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
+		ctx, planner, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
 	).WillDistribute()
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
@@ -803,7 +803,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
 	if !ok {
 		ex.mu.Unlock()
-		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
+		panic(errors.AssertionFailedf("query %d not in registry", stmt.queryID))
 	}
 	queryMeta.phase = executing
 	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
@@ -1286,7 +1286,7 @@ func (ex *connExecutor) addActiveQuery(
 		_, ok := ex.mu.ActiveQueries[queryID]
 		if !ok {
 			ex.mu.Unlock()
-			panic(fmt.Sprintf("query %d missing from ActiveQueries", queryID))
+			panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 		}
 		delete(ex.mu.ActiveQueries, queryID)
 		ex.mu.LastActiveQuery = stmt.AST

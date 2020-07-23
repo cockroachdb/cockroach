@@ -31,7 +31,7 @@ func EncodingDirToDatumEncoding(dir encoding.Direction) DatumEncoding {
 	case encoding.Descending:
 		return DatumEncoding_DESCENDING_KEY
 	default:
-		panic(fmt.Sprintf("invalid encoding direction: %d", dir))
+		panic(errors.AssertionFailedf("invalid encoding direction: %d", dir))
 	}
 }
 
@@ -107,7 +107,7 @@ func (ed EncDatum) Size() uintptr {
 // The underlying Datum is nil.
 func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
-		panic(fmt.Sprintf("empty encoded value"))
+		panic(errors.AssertionFailedf("empty encoded value"))
 	}
 	return EncDatum{
 		encoding: enc,
@@ -142,7 +142,7 @@ func EncDatumFromBuffer(typ *types.T, enc DatumEncoding, buf []byte) (EncDatum, 
 		ed := EncDatumFromEncoded(enc, buf[typeOffset:encLen])
 		return ed, buf[encLen:], nil
 	default:
-		panic(fmt.Sprintf("unknown encoding %s", enc))
+		panic(errors.AssertionFailedf("unknown encoding %s", enc))
 	}
 }
 
@@ -165,12 +165,12 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 	if d == nil {
-		panic("Cannot convert nil datum to EncDatum")
+		panic(errors.AssertionFailedf("Cannot convert nil datum to EncDatum"))
 	}
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(fmt.Sprintf("invalid datum type given: %s, expected %s", dTyp, ctyp))
+		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp, ctyp))
 	}
 	return EncDatum{Datum: d}
 }
@@ -194,7 +194,7 @@ func (ed *EncDatum) IsNull() bool {
 		return ed.Datum == tree.DNull
 	}
 	if ed.encoded == nil {
-		panic("IsNull on unset EncDatum")
+		panic(errors.AssertionFailedf("IsNull on unset EncDatum"))
 	}
 	switch ed.encoding {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
@@ -204,12 +204,12 @@ func (ed *EncDatum) IsNull() bool {
 	case DatumEncoding_VALUE:
 		_, _, _, typ, err := encoding.DecodeValueTag(ed.encoded)
 		if err != nil {
-			panic(err)
+			panic(errors.WithAssertionFailure(err))
 		}
 		return typ == encoding.Null
 
 	default:
-		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+		panic(errors.AssertionFailedf("unknown encoding %s", ed.encoding))
 	}
 }
 
@@ -275,7 +275,7 @@ func (ed *EncDatum) Encode(
 	case DatumEncoding_VALUE:
 		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
-		panic(fmt.Sprintf("unknown encoding requested %s", enc))
+		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
 	}
 }
 
@@ -381,7 +381,7 @@ type EncDatumRow []EncDatum
 
 func (r EncDatumRow) stringToBuf(types []*types.T, a *DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
-		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
+		panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
 	}
 	b.WriteString("[")
 	for i := range r {
@@ -468,7 +468,7 @@ func (r EncDatumRow) Compare(
 	rhs EncDatumRow,
 ) (int, error) {
 	if len(r) != len(types) || len(rhs) != len(types) {
-		panic(fmt.Sprintf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
+		panic(errors.AssertionFailedf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
 	}
 	for _, c := range ordering {
 		cmp, err := r[c.ColIdx].Compare(types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])

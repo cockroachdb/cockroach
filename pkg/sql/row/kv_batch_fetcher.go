@@ -13,7 +13,6 @@ package row
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -144,7 +143,7 @@ func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
 		return lock.Exclusive
 
 	default:
-		panic(fmt.Sprintf("unknown locking strength %s", f.lockStr))
+		panic(errors.AssertionFailedf("unknown locking strength %s", f.lockStr))
 	}
 }
 

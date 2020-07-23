@@ -1127,7 +1127,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 
 			start := timeutil.Now()
 			if len(idx.ColumnNames) != 1 {
-				panic(fmt.Sprintf("expected inverted index %s to have exactly 1 column, but found columns %+v",
+				panic(errors.AssertionFailedf("expected inverted index %s to have exactly 1 column, but found columns %+v",
 					idx.Name, idx.ColumnNames))
 			}
 			col := idx.ColumnNames[0]

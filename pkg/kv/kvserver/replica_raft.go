@@ -1066,7 +1066,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		Term:          msg.Term,
 		Commit:        msg.Commit,
 		Quiesce:       quiesce,
-		ToIsLearner:   toReplica.GetType() == roachpb.LEARNER,
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -1606,9 +1605,9 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
-		rightReplDesc.ReplicaID, nil, /* creatingReplica */
-		rightReplDesc.GetType() == roachpb.LEARNER)
+	rightRepl, _, err := r.store.getOrCreateReplica(
+		ctx, split.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
+	)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
 	if errors.HasType(err, (*roachpb.RaftGroupDeletedError)(nil)) {
@@ -1636,18 +1635,10 @@ func (r *Replica) acquireMergeLock(
 	// for the right-hand range will block on raftMu, waiting for the merge to
 	// complete, after which the replica will realize it has been destroyed and
 	// reject the snapshot.
-	//
-	// These guarantees would not be held if we were catching up from a preemptive
-	// snapshot and were not part of the range. That scenario, however, never
-	// arises because prior to 19.2 we would ensure that a preemptive snapshot had
-	// been applied before adding a store to the range which would fail if the
-	// range had merged another range and in 19.2 we detect if the raft messages
-	// we're processing are for a learner and our current state is due to a
-	// preemptive snapshot and remove the preemptive snapshot.
 	rightReplDesc, _ := merge.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID,
-		rightReplDesc.ReplicaID, nil, /* creatingReplica */
-		rightReplDesc.GetType() == roachpb.LEARNER)
+	rightRepl, _, err := r.store.getOrCreateReplica(
+		ctx, merge.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
+	)
 	if err != nil {
 		return nil, err
 	}

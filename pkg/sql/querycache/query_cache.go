@@ -11,12 +11,12 @@
 package querycache
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // C is a query cache, keyed on SQL statement strings (which can contain
@@ -275,21 +275,21 @@ func (c *C) check() {
 		numUsed++
 		memUsed += e.memoryEstimate()
 		if e.SQL == "" {
-			panic(fmt.Sprintf("used entry with empty SQL"))
+			panic(errors.AssertionFailedf("used entry with empty SQL"))
 		}
 		if me, ok := c.mu.m[e.SQL]; !ok {
-			panic(fmt.Sprintf("used entry %s not in map", e.SQL))
+			panic(errors.AssertionFailedf("used entry %s not in map", e.SQL))
 		} else if e != me {
-			panic(fmt.Sprintf("map entry for %s doesn't match used entry", e.SQL))
+			panic(errors.AssertionFailedf("map entry for %s doesn't match used entry", e.SQL))
 		}
 	}
 
 	if numUsed != len(c.mu.m) {
-		panic(fmt.Sprintf("map length %d doesn't match used list size %d", len(c.mu.m), numUsed))
+		panic(errors.AssertionFailedf("map length %d doesn't match used list size %d", len(c.mu.m), numUsed))
 	}
 
 	if memUsed+c.mu.availableMem != c.totalMem {
-		panic(fmt.Sprintf(
+		panic(errors.AssertionFailedf(
 			"memory usage doesn't add up: used=%d available=%d total=%d",
 			memUsed, c.mu.availableMem, c.totalMem,
 		))

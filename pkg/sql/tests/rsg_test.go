@@ -324,7 +324,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(ft.VarType))
 			}
 		default:
-			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
+			panic(errors.AssertionFailedf("unknown fn.Types: %T", ft))
 		}
 		var limit string
 		switch strings.ToLower(nb.name) {

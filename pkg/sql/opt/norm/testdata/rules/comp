@@ -122,7 +122,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── (s:4::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [outer=(4), stable]
+      └── (s:4::DATE + '02:00:00') = '2000-01-01 02:00:00' [outer=(4), stable]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
@@ -637,7 +637,7 @@ project
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 >= '2020-06-01 13:35:55+00:00' [as="?column?":5, outer=(1)]
+      └── ts:1 >= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunction
@@ -648,7 +648,7 @@ project
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":5, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunction
@@ -718,4 +718,4 @@ project
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":5, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
