@@ -173,7 +173,11 @@ func splitPostApply(
 	}
 
 	// Update store stats with difference in stats before and after split.
-	r.store.metrics.addMVCCStats(deltaMS)
+	if tenantID, ok := r.TenantID(); ok {
+		r.store.metrics.addMVCCStats(ctx, tenantID, deltaMS)
+	} else {
+		log.Fatalf(ctx, "%s: found replica which is part of a split without a valid tenant ID", r)
+	}
 
 	now := r.store.Clock().Now()
 
