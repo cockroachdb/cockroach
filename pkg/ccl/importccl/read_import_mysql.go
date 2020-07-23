@@ -392,9 +392,9 @@ func mysqlTableToCockroach(
 	}
 
 	var seqDesc *sqlbase.TableDescriptor
+	owner := sqlbase.AdminRole
 	// If we have an auto-increment seq, create it and increment the id.
 	if seqName != "" {
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
@@ -404,6 +404,10 @@ func mysqlTableToCockroach(
 		var err error
 		if p != nil {
 			params := p.RunParams(ctx)
+			if params.SessionData() != nil {
+				owner = params.SessionData().User
+			}
+			priv := sqlbase.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,
@@ -416,6 +420,7 @@ func mysqlTableToCockroach(
 				&params,
 			)
 		} else {
+			priv := sqlbase.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,

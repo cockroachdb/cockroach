@@ -563,7 +563,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.Descriptor {
 		return sqlbase.NewInitialDatabaseDescriptor(
-			sqlbase.ID(i), "foo",
+			sqlbase.ID(i), "foo", sqlbase.AdminRole,
 		).DescriptorProto()
 	}
 

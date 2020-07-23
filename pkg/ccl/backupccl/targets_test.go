@@ -46,7 +46,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			return *desc.DescriptorProto()
 		}
 		mkDB := func(id sqlbase.ID, name string) sqlbase.Descriptor {
-			return *sqlbase.NewInitialDatabaseDescriptor(id, name).DescriptorProto()
+			return *sqlbase.NewInitialDatabaseDescriptor(id, name, sqlbase.AdminRole).DescriptorProto()
 		}
 		mkTyp := func(desc typDesc) sqlbase.Descriptor {
 			return *sqlbase.NewImmutableTypeDescriptor(desc).DescriptorProto()
