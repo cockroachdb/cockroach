@@ -966,8 +966,8 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
-	r.store.metrics.addMVCCStats(*s.Stats)
+	r.store.metrics.subtractMVCCStats(r.tenantID, *r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(r.tenantID, *s.Stats)
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
 	// by r.leasePostApply, but we called those above, so now it's safe to

@@ -304,6 +304,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 			log.Fatalf(ctx, "failed to decode tenant prefix from key for "+
 				"replica %v: %v", r, err)
 		}
+		r.store.metrics.ensureTenant(tenantID)
 		r.tenantID = tenantID
 	}
 

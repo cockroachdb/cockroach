@@ -1483,7 +1483,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rep.GetMVCCStats())
+			s.metrics.addMVCCStats(rep.tenantID, rep.GetMVCCStats())
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica

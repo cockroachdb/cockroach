@@ -132,7 +132,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
-	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
+	s.metrics.subtractMVCCStats(rep.tenantID, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 

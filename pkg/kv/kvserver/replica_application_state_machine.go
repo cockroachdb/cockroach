@@ -889,7 +889,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
 	deltaStats.Subtract(prevStats)
-	r.store.metrics.addMVCCStats(deltaStats)
+	r.store.metrics.addMVCCStats(r.tenantID, deltaStats)
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
