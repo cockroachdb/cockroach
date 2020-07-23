@@ -405,7 +405,6 @@ func (p *payloadWriter) Write(buf []byte) (int, error) {
 	_, err := p.ie.QueryEx(p.ctx, "insert-file-chunk", p.txn, p.execSessionDataOverride,
 		insertChunkQuery, p.filename, p.byteOffset, buf)
 	if err != nil {
-		p.txn.CleanupOnError(p.ctx, err)
 		return 0, err
 	}
 
@@ -503,7 +502,6 @@ func (w *chunkWriter) Close() error {
 	// propagated here.
 	if w.buf.Len() > 0 {
 		if n, err := w.pw.Write(w.buf.Bytes()); err != nil || n != w.buf.Len() {
-			w.pw.txn.CleanupOnError(w.pw.ctx, err)
 			return err
 		}
 	}
@@ -514,14 +512,7 @@ func (w *chunkWriter) Close() error {
 	_, err := w.pw.ie.QueryEx(w.pw.ctx, "insert-file-name", w.pw.txn,
 		w.execSessionDataOverride, fileNameQuery, w.pw.filename, w.pw.byteOffset,
 		w.execSessionDataOverride.User)
-	if err != nil {
-		w.pw.txn.CleanupOnError(w.pw.ctx, err)
-		return err
-	}
-
-	// Commit the txn after all the payload bytes have been written and the
-	// metadata entry has been inserted.
-	return w.pw.txn.CommitOrCleanup(w.pw.ctx)
+	return err
 }
 
 // fileReader reads the file payload from the underlying Payload table.
@@ -718,7 +709,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 // the last chunk and commit the txn within which all writes occur.
 // An error at any point of the write aborts the txn.
 func (f *FileToTableSystem) NewFileWriter(
-	ctx context.Context, filename string, chunkSize int,
+	ctx context.Context, filename string, chunkSize int, txn *kv.Txn,
 ) (io.WriteCloser, error) {
 	e, err := resolveInternalFileToTableExecutor(f.executor)
 	if err != nil {
@@ -726,6 +717,5 @@ func (f *FileToTableSystem) NewFileWriter(
 	}
 
 	return newChunkWriter(ctx, chunkSize, filename, f.username, f.GetFQFileTableName(),
-		f.GetFQPayloadTableName(), e.ie,
-		e.db.NewTxn(ctx, f.qualifiedTableName)), nil
+		f.GetFQPayloadTableName(), e.ie, txn), nil
 }
