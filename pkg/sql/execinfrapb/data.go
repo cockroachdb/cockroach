@@ -14,13 +14,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -72,60 +68,6 @@ func ConvertToMappedSpecOrdering(
 		}
 	}
 	return specOrdering
-}
-
-// DistSQLTypeResolver implements tree.ResolvableTypeReference for accessing
-// type information during DistSQL query evaluation.
-type DistSQLTypeResolver struct {
-	EvalContext *tree.EvalContext
-	// TODO (rohany): This struct should locally cache id -> types.T here
-	//  so that repeated lookups do not incur additional KV operations.
-}
-
-// ResolveType implements tree.ResolvableTypeReference.
-func (tr *DistSQLTypeResolver) ResolveType(
-	context.Context, *tree.UnresolvedObjectName,
-) (*types.T, error) {
-	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
-}
-
-func makeTypeLookupFunc(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) sqlbase.TypeLookupFunc {
-	return func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
-	}
-}
-
-// ResolveTypeByID implements tree.ResolvableTypeReference.
-func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	// TODO (rohany): This should eventually look into the set of cached type
-	//  descriptors before attempting to access it here.
-	lookup := makeTypeLookupFunc(ctx, tr.EvalContext.Txn, tr.EvalContext.Codec)
-	name, typDesc, err := lookup(ctx, sqlbase.ID(id))
-	if err != nil {
-		return nil, err
-	}
-	return typDesc.MakeTypesT(ctx, name, lookup)
-}
-
-// HydrateTypeSlice hydrates all user defined types in an input slice of types.
-func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
-	// TODO (rohany): This should eventually look into the set of cached type
-	//  descriptors before attempting to access it here.
-	lookup := makeTypeLookupFunc(evalCtx.Context, evalCtx.Txn, evalCtx.Codec)
-	for _, t := range typs {
-		if t.UserDefined() {
-			name, typDesc, err := lookup(evalCtx.Context, sqlbase.ID(t.StableTypeID()))
-			if err != nil {
-				return err
-			}
-			if err := typDesc.HydrateTypeInfoWithName(evalCtx.Context, t, name, lookup); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper

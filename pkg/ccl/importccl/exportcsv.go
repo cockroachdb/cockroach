@@ -149,7 +149,8 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
+	semaCtx := tree.MakeSemaContext()
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil

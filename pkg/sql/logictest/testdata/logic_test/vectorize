@@ -1270,3 +1270,14 @@ query B
 SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc@i
 ----
 true
+
+# Regression test to ensure that we can EXPLAIN (VEC) plans that contain user
+# defined types. We aren't interested in the output here, but are just ensuring
+# that we don't panic.
+statement ok
+RESET vectorize;
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello');
+CREATE TABLE greeting_table (x greeting);
+EXPLAIN (VEC) SELECT * FROM greeting_table;
+SET vectorize = experimental_always

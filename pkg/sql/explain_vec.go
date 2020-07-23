@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -129,6 +130,9 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, params runParams) *execi
 			Settings:       params.p.execCfg.Settings,
 			DiskMonitor:    &mon.BytesMonitor{},
 			VecFDSemaphore: params.p.execCfg.DistSQLSrv.VecFDSemaphore,
+		},
+		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
+			Descriptors: params.p.Descriptors(),
 		},
 	}
 }

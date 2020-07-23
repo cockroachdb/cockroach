@@ -3100,9 +3100,6 @@ type EvalContext struct {
 
 	Tenant TenantOperator
 
-	// TypeResolver is a type resolver that can be used during execution.
-	TypeResolver TypeReferenceResolver
-
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
 	// A handle to the database.
