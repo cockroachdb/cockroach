@@ -145,24 +145,14 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			return nil, err
 		}
 
-		startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
-		if err != nil {
-			return nil, err
-		}
-
-		sess, err := c.newSession(nodes[nodeIdx])
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-
 		if h.useStartSingleNode(vers) {
 			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
 		}
 
-		if out, err := sess.CombinedOutput(startCmd); err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", startCmd, out)
+		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
+			return nil, err
 		}
+
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
 		return nil, nil
@@ -313,6 +303,28 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) startNode(
+	nodeIdx int, extraArgs []string, vers *version.Version,
+) (string, error) {
+	startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
+	if err != nil {
+		return "", err
+	}
+
+	nodes := h.c.ServerNodes()
+	sess, err := h.c.newSession(nodes[nodeIdx])
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(startCmd)
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", startCmd, out)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (h *crdbStartHelper) generateStartCmd(
