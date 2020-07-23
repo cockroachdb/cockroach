@@ -218,7 +218,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
 		}
 
-		var keyCmd string
 		if StartOpts.Encrypt {
 			// Encryption at rest is turned on for the cluster.
 			// TODO(windchan7): allow key size to be specified through flags.
@@ -231,9 +230,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			}
 			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
 			args = append(args, encryptArgs)
-
-			// Command to create the store key.
-			keyCmd = fmt.Sprintf("mkdir -p %[1]s; if [ ! -e %[1]s/aes-128.key ]; then openssl rand -out %[1]s/aes-128.key 48; fi; ", storeDir)
 		}
 
 		// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -249,6 +245,9 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 
 		binary := cockroachNodeBinary(c, nodes[nodeIdx])
+
+		keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
+
 		// NB: this is awkward as when the process fails, the test runner will show an
 		// unhelpful empty error (since everything has been redirected away). This is
 		// unfortunately equally awkward to address.
@@ -493,6 +492,28 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
+	if !StartOpts.Encrypt {
+		return ""
+	}
+
+	nodes := h.c.ServerNodes()
+	var storeDir string
+	if idx := argExists(extraArgs, "--store"); idx == -1 {
+		storeDir = h.c.Impl.NodeDir(h.c, nodes[nodeIdx])
+	} else {
+		storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
+	}
+
+	// Command to create the store key.
+	keyCmd := fmt.Sprintf(`
+		mkdir -p %[1]s; 
+		if [ ! -e %[1]s/aes-128.key ]; then 
+			openssl rand -out %[1]s/aes-128.key 48; 
+		fi;`, storeDir)
+	return keyCmd
 }
 
 func (h *crdbStartHelper) useStartSingleNode(vers *version.Version) bool {
