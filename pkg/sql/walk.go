@@ -164,7 +164,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *scanNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
+			v.observer.attr(name, "table", formatTable(n.desc, n.index))
 			if n.noIndexJoin {
 				v.observer.attr(name, "hint", "no index join")
 			}
@@ -182,9 +182,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			// a single range, but there is nothing we can do about that.
 			if n.parallelize {
 				v.observer.attr(name, "parallel", "")
-			}
-			if n.index.IsPartial() {
-				v.observer.attr(name, "partial index", "")
 			}
 			if n.hardLimit > 0 {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
@@ -354,29 +351,19 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *interleavedJoinNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "type", joinTypeStr(n.joinType))
-			v.observer.attr(name, "left table", fmt.Sprintf("%s@%s", n.left.desc.Name, n.left.index.Name))
+			v.observer.attr(name, "left table", formatTable(n.left.desc, n.left.index))
 		}
 		if v.observer.spans != nil {
 			v.observer.spans(name, "left spans", n.left.index, n.left.spans, n.left.hardLimit != 0)
-		}
-		if v.observer.attr != nil {
-			if n.left.index.IsPartial() {
-				v.observer.attr(name, "left partial index", "")
-			}
 		}
 		if v.observer.expr != nil {
 			v.expr(name, "left filter", -1, n.leftFilter)
 		}
 		if v.observer.attr != nil {
-			v.observer.attr(name, "right table", fmt.Sprintf("%s@%s", n.right.desc.Name, n.right.index.Name))
+			v.observer.attr(name, "right table", formatTable(n.right.desc, n.right.index))
 		}
 		if v.observer.spans != nil {
 			v.observer.spans(name, "right spans", n.right.index, n.right.spans, n.right.hardLimit != 0)
-		}
-		if v.observer.attr != nil {
-			if n.right.index.IsPartial() {
-				v.observer.attr(name, "right partial index", "")
-			}
 		}
 		if v.observer.expr != nil {
 			v.expr(name, "right filter", -1, n.rightFilter)
@@ -842,6 +829,16 @@ func (v *planVisitor) metadataTuples(nodeName string, tuples [][]tree.TypedExpr)
 			v.metadataExpr(nodeName, fieldName, j, expr)
 		}
 	}
+}
+
+// formatTable returns a string of the form "<table_name>@<index_name>", or
+// "<table_name>@<index_name> (partial index)" if the index is partial.
+func formatTable(desc *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor) string {
+	partial := ""
+	if index.IsPartial() {
+		partial = " (partial index)"
+	}
+	return fmt.Sprintf("%s@%s%s", desc.Name, index.Name, partial)
 }
 
 // formatValuesSize returns a string of the form "5 columns, 1 row".
