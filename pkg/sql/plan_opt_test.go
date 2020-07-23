@@ -90,6 +90,20 @@ func (h *queryCacheTestHelper) AssertStats(tb *testing.T, expHits, expMisses int
 	assert.Equal(tb, expMisses, misses, "misses")
 }
 
+// CheckStats is similar to AssertStats, but returns an error instead of
+// failing the test if the actual stats don't match the expected stats.
+func (h *queryCacheTestHelper) CheckStats(tb *testing.T, expHits, expMisses int) error {
+	tb.Helper()
+	hits, misses := h.GetStats()
+	if expHits != hits {
+		return errors.Errorf("expected %d hits but found %d", expHits, hits)
+	}
+	if expMisses != misses {
+		return errors.Errorf("expected %d misses but found %d", expMisses, misses)
+	}
+	return nil
+}
+
 func TestQueryCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -347,8 +361,17 @@ SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
 			h.AssertStats(t, 1 /* hits */, 1 /* misses */)
 			r0.Exec(t, "CREATE STATISTICS s FROM t")
 			h.AssertStats(t, 1 /* hits */, 1 /* misses */)
-			r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
-			h.AssertStats(t, 1 /* hits */, 2 /* misses */)
+			hits := 1
+			testutils.SucceedsSoon(t, func() error {
+				// The stats cache is updated asynchronously, so we may get some hits
+				// before we get a miss.
+				r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
+				if err := h.CheckStats(t, hits, 2 /* misses */); err != nil {
+					hits++
+					return err
+				}
+				return nil
+			})
 		})
 
 		// Test that a schema change triggers cache invalidation.
