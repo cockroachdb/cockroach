@@ -61,7 +61,7 @@ func (ob *OutputBuilder) EnterNode(
 ) {
 	var colStr, ordStr string
 	if ob.flags.Verbose {
-		colStr = columns.String(ob.flags.ShowTypes)
+		colStr = columns.String(ob.flags.ShowTypes, false /* showHidden */)
 		ordStr = ordering.String(columns)
 	}
 	ob.enterNode(name, colStr, ordStr)
