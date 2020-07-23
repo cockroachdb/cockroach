@@ -350,6 +350,20 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
+		name:   "alter_primary_key",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
+		regreplace: map[string]string{
+			"'=' a_expr": "'=' n_buckets",
+			regList:      "",
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name", "n_buckets"},
+	},
+	{
 		name:   "alter_role_stmt",
 		inline: []string{"role_or_group_or_user", "opt_role_options"},
 		replace: map[string]string{
@@ -362,8 +376,8 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_sequence_options_stmt",
 		inline:  []string{"sequence_option_list", "sequence_option_elem"},
-		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer"},
-		unlink:  []string{"integer", "sequence_name"},
+		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
+		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
 	},
 	{
@@ -481,7 +495,11 @@ var specs = []stmtSpec{
 	{
 		name:   "col_qualification",
 		stmt:   "col_qualification",
-		inline: []string{"col_qualification_elem"},
+		inline: []string{"col_qualification_elem", "opt_hash_sharded"},
+		replace: map[string]string{
+			"'=' a_expr": "'=' n_buckets",
+		},
+		unlink: []string{"n_buckets"},
 	},
 	{
 		name:    "comment",
@@ -527,11 +545,13 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_index_stmt",
-		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_using_gin_btree"},
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_using_gin_btree", "opt_hash_sharded", "opt_concurrently"},
 		replace: map[string]string{
-			"a_expr":          "column_name",
+			"'ON' a_expr":     "'ON' column_name",
+			"'=' a_expr":      "'=' n_buckets",
 			"opt_nulls_order": "",
 		},
+		unlink: []string{"n_buckets"},
 		regreplace: map[string]string{
 			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
 		},
@@ -541,9 +561,10 @@ var specs = []stmtSpec{
 		name:   "create_index_interleaved_stmt",
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'INTERLEAVE'")},
-		inline: []string{"opt_unique", "opt_storing", "opt_interleave"},
+		inline: []string{"opt_unique", "opt_storing", "opt_interleave", "opt_concurrently"},
 		replace: map[string]string{
-			"a_expr":                               "column_name",
+			"'ON' a_expr":                          "'ON' column_name",
+			"'=' a_expr":                           "'=' n_buckets",
 			" opt_index_name":                      "",
 			" opt_partition_by":                    "",
 			" opt_using_gin_btree":                 "",
@@ -555,19 +576,23 @@ var specs = []stmtSpec{
 			regexp.MustCompile("'CREATE' 'INVERTED'"),
 			regexp.MustCompile("'EXISTS'"),
 		},
-		unlink: []string{"stored_columns", "parent_table", "interleave_prefix"},
+		unlink: []string{"stored_columns", "parent_table", "interleave_prefix", "n_buckets"},
 	},
 	{
 		name:   "create_inverted_index_stmt",
 		stmt:   "create_index_stmt",
-		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
-		inline: []string{"opt_storing", "storing", "opt_unique", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_concurrently"},
+		replace: map[string]string{
+			"opt_nulls_order": "",
+		},
+		nosplit: true,
 	},
 	{
 		name:    "create_sequence_stmt",
 		inline:  []string{"opt_sequence_option_list", "sequence_option_list", "sequence_option_elem"},
-		replace: map[string]string{"signed_iconst64": "integer", "any_name": "sequence_name"},
-		unlink:  []string{"integer", "sequence_name"},
+		replace: map[string]string{"signed_iconst64": "integer", "any_name": "sequence_name", "column_path": "column_name"},
+		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
 	},
 	{
@@ -659,7 +684,7 @@ var specs = []stmtSpec{
 		name:   "drop_index",
 		stmt:   "drop_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'INDEX'")},
-		inline: []string{"opt_drop_behavior", "table_index_name_list", "table_index_name"},
+		inline: []string{"opt_drop_behavior", "table_index_name_list", "table_index_name", "opt_concurrently"},
 		regreplace: map[string]string{
 			regList: "",
 		},
@@ -741,11 +766,11 @@ var specs = []stmtSpec{
 		},
 	},
 	{
-		name:  "explain_analyze_stmt",
-		stmt:  "explain_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'ANALY[SZ]E'")},
+		name:   "explain_analyze_stmt",
+		stmt:   "explain_stmt",
+		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_list": "'DISTSQL'",
+			"explain_option_name": "( 'DISTSQL' | 'DEBUG' )",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -800,8 +825,10 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{
-		name:   "index_def",
-		inline: []string{"opt_storing", "storing", "index_params", "opt_name"},
+		name:    "index_def",
+		inline:  []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
+		replace: map[string]string{"a_expr": "n_buckets"},
+		unlink:  []string{"n_buckets"},
 	},
 	{
 		name:   "import_csv",
@@ -1176,12 +1203,14 @@ var specs = []stmtSpec{
 		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
 	},
 	{
-		name: "show_indexes",
-		stmt: "show_indexes_stmt",
+		name:   "show_indexes",
+		inline: []string{"with_comment"},
+		stmt:   "show_indexes_stmt",
 	},
 	{
 		name:    "show_index",
 		stmt:    "show_stmt",
+		inline:  []string{"with_comment"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")},
 		replace: map[string]string{"var_name": "table_name"},
 		unlink:  []string{"table_name"},
@@ -1282,7 +1311,15 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "table_constraint",
-		inline: []string{"constraint_elem", "opt_storing", "storing"},
+		inline: []string{"constraint_elem", "opt_storing", "storing", "opt_hash_sharded"},
+		replace: map[string]string{
+			"'=' a_expr": "'=' n_buckets",
+		},
+		unlink: []string{"n_buckets"},
+	},
+	{
+		name:   "opt_temp_create_table",
+		inline: []string{"opt_temp"},
 	},
 	{
 		name:    "truncate_stmt",
