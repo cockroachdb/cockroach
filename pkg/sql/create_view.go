@@ -114,8 +114,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		schemaName = tree.Name(params.p.TemporarySchemaName())
 	}
 
-	// Inherit permissions from the database descriptor.
-	privs := n.dbDesc.GetPrivileges()
+	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var newDesc *sqlbase.MutableTableDescriptor
 
@@ -267,6 +266,7 @@ func makeViewTableDesc(
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
 		return sqlbase.MutableTableDescriptor{}, err
 	}
+
 	return desc, nil
 }
 

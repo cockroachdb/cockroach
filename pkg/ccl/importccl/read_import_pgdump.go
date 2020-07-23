@@ -234,6 +234,10 @@ func readPostgresCreateTable(
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*sqlbase.TableDescriptor, 0, len(createTbl))
+			owner := sqlbase.AdminRole
+			if params.SessionData() != nil {
+				owner = params.SessionData().User
+			}
 			for name, seq := range createSeq {
 				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.MakeSequenceTableDesc(
@@ -243,7 +247,7 @@ func readPostgresCreateTable(
 					keys.PublicSchemaID,
 					id,
 					hlc.Timestamp{WallTime: walltime},
-					sqlbase.NewDefaultPrivilegeDescriptor(),
+					sqlbase.NewDefaultPrivilegeDescriptor(owner),
 					false, /* temporary */
 					&params,
 				)

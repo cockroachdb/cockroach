@@ -27,4 +27,5 @@ message UserPrivileges {
 message PrivilegeDescriptor {
   option (gogoproto.equal) = true;
   repeated UserPrivileges users = 1 [(gogoproto.nullable) = false];
+  optional string owner = 41 [(gogoproto.nullable) = false];
 }

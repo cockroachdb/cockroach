@@ -109,13 +109,16 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
+	// Inherit the parent privileges.
+	privs := db.GetPrivileges()
+	privs.SetOwner(params.SessionData().User)
+
 	// Create the SchemaDescriptor.
 	desc := sqlbase.NewMutableCreatedSchemaDescriptor(sqlbase.SchemaDescriptor{
-		ParentID: db.ID,
-		Name:     n.Schema,
-		ID:       id,
-		// Inherit the parent privileges.
-		Privileges: db.GetPrivileges(),
+		ParentID:   db.ID,
+		Name:       n.Schema,
+		ID:         id,
+		Privileges: privs,
 	})
 
 	// Finally create the schema on disk.
