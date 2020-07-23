@@ -966,40 +966,40 @@ CREATE TABLE xy (x INT, y INT, INDEX (y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
-·           distribution  local         ·                   ·
-·           vectorized    true          ·                   ·
-index-join  ·             ·             (x, y)              ·
- │          table         xy@primary    ·                   ·
- │          key columns   rowid         ·                   ·
- └── scan   ·             ·             (y, rowid[hidden])  ·
-·           table         xy@xy_y_idx   ·                   ·
-·           spans         /NULL-/!NULL  ·                   ·
+·           distribution  local         ·           ·
+·           vectorized    true          ·           ·
+index-join  ·             ·             (x, y)      ·
+ │          table         xy@primary    ·           ·
+ │          key columns   rowid         ·           ·
+ └── scan   ·             ·             (y, rowid)  ·
+·           table         xy@xy_y_idx   ·           ·
+·           spans         /NULL-/!NULL  ·           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
-·           distribution  local        ·                   ·
-·           vectorized    true         ·                   ·
-index-join  ·             ·            (x, y)              ·
- │          table         xy@primary   ·                   ·
- │          key columns   rowid        ·                   ·
- └── scan   ·             ·            (y, rowid[hidden])  ·
-·           table         xy@xy_y_idx  ·                   ·
-·           spans         /4-/5        ·                   ·
+·           distribution  local        ·           ·
+·           vectorized    true         ·           ·
+index-join  ·             ·            (x, y)      ·
+ │          table         xy@primary   ·           ·
+ │          key columns   rowid        ·           ·
+ └── scan   ·             ·            (y, rowid)  ·
+·           table         xy@xy_y_idx  ·           ·
+·           spans         /4-/5        ·           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
-·                distribution  local        ·                   ·
-·                vectorized    true         ·                   ·
-render           ·             ·            (x)                 ·
- │               render 0      x            ·                   ·
- └── index-join  ·             ·            (x, y)              ·
-      │          table         xy@primary   ·                   ·
-      │          key columns   rowid        ·                   ·
-      └── scan   ·             ·            (y, rowid[hidden])  ·
-·                table         xy@xy_y_idx  ·                   ·
-·                spans         /1-/2        ·                   ·
+·                distribution  local        ·           ·
+·                vectorized    true         ·           ·
+render           ·             ·            (x)         ·
+ │               render 0      x            ·           ·
+ └── index-join  ·             ·            (x, y)      ·
+      │          table         xy@primary   ·           ·
+      │          key columns   rowid        ·           ·
+      └── scan   ·             ·            (y, rowid)  ·
+·                table         xy@xy_y_idx  ·           ·
+·                spans         /1-/2        ·           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
