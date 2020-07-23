@@ -1,0 +1,2 @@
+like_table_option_list ::=
+	 ( ( 'INCLUDING' ( 'CONSTRAINTS' | 'DEFAULTS' | 'GENERATED' | 'INDEXES' | 'ALL' ) | 'EXCLUDING' ( 'CONSTRAINTS' | 'DEFAULTS' | 'GENERATED' | 'INDEXES' | 'ALL' ) ) )*
