@@ -112,7 +112,6 @@ var psycopgBlockList20_2 = blocklist{
 	"tests.test_cursor.CursorTests.test_withhold":                                                            "30352",
 	"tests.test_cursor.CursorTests.test_withhold_autocommit":                                                 "30352",
 	"tests.test_cursor.CursorTests.test_withhold_no_begin":                                                   "30352",
-	"tests.test_dates.DatetimeTests.test_adapt_datetime":                                                     "36115",
 	"tests.test_dates.DatetimeTests.test_adapt_infinity_tz":                                                  "36116",
 	"tests.test_dates.DatetimeTests.test_interval_iso_8601_not_supported":                                    "32562",
 	"tests.test_extras_dictcursor.ExtrasDictCursorRealTests.testDictCursorRealWithNamedCursorFetchAll":       "41412",
