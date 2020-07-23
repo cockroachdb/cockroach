@@ -325,7 +325,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 //
 func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	ex := metric.MakePrometheusExporter()
-	ex.ScrapeRegistry(ts.m)
+	ex.ScrapeRegistry(ts.m, true /* includeChildMetrics */)
 	var in bytes.Buffer
 	if err := ex.PrintAsText(&in); err != nil {
 		d.Fatalf(t, "failed to print prometheus data: %v", err)

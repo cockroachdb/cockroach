@@ -63,24 +63,29 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // family map, holding on only to the scraped data (which is no longer
 // connected to the registry and metrics within) when returning from the the
 // call. It creates new families as needed.
-func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
+func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
 	labels := registry.getLabels()
 	registry.Each(func(_ string, v interface{}) {
-		if prom, ok := v.(PrometheusExportable); ok {
-			m := prom.ToPrometheusMetric()
-			// Set registry and metric labels.
-			m.Label = append(labels, prom.GetLabels()...)
+		prom, ok := v.(PrometheusExportable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		// Set registry and metric labels.
+		m.Label = append(labels, prom.GetLabels()...)
 
-			family := pm.findOrCreateFamily(prom)
-			family.Metric = append(family.Metric, m)
+		family := pm.findOrCreateFamily(prom)
+		family.Metric = append(family.Metric, m)
 
-			// Deal with metrics which have children which are exposed to
-			// prometheus.
-			if promIter, ok := v.(PrometheusIterable); ok {
-				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
-					family.Metric = append(family.Metric, metric)
-				})
-			}
+		// Deal with metrics which have children which are exposed to
+		// prometheus if we should.
+		if !includeChildMetrics {
+			return
+		}
+		if promIter, ok := v.(PrometheusIterable); ok {
+			promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+				family.Metric = append(family.Metric, metric)
+			})
 		}
 	})
 }

@@ -31,7 +31,7 @@ func TestAggMetric(t *testing.T) {
 	writePrometheusMetrics := func(t *testing.T) string {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
-		ex.ScrapeRegistry(r)
+		ex.ScrapeRegistry(r, true /* includeChildMetrics */)
 		require.NoError(t, ex.PrintAsText(&in))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
