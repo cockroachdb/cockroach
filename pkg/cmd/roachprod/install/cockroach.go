@@ -145,59 +145,23 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			return nil, err
 		}
 
+		startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
+		if err != nil {
+			return nil, err
+		}
+
 		sess, err := c.newSession(nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
 		defer sess.Close()
 
-		args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
-		if err != nil {
-			return nil, err
-		}
-
 		if h.useStartSingleNode(vers) {
 			bootstrap = false // `cockroach start-single-node` auto-bootstraps, so we skip doing so ourselves.
 		}
 
-		// For a one-node cluster, use `start-single-node` to disable replication.
-		// For everything else we'll fall back to using `cockroach start`.
-		var startCmd string
-		if h.useStartSingleNode(vers) {
-			startCmd = "start-single-node"
-		} else {
-			startCmd = "start"
-		}
-		binary := cockroachNodeBinary(c, nodes[nodeIdx])
-		keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
-		logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
-
-		// NB: this is awkward as when the process fails, the test runner will show an
-		// unhelpful empty error (since everything has been redirected away). This is
-		// unfortunately equally awkward to address.
-		cmd := "ulimit -c unlimited; mkdir -p " + logDir + "; "
-
-		// TODO(peter): The ps and lslocks stuff is intended to debug why killing
-		// of a cockroach process sometimes doesn't release file locks immediately.
-		cmd += `echo ">>> roachprod start: $(date)" >> ` + logDir + "/roachprod.log; " +
-			`ps axeww -o pid -o command >> ` + logDir + "/roachprod.log; " +
-			`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
-
-		cmd += keyCmd +
-			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[nodeIdx], c.Tag) +
-			"GOTRACEBACK=crash " +
-			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
-			// Turn stats mismatch into panic, see:
-			// https://github.com/cockroachdb/cockroach/issues/38720#issuecomment-539136246
-			// Disabled because we have a local repro in
-			// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
-			//
-			// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
-			h.getEnvVars() + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
-			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
-			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
-		if out, err := sess.CombinedOutput(cmd); err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+		if out, err := sess.CombinedOutput(startCmd); err != nil {
+			return nil, errors.Wrapf(err, "~ %s\n%s", startCmd, out)
 		}
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
@@ -349,6 +313,56 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 type crdbStartHelper struct {
 	c *SyncedCluster
 	r Cockroach
+}
+
+func (h *crdbStartHelper) generateStartCmd(
+	nodeIdx int, extraArgs []string, vers *version.Version,
+) (string, error) {
+	var cmd string
+	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
+	if err != nil {
+		return "", err
+	}
+
+	// For a one-node cluster, use `start-single-node` to disable replication.
+	// For everything else we'll fall back to using `cockroach start`.
+	var startCmd string
+	if h.useStartSingleNode(vers) {
+		startCmd = "start-single-node"
+	} else {
+		startCmd = "start"
+	}
+
+	nodes := h.c.ServerNodes()
+	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
+	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
+	keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
+
+	// NB: this is awkward as when the process fails, the test runner will show an
+	// unhelpful empty error (since everything has been redirected away). This is
+	// unfortunately equally awkward to address.
+	cmd = "ulimit -c unlimited; mkdir -p " + logDir + "; "
+
+	// TODO(peter): The ps and lslocks stuff is intended to debug why killing
+	// of a cockroach process sometimes doesn't release file locks immediately.
+	cmd += `echo ">>> roachprod start: $(date)" >> ` + logDir + "/roachprod.log; " +
+		`ps axeww -o pid -o command >> ` + logDir + "/roachprod.log; " +
+		`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
+
+	cmd += keyCmd +
+		fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[nodeIdx], h.c.Tag) +
+		"GOTRACEBACK=crash " +
+		"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
+		// Turn stats mismatch into panic, see:
+		// https://github.com/cockroachdb/cockroach/issues/38720#issuecomment-539136246
+		// Disabled because we have a local repro in
+		// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
+		//
+		// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
+		h.getEnvVars() + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
+		" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
+		" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
+	return cmd, nil
 }
 
 func (h *crdbStartHelper) generateStartArgs(
