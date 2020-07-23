@@ -31,10 +31,14 @@ func TestServeMuxConcurrency(t *testing.T) {
 	const duration = 20 * time.Millisecond
 	start := timeutil.Now()
 
-	// TODO(peter): This test reliably fails using http.ServeMux with a
-	// "concurrent map read and write error" on go1.10. The bug in http.ServeMux
-	// is fixed in go1.11.
-	var mux safeServeMux
+	// TODO DURING REVIEW: I'm not sure whether we need to keep this test around
+	// anymore. Thoughts?
+	// NB: This test used to reliably fail using http.ServeMux with a "concurrent
+	// map read and write error" on go1.10 and below. The bug in http.ServeMux was
+	// fixed in go1.11.
+	// On go1.10, this test was meant for a safe wrapper that we had
+	// written to provide proper locking around an http.ServeMux.
+	var mux http.ServeMux
 	var wg sync.WaitGroup
 	wg.Add(2)
 
