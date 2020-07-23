@@ -23,7 +23,7 @@ function docsURLNoVersion(pageName: string): string {
   return `${docsURLBaseNoVersion}/${pageName}`;
 }
 
-export const adminUILoginNoVersion = docsURLNoVersion("admin-ui-access-and-navigate.html#secure-the-admin-ui");
+export const adminUILoginNoVersion = docsURLNoVersion("admin-ui-overview.html#admin-ui-security");
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
 export const cancelJob = docsURL("cancel-job.html");
