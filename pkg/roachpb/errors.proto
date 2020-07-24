@@ -36,6 +36,10 @@ message NotLeaseHolderError {
   // The current lease, if known. This might be nil even when lease_holder is
   // set, as sometimes one can create this error without actually knowing the
   // current lease, but having a guess about who the leader is.
+  //
+  // It's possible for leases returned here to represent speculative leases, not
+  // actual committed leasea. In this case, the lease will not have its Sequence
+  // set.
   optional Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
