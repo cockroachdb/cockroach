@@ -171,3 +171,27 @@ t7  CREATE TABLE t7 (
     INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
     FAMILY "primary" (b, rowid)
 )
+
+#### Update a non-indexed column referenced by the predicate.
+
+statement ok
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)
+
+statement ok
+INSERT INTO a VALUES (1, 1, 1);
+
+statement ok
+UPDATE a SET b = b + 1 WHERE a = 1
+
+query III
+SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
+----
+1  2  1
