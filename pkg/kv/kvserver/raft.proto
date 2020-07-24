@@ -35,6 +35,7 @@ message RaftHeartbeat {
   bool quiesce = 6;
   reserved 7;
   repeated storagepb.Liveness lagging_quiescence = 8 [(gogoproto.nullable) = false];
+  bool lagging_quiescence_accurate = 10;
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -70,6 +71,13 @@ message RaftMessageRequest {
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
   repeated storagepb.Liveness lagging_quiescence = 9 [(gogoproto.nullable) = false];
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v21.1: Keep sending. Stop consulting.
+  // v21.2: Remove field.
+  bool lagging_quiescence_accurate = 10;
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.
