@@ -23,13 +23,16 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
+func (r *Replica) quiesceLocked(
+	ctx context.Context, lagging laggingReplicaSet, laggingAccurate bool,
+) {
 	if !r.mu.quiescent {
 		if log.V(3) {
 			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
+		r.mu.laggingFollowersOnQuiesceAccurate = laggingAccurate
 		r.store.unquiescedReplicas.Lock()
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
@@ -56,6 +59,7 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		}
 		r.mu.quiescent = false
 		r.mu.laggingFollowersOnQuiesce = nil
+		r.mu.laggingFollowersOnQuiesceAccurate = false
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -77,6 +81,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 		}
 		r.mu.quiescent = false
 		r.mu.laggingFollowersOnQuiesce = nil
+		r.mu.laggingFollowersOnQuiesceAccurate = false
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -373,7 +378,7 @@ func (r *Replica) quiesceAndNotifyLocked(
 		return false
 	}
 
-	r.quiesceLocked(ctx, lagging)
+	r.quiesceLocked(ctx, lagging, true /* laggingAccurate */)
 
 	for id, prog := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
@@ -475,8 +480,9 @@ func shouldFollowerQuiesceOnNotify(
 	//
 	// This check is critical to provide the guarantee that:
 	//
-	//   If at least one up-to-date replica in a Raft group is alive, the
-	//   Raft group will catch up any lagging replicas that are also alive.
+	//   If a quorum of replica in a Raft group is alive and at least
+	//   one of these replicas is up-to-date, the Raft group will catch
+	//   up any of the live, lagging replicas.
 	//
 	// The other two checks that combine to provide this guarantee are:
 	// 1. a leader will not quiesce if it believes any lagging replicas
@@ -500,7 +506,7 @@ func shouldFollowerQuiesceOnNotify(
 }
 
 func (r *Replica) maybeQuiesceOnNotify(
-	ctx context.Context, msg raftpb.Message, lagging laggingReplicaSet,
+	ctx context.Context, msg raftpb.Message, lagging laggingReplicaSet, laggingAccurate bool,
 ) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -513,6 +519,6 @@ func (r *Replica) maybeQuiesceOnNotify(
 		return false
 	}
 
-	r.quiesceLocked(ctx, lagging)
+	r.quiesceLocked(ctx, lagging, laggingAccurate)
 	return true
 }
