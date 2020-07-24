@@ -2099,7 +2099,7 @@ func (s Span) Valid() bool {
 // Spans is a slice of spans.
 type Spans []Span
 
-// implement Sort.Interface
+// Implement sort.Interface.
 func (a Spans) Len() int           { return len(a) }
 func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Spans) Less(i, j int) bool { return a[i].Key.Compare(a[j].Key) < 0 }
