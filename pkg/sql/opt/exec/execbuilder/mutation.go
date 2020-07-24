@@ -361,7 +361,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
+	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) +
+		len(ups.PartialIndexPutCols) + len(ups.PartialIndexDelCols) + 1
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
@@ -370,6 +371,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
+	colList = appendColsWhenPresent(colList, ups.PartialIndexPutCols)
+	colList = appendColsWhenPresent(colList, ups.PartialIndexDelCols)
 
 	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {

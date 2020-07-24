@@ -14,10 +14,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -306,49 +306,24 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 	}
 
-	// Create a set of index IDs to not add entries to and another to not delete
-	// entries from.
-	var ignoreIndexesForPut util.FastIntSet
-	var ignoreIndexesForDel util.FastIntSet
+	// Create a set of partial index IDs to not add entries or remove entries
+	// from.
+	var pm row.PartialIndexUpdateHelper
 	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
 	if !partialIndexOrds.Empty() {
 		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
 		partialIndexVals := sourceVals[partialIndexValOffset:]
-		colIdx := 0
-		delColOffset := len(partialIndexVals) / 2
-		indexes := u.run.tu.tableDesc().Indexes
-		for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
-			index := &indexes[i]
-			if index.IsPartial() {
-				// Check the boolean partial index put column.
-				val, err := tree.GetBool(partialIndexVals[colIdx])
-				if err != nil {
-					return err
-				}
-				if !val {
-					// If the value of the column for the index predicate expression
-					// is false, the row should not be added to the partial index.
-					ignoreIndexesForPut.Add(int(index.ID))
-				}
+		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
+		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
 
-				// Check the boolean partial index del column.
-				val, err = tree.GetBool(partialIndexVals[colIdx+delColOffset])
-				if err != nil {
-					return err
-				}
-				if !val {
-					// If the value of the column for the index predicate expression
-					// is false, the row should not be added to the partial index.
-					ignoreIndexesForDel.Add(int(index.ID))
-				}
-
-				colIdx++
-			}
+		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
+		if err != nil {
+			return err
 		}
 	}
 
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, ignoreIndexesForPut, ignoreIndexesForDel, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, pm, u.run.traceKV)
 	if err != nil {
 		return err
 	}
