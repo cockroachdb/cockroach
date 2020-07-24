@@ -676,7 +676,7 @@ func forceLeaseTransferOnSubsumedRange(
 		}
 		return nil
 	})
-	restartHeartbeats := oldLeaseholderStore.NodeLiveness().DisableAllHeartbeatsForTest()
+	restartHeartbeats := oldLeaseholderStore.NodeLiveness().PauseAllHeartbeatsForTest()
 	defer restartHeartbeats()
 	log.Infof(ctx, "paused RHS rightLeaseholder's liveness heartbeats")
 	time.Sleep(oldLeaseholderStore.NodeLiveness().GetLivenessThreshold())
