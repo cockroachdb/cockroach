@@ -96,9 +96,10 @@ func (s *Store) uncoalesceBeats(
 				StoreID:   toReplica.StoreID,
 				ReplicaID: beat.ToReplicaID,
 			},
-			Message:           msg,
-			Quiesce:           beat.Quiesce,
-			LaggingQuiescence: beat.LaggingQuiescence,
+			Message:                   msg,
+			Quiesce:                   beat.Quiesce,
+			LaggingQuiescence:         beat.LaggingQuiescence,
+			LaggingQuiescenceAccurate: beat.LaggingQuiescenceAccurate,
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -214,7 +215,12 @@ func (s *Store) processRaftRequestWithReplica(
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
-		if r.maybeQuiesceOnNotify(ctx, req.Message, laggingReplicaSet(req.LaggingQuiescence)) {
+		if r.maybeQuiesceOnNotify(
+			ctx,
+			req.Message,
+			laggingReplicaSet(req.LaggingQuiescence),
+			req.LaggingQuiescenceAccurate,
+		) {
 			return nil
 		}
 	}
@@ -536,8 +542,9 @@ func (s *Store) nodeIsLiveCallback(l kvserverpb.Liveness) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingQuiescence
+		laggingAccurate := r.mu.laggingQuiescenceAccurate
 		r.mu.RUnlock()
-		if quiescent && lagging.MemberStale(l) {
+		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
 			r.unquiesce()
 		}
 		return true

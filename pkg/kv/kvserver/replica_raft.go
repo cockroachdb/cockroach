@@ -1061,13 +1061,14 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		return false
 	}
 	beat := RaftHeartbeat{
-		RangeID:           r.RangeID,
-		ToReplicaID:       toReplica.ReplicaID,
-		FromReplicaID:     fromReplica.ReplicaID,
-		Term:              msg.Term,
-		Commit:            msg.Commit,
-		Quiesce:           quiesce,
-		LaggingQuiescence: lagging,
+		RangeID:                   r.RangeID,
+		ToReplicaID:               toReplica.ReplicaID,
+		FromReplicaID:             fromReplica.ReplicaID,
+		Term:                      msg.Term,
+		Commit:                    msg.Commit,
+		Quiesce:                   quiesce,
+		LaggingQuiescence:         lagging,
+		LaggingQuiescenceAccurate: quiesce,
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
