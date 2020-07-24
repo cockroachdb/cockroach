@@ -195,3 +195,28 @@ query III
 SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
 ----
 1  2  1
+
+#### Return error if evaluating the predicate errs and do not insert or update
+#### the row.
+
+statement ok
+CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1);
+
+statement error division by zero
+INSERT INTO b VALUES (1, 0)
+
+query I
+SELECT count(1) FROM b
+----
+0
+
+statement ok
+INSERT INTO b VALUES (1, 1);
+
+statement error division by zero
+UPDATE b SET b = 0 WHERE a = 1
+
+query II
+SELECT * FROM b
+----
+1  1

@@ -1512,7 +1512,7 @@ func TestRangeInfo(t *testing.T) {
 		return nil
 	})
 	lhsLease, _ := lhsReplica0.GetLease()
-	rhsLease, _ := rhsReplica0.GetLease()
+	rhsDesc, rhsLease := rhsReplica0.GetDescAndLease(ctx)
 
 	send := func(args roachpb.Request, returnRangeInfo bool, txn *roachpb.Transaction) *roachpb.BatchResponse {
 		ba := roachpb.BatchRequest{
@@ -1530,11 +1530,17 @@ func TestRangeInfo(t *testing.T) {
 		return br
 	}
 
-	// Verify range info is not set if unrequested.
+	// Populate the range cache so that the request will be sent to the right
+	// leaseholder, and it will have the up-to-date ClientRangeInfo populated.
+	mtc.distSenders[0].RangeDescriptorCache().Insert(ctx,
+		roachpb.RangeInfo{Desc: rhsDesc, Lease: rhsLease})
+
+	// Verify range info is not set if the request is sent with up-to-date
+	// ClientRangeInfo.
 	getArgs := getArgs(splitKey.AsRawKey())
 	br := send(getArgs, false /* returnRangeInfo */, nil /* txn */)
 	if len(br.RangeInfos) > 0 {
-		t.Errorf("expected empty range infos if unrequested; got %v", br.RangeInfos)
+		t.Fatalf("expected empty range infos if unrequested; got %v", br.RangeInfos)
 	}
 
 	// Verify range info on a get request.
