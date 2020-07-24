@@ -1338,7 +1338,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Disable node liveness heartbeats which can reacquire leases when we're
 			// trying to expire them. We pause liveness heartbeats here after node 0
 			// was restarted (which creates a new NodeLiveness).
-			pauseNodeLivenessHeartbeats(mtc, true)
+			pauseNodeLivenessHeartbeatLoops(mtc)
 
 			// Start draining stores 0 and 1 to prevent them from grabbing any new
 			// leases.
@@ -3901,7 +3901,7 @@ func TestRangeQuiescence(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	// Replica range 1 to all 3 nodes.
 	const rangeID = roachpb.RangeID(1)

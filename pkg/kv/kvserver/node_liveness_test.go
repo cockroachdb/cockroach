@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
@@ -63,9 +64,15 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 	})
 }
 
-func pauseNodeLivenessHeartbeats(mtc *multiTestContext, pause bool) {
+func pauseNodeLivenessHeartbeatLoops(mtc *multiTestContext) func() {
+	var enableFns []func()
 	for _, nl := range mtc.nodeLivenesses {
-		nl.PauseHeartbeat(pause)
+		enableFns = append(enableFns, nl.PauseHeartbeatLoopForTest())
+	}
+	return func() {
+		for _, fn := range enableFns {
+			fn()
+		}
 	}
 }
 
@@ -78,7 +85,7 @@ func TestNodeLiveness(t *testing.T) {
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	// Advance clock past the liveness threshold to verify IsLive becomes false.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
@@ -162,7 +169,81 @@ func verifyEpochIncremented(t *testing.T, mtc *multiTestContext, nodeIdx int) {
 		}
 		return nil
 	})
+}
 
+// TestRedundantNodeLivenessHeartbeatsAvoided tests that in a thundering herd
+// scenario with many goroutines rush to synchronously heartbeat a node's
+// liveness record, redundant heartbeats are detected and avoided.
+func TestRedundantNodeLivenessHeartbeatsAvoided(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+	nl := mtc.nodeLivenesses[0]
+	nlActive, _ := mtc.storeConfig.NodeLivenessDurations()
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+	nl.PauseHeartbeatLoopForTest()
+	enableSync := nl.PauseSynchronousHeartbeatsForTest()
+
+	liveness, err := nl.Self()
+	require.NoError(t, err)
+	hbBefore := nl.Metrics().HeartbeatSuccesses.Count()
+	require.Equal(t, int64(0), nl.Metrics().HeartbeatsInFlight.Value())
+
+	// Issue a set of synchronous node liveness heartbeats. Mimic the kind of
+	// thundering herd we see due to lease acquisitions when a node's liveness
+	// epoch is incremented.
+	var g errgroup.Group
+	const herdSize = 30
+	for i := 0; i < herdSize; i++ {
+		g.Go(func() error {
+			before := mtc.clock().Now()
+			if err := nl.Heartbeat(ctx, liveness); err != nil {
+				return err
+			}
+			livenessAfter, err := nl.Self()
+			if err != nil {
+				return err
+			}
+			exp := livenessAfter.Expiration
+			minExp := hlc.LegacyTimestamp(before.Add(nlActive.Nanoseconds(), 0))
+			if exp.Less(minExp) {
+				return errors.Errorf("expected min expiration %v, found %v", minExp, exp)
+			}
+			return nil
+		})
+	}
+
+	// Wait for all heartbeats to be in-flight, at which point they will have
+	// already computed their minimum expiration time.
+	testutils.SucceedsSoon(t, func() error {
+		inFlight := nl.Metrics().HeartbeatsInFlight.Value()
+		if inFlight < herdSize {
+			return errors.Errorf("not all heartbeats in-flight, want %d, got %d", herdSize, inFlight)
+		} else if inFlight > herdSize {
+			t.Fatalf("unexpected in-flight heartbeat count: %d", inFlight)
+		}
+		return nil
+	})
+
+	// Allow the heartbeats to proceed. Only a single one should end up touching
+	// the liveness record. The rest should be considered redundant.
+	enableSync()
+	require.NoError(t, g.Wait())
+	require.Equal(t, hbBefore+1, nl.Metrics().HeartbeatSuccesses.Count())
+	require.Equal(t, int64(0), nl.Metrics().HeartbeatsInFlight.Value())
+
+	// Send one more heartbeat. Should update liveness record.
+	liveness, err = nl.Self()
+	require.NoError(t, err)
+	require.NoError(t, nl.Heartbeat(ctx, liveness))
+	require.Equal(t, hbBefore+2, nl.Metrics().HeartbeatSuccesses.Count())
+	require.Equal(t, int64(0), nl.Metrics().HeartbeatsInFlight.Value())
 }
 
 // TestNodeIsLiveCallback verifies that the liveness callback for a
@@ -176,7 +257,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
@@ -224,7 +305,7 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	// Verify that last update time has been set for all nodes.
 	verifyUptimes := func() error {
@@ -280,7 +361,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	mtc.Start(t, 2)
 
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	// First try to increment the epoch of a known-live node.
 	deadNodeID := mtc.gossips[1].NodeID.Get()
@@ -411,7 +492,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	mtc.Start(t, 1)
 	g := mtc.gossips[0]
 
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
@@ -471,7 +552,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	mtc.Start(t, 3)
 
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
 	expectedLMap := kvserver.IsLiveMap{
 		1: {IsLive: true, Epoch: 1},
@@ -516,7 +597,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	mtc.Start(t, 3)
 
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	livenesses := mtc.nodeLivenesses[0].GetLivenesses()
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
@@ -573,7 +654,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 	mtc.Start(t, 1)
 
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	const concurrency = 10
 
@@ -607,7 +688,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 	mtc.Start(t, 2)
 
 	verifyLiveness(t, mtc)
-	pauseNodeLivenessHeartbeats(mtc, true)
+	pauseNodeLivenessHeartbeatLoops(mtc)
 
 	const concurrency = 10
 

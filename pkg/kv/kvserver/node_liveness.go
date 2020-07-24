@@ -80,6 +80,12 @@ var (
 		Measurement: "Nodes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaHeartbeatsInFlight = metric.Metadata{
+		Name:        "liveness.heartbeatsinflight",
+		Help:        "Number of in-flight liveness heartbeats from this node",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaHeartbeatSuccesses = metric.Metadata{
 		Name:        "liveness.heartbeatsuccesses",
 		Help:        "Number of successful node liveness heartbeats from this node",
@@ -109,6 +115,7 @@ var (
 // LivenessMetrics holds metrics for use with node liveness activity.
 type LivenessMetrics struct {
 	LiveNodes          *metric.Gauge
+	HeartbeatsInFlight *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
@@ -215,6 +222,7 @@ func NewNodeLiveness(
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
+		HeartbeatsInFlight: metric.NewGauge(metaHeartbeatsInFlight),
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
 		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
@@ -602,32 +610,45 @@ func (nl *NodeLiveness) StartHeartbeat(
 	})
 }
 
-// PauseHeartbeat stops or restarts the periodic heartbeat depending on the
-// pause parameter. When pause is true, waits until it acquires the heartbeatToken
-// (unless heartbeat was already paused); this ensures that no heartbeats happen
-// after this is called. This function is only safe for use in tests.
-func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
-	if pause {
-		if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 0, 1); swapped {
-			<-nl.heartbeatToken
-		}
-	} else {
+// PauseHeartbeatLoopForTest stops the periodic heartbeat. The function
+// waits until it acquires the heartbeatToken (unless heartbeat was
+// already paused); this ensures that no heartbeats happen after this is
+// called. Returns a closure to call to re-enable the heartbeat loop.
+// This function is only safe for use in tests.
+func (nl *NodeLiveness) PauseHeartbeatLoopForTest() func() {
+	if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 0, 1); swapped {
+		<-nl.heartbeatToken
+	}
+	return func() {
 		if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 1, 0); swapped {
 			nl.heartbeatToken <- struct{}{}
 		}
 	}
 }
 
-// DisableAllHeartbeatsForTest disables all node liveness heartbeats, including
-// those triggered from outside the normal StartHeartbeat loop. Returns a
-// closure to call to re-enable heartbeats. Only safe for use in tests.
-func (nl *NodeLiveness) DisableAllHeartbeatsForTest() func() {
-	nl.PauseHeartbeat(true)
+// PauseSynchronousHeartbeatsForTest disables all node liveness
+// heartbeats triggered from outside the normal StartHeartbeat loop.
+// Returns a closure to call to re-enable synchronous heartbeats. Only
+// safe for use in tests.
+func (nl *NodeLiveness) PauseSynchronousHeartbeatsForTest() func() {
 	nl.selfSem <- struct{}{}
 	nl.otherSem <- struct{}{}
 	return func() {
 		<-nl.selfSem
 		<-nl.otherSem
+	}
+}
+
+// PauseAllHeartbeatsForTest disables all node liveness heartbeats,
+// including those triggered from outside the normal StartHeartbeat
+// loop. Returns a closure to call to re-enable heartbeats. Only safe
+// for use in tests.
+func (nl *NodeLiveness) PauseAllHeartbeatsForTest() func() {
+	enableLoop := nl.PauseHeartbeatLoopForTest()
+	enableSync := nl.PauseSynchronousHeartbeatsForTest()
+	return func() {
+		enableLoop()
+		enableSync()
 	}
 }
 
@@ -668,6 +689,24 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 	}(timeutil.Now())
 
+	// Collect a clock reading from before we begin queuing on the heartbeat
+	// semaphore. This method (attempts to, see [*]) guarantees that, if
+	// successful, the liveness record's expiration will be at least the
+	// liveness threshold above the time that the method was called.
+	// Collecting this clock reading before queuing allows us to enforce
+	// this while avoiding redundant liveness heartbeats during thundering
+	// herds without needing to explicitly coalesce heartbeats.
+	//
+	// [*]: see TODO below about how errNodeAlreadyLive handling does not
+	//      enforce this guarantee.
+	beforeQueue := nl.clock.Now()
+	minExpiration := hlc.LegacyTimestamp(
+		beforeQueue.Add(nl.livenessThreshold.Nanoseconds(), 0))
+
+	// Before queueing, record the heartbeat as in-flight.
+	nl.metrics.HeartbeatsInFlight.Inc(1)
+	defer nl.metrics.HeartbeatsInFlight.Dec(1)
+
 	// Allow only one heartbeat at a time.
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)
@@ -679,6 +718,20 @@ func (nl *NodeLiveness) heartbeatInternal(
 	defer func() {
 		<-sem
 	}()
+
+	// If we are not intending to increment the node's liveness epoch, detect
+	// whether this heartbeat is needed anymore. It is possible that we queued
+	// for long enough on the sempahore such that other heartbeat attempts ahead
+	// of us already incremented the expiration past what we wanted. Note that
+	// if we allowed the heartbeat to proceed in this case, we know that it
+	// would hit a ConditionFailedError and return a errNodeAlreadyLive down
+	// below.
+	if !incrementEpoch {
+		curLiveness, err := nl.Self()
+		if err == nil && minExpiration.Less(curLiveness.Expiration) {
+			return nil
+		}
+	}
 
 	// Let's compute what our new liveness record should be.
 	var newLiveness kvserverpb.Liveness
@@ -696,18 +749,17 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 	}
 
-	// We need to add the maximum clock offset to the expiration because it's
-	// used when determining liveness for a node.
-	{
-		newLiveness.Expiration = hlc.LegacyTimestamp(
-			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
-		// This guards against the system clock moving backwards. As long
-		// as the cockroach process is running, checks inside hlc.Clock
-		// will ensure that the clock never moves backwards, but these
-		// checks don't work across process restarts.
-		if newLiveness.Expiration.Less(oldLiveness.Expiration) {
-			return errors.Errorf("proposed liveness update expires earlier than previous record")
-		}
+	// Grab a new clock reading to compute the new expiration time,
+	// since we may have queued on the semaphore for a while.
+	afterQueue := nl.clock.Now()
+	newLiveness.Expiration = hlc.LegacyTimestamp(
+		afterQueue.Add(nl.livenessThreshold.Nanoseconds(), 0))
+	// This guards against the system clock moving backwards. As long
+	// as the cockroach process is running, checks inside hlc.Clock
+	// will ensure that the clock never moves backwards, but these
+	// checks don't work across process restarts.
+	if newLiveness.Expiration.Less(oldLiveness.Expiration) {
+		return errors.Errorf("proposed liveness update expires earlier than previous record")
 	}
 
 	update := livenessUpdate{
@@ -730,6 +782,17 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// expired while in flight, so maybe we don't have to care about
 		// that and only need to distinguish between same and different
 		// epochs in our return value.
+		//
+		// TODO(nvanbenschoten): Unlike the early return above, this doesn't
+		// guarantee that the resulting expiration is past minExpiration,
+		// only that it's different than our oldLiveness. Is that ok? It
+		// hasn't caused issues so far, but we might want to detect this
+		// case and retry, at least in the case of the liveness heartbeat
+		// loop. The downside of this is that a heartbeat that's intending
+		// to bump the expiration of a record out 9s into the future may
+		// return a success even if the expiration is only 5 seconds in the
+		// future. The next heartbeat will then start with only 0.5 seconds
+		// before expiration.
 		if actual.IsLive(nl.clock.Now().GoTime()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
@@ -760,7 +823,7 @@ func (nl *NodeLiveness) Self() (kvserverpb.Liveness, error) {
 	if err != nil {
 		return kvserverpb.Liveness{}, err
 	}
-	return rec.Liveness, err
+	return rec.Liveness, nil
 }
 
 // SelfEx is like Self, but returns the raw, encoded value that the database has

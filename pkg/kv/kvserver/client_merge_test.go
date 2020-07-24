@@ -1434,7 +1434,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 
 	// Turn off liveness heartbeats on the second store, then advance the clock
 	// past the liveness expiration time. This expires all leases on all stores.
-	mtc.nodeLivenesses[1].PauseHeartbeat(true)
+	mtc.nodeLivenesses[1].PauseHeartbeatLoopForTest()
 	mtc.advanceClock(ctx)
 
 	// Manually heartbeat the liveness on the first store to ensure it's

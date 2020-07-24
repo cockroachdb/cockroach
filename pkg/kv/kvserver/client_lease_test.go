@@ -284,7 +284,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	// Turn off liveness heartbeats on all nodes to ensure that updates to node
 	// liveness are not triggering gossiping.
 	for i := range mtc.nodeLivenesses {
-		mtc.nodeLivenesses[i].PauseHeartbeat(true)
+		mtc.nodeLivenesses[i].PauseHeartbeatLoopForTest()
 	}
 
 	nodeLivenessKey := gossip.MakeNodeLivenessKey(1)

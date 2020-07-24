@@ -1346,7 +1346,7 @@ func TestHealthAPI(t *testing.T) {
 	// Expire this node's liveness record by pausing heartbeats and advancing the
 	// server's clock.
 	ts := s.(*TestServer)
-	defer ts.nodeLiveness.DisableAllHeartbeatsForTest()()
+	defer ts.nodeLiveness.PauseAllHeartbeatsForTest()()
 	self, err := ts.nodeLiveness.Self()
 	if err != nil {
 		t.Fatal(err)
