@@ -1405,6 +1405,10 @@ func TestParse(t *testing.T) {
 		{`COMMENT ON INDEX foo IS NULL`},
 		{`COMMENT ON TABLE foo IS 'a'`},
 		{`COMMENT ON TABLE foo IS NULL`},
+		{`COMMENT ON VIEW foo IS 'a'`},
+		{`COMMENT ON VIEW foo IS NULL`},
+		{`COMMENT ON SEQUENCE foo IS 'a'`},
+		{`COMMENT ON SEQUENCE food IS NULL`},
 
 		{`ALTER SEQUENCE a RENAME TO b`},
 		{`EXPLAIN ALTER SEQUENCE a RENAME TO b`},

@@ -225,6 +225,11 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
+	// Drop any comments for the view.
+	if err := p.removeTableComments(ctx, viewDesc); err != nil {
+		return cascadeDroppedViews, err
+	}
+
 	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc, true /* drainName */); err != nil {
 		return cascadeDroppedViews, err
 	}

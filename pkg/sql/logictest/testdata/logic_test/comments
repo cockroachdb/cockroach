@@ -1,0 +1,122 @@
+##########################
+# Comments on Databases  #
+##########################
+
+subtest comment_on_databases
+
+statement ok
+CREATE DATABASE d;
+
+statement ok
+COMMENT ON DATABASE d IS 'foo';
+
+query T
+SELECT shobj_description((select oid from pg_database where datname = 'd')::oid, 'pg_database');
+----
+foo
+
+statement ok
+COMMENT ON DATABASE d IS NULL;
+
+query T
+SELECT shobj_description((select oid from pg_database where datname = 'd')::oid, 'pg_database');
+----
+NULL
+
+##########################
+# Comments on Tables     #
+##########################
+
+subtest comment_on_tables
+
+statement ok
+CREATE TABLE T (i INT);
+
+statement ok
+COMMENT ON TABLE t IS 'foo';
+
+query T
+SELECT obj_description('t'::regclass);
+----
+foo
+
+statement ok
+COMMENT ON TABLE t IS NULL;
+
+query T
+SELECT obj_description('t'::regclass);
+----
+NULL
+
+##########################
+# Comments on Columns    #
+##########################
+
+subtest comment_on_columns
+
+statement ok
+COMMENT ON COLUMN t.i IS 'foo';
+
+query T
+SELECT col_description('t'::regclass, 1);
+----
+foo
+
+statement ok
+COMMENT ON COLUMN t.i IS NULL;
+
+query T
+SELECT col_description('t'::regclass, 1);
+----
+NULL
+
+##########################
+# Comments on Views      #
+##########################
+
+subtest comment_on_views
+
+statement ok
+CREATE VIEW v AS SELECT i FROM t;
+
+statement ok
+COMMENT ON VIEW v IS 'foo';
+
+query T
+SELECT obj_description('v'::regclass);
+----
+foo
+
+statement ok
+COMMENT ON VIEW v IS NULL;
+
+query T
+SELECT obj_description('v'::regclass);
+----
+NULL
+
+##########################
+# Comments on Sequences  #
+##########################
+
+subtest comment_on_sequences
+
+statement ok
+CREATE SEQUENCE s;
+
+statement ok
+COMMENT ON SEQUENCE s IS 'foo';
+
+query T
+SELECT obj_description('s'::regclass);
+----
+foo
+
+statement ok
+COMMENT ON SEQUENCE s IS NULL;
+
+query T
+SELECT obj_description('s'::regclass);
+----
+NULL
+

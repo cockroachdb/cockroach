@@ -2627,6 +2627,14 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
   }
+| COMMENT ON VIEW view_name IS comment_text
+  {
+    $$.val = &tree.CommentOnView{View: $4.unresolvedObjectName(), Comment: $6.strPtr()}
+  }
+| COMMENT ON SEQUENCE sequence_name IS comment_text
+  {
+    $$.val = &tree.CommentOnSequence{Sequence: $4.unresolvedObjectName(), Comment: $6.strPtr()}
+  }
 
 comment_text:
   SCONST
