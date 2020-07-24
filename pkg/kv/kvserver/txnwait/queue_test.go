@@ -192,7 +192,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 
 	cfg := makeConfig(nil, stopper)
 	q := NewQueue(cfg)
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	waitingRes := make(chan *roachpb.Error)
 	go func() {
@@ -234,7 +234,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 		return mockSender(ctx, ba)
 	}, stopper)
 	q := NewQueue(cfg)
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	// Set an extremely high transaction liveness threshold so that the pushee
 	// is only queried once per pusher.
