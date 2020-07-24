@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -944,9 +945,7 @@ func TestClientConnSettings(t *testing.T) {
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
-	if testutils.NightlyStress() {
-		t.Skip()
-	}
+	skip.UnderStress(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()

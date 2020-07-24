@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/google/go-github/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -281,7 +282,7 @@ goroutine 13:
 }
 
 func TestPostEndToEnd(t *testing.T) {
-	t.Skip("only for manual testing")
+	skip.IgnoreLint(t, "only for manual testing")
 
 	env := map[string]string{
 		// githubAPITokenEnv must be set in your actual env.

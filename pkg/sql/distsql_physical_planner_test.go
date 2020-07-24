@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -434,7 +435,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Skip("#49843. test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
+	skip.WithIssue(t, 49843, "test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
 
 	const n = 100
 	const numNodes = 5

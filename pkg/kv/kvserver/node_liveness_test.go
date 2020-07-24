@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -797,9 +798,7 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 func TestNodeLivenessStatusMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	if testing.Short() {
-		t.Skip("short")
-	}
+	skip.UnderShort(t)
 
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{

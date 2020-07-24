@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -84,7 +85,7 @@ func TestSqlLiteLogic(t *testing.T) {
 // See the comments in logic.go for more details.
 func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 	if !*bigtest {
-		t.Skip("-bigtest flag must be specified to run this test")
+		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
 	logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -286,9 +287,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	if testing.Short() {
-		t.Skip("this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
-	}
+	skip.UnderShort(t, "this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
 
 	const numKeys, valueSize, splitEvery = 500, 5000, 1
 

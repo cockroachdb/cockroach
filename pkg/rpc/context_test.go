@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -931,7 +932,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 // its response stream even if it doesn't get any new requests.
 func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("Takes too long given https://github.com/grpc/grpc-go/pull/2642")
+	skip.WithIssue(t, 51800, "Takes too long given https://github.com/grpc/grpc-go/pull/2642")
 
 	sc := log.Scope(t)
 	defer sc.Close(t)
@@ -1726,9 +1727,7 @@ func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testin
 }
 
 func BenchmarkGRPCDial(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 

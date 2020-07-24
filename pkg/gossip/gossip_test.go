@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -876,7 +877,7 @@ func TestGossipPropagation(t *testing.T) {
 //     OrigStamp is less than the highwater stamp from n2
 func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#34494")
+	skip.WithIssue(t, 34494)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 

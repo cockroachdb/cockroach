@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,9 +91,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3,

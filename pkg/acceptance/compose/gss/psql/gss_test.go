@@ -150,7 +150,7 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 	// track the open file count in the cockroach container, but that seems
 	// brittle and probably not worth the effort. However this test is
 	// useful when doing manual tracking of file descriptor count.
-	t.Skip("skip")
+	t.Skip("#51791")
 
 	rootConnector, err := pq.NewConnector("user=root sslmode=require")
 	if err != nil {

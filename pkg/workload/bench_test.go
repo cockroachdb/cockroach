@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -76,9 +77,7 @@ func BenchmarkInitialData(b *testing.B) {
 		benchmarkInitialData(b, bank.FromRows(1000))
 	})
 	b.Run(`tpch/scaleFactor=1`, func(b *testing.B) {
-		if testing.Short() {
-			b.Skip(`tpch loads a lot of data`)
-		}
+		skip.UnderShort(b, "tpch loads a lot of data")
 		benchmarkInitialData(b, tpch.FromScaleFactor(1))
 	})
 }

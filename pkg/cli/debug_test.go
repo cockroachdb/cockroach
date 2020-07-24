@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -143,9 +143,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	// This test is pretty slow under race (200+ cpu-seconds) because it
 	// uses multiple real disk-backed stores and goes through multiple
 	// cycles of rereplicating all ranges.
-	if util.RaceEnabled {
-		t.Skip("skipping under race")
-	}
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1655,7 +1656,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	if runtime.GOOS == "windows" {
-		t.Skip("unix sockets not support on windows")
+		skip.IgnoreLint(t, "unix sockets not support on windows")
 	}
 
 	// We need a temp directory in which we'll create the unix socket.

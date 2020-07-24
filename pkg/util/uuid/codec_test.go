@@ -24,6 +24,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 // codecTestData holds []byte data for a UUID we commonly use for testing.
@@ -280,7 +282,7 @@ var seedFuzzCorpus = flag.Bool("seed_fuzz_corpus", false, "seed fuzz test corpus
 func TestSeedFuzzCorpus(t *testing.T) {
 	// flag.Parse() is called for us by the test binary.
 	if !*seedFuzzCorpus {
-		t.Skip("seeding fuzz test corpus only on demand")
+		skip.IgnoreLint(t, "seeding fuzz test corpus only on demand")
 	}
 	corpusDir := filepath.Join(".", "testdata", "corpus")
 	writeSeedFile := func(name, data string) error {

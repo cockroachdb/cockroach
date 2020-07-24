@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -740,7 +741,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("currently KV pairs with unexpected family IDs are not noticed by the fetcher")
+	skip.WithIssue(t, 51797, "currently KV pairs with unexpected family IDs are not noticed by the fetcher")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -858,7 +859,7 @@ CREATE TABLE t.test (
 func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Skip("the test is not failing, as it would be expected")
+	skip.WithIssue(t, 51797, "the test is not failing, as it would be expected")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 

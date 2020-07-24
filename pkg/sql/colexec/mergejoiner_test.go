@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1821,7 +1822,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	if coldata.BatchSize() > 200 {
-		t.Skipf("this test is too slow with relatively big batch size")
+		skip.IgnoreLintf(t, "this test is too slow with relatively big batch size")
 	}
 	ctx := context.Background()
 	nTuples := 2*coldata.BatchSize() + 1

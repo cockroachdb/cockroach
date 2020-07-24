@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -353,7 +354,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		skip.IgnoreLint(t, "disabled on teeing engine")
 	}
 	tc := testContext{}
 	ctx := context.Background()

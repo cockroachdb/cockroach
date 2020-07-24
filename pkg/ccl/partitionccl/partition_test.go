@@ -36,9 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1176,16 +1176,12 @@ func TestInitialPartitioning(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/49909")
+	skip.WithIssue(t, 49909)
 
 	// This test configures many sub-tests and is too slow to run under nightly
 	// race stress.
-	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip("too big for nightly stress race")
-	}
-	if testing.Short() {
-		t.Skip("short")
-	}
+	skip.UnderStressRace(t)
+	skip.UnderShort(t)
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
@@ -1291,13 +1287,11 @@ func TestRepartitioning(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/49112")
+	skip.WithIssue(t, 49112)
 
 	// This test configures many sub-tests and is too slow to run under nightly
 	// race stress.
-	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip()
-	}
+	skip.UnderStressRace(t)
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))

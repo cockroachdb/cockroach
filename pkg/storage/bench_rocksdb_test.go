@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -51,9 +52,7 @@ func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
 // Read benchmarks. All of them run with on-disk data.
 
 func BenchmarkMVCCScan_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 
 	ctx := context.Background()
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
@@ -79,9 +78,7 @@ func BenchmarkMVCCScan_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCReverseScan_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 
 	ctx := context.Background()
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
@@ -135,9 +132,7 @@ func BenchmarkMVCCGet_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCComputeStats_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -318,9 +313,7 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 // BenchmarkMVCCGetMergedTimeSeries computes performance of reading merged
 // time series data using `MVCCGet()`. Uses an in-memory engine.
 func BenchmarkMVCCGetMergedTimeSeries_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, numKeys := range []int{1, 16, 256} {
 		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
@@ -336,9 +329,7 @@ func BenchmarkMVCCGetMergedTimeSeries_RocksDB(b *testing.B) {
 // DeleteRange benchmarks below (using on-disk data).
 
 func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -348,9 +339,7 @@ func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
 }
 
 func BenchmarkClearRange_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCRocksDB, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearRange(start, end)
@@ -367,9 +356,7 @@ func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 }
 
 func BenchmarkBatchApplyBatchRepr_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, indexed := range []bool{false, true} {
 		b.Run(fmt.Sprintf("indexed=%t", indexed), func(b *testing.B) {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -344,9 +345,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 }
 
 func BenchmarkRocksDBMapIteration(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	dir, err := ioutil.TempDir("", "BenchmarkRocksDBMapIteration")
 	if err != nil {
 		b.Fatal(err)
@@ -565,9 +564,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 }
 
 func BenchmarkPebbleMapIteration(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapIteration")
 	if err != nil {
 		b.Fatal(err)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,9 +40,7 @@ import (
 // with the business logic for the implementation of the other tests following.
 
 func BenchmarkMVCCGarbageCollect(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 
 	// NB: To debug #16068, test only 128-128-15000-6.
 	keySizes := []int{128}

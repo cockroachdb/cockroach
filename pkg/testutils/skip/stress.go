@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package testutils
+package skip
 
 import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
