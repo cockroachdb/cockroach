@@ -533,16 +533,8 @@ message Session {
   // Timestamp of session's start.
   google.protobuf.Timestamp start = 6
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-  // ID of the current KV transaction for this session. Nil if the session
-  // doesn't currently have a transaction.
-  bytes kv_txn_id = 7 [
-    (gogoproto.customname) = "KvTxnID",
-    (gogoproto.customtype) =
-        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
-  ];
-  // Information about the txn in progress on this session. Nil if the
-  // session doesn't currently have a transaction.
-  TxnInfo active_txn = 12;
+  // This used to be active_txn_id until it was moved inside of active_txn.
+  reserved 7;
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).
@@ -551,6 +543,9 @@ message Session {
   int64 alloc_bytes = 10;
   // High water mark of allocated bytes in the session memory monitor.
   int64 max_alloc_bytes = 11;
+  // Information about the txn in progress on this session. Nil if the
+  // session doesn't currently have a transaction.
+  TxnInfo active_txn = 12;
 }
 
 // An error wrapper object for ListSessionsResponse.
