@@ -57,6 +57,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 }
 
 var errTableAdding = errors.New("table is being added")
+var errTableDropped = errors.New("table is being dropped")
 
 type inactiveTableError struct {
 	error
@@ -67,7 +68,7 @@ type inactiveTableError struct {
 func FilterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch tableDesc.State {
 	case sqlbase.TableDescriptor_DROP:
-		return inactiveTableError{errors.New("table is being dropped")}
+		return inactiveTableError{errTableDropped}
 	case sqlbase.TableDescriptor_OFFLINE:
 		err := errors.Errorf("table %q is offline", tableDesc.Name)
 		if tableDesc.OfflineReason != "" {
@@ -1047,7 +1048,8 @@ func (p *planner) writeSchemaChange(
 	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
+			tableDesc.Name)
 	}
 	if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, mutationID); err != nil {
 		return err
@@ -1063,7 +1065,8 @@ func (p *planner) writeSchemaChangeToBatch(
 	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
+			tableDesc.Name)
 	}
 	return p.writeTableDescToBatch(ctx, tableDesc, b)
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -290,7 +291,7 @@ func assignSequenceOptions(
 					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
 						return err
 					}
-					err := addSequenceOwner(params.ctx, params.p, tableDesc, col, sequenceID, opts)
+					err := addSequenceOwner(params.ctx, params.p, option.ColumnItemVal, sequenceID, opts)
 					if err != nil {
 						return err
 					}
@@ -329,12 +330,23 @@ func removeSequenceOwnerIfExists(
 	sequenceID sqlbase.ID,
 	opts *sqlbase.TableDescriptor_SequenceOpts,
 ) error {
-	if opts.SequenceOwner.Equal(sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
+	if !opts.HasOwner() {
 		return nil
 	}
 	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
 	if err != nil {
+		// Special case error swallowing for #50711 and #50781, which can cause a
+		// column to own sequences that have been dropped/do not exist.
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			log.Eventf(ctx, "swallowing error during sequence ownership unlinking: %s", err.Error())
+			return nil
+		}
 		return err
+	}
+	// If the table descriptor has already been dropped, there is no need to
+	// remove the reference.
+	if tableDesc.Dropped() {
+		return nil
 	}
 	col, err := tableDesc.FindColumnByID(opts.SequenceOwner.OwnerColumnID)
 	if err != nil {
@@ -384,11 +396,15 @@ func resolveColumnItemToDescriptors(
 func addSequenceOwner(
 	ctx context.Context,
 	p *planner,
-	tableDesc *MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	columnItemVal *tree.ColumnItem,
 	sequenceID sqlbase.ID,
 	opts *sqlbase.TableDescriptor_SequenceOpts,
 ) error {
+	tableDesc, col, err := resolveColumnItemToDescriptors(ctx, p, columnItemVal)
+	if err != nil {
+		return err
+	}
+
 	col.OwnsSequenceIds = append(col.OwnsSequenceIds, sequenceID)
 
 	opts.SequenceOwner.OwnerColumnID = col.ID
@@ -467,15 +483,27 @@ func maybeAddSequenceDependencies(
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
 // Called when the respective column (or the whole table) is being dropped.
 func (p *planner) dropSequencesOwnedByCol(
-	ctx context.Context, col *sqlbase.ColumnDescriptor,
+	ctx context.Context, col *sqlbase.ColumnDescriptor, queueJob bool,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		// Special case error swallowing for #50781, which can cause a
+		// column to own sequences that do not exist.
 		if err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				log.Eventf(ctx, "swallowing error dropping owned sequences: %s", err.Error())
+				continue
+			}
 			return err
+		}
+		// This sequence is already getting dropped. Don't do it twice.
+		if seqDesc.Dropped() {
+			continue
 		}
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
+		// TODO(arul): This should really be queueJob instead of a hard-coded true
+		// but can't be because of #51782.
 		if err := p.dropSequenceImpl(
 			ctx, seqDesc, true /* queueJob */, jobDesc, tree.DropRestrict,
 		); err != nil {

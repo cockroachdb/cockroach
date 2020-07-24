@@ -288,7 +288,7 @@ func (p *planner) dropTableImpl(
 
 	// Drop sequences that the columns of the table own
 	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col); err != nil {
+		if err := p.dropSequencesOwnedByCol(ctx, &col, queueJob); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -336,7 +336,7 @@ func (p *planner) initiateDropTable(
 	drainName bool,
 ) error {
 	if tableDesc.Dropped() {
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
 	}
 
 	// If the table is not interleaved , use the delayed GC mechanism to
