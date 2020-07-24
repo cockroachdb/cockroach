@@ -67,12 +67,11 @@ type ProjInfo struct {
 	SRText string
 	// Proj4Text is the PROJ4 text representation of the projection.
 	Proj4Text Proj4Text
+	// Bounds defines the bounds (projected or lat/lng) of the given coordinate system.
+	Bounds Bounds
 
 	// Denormalized fields.
 
-	// Bounds defines the bounds (projected or lat/lng) of the given coordinate system.
-	// If nil, no bounds were defined for the given projection.
-	Bounds *Bounds
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
 	IsLatLng bool
 	// The spheroid represented by the SRID.
