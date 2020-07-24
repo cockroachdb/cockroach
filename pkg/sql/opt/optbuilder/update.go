@@ -97,9 +97,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// All columns from the update table will be projected.
 	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
-	// Add partial index del boolean columns to the input.
-	mb.addPartialIndexDelCols()
-
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
 
@@ -326,10 +323,15 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
+	// Keep a reference to the scope before the check constraint columns are
+	// projected. We use this scope when projecting the partial index put
+	// columns because the check columns are not in-scope for those expressions.
+	preCheckScope := mb.outScope
+
 	mb.addCheckConstraintCols()
 
 	// Add partial index put boolean columns to the input.
-	mb.addPartialIndexPutCols()
+	mb.projectPartialIndexPutCols(preCheckScope)
 
 	mb.buildFKChecksForUpdate()
 

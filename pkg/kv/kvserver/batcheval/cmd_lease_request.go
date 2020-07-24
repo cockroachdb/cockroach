@@ -13,13 +13,30 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
 	RegisterReadWriteCommand(roachpb.RequestLease, declareKeysRequestLease, RequestLease)
+}
+
+func declareKeysRequestLease(
+	desc *roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+) {
+	// NOTE: RequestLease is run on replicas that do not hold the lease, so
+	// acquiring latches would not help synchronize with other requests. As
+	// such, the request does not actually acquire latches over these spans
+	// (see concurrency.shouldAcquireLatches). However, we continue to
+	// declare the keys in order to appease SpanSet assertions under race.
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // RequestLease sets the range lease for this range. The command fails

@@ -2421,6 +2421,30 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_relatematch": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"intersection_matrix", types.String},
+				{"pattern", types.String},
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				matrix := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
+
+				matches, err := geomfn.MatchesDE9IM(matrix, pattern)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(matches)), nil
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Info: infoBuilder{
+				info: "Returns whether the given DE-9IM intersection matrix satisfies the given pattern.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Validity checks

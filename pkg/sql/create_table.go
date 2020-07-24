@@ -496,10 +496,11 @@ func (n *createTableNode) startExec(params runParams) error {
 					}
 				}
 
-				// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-				// not add entries to.
-				var ignoreIndexes util.FastIntSet
-				if err := tw.row(params.ctx, rowBuffer, ignoreIndexes, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				// CREATE TABLE AS does not copy indexes from the input table.
+				// An empty row.PartialIndexUpdateHelper is used here because
+				// there are no indexes, partial or otherwise, to update.
+				var pm row.PartialIndexUpdateHelper
+				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
