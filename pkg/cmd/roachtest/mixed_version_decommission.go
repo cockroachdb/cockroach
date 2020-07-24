@@ -278,7 +278,7 @@ func registerDecommissionMixedVersion(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "decommission/mixed-versions",
 		Owner:      OwnerKV,
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
