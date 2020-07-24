@@ -564,7 +564,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
-%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BUNDLE BY
 
@@ -2587,6 +2587,10 @@ copy_options:
   DESTINATION '=' string_or_placeholder
   {
     $$.val = &tree.CopyOptions{Destination: $3.expr()}
+  }
+| BINARY
+  {
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary}
   }
 
 // %Help: CANCEL
@@ -10895,6 +10899,7 @@ unreserved_keyword:
 | BACKUP
 | BEFORE
 | BEGIN
+| BINARY
 | BUCKET_COUNT
 | BUNDLE
 | BY

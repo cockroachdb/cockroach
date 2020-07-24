@@ -1323,6 +1323,7 @@ func TestParse(t *testing.T) {
 		{`COPY t FROM STDIN`},
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
+		{`COPY t (a, b, c) FROM STDIN WITH BINARY`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
@@ -2165,6 +2166,9 @@ $function$`,
 
 		{`ALTER TABLE a RENAME b TO c`,
 			`ALTER TABLE a RENAME COLUMN b TO c`},
+
+		{`COPY t (a, b, c) FROM STDIN BINARY`,
+			`COPY t (a, b, c) FROM STDIN WITH BINARY`},
 
 		// Identifier handling for zone configs.
 
