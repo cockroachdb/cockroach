@@ -3228,6 +3228,124 @@ func TestProposalOverhead(t *testing.T) {
 
 }
 
+// TestDiscoverIntentAcrossLeaseTransferAwayAndBack tests a scenario where a
+// read hits an intent, but only informs its lock-table about the discovered
+// intent after the corresponding range's lease has been transferred away and
+// back. If the intent is replaced during this time and the replacement intent
+// has made its way into the lock-table, the initial read's discovery should not
+// hit an assertion failure. It used to.
+//
+// The test uses a TestCluster to mirror the setup from:
+//   concurrency/testdata/concurrency_manager/discover_lock_after_lease_race
+func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Detect when txn2 has completed its read of txn1's intent and block.
+	var txn2ID atomic.Value
+	var txn2BBlockOnce sync.Once
+	txn2BlockedC := make(chan chan struct{})
+	knobs := &kvserver.StoreTestingKnobs{}
+	knobs.EvalKnobs.TestingPostEvalFilter = func(args kvserverbase.FilterArgs) *roachpb.Error {
+		if txn := args.Hdr.Txn; txn != nil && txn.ID == txn2ID.Load() {
+			txn2BBlockOnce.Do(func() {
+				if !errors.HasType(args.Err, (*roachpb.WriteIntentError)(nil)) {
+					t.Errorf("expected WriteIntentError; got %v", args.Err)
+				}
+
+				unblockCh := make(chan struct{})
+				txn2BlockedC <- unblockCh
+				<-unblockCh
+			})
+		}
+		return nil
+	}
+
+	// Detect when txn4 discovers txn3's intent and begins to push.
+	var txn4ID atomic.Value
+	txn4PushingC := make(chan struct{}, 1)
+	knobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if !ba.IsSinglePushTxnRequest() {
+			return nil
+		}
+		if ba.Requests[0].GetPushTxn().PusherTxn.ID == txn4ID.Load() {
+			select {
+			case txn4PushingC <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}},
+	})
+	defer tc.Stopper().Stop(ctx)
+	kvDB := tc.Servers[0].DB()
+
+	key := []byte("a")
+	rangeDesc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+
+	// Transfer the lease to Server 0 so we start in a known state.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(0))
+	require.NoError(t, err)
+
+	// txn1 writes the first intent.
+	txn1 := kvDB.NewTxn(ctx, "txn1")
+	err = txn1.Put(ctx, key, "val1")
+	require.NoError(t, err)
+
+	// txn2 reads the first intent. Should block during evaluation.
+	txn2 := kvDB.NewTxn(ctx, "txn2")
+	txn2ID.Store(txn2.ID())
+	err2C := make(chan error)
+	go func() {
+		_, err := txn2.Get(ctx, key)
+		err2C <- err
+	}()
+	txn2UnblockC := <-txn2BlockedC
+
+	// Transfer the lease to Server 1.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(1))
+	require.NoError(t, err)
+
+	// Roll back txn1.
+	err = txn1.Rollback(ctx)
+	require.NoError(t, err)
+
+	// txn3 writes the second intent.
+	txn3 := kvDB.NewTxn(ctx, "txn3")
+	err = txn3.Put(ctx, key, "val3")
+	require.NoError(t, err)
+
+	// Make sure txn3 creates its record before a lease transfer to avoid it
+	// being aborted.
+	hb, hbH := heartbeatArgs(txn3.TestingCloneTxn(), kvDB.Clock().Now())
+	_, pErr := kv.SendWrappedWith(ctx, kvDB.GetFactory().NonTransactionalSender(), hbH, hb)
+	require.NoError(t, pErr.GoError())
+
+	// Transfer the lease back to Server 0.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(0))
+	require.NoError(t, err)
+
+	// txn4 reads the second intent. Should discover intent and wait in lockTable.
+	txn4 := kvDB.NewTxn(ctx, "txn4")
+	txn4ID.Store(txn4.ID())
+	err4C := make(chan error)
+	go func() {
+		_, err := txn4.Get(ctx, key)
+		err4C <- err
+	}()
+	<-txn4PushingC
+	close(txn2UnblockC)
+
+	err = txn3.Rollback(ctx)
+	require.NoError(t, err)
+	require.NoError(t, <-err2C)
+	require.NoError(t, <-err4C)
+}
+
 // getRangeInfo retreives range info by performing a get against the provided
 // key and setting the ReturnRangeInfo flag to true.
 func getRangeInfo(

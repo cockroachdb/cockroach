@@ -16,15 +16,11 @@ package kvserverbase
 
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {
-	// TestingEvalFilter is called before evaluating each command. This filter is
-	// deprecated in favor of either TestingProposalFilter (which runs only on the
-	// lease holder) or TestingApplyFilter (which runs on each replica). If your
-	// filter is not idempotent, consider wrapping it in a
-	// ReplayProtectionFilterWrapper.
-	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
-	// to one of the other filters. See #10493
-	// TODO(andrei): Provide guidance on what to use instead for trapping reads.
+	// TestingEvalFilter is called before evaluating each command.
 	TestingEvalFilter ReplicaCommandFilter
+
+	// TestingPostEvalFilter is called after evaluating each command.
+	TestingPostEvalFilter ReplicaCommandFilter
 
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
