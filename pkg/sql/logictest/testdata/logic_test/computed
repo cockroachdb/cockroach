@@ -289,9 +289,22 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error context-dependent functions are not allowed in computed column
+statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE y (
+  a STRING,
+  b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
+)
+
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE y (
+  a TIMESTAMPTZ,
+  b INTERVAL,
+  c TIMESTAMPTZ AS (a+ b) STORED
 )
 
 statement error volatile functions are not allowed in computed column
