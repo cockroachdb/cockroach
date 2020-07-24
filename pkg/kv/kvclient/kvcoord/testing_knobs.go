@@ -29,6 +29,10 @@ type ClientTestingKnobs struct {
 	// will not be attempted and the span refresher will behave as if condensing
 	// failed to save enough memory.
 	CondenseRefreshSpansFilter func() bool
+
+	// LatencyFunc, if set, overrides RPCContext.RemoteClocks.Latency as the
+	// function used by the DistSender to order replicas for follower reads.
+	LatencyFunc LatencyFunc
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}
