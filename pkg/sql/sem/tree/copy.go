@@ -23,6 +23,7 @@ type CopyFrom struct {
 // CopyOptions describes options for COPY execution.
 type CopyOptions struct {
 	Destination Expr
+	CopyFormat  CopyFormat
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -46,20 +47,39 @@ func (node *CopyFrom) Format(ctx *FmtCtx) {
 	}
 }
 
+// Format implements the NodeFormatter interface
 func (o *CopyOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
 	if o.Destination != nil {
 		// Lowercase because that's what has historically been produced
 		// by copy_file_upload.go, so this will provide backward
-		// compatibilty with older servers.
+		// compatibility with older servers.
 		ctx.WriteString("destination = ")
 		o.Destination.Format(ctx)
+		addSep = true
+	}
+	if o.CopyFormat != CopyFormatText {
+		maybeAddSep()
+		switch o.CopyFormat {
+		case CopyFormatBinary:
+			ctx.WriteString("BINARY")
+		}
 	}
 }
 
+// IsDefault returns true if this struct has default value.
 func (o CopyOptions) IsDefault() bool {
 	return o == CopyOptions{}
 }
 
+// CombineWith merges other options into this struct. An error is returned if
+// the same option merged multiple times.
 func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 	if other.Destination != nil {
 		if o.Destination != nil {
@@ -67,5 +87,20 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 		}
 		o.Destination = other.Destination
 	}
+	if other.CopyFormat != CopyFormatText {
+		if o.CopyFormat != CopyFormatText {
+			return errors.New("format option specified multiple times")
+		}
+		o.CopyFormat = other.CopyFormat
+	}
 	return nil
 }
+
+// CopyFormat identifies a COPY data format.
+type CopyFormat int
+
+// Valid values for CopyFormat.
+const (
+	CopyFormatText CopyFormat = iota
+	CopyFormatBinary
+)
