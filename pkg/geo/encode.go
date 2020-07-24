@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
+	"github.com/pierrre/geohash"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/geojson"
@@ -177,6 +179,122 @@ func SpatialObjectToKML(so geopb.SpatialObject) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// GeoHashAutoPrecision means to calculate the precision of SpatialObjectToGeoHash
+// based on input, up to 32 characters.
+const GeoHashAutoPrecision = 0
+
+// GeoHashMaxPrecision is the maximum precision for GeoHashes.
+// 20 is picked as doubles have 51 decimals of precision, and each base32 position
+// can contain 5 bits of data. As we have two points, we use floor((2 * 51) / 5) = 20.
+const GeoHashMaxPrecision = 20
+
+// SpatialObjectToGeoHash transforms a given SpatialObject to a GeoHash.
+func SpatialObjectToGeoHash(so geopb.SpatialObject, p int) (string, error) {
+	if so.BoundingBox == nil {
+		return "", nil
+	}
+	bbox := so.BoundingBox
+	if so.Type == geopb.SpatialObjectType_GeographyType {
+		// Convert bounding box back to degrees.
+		bbox = &geopb.BoundingBox{
+			LoX: s1.Angle(bbox.LoX).Degrees(),
+			HiX: s1.Angle(bbox.HiX).Degrees(),
+			LoY: s1.Angle(bbox.LoY).Degrees(),
+			HiY: s1.Angle(bbox.HiY).Degrees(),
+		}
+	}
+	if bbox.LoX < -180 || bbox.HiX > 180 || bbox.LoY < -90 || bbox.HiY > 90 {
+		return "", errors.Newf(
+			"object has bounds greater than the bounds of lat/lng, got (%f %f, %f %f)",
+			bbox.LoX, bbox.LoY,
+			bbox.HiX, bbox.HiY,
+		)
+	}
+
+	// Get precision using the bounding box if required.
+	if p <= GeoHashAutoPrecision {
+		p = getPrecisionForBBox(bbox)
+	}
+
+	// Support up to 20, which is the same as PostGIS.
+	if p > GeoHashMaxPrecision {
+		p = GeoHashMaxPrecision
+	}
+
+	bbCenterLng := bbox.LoX + (bbox.HiX-bbox.LoX)/2.0
+	bbCenterLat := bbox.LoY + (bbox.HiY-bbox.LoY)/2.0
+
+	return geohash.Encode(bbCenterLat, bbCenterLng, p), nil
+}
+
+// getPrecisionForBBox is a function imitating PostGIS's ability to go from
+// a world bounding box and truncating a GeoHash to fit the given bounding box.
+// The algorithm halves the world bounding box until it intersects with the
+// feature bounding box to get a precision that will encompass the entire
+// bounding box.
+func getPrecisionForBBox(bbox *geopb.BoundingBox) int {
+	bitPrecision := 0
+
+	// This is a point, for points we use the full bitPrecision.
+	if bbox.LoX == bbox.HiX && bbox.LoY == bbox.HiY {
+		return GeoHashMaxPrecision
+	}
+
+	// Starts from a world bounding box:
+	lonMin := -180.0
+	lonMax := 180.0
+	latMin := -90.0
+	latMax := 90.0
+
+	// Each iteration shrinks the world bounding box by half in the dimension that
+	// does not fit, making adjustments each iteration until it intersects with
+	// the object bbox.
+	for {
+		lonWidth := lonMax - lonMin
+		latWidth := latMax - latMin
+		latMaxDelta, lonMaxDelta, latMinDelta, lonMinDelta := 0.0, 0.0, 0.0, 0.0
+
+		// Look at whether the longitudes of the bbox are to the left or
+		// the right of the world bbox longitudes, shrinks it and makes adjustments
+		// for the next iteration.
+		if bbox.LoX > lonMin+lonWidth/2.0 {
+			lonMinDelta = lonWidth / 2.0
+		} else if bbox.HiX < lonMax-lonWidth/2.0 {
+			lonMaxDelta = lonWidth / -2.0
+		}
+		// Look at whether the latitudes of the bbox are to the left or
+		// the right of the world bbox latitudes, shrinks it and makes adjustments
+		// for the next iteration.
+		if bbox.LoY > latMin+latWidth/2.0 {
+			latMinDelta = latWidth / 2.0
+		} else if bbox.HiY < latMax-latWidth/2.0 {
+			latMaxDelta = latWidth / -2.0
+		}
+
+		// Every change we make that splits the box up adds precision.
+		// If we detect no change, we've intersected a box and so must exit.
+		precisionDelta := 0
+		if lonMinDelta != 0.0 || lonMaxDelta != 0.0 {
+			lonMin += lonMinDelta
+			lonMax += lonMaxDelta
+			precisionDelta++
+		} else {
+			break
+		}
+		if latMinDelta != 0.0 || latMaxDelta != 0.0 {
+			latMin += latMinDelta
+			latMax += latMaxDelta
+			precisionDelta++
+		} else {
+			break
+		}
+		bitPrecision += precisionDelta
+	}
+	// Each character can represent 5 bits of bitPrecision.
+	// As such, divide by 5 to get GeoHash precision.
+	return bitPrecision / 5
 }
 
 // StringToByteOrder returns the byte order of string.

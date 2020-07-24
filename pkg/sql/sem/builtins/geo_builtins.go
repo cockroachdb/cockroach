@@ -1039,6 +1039,78 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_geohash": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geo.SpatialObjectToGeoHash(g.Geometry.SpatialObject(), geo.GeoHashAutoPrecision)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			types.String,
+			infoBuilder{
+				info: "Returns a GeoHash representation of the geometry with full precision if a point is provided, or with variable precision based on the size of the feature. This will error any coordinates are outside the bounds of longitude/latitude.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				p := args[1].(*tree.DInt)
+				ret, err := geo.SpatialObjectToGeoHash(g.Geometry.SpatialObject(), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a GeoHash representation of the geometry with the supplied precision. This will error any coordinates are outside the bounds of longitude/latitude.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		geographyOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+				ret, err := geo.SpatialObjectToGeoHash(g.Geography.SpatialObject(), geo.GeoHashAutoPrecision)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			types.String,
+			infoBuilder{
+				info: "Returns a GeoHash representation of the geeographywith full precision if a point is provided, or with variable precision based on the size of the feature.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				p := args[1].(*tree.DInt)
+				ret, err := geo.SpatialObjectToGeoHash(g.Geography.SpatialObject(), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a GeoHash representation of the geography with the supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"st_asgeojson": makeBuiltin(
 		defProps(),
 		geometryOverload1(

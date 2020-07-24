@@ -340,6 +340,14 @@ POINT EMPTY                                         POINT EMPTY  [1 1 0 0 0 0 0 
 <Point><coordinates></coordinates></Point>
 NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
+query TTT
+SELECT ST_AsEWKT(g), ST_GeoHash(g), ST_GeoHash(g, 8) FROM ( VALUES
+  ('POINT (0 0)'::geometry),
+  ('LINESTRING(0 0, 1 0)'::geometry)
+) t(g)
+----
+POINT (0 0)            s0000000000000000000  s0000000
+LINESTRING (0 0, 1 0)  ·                     s00252h0
 
 query TTT
 SELECT
@@ -475,6 +483,15 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[1,1]}       {"type":"Point","coordinates":[1,1]}       {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
 {"type":"Point","coordinates":[]}          {"type":"Point","coordinates":[]}          {"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[]}
 NULL                                       NULL                                       NULL
+
+query TTT
+SELECT ST_AsEWKT(g), ST_GeoHash(g), ST_GeoHash(g, 8) FROM ( VALUES
+  ('POINT (0 0)'::geography),
+  ('LINESTRING(0 0, 1 0)'::geography)
+) t(g)
+----
+SRID=4326;POINT (0 0)            s0000000000000000000  s0000000
+SRID=4326;LINESTRING (0 0, 1 0)  ·                     s00252h0
 
 # tests casts
 query TTT
