@@ -15,12 +15,14 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 )
 
@@ -276,6 +279,75 @@ func TestCopyRandom(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestCopyBinary uses the pgx driver, which hard codes COPY ... BINARY.
+func TestCopyBinary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+	defer cleanupGoDB()
+	conn, err := pgx.Connect(ctx, pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := conn.Exec(ctx, `
+		CREATE TABLE t (
+			id INT8 PRIMARY KEY,
+			u INT, -- NULL test
+			o BOOL,
+			i2 INT2,
+			i4 INT4,
+			i8 INT8,
+			f FLOAT,
+			s STRING,
+			b BYTES
+		);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	input := [][]interface{}{{
+		1,
+		nil,
+		true,
+		int16(1),
+		int32(1),
+		int64(1),
+		float64(1),
+		"s",
+		"b",
+	}}
+	if _, err = conn.CopyFrom(
+		ctx,
+		pgx.Identifier{"t"},
+		[]string{"id", "u", "o", "i2", "i4", "i8", "f", "s", "b"},
+		pgx.CopyFromRows(input),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	expect := func() [][]string {
+		row := make([]string, len(input[0]))
+		for i, v := range input[0] {
+			if v == nil {
+				row[i] = "NULL"
+			} else {
+				row[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		return [][]string{row}
+	}()
+	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY id", expect)
 }
 
 func TestCopyError(t *testing.T) {

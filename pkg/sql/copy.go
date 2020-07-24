@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
 	"strconv"
 	"time"
@@ -53,6 +54,8 @@ type copyMachine struct {
 	table         tree.TableExpr
 	columns       tree.NameList
 	resultColumns sqlbase.ResultColumns
+	format        tree.CopyFormat
+	binaryState   binaryState
 	// buf is used to parse input data into rows. It also accumulates a partial
 	// row between protocol messages.
 	buf bytes.Buffer
@@ -103,6 +106,7 @@ func newCopyMachine(
 		//  but that dependency can be removed by refactoring it.
 		table:   &n.Table,
 		columns: n.Columns,
+		format:  n.Options.CopyFormat,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
 		p:              planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}},
@@ -248,29 +252,54 @@ func (c *copyMachine) processCopyData(
 		}
 	}
 	c.buf.WriteString(data)
+Loop:
 	for c.buf.Len() > 0 {
-		line, err := c.buf.ReadBytes(lineDelim)
-		if err != nil {
-			if err != io.EOF {
-				return err
-			} else if !final {
-				// Put the incomplete row back in the buffer, to be processed next time.
-				c.buf.Write(line)
-				break
-			}
-		} else {
-			// Remove lineDelim from end.
-			line = line[:len(line)-1]
-			// Remove a single '\r' at EOL, if present.
-			if len(line) > 0 && line[len(line)-1] == '\r' {
+		switch c.format {
+		case tree.CopyFormatText:
+			line, err := c.buf.ReadBytes(lineDelim)
+			if err != nil {
+				if err != io.EOF {
+					return err
+				} else if !final {
+					// Put the incomplete row back in the buffer, to be processed next time.
+					c.buf.Write(line)
+					break Loop
+				}
+			} else {
+				// Remove lineDelim from end.
 				line = line[:len(line)-1]
+				// Remove a single '\r' at EOL, if present.
+				if len(line) > 0 && line[len(line)-1] == '\r' {
+					line = line[:len(line)-1]
+				}
 			}
-		}
-		if c.buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
-			break
-		}
-		if err := c.addRow(ctx, line); err != nil {
-			return err
+			if c.buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
+				break Loop
+			}
+			if err := c.addRow(ctx, line); err != nil {
+				return err
+			}
+		case tree.CopyFormatBinary:
+			switch c.binaryState {
+			case binaryStateNeedSignature:
+				if err := c.readBinarySignature(); err != nil {
+					return err
+				}
+			case binaryStateRead:
+				if err := c.readBinaryTuple(ctx); err != nil {
+					return errors.Wrapf(err, "read binary tuple")
+				}
+			case binaryStateFoundTrailer:
+				if !final {
+					return pgerror.New(pgcode.ProtocolViolation,
+						"copy data present after trailer")
+				}
+				break Loop
+			default:
+				panic("unknown binary state")
+			}
+		default:
+			panic("unknown copy format")
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
@@ -278,6 +307,77 @@ func (c *copyMachine) processCopyData(
 		return nil
 	}
 	return c.processRows(ctx)
+}
+
+func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
+	// This implementation expects that if a field count exists, all of the
+	// fields in the tuple have also been sent. It will error if it expects
+	// more fields than are in the buffer.
+	var fieldCount int16
+	var err error
+	if err = binary.Read(&c.buf, binary.BigEndian, &fieldCount); err != nil {
+		return err
+	}
+	if fieldCount == -1 {
+		c.binaryState = binaryStateFoundTrailer
+		return nil
+	}
+	if fieldCount < 1 {
+		return pgerror.Newf(pgcode.ProtocolViolation,
+			"unexpected field count: %d", fieldCount)
+	}
+	exprs := make(tree.Exprs, fieldCount)
+	var byteCount int32
+	for i := range exprs {
+		if err = binary.Read(&c.buf, binary.BigEndian, &byteCount); err != nil {
+			return err
+		}
+		if byteCount == -1 {
+			exprs[i] = tree.DNull
+			continue
+		}
+		data := c.buf.Next(int(byteCount))
+		if len(data) != int(byteCount) {
+			return errors.Newf("partial copy data row")
+		}
+		d, err := pgwirebase.DecodeOidDatum(
+			c.parsingEvalCtx,
+			c.resultColumns[i].Typ.Oid(),
+			pgwirebase.FormatBinary,
+			data,
+		)
+		if err != nil {
+			return pgerror.Wrapf(err, pgcode.ProtocolViolation,
+				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
+		}
+		sz := d.Size()
+		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
+			return err
+		}
+		exprs[i] = d
+	}
+	if err = c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+		return err
+	}
+	c.rows = append(c.rows, exprs)
+	return nil
+}
+
+func (c *copyMachine) readBinarySignature() error {
+	// This is the standard 11-byte binary signature with the flags and
+	// header 32-bit integers appended since we only support the zero value
+	// of them.
+	const binarySignature = "PGCOPY\n\377\r\n\000" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00"
+	var sig [11 + 8]byte
+	if _, err := io.ReadFull(&c.buf, sig[:]); err != nil {
+		return err
+	}
+	if !bytes.Equal(sig[:], []byte(binarySignature)) {
+		return pgerror.New(pgcode.ProtocolViolation,
+			"unrecognized binary copy signature")
+	}
+	c.binaryState = binaryStateRead
+	return nil
 }
 
 // preparePlannerForCopy resets the planner so that it can be used during
@@ -514,3 +614,18 @@ var decodeMap = map[byte]byte{
 	'v':  '\v',
 	'\\': '\\',
 }
+
+type copyFormat int
+
+const (
+	formatText copyFormat = iota
+	formatBinary
+)
+
+type binaryState int
+
+const (
+	binaryStateNeedSignature binaryState = iota
+	binaryStateRead
+	binaryStateFoundTrailer
+)

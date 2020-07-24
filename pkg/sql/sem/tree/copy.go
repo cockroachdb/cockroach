@@ -23,6 +23,7 @@ type CopyFrom struct {
 // CopyOptions describes options for COPY execution.
 type CopyOptions struct {
 	Destination Expr
+	CopyFormat  CopyFormat
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -47,9 +48,24 @@ func (node *CopyFrom) Format(ctx *FmtCtx) {
 }
 
 func (o *CopyOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
 	if o.Destination != nil {
 		ctx.WriteString("destination=")
 		o.Destination.Format(ctx)
+		addSep = true
+	}
+	if o.CopyFormat != CopyFormatText {
+		maybeAddSep()
+		switch o.CopyFormat {
+		case CopyFormatBinary:
+			ctx.WriteString("BINARY")
+		}
 	}
 }
 
@@ -65,5 +81,20 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 	} else {
 		o.Destination = other.Destination
 	}
+	if o.CopyFormat != CopyFormatText {
+		if other.CopyFormat != CopyFormatText {
+			return errors.New("format option specified multiple times")
+		}
+	} else {
+		o.CopyFormat = other.CopyFormat
+	}
 	return nil
 }
+
+// CopyFormat identifies a COPY data format.
+type CopyFormat int
+
+const (
+	CopyFormatText CopyFormat = iota
+	CopyFormatBinary
+)

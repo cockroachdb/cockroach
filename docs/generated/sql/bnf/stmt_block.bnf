@@ -48,7 +48,7 @@ analyze_stmt ::=
 	| 'ANALYSE' analyze_target
 
 copy_from_stmt ::=
-	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_options
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -221,9 +221,8 @@ opt_column_list ::=
 	'(' name_list ')'
 	| 
 
-opt_with_options ::=
-	'WITH' kv_option_list
-	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
+opt_with_copy_options ::=
+	opt_with copy_options_list
 	| 
 
 database_name ::=
@@ -418,6 +417,11 @@ import_format ::=
 string_or_placeholder ::=
 	non_reserved_word_or_sconst
 	| 'PLACEHOLDER'
+
+opt_with_options ::=
+	'WITH' kv_option_list
+	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -617,8 +621,12 @@ db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
 
-kv_option_list ::=
-	( kv_option ) ( ( ',' kv_option ) )*
+opt_with ::=
+	'WITH'
+	| 
+
+copy_options_list ::=
+	( copy_options ) ( ( copy_options ) )*
 
 prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
@@ -650,6 +658,7 @@ unreserved_keyword ::=
 	| 'BACKUP'
 	| 'BEFORE'
 	| 'BEGIN'
+	| 'BINARY'
 	| 'BUCKET_COUNT'
 	| 'BUNDLE'
 	| 'BY'
@@ -687,6 +696,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DESTINATION'
 	| 'DETACHED'
 	| 'DISCARD'
 	| 'DOMAIN'
@@ -1174,6 +1184,9 @@ non_reserved_word_or_sconst ::=
 	non_reserved_word
 	| 'SCONST'
 
+kv_option_list ::=
+	( kv_option ) ( ( ',' kv_option ) )*
+
 table_elem ::=
 	column_def
 	| index_def
@@ -1332,11 +1345,9 @@ complex_db_object_name ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 
-kv_option ::=
-	name '=' string_or_placeholder
-	| name
-	| 'SCONST' '=' string_or_placeholder
-	| 'SCONST'
+copy_options ::=
+	'DESTINATION' '=' string_or_placeholder
+	| 'BINARY'
 
 db_object_name_component ::=
 	name
@@ -1441,10 +1452,6 @@ opt_add_val_placement ::=
 
 schema_name ::=
 	name
-
-opt_with ::=
-	'WITH'
-	| 
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
@@ -1594,6 +1601,12 @@ non_reserved_word ::=
 	| unreserved_keyword
 	| col_name_keyword
 	| type_func_name_keyword
+
+kv_option ::=
+	name '=' string_or_placeholder
+	| name
+	| 'SCONST' '=' string_or_placeholder
+	| 'SCONST'
 
 column_def ::=
 	column_name typename col_qual_list
