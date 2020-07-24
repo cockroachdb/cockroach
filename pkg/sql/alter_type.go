@@ -114,14 +114,13 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	if err != nil {
 		return err
 	}
-	// TODO (rohany): This should use a method on the desc collection instead.
-	arrayDesc, err := sqlbase.GetTypeDescFromID(params.ctx, p.txn, p.ExecCfg().Codec, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(params.ctx, p.txn, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 	if err := p.performRenameTypeDesc(
 		params.ctx,
-		sqlbase.NewMutableExistingTypeDescriptor(*arrayDesc.TypeDesc()),
+		arrayDesc,
 		newArrayName,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {

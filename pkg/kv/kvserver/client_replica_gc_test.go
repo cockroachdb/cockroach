@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestReplicaGCQueueDropReplica verifies that a removed replica is
@@ -72,7 +73,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 
 	tc = testcluster.StartTestCluster(t, numStores,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
+			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &testKnobs,
@@ -82,8 +83,11 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
+	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
-	desc := tc.LookupRangeOrFatal(t, k)
+	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
+
 	ts := tc.Servers[1]
 	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
@@ -91,10 +95,9 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	}
 
 	{
-		repl1, err := store.GetReplica(desc.RangeID)
-		if err != nil {
-			t.Fatal(err)
-		}
+		repl1 := store.LookupReplica(roachpb.RKey(k))
+		require.NotNil(t, repl1)
+
 		eng := store.Engine()
 
 		// Put some bogus sideloaded data on the replica which we're about to
@@ -122,7 +125,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					repl1.RaftLock()
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
-					if _, err := eng.Stat(dir); os.IsNotExist(err) {
+					_, err := eng.Stat(dir)
+					if os.IsNotExist(err) {
 						return nil
 					}
 					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)
@@ -131,12 +135,12 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		}()
 	}
 
-	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
-			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
+			return errors.Errorf("expected range removal: %v", err)
 		}
 		return nil
 	})
