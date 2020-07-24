@@ -134,8 +134,9 @@ const (
 	// This is used e.g. when processing the calls inside ROWS FROM.
 	RejectNestedGenerators
 
-	// RejectStableFunctions rejects any stable functions.
-	RejectStableFunctions
+	// RejectStableOperators rejects any stable functions or operators (including
+	// casts).
+	RejectStableOperators
 
 	// RejectVolatileFunctions rejects any volatile functions.
 	RejectVolatileFunctions
@@ -339,6 +340,9 @@ func (expr *BinaryExpr) TypeCheck(
 	}
 
 	binOp := fns[0].(*BinOp)
+	if err := semaCtx.checkVolatility(binOp.Volatility); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
+	}
 
 	// Register operator usage in telemetry.
 	if binOp.counter != nil {
@@ -405,27 +409,26 @@ func (expr *CaseExpr) TypeCheck(
 	return expr, nil
 }
 
-func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
+func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter, Volatility) {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
 	switch {
 	case toFamily == types.ArrayFamily && fromFamily == types.ArrayFamily:
-		ok, c := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
+		ok, c, v := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
 		}
-		return ok, c
+		return ok, c, v
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
 		// Casts from ENUM to ENUM type can only succeed if the two enums
-		// types are equivalent.
-		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter
+		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter, VolatilityImmutable
 	}
 
 	cast := lookupCast(fromFamily, toFamily)
 	if cast == nil {
-		return false, nil
+		return false, nil, 0
 	}
-	return true, cast.counter
+	return true, cast.counter, cast.volatility
 }
 
 func isEmptyArray(expr Expr) bool {
@@ -485,15 +488,19 @@ func (expr *CastExpr) TypeCheck(
 
 	castFrom := typedSubExpr.ResolvedType()
 
-	if ok, c := isCastDeepValid(castFrom, exprType); ok {
-		telemetry.Inc(c)
-		expr.Expr = typedSubExpr
-		expr.Type = exprType
-		expr.typ = exprType
-		return expr, nil
+	ok, c, volatility := isCastDeepValid(castFrom, exprType)
+	if !ok {
+		return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
+	}
+	if err := semaCtx.checkVolatility(volatility); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
 	}
 
-	return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
+	telemetry.Inc(c)
+	expr.Expr = typedSubExpr
+	expr.Type = exprType
+	expr.typ = exprType
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -690,11 +697,11 @@ func (expr *ComparisonExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
-	var fn *CmpOp
+	var cmpOp *CmpOp
 	var alwaysNull bool
 	var err error
 	if expr.Operator.hasSubOperator() {
-		leftTyped, rightTyped, fn, alwaysNull, err = typeCheckComparisonOpWithSubOperator(
+		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOpWithSubOperator(
 			ctx,
 			semaCtx,
 			expr.Operator,
@@ -703,7 +710,7 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Right,
 		)
 	} else {
-		leftTyped, rightTyped, fn, alwaysNull, err = typeCheckComparisonOp(
+		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOp(
 			ctx,
 			semaCtx,
 			expr.Operator,
@@ -719,13 +726,17 @@ func (expr *ComparisonExpr) TypeCheck(
 		return DNull, nil
 	}
 
+	if err := semaCtx.checkVolatility(cmpOp.Volatility); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
+	}
+
 	// Register operator usage in telemetry.
-	if fn.counter != nil {
-		telemetry.Inc(fn.counter)
+	if cmpOp.counter != nil {
+		telemetry.Inc(cmpOp.counter)
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.fn = fn
+	expr.fn = cmpOp
 	expr.typ = types.Bool
 	return expr, nil
 }
@@ -826,13 +837,13 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	return nil
 }
 
-// checkOverloadUsage checks whether the given built-in overload is allowed in
-// the current context.
-func (sc *SemaContext) checkOverloadUsage(overload *Overload) error {
+// checkVolatility checks whether an operator with the given volatility is
+// allowed in the current context.
+func (sc *SemaContext) checkVolatility(v Volatility) error {
 	if sc == nil {
 		return nil
 	}
-	switch overload.Volatility {
+	switch v {
 	case VolatilityVolatile:
 		if sc.Properties.required.rejectFlags&RejectVolatileFunctions != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
@@ -842,12 +853,12 @@ func (sc *SemaContext) checkOverloadUsage(overload *Overload) error {
 				"volatile functions are not allowed in %s", sc.Properties.required.context)
 		}
 	case VolatilityStable:
-		if sc.Properties.required.rejectFlags&RejectStableFunctions != 0 {
+		if sc.Properties.required.rejectFlags&RejectStableOperators != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
 			// this error code matches PostgreSQL's in the same conditions.
 			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"context-dependent functions are not allowed in %s",
+				"context-dependent operators are not allowed in %s",
 				sc.Properties.required.context,
 			)
 		}
@@ -1037,7 +1048,7 @@ func (expr *FuncExpr) TypeCheck(
 			strings.Join(typeNames, ", "),
 		)
 	}
-	if err := semaCtx.checkOverloadUsage(overloadImpl); err != nil {
+	if err := semaCtx.checkVolatility(overloadImpl.Volatility); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 	if overloadImpl.counter != nil {
@@ -1323,6 +1334,9 @@ func (expr *UnaryExpr) TypeCheck(
 	}
 
 	unaryOp := fns[0].(*UnaryOp)
+	if err := semaCtx.checkVolatility(unaryOp.Volatility); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
+	}
 
 	// Register operator usage in telemetry.
 	if unaryOp.counter != nil {
