@@ -35,6 +35,7 @@ message RaftHeartbeat {
   bool quiesce = 6;
   reserved 7;
   repeated storagepb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  bool lagging_followers_on_quiesce_accurate = 10;
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -70,6 +71,18 @@ message RaftMessageRequest {
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
   repeated storagepb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+  // This field helps migrate in the lagging_followers_on_quiesce field. For
+  // messages sent by versions of Cockroach that do not know about the
+  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
+  // replicas are lagging, not that none of them are.
+  //
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v21.1: Keep sending. Stop consulting.
+  // v21.2: Remove field.
+  bool lagging_followers_on_quiesce_accurate = 10;
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.

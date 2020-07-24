@@ -96,9 +96,10 @@ func (s *Store) uncoalesceBeats(
 				StoreID:   toReplica.StoreID,
 				ReplicaID: beat.ToReplicaID,
 			},
-			Message:                   msg,
-			Quiesce:                   beat.Quiesce,
-			LaggingFollowersOnQuiesce: beat.LaggingFollowersOnQuiesce,
+			Message:                           msg,
+			Quiesce:                           beat.Quiesce,
+			LaggingFollowersOnQuiesce:         beat.LaggingFollowersOnQuiesce,
+			LaggingFollowersOnQuiesceAccurate: beat.LaggingFollowersOnQuiesceAccurate,
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -214,7 +215,12 @@ func (s *Store) processRaftRequestWithReplica(
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
-		if r.maybeQuiesceOnNotify(ctx, req.Message, laggingReplicaSet(req.LaggingFollowersOnQuiesce)) {
+		if r.maybeQuiesceOnNotify(
+			ctx,
+			req.Message,
+			laggingReplicaSet(req.LaggingFollowersOnQuiesce),
+			req.LaggingFollowersOnQuiesceAccurate,
+		) {
 			return nil
 		}
 	}
@@ -520,14 +526,22 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
-// nodeIsLiveCallback is invoked when a node transitions from non-live
-// to live. Iterate through all replicas and find any which belong to
-// ranges containing the implicated node. Unquiesce if currently
-// quiesced and the node's replica is not up-to-date. Note that this
-// mechanism can race with concurrent invocations of processTick, which
-// may have a copy of the previous livenessMap where the now-live node
-// is down. Those instances should be rare, however, and we expect the
-// newly live node to eventually unquiesce the range.
+// nodeIsLiveCallback is invoked when a node transitions from non-live to live.
+// Iterate through all replicas and find any which belong to ranges containing
+// the implicated node. Unquiesce if currently quiesced and the node's replica
+// is not up-to-date.
+//
+// See the comment in shouldFollowerQuiesceOnNotify for details on how these two
+// functions combine to provide the guarantee that:
+//
+//   If at quorum of replica in a Raft group is alive and at least
+//   one of these replicas is up-to-date, the Raft group will catch
+//   up any of the live, lagging replicas.
+//
+// Note that this mechanism can race with concurrent invocations of processTick,
+// which may have a copy of the previous livenessMap where the now-live node is
+// down. Those instances should be rare, however, and we expect the newly live
+// node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l kvserverpb.Liveness) {
 	s.updateLivenessMap()
 
@@ -536,8 +550,9 @@ func (s *Store) nodeIsLiveCallback(l kvserverpb.Liveness) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
+		laggingAccurate := r.mu.laggingFollowersOnQuiesceAccurate
 		r.mu.RUnlock()
-		if quiescent && lagging.MemberStale(l) {
+		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
 			r.unquiesce()
 		}
 		return true
