@@ -1780,6 +1780,15 @@ func (l Lease) Type() LeaseType {
 	return LeaseEpoch
 }
 
+// Speculative returns true if this lease instance doesn't correspond to a
+// committed lease (or at least to a lease that's *known* to have committed).
+// For example, nodes sometimes guess who a leaseholder might be and synthesize
+// a more or less complete lease struct. Such cases are identified by an empty
+// Sequence.
+func (l Lease) Speculative() bool {
+	return l.Sequence == 0
+}
+
 // Equivalent determines whether ol is considered the same lease
 // for the purposes of matching leases when executing a command.
 // For expiration-based leases, extensions are allowed.
