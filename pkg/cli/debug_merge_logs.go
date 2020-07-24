@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
+	"database/sql"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +25,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -573,5 +576,180 @@ func seekToFirstAfterFrom(f *os.File, from time.Time, editMode log.EditSensitive
 		return err
 	}
 	_, err = f.Seek(int64(offset), io.SeekStart)
+	return err
+}
+
+// logStreamToDB pops messages off of s and writes them to out prepending
+// prefix per message and filtering messages which match filter.
+func writeLogStreamToParquet(s logStream, out io.Writer, prefix string) error {
+	const chanSize = 1 << 16        // 64k
+	const maxWriteBufSize = 1 << 18 // 256kB
+
+	prefixCache := map[*fileInfo][]byte{}
+	getPrefix := func(fi *fileInfo) ([]byte, error) {
+		if prefixBuf, ok := prefixCache[fi]; ok {
+			return prefixBuf, nil
+		}
+		prefixCache[fi] = fi.pattern.ExpandString(nil, prefix, fi.path, fi.matches)
+		return prefixCache[fi], nil
+	}
+
+	type entryInfo struct {
+		log.Entry
+		*fileInfo
+	}
+	render := func(ei entryInfo, w io.Writer) (err error) {
+		var prefixBytes []byte
+		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
+			return err
+		}
+		if _, err = w.Write(prefixBytes); err != nil {
+			return err
+		}
+		return ei.Format(w)
+	}
+
+	g, ctx := errgroup.WithContext(context.Background())
+	entryChan := make(chan entryInfo, chanSize) // read -> bufferWrites
+	writeChan := make(chan *bytes.Buffer)       // bufferWrites -> write
+	read := func() error {
+		defer close(entryChan)
+		for e, ok := s.peek(); ok; e, ok = s.peek() {
+			select {
+			case entryChan <- entryInfo{Entry: e, fileInfo: s.fileInfo()}:
+			case <-ctx.Done():
+				return nil
+			}
+			s.pop()
+		}
+		return s.error()
+	}
+	bufferWrites := func() error {
+		defer close(writeChan)
+		writing, pending := &bytes.Buffer{}, &bytes.Buffer{}
+		for {
+			send, recv := writeChan, entryChan
+			if pending.Len() == 0 {
+				send = nil
+				if recv == nil {
+					return nil
+				}
+			} else if pending.Len() > maxWriteBufSize {
+				recv = nil
+			}
+			select {
+			case ei, open := <-recv:
+				if !open {
+					entryChan = nil
+					break
+				}
+				if err := render(ei, pending); err != nil {
+					return err
+				}
+			case send <- pending:
+				writing.Reset()
+				pending, writing = writing, pending
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}
+	write := func() error {
+		for buf := range writeChan {
+			if _, err := out.Write(buf.Bytes()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	g.Go(read)
+	g.Go(bufferWrites)
+	g.Go(write)
+	return g.Wait()
+}
+
+// writeLogStream pops messages off of s and writes them to out prepending
+// prefix per message and filtering messages which match filter.
+func writeLogStreamToSQL(s logStream, prefix, dbName string) error {
+	const chanSize = 1 << 16 // 64k
+
+	prefixCache := map[*fileInfo][]byte{}
+	getPrefix := func(fi *fileInfo) ([]byte, error) {
+		if prefixBuf, ok := prefixCache[fi]; ok {
+			return prefixBuf, nil
+		}
+		prefixCache[fi] = fi.pattern.ExpandString(nil, prefix, fi.path, fi.matches)
+		return prefixCache[fi], nil
+	}
+
+	type entryInfo struct {
+		log.Entry
+		*fileInfo
+	}
+
+	g, ctx := errgroup.WithContext(context.Background())
+	entryChan := make(chan entryInfo, chanSize) // read -> bufferWrites
+	read := func() error {
+		defer close(entryChan)
+		for e, ok := s.peek(); ok; e, ok = s.peek() {
+			select {
+			case entryChan <- entryInfo{Entry: e, fileInfo: s.fileInfo()}:
+			case <-ctx.Done():
+				return nil
+			}
+			s.pop()
+		}
+		return s.error()
+	}
+	write := func() error {
+		db, err := sql.Open("sqlite3", dbName)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		tblName := "logs"
+		if err := createSQLTable(db, tblName); err != nil {
+			return errors.Wrap(err, "Failed creating sqlite table")
+		}
+		stmt, err := db.Prepare("INSERT INTO " + tblName + `
+(prefix, time, severity, goroutine, file, line, tags, message)
+VALUES (?,?,?,?,?,?,?,?);
+`)
+		if err != nil {
+			return errors.Wrap(err, "Failed inserting log entry")
+		}
+
+		for e := range entryChan {
+			prefixBytes, err := getPrefix(e.fileInfo)
+			if err != nil {
+				return err
+			}
+			if _, err := stmt.Exec(prefixBytes, e.Time, e.Severity, e.Goroutine, e.File, e.Line, e.Tags, e.Message); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	g.Go(read)
+	g.Go(write)
+	return g.Wait()
+}
+
+func createSQLTable(db *sql.DB, name string) error {
+	stmt, err := db.Prepare("CREATE TABLE IF NOT EXISTS " + name + `(
+	"id"	 			INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,		
+	"prefix" 		TEXT,
+	"time"      INTEGER,
+	"severity"	INTEGER,
+	"goroutine" INTEGER,
+	"file"	    TEXT,
+	"line"  	  INTEGER,
+	"tags"			TEXT,
+	"message" 	TEXT
+);`)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec() // Execute SQL Statements
 	return err
 }
