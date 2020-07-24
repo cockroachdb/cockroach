@@ -33,12 +33,7 @@ const (
 	// UserFileUploadTable is used internally to identify a COPY initiated by
 	// userfile upload.
 	UserFileUploadTable = "user_file_upload"
-	copyOptionDest      = "destination"
 )
-
-var copyFileOptionExpectValues = map[string]KVStringOptValidate{
-	copyOptionDest: KVStringOptRequireValue,
-}
 
 var _ copyMachineInterface = &fileUploadMachine{}
 
@@ -93,17 +88,20 @@ func newFileUploadMachine(
 		}
 	}
 
-	optsFn, err := f.c.p.TypeAsStringOpts(ctx, n.Options, copyFileOptionExpectValues)
+	if n.Options.Destination == nil {
+		return nil, errors.Newf("destination required")
+	}
+	destFn, err := f.c.p.TypeAsString(ctx, n.Options.Destination, "COPY")
 	if err != nil {
 		return nil, err
 	}
-	opts, err := optsFn()
+	dest, err := destFn()
 	if err != nil {
 		return nil, err
 	}
 
 	pr, pw := io.Pipe()
-	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, opts[copyOptionDest], c.p.User())
+	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User())
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +111,7 @@ func newFileUploadMachine(
 	if err == nil {
 		// Can ignore this parse error as it would have been caught when creating a
 		// new ExternalStorage above and so we never expect it to non-nil.
-		uri, _ := url.Parse(opts[copyOptionDest])
+		uri, _ := url.Parse(dest)
 		return nil, errors.Newf("destination file already exists for %s", uri.Path)
 	}
 

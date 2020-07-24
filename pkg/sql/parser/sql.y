@@ -481,6 +481,9 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
   return u.val.(*tree.BackupOptions)
 }
+func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
+  return u.val.(*tree.CopyOptions)
+}
 func (u *sqlSymUnion) transactionModes() tree.TransactionModes {
     return u.val.(tree.TransactionModes)
 }
@@ -569,7 +572,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DETACHED
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -850,6 +853,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
+%type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with
@@ -2486,15 +2490,43 @@ opt_with_options:
   }
 
 copy_from_stmt:
-  COPY table_name opt_column_list FROM STDIN opt_with_options
+  COPY table_name opt_column_list FROM STDIN opt_with_copy_options
   {
     name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
        Stdin: true,
-       Options: $6.kvOptions(),
+       Options: *$6.copyOptions(),
     }
+  }
+
+opt_with_copy_options:
+  opt_with copy_options_list
+  {
+    $$.val = $2.copyOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CopyOptions{}
+  }
+
+copy_options_list:
+  copy_options
+  {
+    $$.val = $1.copyOptions()
+  }
+| copy_options_list copy_options
+  {
+    if err := $1.copyOptions().CombineWith($2.copyOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+copy_options:
+  DESTINATION '=' string_or_placeholder
+  {
+    $$.val = &tree.CopyOptions{Destination: $3.expr()}
   }
 
 // %Help: CANCEL
@@ -10538,6 +10570,7 @@ unreserved_keyword:
 | DELETE
 | DEFAULTS
 | DEFERRED
+| DESTINATION
 | DETACHED
 | DISCARD
 | DOMAIN
