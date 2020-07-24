@@ -589,7 +589,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					return nil
 				}); err != nil {
-				log.Warningf(ctx, "failed node liveness heartbeat: %+v", err)
+				log.Warningf(ctx, heartbeatFailureLogFormat, err)
 			}
 
 			nl.heartbeatToken <- struct{}{}
@@ -601,6 +601,16 @@ func (nl *NodeLiveness) StartHeartbeat(
 		}
 	})
 }
+
+const heartbeatFailureLogFormat = `failed node liveness heartbeat: %+v
+
+An inability to maintain liveness will prevent a node from participating in a
+cluster. If this problem persists, it may be a sign of resource starvation or
+of network connectivity problems. For help troubleshooting, visit:
+
+    https://www.cockroachlabs.com/docs/stable/cluster-setup-troubleshooting.html#node-liveness-issues
+
+`
 
 // PauseHeartbeat stops or restarts the periodic heartbeat depending on the
 // pause parameter. When pause is true, waits until it acquires the heartbeatToken
