@@ -324,18 +324,21 @@ func makeMetrics(internal bool) Metrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	gossipUpdateC := s.cfg.Gossip.DeprecatedRegisterSystemConfigChannel(47150)
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		for {
-			select {
-			case <-gossipUpdateC:
-				sysCfg := s.cfg.Gossip.DeprecatedSystemConfig(47150)
-				s.dbCache.updateSystemConfig(sysCfg)
-			case <-stopper.ShouldStop():
-				return
+	if s.cfg.Codec.ForSystemTenant() {
+		gossipUpdateC := s.cfg.Gossip.DeprecatedRegisterSystemConfigChannel(47150)
+		stopper.RunWorker(ctx, func(ctx context.Context) {
+			for {
+				select {
+				case <-gossipUpdateC:
+					sysCfg := s.cfg.Gossip.DeprecatedSystemConfig(47150)
+					s.dbCache.updateSystemConfig(sysCfg)
+				case <-stopper.ShouldStop():
+					return
+				}
 			}
-		}
-	})
+		})
+	}
+
 	// Start a loop to clear SQL stats at the max reset interval. This is
 	// to ensure that we always have some worker clearing SQL stats to avoid
 	// continually allocating space for the SQL stats. Additionally, spawn
