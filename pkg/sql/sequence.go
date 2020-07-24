@@ -530,6 +530,17 @@ func (p *planner) removeSequenceDependencies(
 		if err != nil {
 			return err
 		}
+		// If the sequence descriptor has been dropped, we do not need to unlink the
+		// dependency. This can happen during a `DROP DATABASE CASCADE` when both
+		// the table and sequence are objects in the database being dropped. If
+		// `dropImpl` is called on the sequence before the table, because CRDB
+		// doesn't implement CASCADE for sequences, the dependency to the
+		// table descriptor is not unlinked. This check prevents us from failing
+		// when trying to unlink a dependency that really shouldn't have existed
+		// at this point in the code to begin with.
+		if seqDesc.Dropped() {
+			continue
+		}
 		// Find the item in seqDesc.DependedOnBy which references tableDesc and col.
 		refTableIdx := -1
 		refColIdx := -1
