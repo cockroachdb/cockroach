@@ -17,8 +17,6 @@ import (
 	"io"
 	// For the debug http handlers.
 	_ "net/http/pprof"
-	"os/exec"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -454,39 +452,6 @@ func teamCityEscape(s string) string {
 
 func teamCityNameEscape(name string) string {
 	return strings.Replace(name, ",", "_", -1)
-}
-
-// getAuthorEmail retrieves the author of a line of code. Returns the empty
-// string if the author cannot be determined. Some test tags override this
-// behavior and have a hardcoded author email.
-func getAuthorEmail(tags []string, file string, line int) string {
-	for _, tag := range tags {
-		if tag == `orm` || tag == `driver` {
-			return `rafi@cockroachlabs.com`
-		}
-	}
-	const repo = "github.com/cockroachdb/cockroach/"
-	i := strings.Index(file, repo)
-	if i == -1 {
-		return ""
-	}
-	file = file[i+len(repo):]
-
-	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git blame --porcelain -L%d,+1 $(git rev-parse --show-toplevel)/%s | grep author-mail`,
-			line, file))
-	// This command returns output such as:
-	// author-mail <jordan@cockroachlabs.com>
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	re := regexp.MustCompile("author-mail <(.*)>")
-	matches := re.FindSubmatch(out)
-	if matches == nil {
-		return ""
-	}
-	return string(matches[1])
 }
 
 type testWithCount struct {

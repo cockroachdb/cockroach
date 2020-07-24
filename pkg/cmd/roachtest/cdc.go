@@ -512,7 +512,7 @@ func registerCDC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/tpcc-1000/rangefeed=%t", useRangeFeed),
-		Owner:      `cdc`,
+		Owner:      OwnerCDC,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -528,7 +528,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/initial-scan/rangefeed=%t", useRangeFeed),
-		Owner:      `cdc`,
+		Owner:      OwnerCDC,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -545,7 +545,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:  "cdc/poller/rangefeed=false",
-		Owner: `cdc`,
+		Owner: OwnerCDC,
 		// When testing a 2.1 binary, we use the poller for all the other tests
 		// and this is close enough to cdc/tpcc-1000 test to be redundant, so
 		// skip it.
