@@ -117,7 +117,7 @@ type LivenessMetrics struct {
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
 // Callbacks can be registered via NodeLiveness.RegisterCallback().
-type IsLiveCallback func(nodeID roachpb.NodeID)
+type IsLiveCallback func(kvserverpb.Liveness)
 
 // HeartbeatCallback is invoked whenever this node updates its own liveness status,
 // indicating that it is alive.
@@ -774,8 +774,8 @@ func (nl *NodeLiveness) SelfEx() (LivenessRecord, error) {
 // IsLiveMapEntry encapsulates data about current liveness for a
 // node.
 type IsLiveMapEntry struct {
+	kvserverpb.Liveness
 	IsLive bool
-	Epoch  int64
 }
 
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
@@ -796,8 +796,8 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 			continue
 		}
 		lMap[nID] = IsLiveMapEntry{
-			IsLive: isLive,
-			Epoch:  l.Epoch,
+			Liveness: l.Liveness,
+			IsLive:   isLive,
 		}
 	}
 	return lMap
@@ -1067,7 +1067,7 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	now := nl.clock.Now().GoTime()
 	if !old.IsLive(now) && new.IsLive(now) {
 		for _, fn := range callbacks {
-			fn(new.NodeID)
+			fn(new.Liveness)
 		}
 	}
 }
@@ -1079,12 +1079,9 @@ func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 		return true
 	}
 
-	// Compare Epoch, and if no change there, Expiration.
-	if old.Epoch != new.Epoch {
-		return old.Epoch < new.Epoch
-	}
-	if old.Expiration != new.Expiration {
-		return old.Expiration.Less(new.Expiration)
+	// Compare liveness information. If old < new, replace.
+	if cmp := old.Compare(new); cmp != 0 {
+		return cmp < 0
 	}
 
 	// If Epoch and Expiration are unchanged, assume that the update is newer

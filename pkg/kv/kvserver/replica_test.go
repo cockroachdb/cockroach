@@ -9397,14 +9397,16 @@ func TestSplitMsgApps(t *testing.T) {
 type testQuiescer struct {
 	desc            roachpb.RangeDescriptor
 	numProposals    int
+	pendingQuota    bool
 	status          *raft.Status
 	lastIndex       uint64
 	raftReady       bool
 	ownsValidLease  bool
 	mergeInProgress bool
 	isDestroyed     bool
-	livenessMap     IsLiveMap
-	pendingQuota    bool
+
+	// Not used to implement quiescer, but used by tests.
+	livenessMap IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9413,6 +9415,10 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 
 func (q *testQuiescer) raftStatusRLocked() *raft.Status {
 	return q.status
+}
+
+func (q *testQuiescer) raftBasicStatusRLocked() raft.BasicStatus {
+	return q.status.BasicStatus
 }
 
 func (q *testQuiescer) raftLastIndexLocked() (uint64, error) {
@@ -9493,9 +9499,18 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.livenessMap)
-			if expected != ok {
-				t.Fatalf("expected %v, but found %v", expected, ok)
+			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.livenessMap)
+			require.Equal(t, expected, ok)
+			if ok {
+				// Any non-live replicas should be in the laggingReplicaSet.
+				var expLagging laggingReplicaSet
+				for _, rep := range q.descRLocked().Replicas().All() {
+					if l, ok := q.livenessMap[rep.NodeID]; ok && !l.IsLive {
+						expLagging = append(expLagging, l.Liveness)
+					}
+				}
+				sort.Sort(expLagging)
+				require.Equal(t, expLagging, lagging)
 			}
 		})
 	}
@@ -9582,11 +9597,177 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// the replica is on a non-live node.
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
-			q.livenessMap[roachpb.NodeID(i)] = IsLiveMapEntry{IsLive: false}
+			nodeID := roachpb.NodeID(i)
+			q.livenessMap[nodeID] = IsLiveMapEntry{
+				Liveness: kvserverpb.Liveness{NodeID: nodeID},
+				IsLive:   false,
+			}
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
 		})
 	}
+	// Verify no quiescence when replica progress doesn't match, if
+	// given a nil liveness map.
+	for _, i := range []uint64{1, 2, 3} {
+		test(false, func(q *testQuiescer) *testQuiescer {
+			q.livenessMap = nil
+			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
+			return q
+		})
+	}
+	// Verify no quiescence when replica progress doesn't match, if
+	// liveness map does not contain the lagging replica.
+	for _, i := range []uint64{1, 2, 3} {
+		test(false, func(q *testQuiescer) *testQuiescer {
+			delete(q.livenessMap, roachpb.NodeID(i))
+			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
+			return q
+		})
+	}
+}
+
+func TestFollowerQuiesceOnNotify(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	test := func(
+		expected bool,
+		transform func(*testQuiescer, RaftMessageRequest) (*testQuiescer, RaftMessageRequest),
+	) {
+		t.Run("", func(t *testing.T) {
+			q := &testQuiescer{
+				status: &raft.Status{
+					BasicStatus: raft.BasicStatus{
+						ID: 2,
+						HardState: raftpb.HardState{
+							Term:   5,
+							Commit: 10,
+						},
+						SoftState: raft.SoftState{
+							Lead: 1,
+						},
+					},
+				},
+				livenessMap: IsLiveMap{
+					1: {IsLive: true},
+					2: {IsLive: true},
+					3: {IsLive: true},
+				},
+			}
+			req := RaftMessageRequest{
+				Message: raftpb.Message{
+					Type:   raftpb.MsgHeartbeat,
+					From:   1,
+					Term:   5,
+					Commit: 10,
+				},
+				Quiesce:           true,
+				LaggingQuiescence: nil,
+			}
+			q, req = transform(q, req)
+
+			ok := shouldFollowerQuiesceOnNotify(
+				context.Background(),
+				q,
+				req.Message,
+				laggingReplicaSet(req.LaggingQuiescence),
+				q.livenessMap,
+			)
+			require.Equal(t, expected, ok)
+		})
+	}
+
+	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		return q, req
+	})
+	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		req.Message.Term = 4
+		return q, req
+	})
+	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		req.Message.Commit = 9
+		return q, req
+	})
+	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		q.numProposals = 1
+		return q, req
+	})
+	// Lagging replica with same liveness information.
+	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		l := kvserverpb.Liveness{
+			NodeID:     3,
+			Epoch:      7,
+			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+		}
+		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+			Liveness: l,
+			IsLive:   false,
+		}
+		req.LaggingQuiescence = []kvserverpb.Liveness{l}
+		return q, req
+	})
+	// Lagging replica with older liveness information.
+	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		l := kvserverpb.Liveness{
+			NodeID:     3,
+			Epoch:      7,
+			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+		}
+		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+			Liveness: l,
+			IsLive:   false,
+		}
+		lOld := l
+		lOld.Epoch--
+		req.LaggingQuiescence = []kvserverpb.Liveness{lOld}
+		return q, req
+	})
+	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		l := kvserverpb.Liveness{
+			NodeID:     3,
+			Epoch:      7,
+			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+		}
+		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+			Liveness: l,
+			IsLive:   false,
+		}
+		lOld := l
+		lOld.Expiration.WallTime--
+		req.LaggingQuiescence = []kvserverpb.Liveness{lOld}
+		return q, req
+	})
+	// Lagging replica with newer liveness information.
+	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		l := kvserverpb.Liveness{
+			NodeID:     3,
+			Epoch:      7,
+			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+		}
+		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+			Liveness: l,
+			IsLive:   false,
+		}
+		lNew := l
+		lNew.Epoch++
+		req.LaggingQuiescence = []kvserverpb.Liveness{lNew}
+		return q, req
+	})
+	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+		l := kvserverpb.Liveness{
+			NodeID:     3,
+			Epoch:      7,
+			Expiration: hlc.LegacyTimestamp{WallTime: 8},
+		}
+		q.livenessMap[l.NodeID] = IsLiveMapEntry{
+			Liveness: l,
+			IsLive:   false,
+		}
+		lNew := l
+		lNew.Expiration.WallTime++
+		req.LaggingQuiescence = []kvserverpb.Liveness{lNew}
+		return q, req
+	})
 }
 
 func TestReplicaRecomputeStats(t *testing.T) {

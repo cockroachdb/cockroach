@@ -14,6 +14,7 @@ option go_package = "kvserver";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
@@ -33,6 +34,7 @@ message RaftHeartbeat {
   uint64 commit = 5;
   bool quiesce = 6;
   reserved 7;
+  repeated storagepb.Liveness lagging_quiescence = 8 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -60,6 +62,14 @@ message RaftMessageRequest {
   // Raft which will generate a MsgHeartbeatResp that will unquiesce
   // the sender.
   bool quiesce = 5;
+  // If quiesce is true, this set contains liveness information about
+  // the replicas that were dead when the leader decided to quiesce and
+  // were lagging behind the quiescence log index (meaning they would
+  // have prevented quiescence had they been alive). If any replica
+  // (leader or follower) becomes aware that a replica in this set has
+  // become live, it should unquiesce the range so that the replica can
+  // be caught back up.
+  repeated storagepb.Liveness lagging_quiescence = 9 [(gogoproto.nullable) = false];
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.

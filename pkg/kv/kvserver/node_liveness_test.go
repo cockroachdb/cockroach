@@ -180,10 +180,10 @@ func TestNodeIsLiveCallback(t *testing.T) {
 
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
-	mtc.nodeLivenesses[0].RegisterCallback(func(nodeID roachpb.NodeID) {
+	mtc.nodeLivenesses[0].RegisterCallback(func(l kvserverpb.Liveness) {
 		cbMu.Lock()
 		defer cbMu.Unlock()
-		cbs[nodeID] = struct{}{}
+		cbs[l.NodeID] = struct{}{}
 	})
 
 	// Advance clock past the liveness threshold.
@@ -473,10 +473,13 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	verifyLiveness(t, mtc)
 	pauseNodeLivenessHeartbeats(mtc, true)
 	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
+	l1, _ := mtc.nodeLivenesses[0].GetLiveness(1)
+	l2, _ := mtc.nodeLivenesses[0].GetLiveness(2)
+	l3, _ := mtc.nodeLivenesses[0].GetLiveness(3)
 	expectedLMap := kvserver.IsLiveMap{
-		1: {IsLive: true, Epoch: 1},
-		2: {IsLive: true, Epoch: 1},
-		3: {IsLive: true, Epoch: 1},
+		1: {Liveness: l1.Liveness, IsLive: true},
+		2: {Liveness: l2.Liveness, IsLive: true},
+		3: {Liveness: l3.Liveness, IsLive: true},
 	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
@@ -498,10 +501,13 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Now verify only node 0 is live.
 	lMap = mtc.nodeLivenesses[0].GetIsLiveMap()
+	l1, _ = mtc.nodeLivenesses[0].GetLiveness(1)
+	l2, _ = mtc.nodeLivenesses[0].GetLiveness(2)
+	l3, _ = mtc.nodeLivenesses[0].GetLiveness(3)
 	expectedLMap = kvserver.IsLiveMap{
-		1: {IsLive: true, Epoch: 1},
-		2: {IsLive: false, Epoch: 1},
-		3: {IsLive: false, Epoch: 1},
+		1: {Liveness: l1.Liveness, IsLive: true},
+		2: {Liveness: l2.Liveness, IsLive: false},
+		3: {Liveness: l3.Liveness, IsLive: false},
 	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
