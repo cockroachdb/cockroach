@@ -77,10 +77,13 @@ func DefaultGeometryIndexConfig() *Config {
 }
 
 // GeometryIndexConfigForSRID returns a geometry index config for srid.
-func GeometryIndexConfigForSRID(srid geopb.SRID) *Config {
+func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
+	if srid == 0 {
+		return DefaultGeometryIndexConfig(), nil
+	}
 	p, exists := geoprojbase.Projection(srid)
-	if !exists || p.Bounds == nil {
-		return DefaultGeometryIndexConfig()
+	if !exists {
+		return nil, errors.Newf("expected definition for SRID %d", srid)
 	}
 	b := p.Bounds
 	minX, maxX, minY, maxY := b.MinX, b.MaxX, b.MinY, b.MaxY
@@ -105,7 +108,7 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) *Config {
 			MinY:     minY - deltaY,
 			MaxY:     maxY + deltaY,
 			S2Config: defaultS2Config()},
-	}
+	}, nil
 }
 
 // A cell id unused by S2. We use it to index geometries that exceed the

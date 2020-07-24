@@ -1444,10 +1444,14 @@ func MakeTableDesc(
 				if err != nil {
 					return desc, err
 				}
-				if columnDesc.Type.InternalType.Family == types.GeometryFamily {
-					idx.GeoConfig = *geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
-				}
-				if columnDesc.Type.InternalType.Family == types.GeographyFamily {
+				switch columnDesc.Type.Family() {
+				case types.GeometryFamily:
+					config, err := geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
+					if err != nil {
+						return desc, err
+					}
+					idx.GeoConfig = *config
+				case types.GeographyFamily:
 					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 				}
 			}

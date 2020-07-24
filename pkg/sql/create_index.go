@@ -161,11 +161,15 @@ func MakeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		if columnDesc.Type.InternalType.Family == types.GeometryFamily {
-			indexDesc.GeoConfig = *geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
+		switch columnDesc.Type.Family() {
+		case types.GeometryFamily:
+			config, err := geoindex.GeometryIndexConfigForSRID(columnDesc.Type.GeoSRIDOrZero())
+			if err != nil {
+				return nil, err
+			}
+			indexDesc.GeoConfig = *config
 			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
-		}
-		if columnDesc.Type.InternalType.Family == types.GeographyFamily {
+		case types.GeographyFamily:
 			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 			telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
 		}
