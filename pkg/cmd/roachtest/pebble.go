@@ -103,3 +103,66 @@ func registerPebble(r *testRegistry) {
 		})
 	}
 }
+
+func registerPebbleMetamorphic(r *testRegistry) {
+	stressBin := os.Getenv("STRESS_BIN")
+	if stressBin == "" {
+		stressBin = "./stress.linux"
+	}
+	metamorphicBin := os.Getenv("METAMORPHIC_TEST_BIN")
+	if metamorphicBin == "" {
+		metamorphicBin = "./metamorphic.test.linux"
+	}
+
+	const duration = 2 * time.Hour
+	run := func(ctx context.Context, t *test, c *cluster) {
+		c.Put(ctx, stressBin, "./stress")
+		c.Put(ctx, metamorphicBin, "./metamorphic.test")
+
+		runCmd := func(cmd string) error {
+			c.l.PrintfCtx(ctx, "> %s", cmd)
+			err := c.RunL(ctx, c.l, c.All(), cmd)
+			c.l.Printf("> result: %+v", err)
+			if err := ctx.Err(); err != nil {
+				c.l.Printf("(note: incoming context was canceled: %s", err)
+			}
+			return err
+		}
+
+		if err := runCmd(`mkdir ./logs`); err != nil {
+			t.Fatal(err)
+		}
+		err := runCmd(fmt.Sprintf("./stress"+
+			" -p 1"+
+			" -maxtime %s"+
+			" ./metamorphic.test"+
+			" -test.v"+
+			" -test.run 'TestMeta$$' > ./logs/meta.log 2>&1",
+			duration.String()))
+
+		// Retrieve the log file and the _meta directory before failing the
+		// test.
+		dest := filepath.Join(t.artifactsDir, "meta.log")
+		if err := c.Get(ctx, c.l, "./logs/meta.log", dest, c.All()); err != nil {
+			t.Fatal(err)
+		}
+		dest = filepath.Join(t.artifactsDir, "_meta")
+		if err := c.Get(ctx, c.l, "_meta", dest, c.All()); err != nil {
+			t.Fatal(err)
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r.Add(testSpec{
+		Name:       "pebble/metamorphic",
+		Owner:      OwnerStorage,
+		Timeout:    duration + 30*time.Minute,
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(1, cpu(16)),
+		Tags:       []string{"pebble"},
+		Run:        run,
+	})
+}

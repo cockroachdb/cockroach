@@ -63,6 +63,7 @@ func registerTests(r *testRegistry) {
 	registerNamespaceUpgrade(r)
 	registerNetwork(r)
 	registerPebble(r)
+	registerPebbleMetamorphic(r)
 	registerPgjdbc(r)
 	registerPgx(r)
 	registerPsycopg(r)
