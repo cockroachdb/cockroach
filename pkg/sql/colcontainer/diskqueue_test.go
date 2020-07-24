@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -176,9 +177,7 @@ var (
 
 // BenchmarkDiskQueue benchmarks a queue with parameters provided through flags.
 func BenchmarkDiskQueue(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 
 	bufSize, err := humanizeutil.ParseBytes(*bufferSizeBytes)
 	if err != nil {

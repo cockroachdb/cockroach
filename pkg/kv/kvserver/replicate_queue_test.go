@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -43,10 +43,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// This test was seen taking north of 20m under race.
-		t.Skip("too heavyweight for race")
-	}
+	// This test was seen taking north of 20m under race.
+	skip.UnderRace(t)
 
 	testutils.RunTrueAndFalse(t, "atomic", func(t *testing.T, atomic bool) {
 		testReplicateQueueRebalanceInner(t, atomic)
@@ -54,9 +52,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 }
 
 func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 
 	const numNodes = 5
 
@@ -361,9 +357,9 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if testing.Short() || testutils.NightlyStress() || util.RaceEnabled {
-		t.Skip("https://github.com/cockroachdb/cockroach/issues/38565")
-	}
+	skip.UnderStress(t, 38565)
+	skip.UnderRace(t, 38565)
+	skip.UnderShort(t, 38565)
 	ctx := context.Background()
 
 	// Create a cluster with really small ranges.

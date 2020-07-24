@@ -17,13 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func TestDownload(t *testing.T) {
-	if testutils.NightlyStress() {
-		t.Skip()
-	}
-	t.Skip("disabled by default because downloading files in CI is a silly idea")
+	skip.IgnoreLint(t, "disabled by default because downloading files in CI is a silly idea")
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()

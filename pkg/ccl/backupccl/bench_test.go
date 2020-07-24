@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -40,9 +41,7 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 }
 
 func BenchmarkClusterBackup(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -97,9 +96,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -149,9 +146,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 }
 
 func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	const numStatements = 100000
 
 	_, _, sqlDB, _, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode, 0, backupccl.InitNone)

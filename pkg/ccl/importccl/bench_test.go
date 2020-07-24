@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,10 +43,8 @@ type tableSSTable struct {
 }
 
 func BenchmarkImportWorkload(b *testing.B) {
-	b.Skip("#41932: broken due to adding keys out-of-order to an sstable")
-	if testing.Short() {
-		b.Skip("skipping long benchmark")
-	}
+	skip.WithIssue(b, 41932, "broken due to adding keys out-of-order to an sstable")
+	skip.UnderShort(b, "skipping long benchmark")
 
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -149,9 +148,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 }
 
 func BenchmarkConvertToKVs(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping long benchmark")
-	}
+	skip.UnderShort(b, "skipping long benchmark")
 
 	tpccGen := tpcc.FromWarehouses(1)
 	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
@@ -196,9 +193,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 }
 
 func BenchmarkConvertToSSTable(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping long benchmark")
-	}
+	skip.UnderShort(b, "skipping long benchmark")
 
 	tpccGen := tpcc.FromWarehouses(1)
 	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {

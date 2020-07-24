@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -52,7 +53,7 @@ func (hs healthServer) Watch(*healthpb.HealthCheckRequest, healthpb.Health_Watch
 func TestRequestDidNotStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/19708")
+	skip.WithIssue(t, 19708)
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

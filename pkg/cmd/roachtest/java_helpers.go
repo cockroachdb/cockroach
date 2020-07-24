@@ -23,9 +23,9 @@ var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
 type status int
 
 const (
-	pass status = iota
-	fail
-	skip
+	statusPass status = iota
+	statusFail
+	statusSkip
 )
 
 // extractFailureFromJUnitXML parses an XML report to find all failed tests. The
@@ -72,11 +72,11 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 			testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
 			tests = append(tests, testName)
 			if testCase.Skipped != nil {
-				testStatuses = append(testStatuses, skip)
+				testStatuses = append(testStatuses, statusSkip)
 			} else if testPassed {
-				testStatuses = append(testStatuses, pass)
+				testStatuses = append(testStatuses, statusPass)
 			} else {
-				testStatuses = append(testStatuses, fail)
+				testStatuses = append(testStatuses, statusFail)
 				message := testCase.Failure.Message
 				if len(message) == 0 {
 					message = testCase.Error.Message
@@ -140,24 +140,24 @@ func (r *ormTestsResults) parseJUnitXML(
 		case expectedIgnored:
 			r.results[test] = fmt.Sprintf("--- IGNORE: %s due to %s (expected)", test, ignoredIssue)
 			r.ignoredCount++
-		case status == skip:
+		case status == statusSkip:
 			r.results[test] = fmt.Sprintf("--- SKIP: %s", test)
 			r.skipCount++
-		case status == pass && !expectedFailure:
+		case status == statusPass && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 			r.passExpectedCount++
-		case status == pass && expectedFailure:
+		case status == statusPass && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.passUnexpectedCount++
-		case status == fail && expectedFailure:
+		case status == statusFail && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.failExpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
-		case status == fail && !expectedFailure:
+		case status == statusFail && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue))
 			r.failUnexpectedCount++

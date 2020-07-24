@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -382,9 +383,7 @@ func (c cliTest) RunWithCAArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
@@ -1553,7 +1552,7 @@ SQLSTATE: 57014
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("currently flaky: #38151")
+	skip.WithIssue(t, 38151)
 
 	start := timeutil.Now()
 	c := newCLITest(cliTestParams{})

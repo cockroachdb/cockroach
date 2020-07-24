@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -86,7 +87,7 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 
 func execPgbench(b *testing.B, pgURL url.URL) {
 	if _, err := exec.LookPath("pgbench"); err != nil {
-		b.Skip("pgbench is not available on PATH")
+		skip.IgnoreLint(b, "pgbench is not available on PATH")
 	}
 	c, err := SetupExec(pgURL, "bench", 20000, b.N)
 	if err != nil {
@@ -126,7 +127,7 @@ func BenchmarkPgbenchExec(b *testing.B) {
 			RawQuery: "sslmode=disable&dbname=postgres",
 		}
 		if conn, err := net.Dial("tcp", pgURL.Host); err != nil {
-			b.Skipf("unable to connect to postgres server on %s: %s", pgURL.Host, err)
+			skip.IgnoreLintf(b, "unable to connect to postgres server on %s: %s", pgURL.Host, err)
 		} else {
 			conn.Close()
 		}
