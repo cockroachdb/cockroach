@@ -10,6 +10,8 @@
 
 package tree
 
+import "fmt"
+
 // ControlJobs represents a PAUSE/RESUME/CANCEL JOBS statement.
 type ControlJobs struct {
 	Jobs    *Select
@@ -68,4 +70,57 @@ func (node *CancelSessions) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(node.Sessions)
+}
+
+// ScheduleCommand determines which type of action to effect on the selected job(s).
+type ScheduleCommand int
+
+// ScheduleCommand values
+const (
+	PauseSchedule ScheduleCommand = iota
+	ResumeSchedule
+	DropSchedule
+)
+
+func (c ScheduleCommand) String() string {
+	switch c {
+	case PauseSchedule:
+		return "PAUSE"
+	case ResumeSchedule:
+		return "RESUME"
+	case DropSchedule:
+		return "DROP"
+	default:
+		panic("unhandled schedule command")
+	}
+}
+
+// ControlSchedules represents PAUSE/RESUME SCHEDULE statement.
+type ControlSchedules struct {
+	Schedules *Select
+	Command   ScheduleCommand
+}
+
+type ControlAllSchedules struct {
+	With    *With
+	From    TableExpr
+	Command ScheduleCommand
+}
+
+var _ Statement = &ControlAllSchedules{}
+var _ Statement = &ControlSchedules{}
+
+// Format implements NodeFormatter interface
+func (n *ControlSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s SCHEDULES ", n.Command)
+	n.Schedules.Format(ctx)
+}
+
+// Format implements NodeFormatter interface
+func (n *ControlAllSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s ALL SCHEDULES", n.Command)
+	if n.With != nil {
+		fmt.Fprintf(ctx, " %s ", AsString(n.With))
+	}
+	n.From.Format(ctx)
 }

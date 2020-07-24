@@ -126,6 +126,10 @@ func (j *ScheduledJob) HasRecurringSchedule() bool {
 
 // ScheduleNextRun updates next run based on job schedule.
 func (j *ScheduledJob) ScheduleNextRun() error {
+	if !j.HasRecurringSchedule() {
+		return errors.Newf(
+			"cannot set next run for schedule %d (empty schedule)", j.rec.ScheduleID)
+	}
 	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
 	if err != nil {
 		return errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)

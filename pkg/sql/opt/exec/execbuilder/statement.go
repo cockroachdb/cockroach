@@ -227,6 +227,22 @@ func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) 
 	return execPlan{root: node}, nil
 }
 
+func (b *Builder) buildControlAllSchedules(ctl *memo.ControlAllSchedulesExpr) (execPlan, error) {
+	input, err := b.buildRelational(ctl.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructControlAllSchedules(
+		ctl.Command,
+		input.root,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// ControlAllSchedules returns no columns.
+	return execPlan{root: node}, nil
+}
+
 func (b *Builder) buildCancelQueries(cancel *memo.CancelQueriesExpr) (execPlan, error) {
 	input, err := b.buildRelational(cancel.Input)
 	if err != nil {

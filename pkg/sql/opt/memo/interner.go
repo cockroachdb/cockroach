@@ -517,6 +517,10 @@ func (h *hasher) HashJobCommand(val tree.JobCommand) {
 	h.HashInt(int(val))
 }
 
+func (h *hasher) HashScheduleCommand(val tree.ScheduleCommand) {
+	h.HashInt(int(val))
+}
+
 func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
@@ -874,6 +878,10 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 }
 
 func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
+	return l == r
+}
+
+func (h *hasher) IsScheduleCommandEqual(l, r tree.ScheduleCommand) bool {
 	return l == r
 }
 

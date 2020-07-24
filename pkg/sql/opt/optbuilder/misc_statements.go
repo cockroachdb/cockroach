@@ -96,3 +96,23 @@ func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (o
 	)
 	return outScope
 }
+
+func (b *Builder) buildControlAllSchedules(n *tree.ControlAllSchedules, inScope *scope) *scope {
+	if err := b.catalog.RequireAdminRole(b.ctx, n.StatementTag()); err != nil {
+		panic(err)
+	}
+
+	inputScope := b.processWiths(n.With, inScope, func(in *scope) *scope {
+		return b.buildDataSource(n.From, nil, noRowLocking, in)
+	})
+
+	outScope := inputScope.push()
+	outScope.expr = b.factory.ConstructControlAllSchedules(
+		inputScope.expr.(memo.RelExpr),
+		&memo.ControlAllSchedulesPrivate{
+			Props:   inScope.makePhysicalProps(),
+			Command: n.Command,
+		},
+	)
+	return outScope
+}

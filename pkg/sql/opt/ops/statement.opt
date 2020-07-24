@@ -207,6 +207,22 @@ define ControlJobsPrivate {
     Command JobCommand
 }
 
+# ControlAllSchedules represents a `PAUSE/CANCEL/RESUME SCHEDULES` statement.
+[Relational]
+define ControlAllSchedules {
+    # The input expression returns schedule IDs (as integers).
+    Input RelExpr
+    _ ControlAllSchedulesPrivate
+}
+
+[Private]
+define ControlAllSchedulesPrivate {
+    # Props stores the required physical properties for the input
+    # expression.
+    Props PhysProps
+    Command ScheduleCommand
+}
+
 # CancelQueries represents a `CANCEL QUERIES` statement.
 [Relational]
 define CancelQueries {

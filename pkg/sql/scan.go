@@ -106,7 +106,7 @@ type scanNode struct {
 	systemColumnOrdinals []int
 }
 
-// scanColumnsConfig controls the "schema" of a scan node.
+// scanColumnsConfig controls the "schema" o f a scan node.
 type scanColumnsConfig struct {
 	// wantedColumns contains all the columns are part of the scan node schema,
 	// in this order (with the caveat that the addUnwantedAsHidden flag below

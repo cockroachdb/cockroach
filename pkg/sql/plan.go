@@ -207,6 +207,7 @@ var _ planNode = &valuesNode{}
 var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
+var _ planNode = &controlAllSchedulesNode{}
 
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}

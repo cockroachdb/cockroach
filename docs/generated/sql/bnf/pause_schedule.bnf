@@ -1,0 +1,4 @@
+pause_schedules_stmt ::=
+	'PAUSE' 'SCHEDULE' schedule_id
+	| 'PAUSE' 'SCHEDULES' select_stmt
+	| with_clause 'PAUSE' 'SCHEDULES' 'FROM' table_ref

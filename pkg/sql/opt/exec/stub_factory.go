@@ -422,6 +422,13 @@ func (StubFactory) ConstructControlJobs(command tree.JobCommand, input Node) (No
 	return struct{}{}, nil
 }
 
+// ConstructControlAllSchedules is part of the exec.Factory interface.
+func (StubFactory) ConstructControlAllSchedules(
+	command tree.ScheduleCommand, input Node,
+) (Node, error) {
+	return struct{}{}, nil
+}
+
 // ConstructCancelQueries is part of the exec.Factory interface.
 func (StubFactory) ConstructCancelQueries(input Node, ifExists bool) (Node, error) {
 	return struct{}{}, nil
