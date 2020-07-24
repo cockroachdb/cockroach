@@ -1253,8 +1253,8 @@ func populateSessionsTable(
 		}
 
 		kvTxnIDDatum := tree.DNull
-		if session.KvTxnID != nil {
-			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
+		if session.ActiveTxn != nil {
+			kvTxnIDDatum = tree.NewDString(session.ActiveTxn.ID.String())
 		}
 
 		sessionID := getSessionID(session)
