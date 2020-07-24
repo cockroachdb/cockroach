@@ -464,7 +464,7 @@ UPDATE fam SET c = 3
 ----
 update fam
  ├── columns: <none>
- ├── fetch columns: fam.a:8 fam.b:9 c:10 fam.d:11 rowid:13
+ ├── fetch columns: fam.a:8 fam.b:9 c:10 rowid:13
  ├── update-mapping:
  │    └── c_new:15 => c:3
  ├── input binding: &1
@@ -498,7 +498,7 @@ UPDATE fam SET d = 3
 ----
 update fam
  ├── columns: <none>
- ├── fetch columns: fam.c:10 d:11 e:12 rowid:13
+ ├── fetch columns: d:11 e:12 rowid:13
  ├── update-mapping:
  │    └── d_new:15 => d:4
  ├── input binding: &1

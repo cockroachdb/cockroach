@@ -44,6 +44,10 @@ const (
 
 var uniqueRowIDString = "unique_rowid()"
 
+// creteFKIndexes controls whether we automatically create indexes on the
+// referencing side of foreign keys (like it was required before 20.2).
+const createFKIndexes = false
+
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
@@ -351,25 +355,27 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		))
 	}
 
-	// 2. Search for an existing index in the source table; add it if necessary.
-	found := false
-	for _, idx := range tab.Indexes {
-		if matches(idx, fromCols, false /* strict */) {
-			found = true
-			break
+	if createFKIndexes {
+		// 2. Search for an existing index in the source table; add it if necessary.
+		found := false
+		for _, idx := range tab.Indexes {
+			if matches(idx, fromCols, false /* strict */) {
+				found = true
+				break
+			}
 		}
-	}
-	if !found {
-		// Add a non-unique index on fromCols.
-		idx := tree.IndexTableDef{
-			Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
-			Columns: make(tree.IndexElemList, len(fromCols)),
+		if !found {
+			// Add a non-unique index on fromCols.
+			idx := tree.IndexTableDef{
+				Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
+				Columns: make(tree.IndexElemList, len(fromCols)),
+			}
+			for i, c := range fromCols {
+				idx.Columns[i].Column = tab.Columns[c].ColName()
+				idx.Columns[i].Direction = tree.Ascending
+			}
+			tab.addIndex(&idx, nonUniqueIndex)
 		}
-		for i, c := range fromCols {
-			idx.Columns[i].Column = tab.Columns[c].ColName()
-			idx.Columns[i].Direction = tree.Ascending
-		}
-		tab.addIndex(&idx, nonUniqueIndex)
 	}
 
 	fk := ForeignKeyConstraint{
