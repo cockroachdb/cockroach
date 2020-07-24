@@ -732,9 +732,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 		//      index predicates not possible to use.
 		//
 		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
-			fals := memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}
-			tabMeta.AddPartialIndexPredicate(indexOrd, &fals)
-			return
+			panic(errors.AssertionFailedf("partial index predicate is not immutable"))
 		}
 
 		// Wrap the predicate filter expression in a FiltersExpr and normalize
