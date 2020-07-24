@@ -119,87 +119,54 @@ func argExists(args []string, target string) int {
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
-	// Check to see if node 1 was started, indicating the cluster is to be
-	// bootstrapped.
-	var bootstrap bool
-	for _, node := range c.ServerNodes() {
-		if node == 1 {
-			bootstrap = true
-			break
-		}
-	}
-
 	h := &crdbStartHelper{c: c, r: r}
 	h.distributeCerts()
 
-	display := fmt.Sprintf("%s: starting", c.Name)
 	nodes := c.ServerNodes()
-
-	p := 0
+	var parallelism = 0
 	if StartOpts.Sequential {
-		p = 1
+		parallelism = 1
 	}
-	c.Parallel(display, len(nodes), p, func(nodeIdx int) ([]byte, error) {
+
+	fmt.Printf("%s: starting nodes\n", c.Name)
+	c.Parallel("", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
 		vers, err := getCockroachVersion(c, nodes[nodeIdx])
 		if err != nil {
 			return nil, err
 		}
 
-		if h.useStartSingleNode(vers) {
-			// `cockroach start-single-node` auto-bootstraps, so we skip doing
-			// so ourselves.
-			//
-			// TODO(irfansharif): We don't seem to be setting cluster settings
-			// for clusters started using `start-single-node`, we should.
-			//
-			// TODO(irfansharif): We shouldn't explicitly bootstrap clusters
-			// running versions <20.1, as the join flags are constructed in a
-			// way such that node 1 is started with an empty join flag, and thus
-			// auto-bootstraps.
-			//
-			// TODO(irfansharif): `roachprod start --sequential` is broken.
-			// Given we bootstrap the cluster after having started all the
-			// servers in parallel, there's no longer any guarantee that node
-			// IDs will have been allocated in sequential order. What we should
-			// do here instead is initialize the cluster as soon as we start
-			// node 1, that way subsequent node additions will be allocated the
-			// right node IDs.
-			bootstrap = false
-		}
-
+		// NB: if cockroach started successfully, we ignore the output as it is
+		// some harmless start messaging.
 		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
 			return nil, err
 		}
 
-		// NB: if cockroach started successfully, we ignore the output as it is
-		// some harmless start messaging.
+		// We reserve a few special operations like initializing the cluster,
+		// and setting cluster settings, for node 1.
+		if node := nodes[nodeIdx]; node != 1 {
+			return nil, nil
+		}
+
+		// NB: The code blocks below are not parallelized, so it's safe for us
+		// to use fmt.Printf style logging.
+
+		if h.shouldInitialize(nodeIdx, vers) {
+			fmt.Printf("%s: initializing cluster\n", h.c.Name)
+			initOut, err := h.initializeCluster(nodeIdx)
+			if err != nil {
+				log.Fatalf("unable to initialize cluster: %v", err)
+			}
+			fmt.Println(initOut)
+		}
+
+		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
+		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
+		if err != nil {
+			log.Fatalf("unable to set cluster settings: %v", err)
+		}
+		fmt.Println(clusterSettingsOut)
 		return nil, nil
 	})
-
-	if !bootstrap {
-		return
-	}
-
-	// ServerNodes returns an ordered list, and given we're cleared to bootstrap
-	// this cluster, we expect to be doing it through node 1.
-	nodeIdx := 0
-	if node := nodes[nodeIdx]; node != 1 {
-		log.Fatalf("programming error: expecting to initialization/set cluster settings through node 1, found node %d", node)
-	}
-
-	fmt.Printf("%s: bootstrapping cluster", h.c.Name)
-	initOut, err := h.initializeCluster(nodeIdx)
-	if err != nil {
-		log.Fatalf("unable to bootstrap cluster: %v", err)
-	}
-	fmt.Println(initOut)
-
-	fmt.Printf("%s: initializing cluster settings", h.c.Name)
-	clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
-	if err != nil {
-		log.Fatalf("unable to set cluster settings: %v", err)
-	}
-	fmt.Println(clusterSettingsOut)
 }
 
 // NodeDir implements the ClusterImpl.NodeDir interface.
@@ -445,10 +412,13 @@ func (h *crdbStartHelper) generateStartArgs(
 	}
 
 	if !h.useStartSingleNode(vers) {
-		// Every node points to node 1. For clusters <20.1, node 1 does not
-		// point to anything (which itself is used to trigger bootstrap). For
-		// clusters >20.1, node 1 also points to itself, and an explicit
-		// `cockroach init` is needed.
+		// --join flags are unsupported/unnecessary in `cockroach
+		// start-single-node`. That aside, setting up --join flags is a bit
+		// precise. We have every node point to node 1. For clusters running
+		// <20.1, we have node 1 not point to anything (which in turn is used to
+		// trigger auto-initialization node 1). For clusters running >=20.1,
+		// node 1 also points to itself, and an explicit `cockroach init` is
+		// needed. See `skipInitialization` and usages.
 		if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
 			args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1), h.r.NodePort(h.c, 1)))
 		}
@@ -491,6 +461,18 @@ func (h *crdbStartHelper) generateStartArgs(
 	}
 
 	return args, nil
+}
+
+func (h *crdbStartHelper) shouldInitialize(nodeIdx int, vers *version.Version) bool {
+	nodes := h.c.ServerNodes()
+
+	// 1. We don't init when invoking with `start-single-node`.
+	// 2. We only ever initialize when starting node 1.
+	// 3. For nodes running <20.1, the --join flags are constructed in a manner
+	//    such that the first node doesn't have any (see `generateStartArgs`),
+	//    which prompts CRDB to auto-initialize. For nodes running >=20.1, we
+	//    need to explicitly initialize.
+	return !h.useStartSingleNode(vers) && nodes[nodeIdx] == 1 && vers.AtLeast(version.MustParse("v20.1.0"))
 }
 
 func (h *crdbStartHelper) initializeCluster(nodeIdx int) (string, error) {
