@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -2284,12 +2283,10 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	ex.state.mu.RLock()
 	defer ex.state.mu.RUnlock()
 
-	var kvTxnID *uuid.UUID
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
 	if txn != nil {
 		id := txn.ID()
-		kvTxnID = &id
 		activeTxnInfo = &serverpb.TxnInfo{
 			ID:             id,
 			Start:          ex.state.mu.txnStart,
@@ -2346,7 +2343,6 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Start:           ex.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		ActiveTxn:       activeTxnInfo,
-		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
 		ID:              ex.sessionID.GetBytes(),
 		AllocBytes:      ex.mon.AllocBytes(),
