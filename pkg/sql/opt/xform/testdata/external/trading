@@ -1107,24 +1107,27 @@ limit
  │         ├── fd: (10)-->(15)
  │         ├── project
  │         │    ├── columns: quantity:14!null accountname:10!null
- │         │    ├── inner-join (lookup inventorydetails)
+ │         │    ├── inner-join (hash)
  │         │    │    ├── columns: id:6!null quantity:7!null dealerid:8!null cardid:9!null accountname:10!null inventorydetails.quantity:11!null
- │         │    │    ├── key columns: [8 9 10] = [8 9 10]
- │         │    │    ├── lookup columns are key
  │         │    │    ├── fd: (8-10)-->(11), (6)==(9), (9)==(6)
- │         │    │    ├── inner-join (lookup inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey)
- │         │    │    │    ├── columns: id:6!null quantity:7!null dealerid:8!null cardid:9!null accountname:10!null
- │         │    │    │    ├── key columns: [6] = [9]
- │         │    │    │    ├── fd: (6)==(9), (9)==(6)
- │         │    │    │    ├── values
- │         │    │    │    │    ├── columns: id:6!null quantity:7!null
- │         │    │    │    │    ├── cardinality: [2 - 2]
- │         │    │    │    │    ├── (42948, 3)
- │         │    │    │    │    └── (24924, 4)
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: dealerid:8!null cardid:9!null accountname:10!null inventorydetails.quantity:11!null
+ │         │    │    │    ├── key: (8-10)
+ │         │    │    │    ├── fd: (8-10)-->(11)
+ │         │    │    │    ├── scan inventorydetails
+ │         │    │    │    │    ├── columns: dealerid:8!null cardid:9!null accountname:10!null inventorydetails.quantity:11!null
+ │         │    │    │    │    ├── constraint: /8/9/10: [/1 - /5]
+ │         │    │    │    │    ├── key: (8-10)
+ │         │    │    │    │    └── fd: (8-10)-->(11)
  │         │    │    │    └── filters
- │         │    │    │         ├── ((((dealerid:8 = 1) OR (dealerid:8 = 2)) OR (dealerid:8 = 3)) OR (dealerid:8 = 4)) OR (dealerid:8 = 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
  │         │    │    │         └── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
- │         │    │    └── filters (true)
+ │         │    │    ├── values
+ │         │    │    │    ├── columns: id:6!null quantity:7!null
+ │         │    │    │    ├── cardinality: [2 - 2]
+ │         │    │    │    ├── (42948, 3)
+ │         │    │    │    └── (24924, 4)
+ │         │    │    └── filters
+ │         │    │         └── cardid:9 = id:6 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
  │         │    └── projections
  │         │         └── CASE WHEN quantity:7 < inventorydetails.quantity:11 THEN quantity:7 ELSE inventorydetails.quantity:11 END [as=quantity:14, outer=(7,11)]
  │         └── aggregations
@@ -1421,12 +1424,12 @@ delete inventorydetails
  ├── fetch columns: dealerid:7 cardid:8 accountname:9
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── scan inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey
+ └── scan inventorydetails
       ├── columns: dealerid:7!null cardid:8!null accountname:9!null
-      ├── constraint: /8/7/9
-      │    ├── [/294/1/'some-account' - /294/1/'some-account']
-      │    ├── [/1793/1/'some-account' - /1793/1/'some-account']
-      │    └── [/29483/1/'some-account' - /29483/1/'some-account']
+      ├── constraint: /7/8/9
+      │    ├── [/1/294/'some-account' - /1/294/'some-account']
+      │    ├── [/1/1793/'some-account' - /1/1793/'some-account']
+      │    └── [/1/29483/'some-account' - /1/29483/'some-account']
       ├── cardinality: [0 - 3]
       ├── key: (8)
       └── fd: ()-->(7,9)
@@ -1464,13 +1467,13 @@ update ci
       │    ├── fd: ()-->(16), (17)-->(16,18-24,26,27,34), (24)-->(17-23), (17)==(26), (26)==(17)
       │    ├── left-join (lookup inventorydetails)
       │    │    ├── columns: ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null id.dealerid:28 id.cardid:29 quantity:31
-      │    │    ├── key columns: [40 17] = [28 29]
+      │    │    ├── key columns: [39 17] = [28 29]
       │    │    ├── fd: ()-->(16), (17)-->(18-24,26,27), (24)-->(17-23), (17)==(26), (26)==(17)
       │    │    ├── project
-      │    │    │    ├── columns: "project_const_col_@28":40!null ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null
+      │    │    │    ├── columns: "project_const_col_@28":39!null ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null
       │    │    │    ├── cardinality: [0 - 2]
       │    │    │    ├── key: (17)
-      │    │    │    ├── fd: ()-->(16,40), (17)-->(18-24,26,27), (24)-->(17-23), (17)==(26), (26)==(17)
+      │    │    │    ├── fd: ()-->(16,39), (17)-->(18-24,26,27), (24)-->(17-23), (17)==(26), (26)==(17)
       │    │    │    ├── distinct-on
       │    │    │    │    ├── columns: ci.dealerid:16!null ci.cardid:17!null buyprice:18!null sellprice:19!null discount:20!null desiredinventory:21!null actualinventory:22!null maxinventory:23!null ci.version:24!null c:26!null q:27!null
       │    │    │    │    ├── grouping columns: ci.cardid:17!null
@@ -1517,7 +1520,7 @@ update ci
       │    │    │    │         └── const-agg [as=ci.dealerid:16, outer=(16)]
       │    │    │    │              └── ci.dealerid:16
       │    │    │    └── projections
-      │    │    │         └── 1 [as="project_const_col_@28":40]
+      │    │    │         └── 1 [as="project_const_col_@28":39]
       │    │    └── filters (true)
       │    └── aggregations
       │         ├── sum-int [as=sum_int:34, outer=(31)]

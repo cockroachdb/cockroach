@@ -35,54 +35,31 @@ UPSERT INTO c1 VALUES (100, 1), (200, 1)
 ----
 upsert c1
  ├── columns: <none>
- ├── canary column: 8
- ├── fetch columns: c:8 c1.p:9 i:10
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── column1:5 => c:1
- │    ├── column2:6 => c1.p:2
- │    └── column7:7 => i:3
- ├── update-mapping:
  │    ├── column2:6 => c1.p:2
  │    └── column7:7 => i:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:12 column1:5!null column2:6!null column7:7 c:8 c1.p:9 i:10 c1.crdb_internal_mvcc_timestamp:11
- │    ├── left-join (hash)
- │    │    ├── columns: column1:5!null column2:6!null column7:7 c:8 c1.p:9 i:10 c1.crdb_internal_mvcc_timestamp:11
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:5!null column2:6!null column7:7
- │    │    │    ├── grouping columns: column1:5!null
- │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
- │    │    │    │    ├── values
- │    │    │    │    │    ├── columns: column1:5!null column2:6!null
- │    │    │    │    │    ├── (100, 1)
- │    │    │    │    │    └── (200, 1)
- │    │    │    │    └── projections
- │    │    │    │         └── NULL::INT8 [as=column7:7]
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=column2:6]
- │    │    │         │    └── column2:6
- │    │    │         └── first-agg [as=column7:7]
- │    │    │              └── column7:7
- │    │    ├── scan c1
- │    │    │    └── columns: c:8!null c1.p:9!null i:10 c1.crdb_internal_mvcc_timestamp:11
- │    │    └── filters
- │    │         └── column1:5 = c:8
+ │    ├── columns: column7:7 column1:5!null column2:6!null
+ │    ├── values
+ │    │    ├── columns: column1:5!null column2:6!null
+ │    │    ├── (100, 1)
+ │    │    └── (200, 1)
  │    └── projections
- │         └── CASE WHEN c:8 IS NULL THEN column1:5 ELSE c:8 END [as=upsert_c:12]
+ │         └── NULL::INT8 [as=column7:7]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
-                ├── columns: column2:13!null
+                ├── columns: column2:8!null
                 ├── with-scan &1
-                │    ├── columns: column2:13!null
+                │    ├── columns: column2:8!null
                 │    └── mapping:
-                │         └──  column2:6 => column2:13
+                │         └──  column2:6 => column2:8
                 ├── scan p
-                │    └── columns: p.p:14!null
+                │    └── columns: p.p:9!null
                 └── filters
-                     └── column2:13 = p.p:14
+                     └── column2:8 = p.p:9
 
 build
 UPSERT INTO c1(c) VALUES (100), (200)
@@ -144,54 +121,31 @@ UPSERT INTO c1 SELECT x, y FROM xyzw
 ----
 upsert c1
  ├── columns: <none>
- ├── canary column: 12
- ├── fetch columns: c:12 c1.p:13 i:14
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── x:5 => c:1
- │    ├── xyzw.y:6 => c1.p:2
- │    └── column11:11 => i:3
- ├── update-mapping:
  │    ├── xyzw.y:6 => c1.p:2
  │    └── column11:11 => i:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:16 x:5 xyzw.y:6 column11:11 c:12 c1.p:13 i:14 c1.crdb_internal_mvcc_timestamp:15
- │    ├── left-join (hash)
- │    │    ├── columns: x:5 xyzw.y:6 column11:11 c:12 c1.p:13 i:14 c1.crdb_internal_mvcc_timestamp:15
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: x:5 xyzw.y:6 column11:11
- │    │    │    ├── grouping columns: x:5
- │    │    │    ├── project
- │    │    │    │    ├── columns: column11:11 x:5 xyzw.y:6
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: x:5 xyzw.y:6
- │    │    │    │    │    └── scan xyzw
- │    │    │    │    │         └── columns: x:5 xyzw.y:6 z:7 w:8 rowid:9!null xyzw.crdb_internal_mvcc_timestamp:10
- │    │    │    │    └── projections
- │    │    │    │         └── NULL::INT8 [as=column11:11]
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=xyzw.y:6]
- │    │    │         │    └── xyzw.y:6
- │    │    │         └── first-agg [as=column11:11]
- │    │    │              └── column11:11
- │    │    ├── scan c1
- │    │    │    └── columns: c:12!null c1.p:13!null i:14 c1.crdb_internal_mvcc_timestamp:15
- │    │    └── filters
- │    │         └── x:5 = c:12
+ │    ├── columns: column11:11 x:5 xyzw.y:6
+ │    ├── project
+ │    │    ├── columns: x:5 xyzw.y:6
+ │    │    └── scan xyzw
+ │    │         └── columns: x:5 xyzw.y:6 z:7 w:8 rowid:9!null xyzw.crdb_internal_mvcc_timestamp:10
  │    └── projections
- │         └── CASE WHEN c:12 IS NULL THEN x:5 ELSE c:12 END [as=upsert_c:16]
+ │         └── NULL::INT8 [as=column11:11]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
-                ├── columns: y:17
+                ├── columns: y:12
                 ├── with-scan &1
-                │    ├── columns: y:17
+                │    ├── columns: y:12
                 │    └── mapping:
-                │         └──  xyzw.y:6 => y:17
+                │         └──  xyzw.y:6 => y:12
                 ├── scan p
-                │    └── columns: p.p:18!null
+                │    └── columns: p.p:13!null
                 └── filters
-                     └── y:17 = p.p:18
+                     └── y:12 = p.p:13
 
 build
 INSERT INTO c1 VALUES (100, 1), (200, 1) ON CONFLICT (c) DO UPDATE SET p = excluded.p + 1
@@ -372,50 +326,30 @@ UPSERT INTO c3 VALUES (100, 1), (200, NULL)
 ----
 upsert c3
  ├── columns: <none>
- ├── canary column: 6
- ├── fetch columns: c:6 c3.p:7
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── column1:4 => c:1
  │    └── column2:5 => c3.p:2
- ├── update-mapping:
- │    └── column2:5 => c3.p:2
  ├── input binding: &1
- ├── project
- │    ├── columns: upsert_c:9 column1:4!null column2:5 c:6 c3.p:7 c3.crdb_internal_mvcc_timestamp:8
- │    ├── left-join (hash)
- │    │    ├── columns: column1:4!null column2:5 c:6 c3.p:7 c3.crdb_internal_mvcc_timestamp:8
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:4!null column2:5
- │    │    │    ├── grouping columns: column1:4!null
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:4!null column2:5
- │    │    │    │    ├── (100, 1)
- │    │    │    │    └── (200, NULL::INT8)
- │    │    │    └── aggregations
- │    │    │         └── first-agg [as=column2:5]
- │    │    │              └── column2:5
- │    │    ├── scan c3
- │    │    │    └── columns: c:6!null c3.p:7 c3.crdb_internal_mvcc_timestamp:8
- │    │    └── filters
- │    │         └── column1:4 = c:6
- │    └── projections
- │         └── CASE WHEN c:6 IS NULL THEN column1:4 ELSE c:6 END [as=upsert_c:9]
+ ├── values
+ │    ├── columns: column1:4!null column2:5
+ │    ├── (100, 1)
+ │    └── (200, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: c3(p) -> p(p)
            └── anti-join (hash)
-                ├── columns: column2:10!null
+                ├── columns: column2:6!null
                 ├── select
-                │    ├── columns: column2:10!null
+                │    ├── columns: column2:6!null
                 │    ├── with-scan &1
-                │    │    ├── columns: column2:10
+                │    │    ├── columns: column2:6
                 │    │    └── mapping:
-                │    │         └──  column2:5 => column2:10
+                │    │         └──  column2:5 => column2:6
                 │    └── filters
-                │         └── column2:10 IS NOT NULL
+                │         └── column2:6 IS NOT NULL
                 ├── scan p
-                │    └── columns: p.p:11!null
+                │    └── columns: p.p:7!null
                 └── filters
-                     └── column2:10 = p.p:11
+                     └── column2:6 = p.p:7
 
 build
 UPSERT INTO c3(c) VALUES (100), (200)
@@ -624,55 +558,29 @@ UPSERT INTO cpq VALUES (1, 1, 1, 1)
 ----
 upsert cpq
  ├── columns: <none>
- ├── canary column: 10
- ├── fetch columns: c:10 cpq.p:11 cpq.q:12 cpq.other:13
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── column1:6 => c:1
  │    ├── column2:7 => cpq.p:2
  │    ├── column3:8 => cpq.q:3
  │    └── column4:9 => cpq.other:4
- ├── update-mapping:
- │    ├── column2:7 => cpq.p:2
- │    ├── column3:8 => cpq.q:3
- │    └── column4:9 => cpq.other:4
  ├── input binding: &1
- ├── project
- │    ├── columns: upsert_c:15 column1:6!null column2:7!null column3:8!null column4:9!null c:10 cpq.p:11 cpq.q:12 cpq.other:13 cpq.crdb_internal_mvcc_timestamp:14
- │    ├── left-join (hash)
- │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null c:10 cpq.p:11 cpq.q:12 cpq.other:13 cpq.crdb_internal_mvcc_timestamp:14
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
- │    │    │    ├── grouping columns: column1:6!null
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
- │    │    │    │    └── (1, 1, 1, 1)
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=column2:7]
- │    │    │         │    └── column2:7
- │    │    │         ├── first-agg [as=column3:8]
- │    │    │         │    └── column3:8
- │    │    │         └── first-agg [as=column4:9]
- │    │    │              └── column4:9
- │    │    ├── scan cpq
- │    │    │    └── columns: c:10!null cpq.p:11 cpq.q:12 cpq.other:13 cpq.crdb_internal_mvcc_timestamp:14
- │    │    └── filters
- │    │         └── column1:6 = c:10
- │    └── projections
- │         └── CASE WHEN c:10 IS NULL THEN column1:6 ELSE c:10 END [as=upsert_c:15]
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+ │    └── (1, 1, 1, 1)
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
-                ├── columns: column2:16!null column3:17!null
+                ├── columns: column2:10!null column3:11!null
                 ├── with-scan &1
-                │    ├── columns: column2:16!null column3:17!null
+                │    ├── columns: column2:10!null column3:11!null
                 │    └── mapping:
-                │         ├──  column2:7 => column2:16
-                │         └──  column3:8 => column3:17
+                │         ├──  column2:7 => column2:10
+                │         └──  column3:8 => column3:11
                 ├── scan pq
-                │    └── columns: pq.p:19 pq.q:20
+                │    └── columns: pq.p:13 pq.q:14
                 └── filters
-                     ├── column2:16 = pq.p:19
-                     └── column3:17 = pq.q:20
+                     ├── column2:10 = pq.p:13
+                     └── column3:11 = pq.q:14
 
 # In this case, the input columns can be null.
 build
@@ -680,61 +588,35 @@ UPSERT INTO cpq SELECT x,y,z,w FROM xyzw
 ----
 upsert cpq
  ├── columns: <none>
- ├── canary column: 12
- ├── fetch columns: c:12 cpq.p:13 cpq.q:14 cpq.other:15
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── x:6 => c:1
- │    ├── xyzw.y:7 => cpq.p:2
- │    ├── xyzw.z:8 => cpq.q:3
- │    └── w:9 => cpq.other:4
- ├── update-mapping:
  │    ├── xyzw.y:7 => cpq.p:2
  │    ├── xyzw.z:8 => cpq.q:3
  │    └── w:9 => cpq.other:4
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:17 x:6 xyzw.y:7 xyzw.z:8 w:9 c:12 cpq.p:13 cpq.q:14 cpq.other:15 cpq.crdb_internal_mvcc_timestamp:16
- │    ├── left-join (hash)
- │    │    ├── columns: x:6 xyzw.y:7 xyzw.z:8 w:9 c:12 cpq.p:13 cpq.q:14 cpq.other:15 cpq.crdb_internal_mvcc_timestamp:16
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: x:6 xyzw.y:7 xyzw.z:8 w:9
- │    │    │    ├── grouping columns: x:6
- │    │    │    ├── project
- │    │    │    │    ├── columns: x:6 xyzw.y:7 xyzw.z:8 w:9
- │    │    │    │    └── scan xyzw
- │    │    │    │         └── columns: x:6 xyzw.y:7 xyzw.z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=xyzw.y:7]
- │    │    │         │    └── xyzw.y:7
- │    │    │         ├── first-agg [as=xyzw.z:8]
- │    │    │         │    └── xyzw.z:8
- │    │    │         └── first-agg [as=w:9]
- │    │    │              └── w:9
- │    │    ├── scan cpq
- │    │    │    └── columns: c:12!null cpq.p:13 cpq.q:14 cpq.other:15 cpq.crdb_internal_mvcc_timestamp:16
- │    │    └── filters
- │    │         └── x:6 = c:12
- │    └── projections
- │         └── CASE WHEN c:12 IS NULL THEN x:6 ELSE c:12 END [as=upsert_c:17]
+ │    ├── columns: x:6 xyzw.y:7 xyzw.z:8 w:9
+ │    └── scan xyzw
+ │         └── columns: x:6 xyzw.y:7 xyzw.z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
-                ├── columns: y:18!null z:19!null
+                ├── columns: y:12!null z:13!null
                 ├── select
-                │    ├── columns: y:18!null z:19!null
+                │    ├── columns: y:12!null z:13!null
                 │    ├── with-scan &1
-                │    │    ├── columns: y:18 z:19
+                │    │    ├── columns: y:12 z:13
                 │    │    └── mapping:
-                │    │         ├──  xyzw.y:7 => y:18
-                │    │         └──  xyzw.z:8 => z:19
+                │    │         ├──  xyzw.y:7 => y:12
+                │    │         └──  xyzw.z:8 => z:13
                 │    └── filters
-                │         ├── y:18 IS NOT NULL
-                │         └── z:19 IS NOT NULL
+                │         ├── y:12 IS NOT NULL
+                │         └── z:13 IS NOT NULL
                 ├── scan pq
-                │    └── columns: pq.p:21 pq.q:22
+                │    └── columns: pq.p:15 pq.q:16
                 └── filters
-                     ├── y:18 = pq.p:21
-                     └── z:19 = pq.q:22
+                     ├── y:12 = pq.p:15
+                     └── z:13 = pq.q:16
 
 build
 UPSERT INTO cpq(c,p) SELECT x,y FROM xyzw
@@ -875,62 +757,36 @@ UPSERT INTO cpq SELECT x FROM xyzw
 ----
 upsert cpq
  ├── columns: <none>
- ├── canary column: 15
- ├── fetch columns: c:15 cpq.p:16 cpq.q:17 cpq.other:18
- ├── insert-mapping:
+ ├── upsert-mapping:
  │    ├── x:6 => c:1
- │    ├── column12:12 => cpq.p:2
- │    ├── column13:13 => cpq.q:3
- │    └── column14:14 => cpq.other:4
- ├── update-mapping:
  │    ├── column12:12 => cpq.p:2
  │    ├── column13:13 => cpq.q:3
  │    └── column14:14 => cpq.other:4
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:20 x:6 column12:12!null column13:13!null column14:14 c:15 cpq.p:16 cpq.q:17 cpq.other:18 cpq.crdb_internal_mvcc_timestamp:19
- │    ├── left-join (hash)
- │    │    ├── columns: x:6 column12:12!null column13:13!null column14:14 c:15 cpq.p:16 cpq.q:17 cpq.other:18 cpq.crdb_internal_mvcc_timestamp:19
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: x:6 column12:12!null column13:13!null column14:14
- │    │    │    ├── grouping columns: x:6
- │    │    │    ├── project
- │    │    │    │    ├── columns: column12:12!null column13:13!null column14:14 x:6
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: x:6
- │    │    │    │    │    └── scan xyzw
- │    │    │    │    │         └── columns: x:6 y:7 z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
- │    │    │    │    └── projections
- │    │    │    │         ├── 4 [as=column12:12]
- │    │    │    │         ├── 8 [as=column13:13]
- │    │    │    │         └── NULL::INT8 [as=column14:14]
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=column12:12]
- │    │    │         │    └── column12:12
- │    │    │         ├── first-agg [as=column13:13]
- │    │    │         │    └── column13:13
- │    │    │         └── first-agg [as=column14:14]
- │    │    │              └── column14:14
- │    │    ├── scan cpq
- │    │    │    └── columns: c:15!null cpq.p:16 cpq.q:17 cpq.other:18 cpq.crdb_internal_mvcc_timestamp:19
- │    │    └── filters
- │    │         └── x:6 = c:15
+ │    ├── columns: column12:12!null column13:13!null column14:14 x:6
+ │    ├── project
+ │    │    ├── columns: x:6
+ │    │    └── scan xyzw
+ │    │         └── columns: x:6 y:7 z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
  │    └── projections
- │         └── CASE WHEN c:15 IS NULL THEN x:6 ELSE c:15 END [as=upsert_c:20]
+ │         ├── 4 [as=column12:12]
+ │         ├── 8 [as=column13:13]
+ │         └── NULL::INT8 [as=column14:14]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
-                ├── columns: column12:21!null column13:22!null
+                ├── columns: column12:15!null column13:16!null
                 ├── with-scan &1
-                │    ├── columns: column12:21!null column13:22!null
+                │    ├── columns: column12:15!null column13:16!null
                 │    └── mapping:
-                │         ├──  column12:12 => column12:21
-                │         └──  column13:13 => column13:22
+                │         ├──  column12:12 => column12:15
+                │         └──  column13:13 => column13:16
                 ├── scan pq
-                │    └── columns: pq.p:24 pq.q:25
+                │    └── columns: pq.p:18 pq.q:19
                 └── filters
-                     ├── column12:21 = pq.p:24
-                     └── column13:22 = pq.q:25
+                     ├── column12:15 = pq.p:18
+                     └── column13:16 = pq.q:19
 
 build
 INSERT INTO cpq VALUES (1), (2) ON CONFLICT (c) DO UPDATE SET p = 10
@@ -1024,66 +880,41 @@ UPSERT INTO cmulti SELECT x,y,z,w FROM xyzw
 ----
 upsert cmulti
  ├── columns: <none>
- ├── canary column: 12
- ├── fetch columns: a:12 b:13 c:14 d:15
- ├── insert-mapping:
- │    ├── x:6 => a:1
- │    ├── y:7 => b:2
- │    ├── xyzw.z:8 => c:3
- │    └── w:9 => d:4
- ├── update-mapping:
+ ├── upsert-mapping:
+ │    ├── xyzw.x:6 => a:1
+ │    ├── xyzw.y:7 => b:2
  │    ├── xyzw.z:8 => c:3
  │    └── w:9 => d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_a:17 upsert_b:18 x:6 y:7 xyzw.z:8 w:9 a:12 b:13 c:14 d:15 cmulti.crdb_internal_mvcc_timestamp:16
- │    ├── left-join (hash)
- │    │    ├── columns: x:6 y:7 xyzw.z:8 w:9 a:12 b:13 c:14 d:15 cmulti.crdb_internal_mvcc_timestamp:16
- │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: x:6 y:7 xyzw.z:8 w:9
- │    │    │    ├── grouping columns: x:6 y:7
- │    │    │    ├── project
- │    │    │    │    ├── columns: x:6 y:7 xyzw.z:8 w:9
- │    │    │    │    └── scan xyzw
- │    │    │    │         └── columns: x:6 y:7 xyzw.z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
- │    │    │    └── aggregations
- │    │    │         ├── first-agg [as=xyzw.z:8]
- │    │    │         │    └── xyzw.z:8
- │    │    │         └── first-agg [as=w:9]
- │    │    │              └── w:9
- │    │    ├── scan cmulti
- │    │    │    └── columns: a:12!null b:13!null c:14 d:15 cmulti.crdb_internal_mvcc_timestamp:16
- │    │    └── filters
- │    │         ├── x:6 = a:12
- │    │         └── y:7 = b:13
- │    └── projections
- │         ├── CASE WHEN a:12 IS NULL THEN x:6 ELSE a:12 END [as=upsert_a:17]
- │         └── CASE WHEN a:12 IS NULL THEN y:7 ELSE b:13 END [as=upsert_b:18]
+ │    ├── columns: xyzw.x:6 xyzw.y:7 xyzw.z:8 w:9
+ │    └── scan xyzw
+ │         └── columns: xyzw.x:6 xyzw.y:7 xyzw.z:8 w:9 rowid:10!null xyzw.crdb_internal_mvcc_timestamp:11
  └── f-k-checks
       ├── f-k-checks-item: cmulti(a) -> p(p)
       │    └── anti-join (hash)
-      │         ├── columns: upsert_a:19
+      │         ├── columns: x:12
       │         ├── with-scan &1
-      │         │    ├── columns: upsert_a:19
+      │         │    ├── columns: x:12
       │         │    └── mapping:
-      │         │         └──  upsert_a:17 => upsert_a:19
+      │         │         └──  xyzw.x:6 => x:12
       │         ├── scan p
-      │         │    └── columns: p.p:20!null
+      │         │    └── columns: p.p:13!null
       │         └── filters
-      │              └── upsert_a:19 = p.p:20
+      │              └── x:12 = p.p:13
       └── f-k-checks-item: cmulti(b,c) -> pq(p,q)
            └── anti-join (hash)
-                ├── columns: upsert_b:23 z:24
+                ├── columns: y:16 z:17
                 ├── with-scan &1
-                │    ├── columns: upsert_b:23 z:24
+                │    ├── columns: y:16 z:17
                 │    └── mapping:
-                │         ├──  upsert_b:18 => upsert_b:23
-                │         └──  xyzw.z:8 => z:24
+                │         ├──  xyzw.y:7 => y:16
+                │         └──  xyzw.z:8 => z:17
                 ├── scan pq
-                │    └── columns: pq.p:26 q:27
+                │    └── columns: pq.p:19 q:20
                 └── filters
-                     ├── upsert_b:23 = pq.p:26
-                     └── z:24 = q:27
+                     ├── y:16 = pq.p:19
+                     └── z:17 = q:20
 
 build
 UPSERT INTO cmulti(a,b,c) SELECT x,y,z FROM xyzw
