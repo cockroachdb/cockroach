@@ -50,6 +50,7 @@ export const clusterStore = docsURL("cockroach-start.html#store");
 export const clusterGlossary = docsURL("architecture/overview.html#glossary");
 export const reviewOfCockroachTerminology = docsURL("admin-ui-replication-dashboard.html#review-of-cockroachdb-terminology");
 export const privileges = docsURL("authorization.html#privileges");
+export const showSessions = docsURL("show-sessions.html");
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion = "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html";

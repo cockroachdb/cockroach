@@ -93,6 +93,15 @@ export type RangeLogResponseMessage =
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
 
+export type SessionsRequestMessage = protos.cockroach.server.serverpb.ListSessionsRequest;
+export type SessionsResponseMessage = protos.cockroach.server.serverpb.ListSessionsResponse;
+
+export type CancelSessionRequestMessage = protos.cockroach.server.serverpb.CancelSessionRequest;
+export type CancelSessionResponseMessage = protos.cockroach.server.serverpb.CancelSessionResponse;
+
+export type CancelQueryRequestMessage = protos.cockroach.server.serverpb.CancelQueryRequest;
+export type CancelQueryResponseMessage = protos.cockroach.server.serverpb.CancelQueryResponse;
+
 export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
 export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
 
@@ -361,6 +370,23 @@ export function getRangeLog(
 // the user also happens to have admin privilege.
 export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
   return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings?unredacted_values=true`, null, timeout);
+}
+
+// getSessions gets all cluster sessions.
+export function getSessions(_req: SessionsRequestMessage, timeout?: moment.Duration): Promise<SessionsResponseMessage> {
+  return timeoutFetch(serverpb.ListSessionsResponse, `${STATUS_PREFIX}/sessions`, null, timeout);
+}
+
+// cancelSession cancels the session with the given id on the given node.
+export function terminateSession(req: CancelSessionRequestMessage, timeout?: moment.Duration): Promise<CancelSessionResponseMessage> {
+  return timeoutFetch(serverpb.CancelSessionResponse,
+                      `${STATUS_PREFIX}/cancel_session/${req.node_id}`, req as any, timeout);
+}
+
+// cancelQuery cancels the query with the given id on the given node.
+export function terminateQuery(req: CancelQueryRequestMessage, timeout?: moment.Duration): Promise<CancelQueryResponseMessage> {
+  return timeoutFetch(serverpb.CancelQueryResponse,
+                      `${STATUS_PREFIX}/cancel_query/${req.node_id}`, req as any, timeout);
 }
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {

@@ -1328,7 +1328,9 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 
 // CancelSession looks up the specified session in the session registry and
 // cancels it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelSession(sessionIDBytes []byte) (*serverpb.CancelSessionResponse, error) {
+func (r *SessionRegistry) CancelSession(
+	sessionIDBytes []byte,
+) (*serverpb.CancelSessionResponse, error) {
 	if len(sessionIDBytes) != 16 {
 		return nil, errors.Errorf("invalid non-16-byte UUID %v", sessionIDBytes)
 	}
