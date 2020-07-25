@@ -1,0 +1,108 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
+
+.sessions-table
+  &__col-query-text
+    font-family $font-family--monospace
+    white-space pre-wrap
+
+.back-link
+  text-decoration none
+  color $link-color
+
+.cl-count-title, .last-cleared-title
+  font-family SourceSansPro-Regular
+  font-size 14px
+  padding 0px
+  margin 0px
+  color $placeholder
+  line-height 1.57
+  letter-spacing 0.1px
+  .label
+    font-family $font-family--bold
+    color $colors--neutral-7
+
+
+.statements-table__col-time
+  white-space nowrap
+
+.statements-table__col-count
+  .bar-chart
+    width 100px
+
+.statements-table__col-retries
+  .bar-chart
+    width 80px
+
+.numeric-stats-table
+  .bar-chart
+    width 200px
+
+.statements-table__col-rows, .statements-table__col-latency
+  .bar-chart
+    min-width 150px
+
+.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
+  .bar-chart
+    margin-left 0
+
+    &__label
+      left 0
+      width 40px
+      min-width 40px
+
+._pg-jump
+  width 32px
+  height 24px
+  position relative
+  justify-content center
+  align-items center
+  ._jump-dots
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    color $colors--neutral-5
+    font-size 14px
+    letter-spacing 1.5px
+  .anticon
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    display none
+    font-size 10px
+    color #3a7ce1
+  &:hover
+    ._jump-dots
+      display none
+    .anticon
+      display block
+
+.cl-table__col-query-text a
+  font-family RobotoMono-Medium
+  font-size 12px
+  line-height 1.83
+  color $adminui-grey-1
+  width 400px
+  text-decoration none
+  cursor pointer
+  &:hover
+    color $colors--primary-blue-3
+    text-decoration underline
+
+.cl-table-link__statement-tooltip--fixed-width
+  max-width max-content
+  .ant-tooltip-content
+    max-width 500px

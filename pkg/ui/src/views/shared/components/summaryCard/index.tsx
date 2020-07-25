@@ -25,3 +25,15 @@ export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className =
     {children}
   </div>
 );
+
+interface ISummaryCardItemProps {
+  label: React.ReactNode;
+  value: React.ReactNode;
+}
+
+export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ( {label, value }) => (
+<div className={cx("summary--card__item")}>
+  <h4 className={cx("summary--card__item--label")}>{ label }</h4>
+  <p className={cx("summary--card__item--value")}>{ value }</p>
+</div>
+);

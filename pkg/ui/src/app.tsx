@@ -19,7 +19,17 @@ import { Action, Store } from "redux";
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
-import { appAttr, dashboardNameAttr, databaseNameAttr, implicitTxnAttr, nodeIDAttr, rangeIDAttr, statementAttr, tableNameAttr } from "src/util/constants";
+import {
+  appAttr,
+  dashboardNameAttr,
+  databaseNameAttr,
+  implicitTxnAttr,
+  nodeIDAttr,
+  rangeIDAttr,
+  sessionAttr,
+  statementAttr,
+  tableNameAttr,
+} from "src/util/constants";
 import NotFound from "src/views/app/components/NotFound";
 import Layout from "src/views/app/containers/layout";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
@@ -49,6 +59,8 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementDetails from "src/views/statements/statementDetails";
 import StatementsPage from "src/views/statements/statementsPage";
+import SessionsPage from "src/views/sessions/sessionsPage";
+import SessionDetails from "src/views/sessions/sessionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
 
@@ -128,6 +140,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
                   <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
                   <Route exact path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
+
+                  { /* sessions */ }
+                  <Route exact path="/sessions" component={ SessionsPage }/>
+                  <Route exact path={ `/session/:${sessionAttr}`} component={ SessionDetails } />
 
                   { /* debug pages */ }
                   <Route exact path="/debug" component={Debug}/>
