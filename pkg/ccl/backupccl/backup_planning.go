@@ -255,12 +255,30 @@ func backupJobDescription(
 	return tree.AsStringWithFQNames(b, ann), nil
 }
 
+// annotatedBackupStatement is a tree.Backup, optionally
+// annotated with the scheduling information.
+type annotatedBackupStatement struct {
+	*tree.Backup
+	*jobs.CreatedByInfo
+}
+
+func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
+	switch backup := stmt.(type) {
+	case *annotatedBackupStatement:
+		return backup
+	case *tree.Backup:
+		return &annotatedBackupStatement{Backup: backup}
+	default:
+		return nil
+	}
+}
+
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
-	backupStmt, ok := stmt.(*tree.Backup)
-	if !ok {
+	backupStmt := getBackupStatement(stmt)
+	if backupStmt == nil {
 		return nil, nil, nil, false, nil
 	}
 
@@ -666,7 +684,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt, to, incrementalFrom)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom)
 		if err != nil {
 			return err
 		}
@@ -756,8 +774,9 @@ func backupPlanHook(
 				}
 				return sqlDescIDs
 			}(),
-			Details:  backupDetails,
-			Progress: jobspb.BackupProgress{},
+			Details:   backupDetails,
+			Progress:  jobspb.BackupProgress{},
+			CreatedBy: backupStmt.CreatedByInfo,
 		}
 
 		if backupStmt.Options.Detached {
