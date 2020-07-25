@@ -14,10 +14,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/csv"
 	"io"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -56,7 +58,12 @@ type copyMachine struct {
 	columns       tree.NameList
 	resultColumns sqlbase.ResultColumns
 	format        tree.CopyFormat
-	binaryState   binaryState
+	delimiter     byte
+	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
+	textDelim   []byte
+	null        string
+	binaryState binaryState
+	csvReader   *csv.Reader
 	// buf is used to parse input data into rows. It also accumulates a partial
 	// row between protocol messages.
 	buf bytes.Buffer
@@ -122,6 +129,40 @@ func newCopyMachine(
 	}()
 	c.parsingEvalCtx = c.p.EvalContext()
 
+	switch c.format {
+	case tree.CopyFormatText:
+		c.null = `\N`
+		c.delimiter = '\t'
+	case tree.CopyFormatCSV:
+		c.null = ""
+		c.delimiter = ','
+	}
+
+	if n.Options.Delimiter != nil {
+		fn, err := c.p.TypeAsString(ctx, n.Options.Delimiter, "COPY")
+		if err != nil {
+			return nil, err
+		}
+		delim, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		if len(delim) != 1 || !utf8.ValidString(delim) {
+			return nil, errors.Newf("delimiter must be a single-byte character")
+		}
+		c.delimiter = delim[0]
+	}
+	if n.Options.Null != nil {
+		fn, err := c.p.TypeAsString(ctx, n.Options.Null, "COPY")
+		if err != nil {
+			return nil, err
+		}
+		c.null, err = fn()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
 	if err != nil {
@@ -182,6 +223,16 @@ func (c *copyMachine) run(ctx context.Context) error {
 	// Read from the connection until we see an ClientMsgCopyDone.
 	readBuf := pgwirebase.ReadBuffer{}
 
+	switch c.format {
+	case tree.CopyFormatText:
+		c.textDelim = []byte{c.delimiter}
+	case tree.CopyFormatCSV:
+		c.csvReader = csv.NewReader(&c.buf)
+		c.csvReader.Comma = rune(c.delimiter)
+		c.csvReader.ReuseRecord = true
+		c.csvReader.FieldsPerRecord = len(c.resultColumns)
+	}
+
 Loop:
 	for {
 		typ, _, err := readBuf.ReadTypedMsg(c.conn.Rd())
@@ -222,12 +273,8 @@ Loop:
 }
 
 const (
-	nullString = `\N`
-	lineDelim  = '\n'
-)
-
-var (
-	fieldDelim = []byte{'\t'}
+	lineDelim = '\n'
+	endOfData = `\.`
 )
 
 // processCopyData buffers incoming data and, once the buffer fills up, inserts
@@ -261,6 +308,8 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		readFn = c.readTextData
 	case tree.CopyFormatBinary:
 		readFn = c.readBinaryData
+	case tree.CopyFormatCSV:
+		readFn = c.readCSVData
 	default:
 		panic("unknown copy format")
 	}
@@ -305,6 +354,52 @@ func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, e
 	return false, err
 }
 
+func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, err error) {
+	record, err := c.csvReader.Read()
+	// Look for end of data before checking for errors, since a field count
+	// error will still return record data.
+	if len(record) == 1 && record[0] == endOfData && c.buf.Len() == 0 {
+		return true, nil
+	}
+	if err != nil {
+		return false, pgerror.Wrap(err, pgcode.BadCopyFileFormat,
+			"read CSV record")
+	}
+	err = c.readCSVTuple(ctx, record)
+	return false, err
+}
+
+func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
+	if len(record) != len(c.resultColumns) {
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
+			"expected %d values, got %d", len(c.resultColumns), len(record))
+	}
+	exprs := make(tree.Exprs, len(record))
+	for i, s := range record {
+		if s == c.null {
+			exprs[i] = tree.DNull
+			continue
+		}
+		d, err := sqlbase.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		if err != nil {
+			return err
+		}
+
+		sz := d.Size()
+		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
+			return err
+		}
+
+		exprs[i] = d
+	}
+	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+		return err
+	}
+
+	c.rows = append(c.rows, exprs)
+	return nil
+}
+
 func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool, err error) {
 	switch c.binaryState {
 	case binaryStateNeedSignature:
@@ -317,7 +412,7 @@ func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool,
 		}
 	case binaryStateFoundTrailer:
 		if !final {
-			return false, pgerror.New(pgcode.ProtocolViolation,
+			return false, pgerror.New(pgcode.BadCopyFileFormat,
 				"copy data present after trailer")
 		}
 		return true, nil
@@ -341,7 +436,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 		return nil
 	}
 	if fieldCount < 1 {
-		return pgerror.Newf(pgcode.ProtocolViolation,
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
 	exprs := make(tree.Exprs, fieldCount)
@@ -365,7 +460,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 			data,
 		)
 		if err != nil {
-			return pgerror.Wrapf(err, pgcode.ProtocolViolation,
+			return pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
 		sz := d.Size()
@@ -391,7 +486,7 @@ func (c *copyMachine) readBinarySignature() error {
 		return err
 	}
 	if !bytes.Equal(sig[:], []byte(binarySignature)) {
-		return pgerror.New(pgcode.ProtocolViolation,
+		return pgerror.New(pgcode.BadCopyFileFormat,
 			"unrecognized binary copy signature")
 	}
 	c.binaryState = binaryStateRead
@@ -498,15 +593,15 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 }
 
 func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
-	parts := bytes.Split(line, fieldDelim)
+	parts := bytes.Split(line, c.textDelim)
 	if len(parts) != len(c.resultColumns) {
-		return pgerror.Newf(pgcode.ProtocolViolation,
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"expected %d values, got %d", len(c.resultColumns), len(parts))
 	}
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
 		s := string(part)
-		if s == nullString {
+		if s == c.null {
 			exprs[i] = tree.DNull
 			continue
 		}

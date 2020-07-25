@@ -726,6 +726,7 @@ unreserved_keyword ::=
 	| 'COPY'
 	| 'COVERING'
 	| 'CREATEROLE'
+	| 'CSV'
 	| 'CUBE'
 	| 'CURRENT'
 	| 'CYCLE'
@@ -738,6 +739,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DELIMITER'
 	| 'DESTINATION'
 	| 'DETACHED'
 	| 'DISCARD'
@@ -1388,6 +1390,9 @@ complex_db_object_name ::=
 copy_options ::=
 	'DESTINATION' '=' string_or_placeholder
 	| 'BINARY'
+	| 'CSV'
+	| 'DELIMITER' string_or_placeholder
+	| 'NULL' string_or_placeholder
 
 db_object_name_component ::=
 	name
