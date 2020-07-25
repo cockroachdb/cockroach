@@ -1754,6 +1754,16 @@ func (ef *execFactory) ConstructControlJobs(
 	}, nil
 }
 
+// ConstructControlJobs is part of the exec.Factory interface.
+func (ef *execFactory) ConstructControlSchedules(
+	command tree.ScheduleCommand, input exec.Node,
+) (exec.Node, error) {
+	return &controlSchedulesNode{
+		rows:    input.(planNode),
+		command: command,
+	}, nil
+}
+
 // ConstructCancelQueries is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
 	return &cancelQueriesNode{

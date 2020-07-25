@@ -903,6 +903,12 @@ func (e *distSQLSpecExecFactory) ConstructControlJobs(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: control jobs")
 }
 
+func (e *distSQLSpecExecFactory) ConstructControlSchedules(
+	command tree.ScheduleCommand, input exec.Node,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: control jobs")
+}
+
 func (e *distSQLSpecExecFactory) ConstructCancelQueries(
 	input exec.Node, ifExists bool,
 ) (exec.Node, error) {
