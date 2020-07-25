@@ -40,6 +40,7 @@ export class Sidebar extends React.Component<SidebarProps> {
     { path: "/metrics", text: "Metrics", activeFor: [] },
     { path: "/databases", text: "Databases", activeFor: ["/database"] },
     { path: "/statements", text: "Statements", activeFor: ["/statement"] },
+    { path: "/sessions", text: "Active Sessions", activeFor: ["/session"] },
     {
       path: "/reports/network",
       text: "Network Latency",
