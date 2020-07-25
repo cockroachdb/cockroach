@@ -25,9 +25,6 @@ TABLE child
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── c int not null
- ├── INDEX child_auto_index_fk_p_ref_parent
- │    ├── p int
- │    └── c int not null
  └── CONSTRAINT fk_p_ref_parent FOREIGN KEY child (p) REFERENCES parent (p)
 
 exec-ddl
@@ -60,9 +57,6 @@ TABLE child2
  ├── p int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
- │    └── c int not null
- ├── INDEX child2_auto_index_fk_p_ref_parent2
- │    ├── p int
  │    └── c int not null
  └── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY child2 (p) REFERENCES parent2 (p)
 
