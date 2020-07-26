@@ -206,9 +206,19 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
 		useComma = true
 	}
+	if zone.NumLearnerReplicas != nil {
+		writeComma(f, useComma)
+		f.Printf("\tnum_learner_replicas = %d", *zone.NumLearnerReplicas)
+		useComma = true
+	}
 	if !zone.InheritedConstraints {
 		writeComma(f, useComma)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
+		useComma = true
+	}
+	if !zone.InheritedLearnerConstraints {
+		writeComma(f, useComma)
+		f.Printf("\tlearner_constraints = %s", lex.EscapeSQLString(constraints))
 		useComma = true
 	}
 	if !zone.InheritedLeasePreferences {

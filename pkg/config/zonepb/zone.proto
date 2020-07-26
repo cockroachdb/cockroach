@@ -97,9 +97,16 @@ message ZoneConfig {
   // in the zone config hierarchy, up to the default policy if necessary.
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC"];
 
-  // NumReplicas specifies the desired number of replicas
+  // TODO DURING REVIEW: We probably want to rename this field from
+  // `num_replicas` to `num_quorum_replicas` (or `num_voter_replicas`), since we
+  // now have multiple types of replicas (especially with consistent read
+  // replicas coming in the next couple releases). However, `num_replicas` is a
+  // part of the user visible zone config syntax. What can we do here?
+  // NumReplicas specifies the desired number of (voter) replicas
   optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
 
+  // NumLearnerReplicas specifies the desired number of persistent learner replicas
+  optional int32 num_learner_replicas = 12 [(gogoproto.moretags) = "yaml:\"num_learner_replicas\""];
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
@@ -107,11 +114,23 @@ message ZoneConfig {
   // NOTE: The sum of the num_replicas fields of the Constraints must add up to
   // ZoneConfig.num_replicas, or there must be no more than a single Constraints
   // field with num_replicas set to 0.
+  // TODO DURING REVIEW: Likewise, this field should probably be something like
+  // `voter_constraints`.
   repeated ConstraintsConjunction constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+
+  // LearnerConstraints constrain which stores the learners can be stored on.
+  // The sum of the num_replicas fields of the LearnerConstraints must add up to
+  // ZoneConfig.num_learner_replicas, or there must be no more than a single
+  // LearnerConstraints field
+  repeated ConstraintsConjunction learner_constraints = 13 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"learner_constraints,flow\""];
 
   // InheritedContraints specifies if the value in the Constraints field was
   // inherited from the zone's parent or specified explicitly by the user.
   optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
+
+  // InheritedLearnerContraints specifies if the value in the Constraints field was
+  // inherited from the zone's parent or specified explicitly by the user.
+  optional bool inherited_learner_constraints = 14 [(gogoproto.nullable) = false];
 
   // LeasePreference stores information about where the user would prefer for
   // range leases to be placed. Leases are allowed to be placed elsewhere if

@@ -62,6 +62,9 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"range_min_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"range_max_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
 	"num_replicas":    {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
+	"num_learner_replicas": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		c.NumLearnerReplicas = proto.Int32(int32(tree.MustBeDInt(d)))
+	}},
 	"gc.ttlseconds": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
 	}},
@@ -73,6 +76,15 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
 		c.Constraints = constraintsList.Constraints
 		c.InheritedConstraints = false
+	}},
+	"learner_constraints": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
+		constraintsList := zonepb.ConstraintsList{
+			Constraints: c.LearnerConstraints,
+			Inherited:   c.InheritedLearnerConstraints,
+		}
+		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
+		c.LearnerConstraints = constraintsList.Constraints
+		c.InheritedLearnerConstraints = false
 	}},
 	"lease_preferences": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
 		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
