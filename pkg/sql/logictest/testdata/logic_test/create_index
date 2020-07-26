@@ -17,7 +17,7 @@ CREATE INDEX foo ON t (b)
 statement error duplicate index name: \"foo\"
 CREATE INDEX foo ON t (a)
 
-statement error index \"bar\" contains unknown column \"c\"
+statement error column "c" does not exist
 CREATE INDEX bar ON t (c)
 
 statement error index \"bar\" contains duplicate column \"b\"
@@ -188,3 +188,22 @@ create_index_concurrently_tbl  CREATE TABLE create_index_concurrently_tbl (
 
 statement ok
 DROP TABLE create_index_concurrently_tbl
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;
