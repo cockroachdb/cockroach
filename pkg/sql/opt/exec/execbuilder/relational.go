@@ -1777,7 +1777,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(bufferRef exec.BufferNode) (exec.Plan, error) {
+	fn := func(bufferRef exec.Node) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
 		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
@@ -2258,7 +2258,7 @@ func (b *Builder) ensureColumns(
 		// No projection necessary.
 		if colNames != nil {
 			var err error
-			input.root, err = b.factory.RenameColumns(input.root, colNames)
+			input.root, err = b.factory.ConstructRenameColumns(input.root, colNames)
 			if err != nil {
 				return execPlan{}, err
 			}

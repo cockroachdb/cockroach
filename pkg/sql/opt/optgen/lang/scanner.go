@@ -74,6 +74,8 @@ const (
 	COMMA
 	// CARET is the caret rune: ^
 	CARET
+	// DOT is the dot rune: .
+	DOT
 	// ELLIPSES is three periods in succession: ...
 	ELLIPSES
 	// PIPE is the vertical line rune: |
@@ -231,11 +233,15 @@ func (s *Scanner) Scan() Token {
 			if s.read() == '.' {
 				s.tok = ELLIPSES
 				s.lit = "..."
-				break
+			} else {
+				s.unread()
+				s.tok = ILLEGAL
+				s.lit = ".."
 			}
+			break
 		}
-
-		s.tok = ILLEGAL
+		s.unread()
+		s.tok = DOT
 		s.lit = "."
 
 	case '"':
