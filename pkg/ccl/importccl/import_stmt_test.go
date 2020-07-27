@@ -1095,24 +1095,6 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
-		// Test PGDump imports.
-		{
-			create:      "a greeting, b greeting",
-			intoCols:    "a, b",
-			typ:         "PGDUMP",
-			contents:    `INSERT INTO t VALUES ('hello', 'hello'), ('hi', 'hi')`,
-			verifyQuery: "SELECT * FROM t ORDER BY a",
-			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
-		},
-		// Test MySQL imports.
-		{
-			create:      "a greeting, b greeting",
-			intoCols:    "a, b",
-			typ:         "MYSQLDUMP",
-			contents:    "INSERT INTO `t` VALUES ('hello', 'hello'), ('hi', 'hi')",
-			verifyQuery: "SELECT * FROM t ORDER BY a",
-			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
-		},
 		// Test AVRO imports.
 		{
 			create:      "a greeting, b greeting",
@@ -3091,17 +3073,8 @@ func TestImportDefault(t *testing.T) {
 			format:        "CSV",
 			expectedError: "unsafe for import",
 		},
-		// Non CSV formats.
-		// TODO (anzoteh96): currently, DEFAULT expressions don't work well for
-		// MySQL and AVRO. Fix these and add tests here.
-		{
-			name:            "pgdump",
-			data:            "INSERT INTO t VALUES (1, 2), (3, 4)",
-			create:          `a INT, b INT DEFAULT 42, c INT`,
-			targetCols:      "c, a",
-			format:          "PGDUMP",
-			expectedResults: [][]string{{"2", "42", "1"}, {"4", "42", "3"}},
-		},
+		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
+		// IMPORT INTO are supported for these file formats.
 	}
 	for _, test := range tests {
 		if test.sequence != "" {
@@ -4038,6 +4011,20 @@ func TestImportMysql(t *testing.T) {
 			}
 		})
 	}
+	t.Run("import-into-not-supported", func(t *testing.T) {
+		data := `INSERT INTO t VALUES (1, 2), (3, 4)`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
+		sqlDB.ExpectErr(t,
+			"MYSQLDUMP file format is currently unsupported by IMPORT INTO",
+			fmt.Sprintf(`IMPORT INTO t (a, b) MYSQLDUMP DATA (%q)`, srv.URL))
+	})
 }
 
 func TestImportMysqlOutfile(t *testing.T) {
@@ -4100,6 +4087,22 @@ func TestImportMysqlOutfile(t *testing.T) {
 			}
 		})
 	}
+	t.Run("import-into-not-supported", func(t *testing.T) {
+		data := "1,2\n3,4"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
+		sqlDB.ExpectErr(t,
+			"DELIMITED file format is currently unsupported by IMPORT INTO",
+			fmt.Sprintf(
+				`IMPORT INTO t (a, b) DELIMITED DATA (%q) WITH fields_terminated_by = ","`,
+				srv.URL))
+	})
 }
 
 func TestImportPgCopy(t *testing.T) {
@@ -4167,6 +4170,20 @@ func TestImportPgCopy(t *testing.T) {
 			}
 		})
 	}
+	t.Run("import-into-not-supported", func(t *testing.T) {
+		data := "1,2\n3,4"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
+		sqlDB.ExpectErr(t,
+			"PGCOPY file format is currently unsupported by IMPORT INTO",
+			fmt.Sprintf(`IMPORT INTO t (a, b) PGCOPY DATA (%q) WITH delimiter = ","`, srv.URL))
+	})
 }
 
 func TestImportPgDump(t *testing.T) {
@@ -4335,6 +4352,20 @@ func TestImportPgDump(t *testing.T) {
 		defer sqlDB.Exec(t, "DROP TABLE t")
 		sqlDB.Exec(t, "IMPORT PGDUMP ($1)", srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
+	})
+	t.Run("import-into-not-supported", func(t *testing.T) {
+		data := `INSERT INTO t VALUES (1, 2), (3, 4)`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		defer sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
+		sqlDB.ExpectErr(t,
+			"PGDUMP file format is currently unsupported by IMPORT INTO",
+			fmt.Sprintf(`IMPORT INTO t (a, b) PGDUMP DATA (%q)`, srv.URL))
 	})
 }
 
