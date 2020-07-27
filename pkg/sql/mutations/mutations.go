@@ -40,6 +40,10 @@ var (
 	// indexes in CREATE TABLE.
 	IndexStoringMutator MultiStatementMutation = sqlbase.IndexStoringMutator
 
+	// PartialIndexMutator adds random partial index predicate expressions to
+	// indexes.
+	PartialIndexMutator MultiStatementMutation = sqlbase.PartialIndexMutator
+
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
 	// features not supported by Postgres; use PostgresCreateTableMutator
@@ -292,8 +296,12 @@ func statisticsMutator(
 				// Should not happen.
 				panic(err)
 			}
+			j, err := tree.ParseDJSON(string(b))
+			if err != nil {
+				panic(err)
+			}
 			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
-				Stats: tree.NewDString(string(b)),
+				Stats: j,
 			})
 			stmts = append(stmts, alter)
 			changed = true
