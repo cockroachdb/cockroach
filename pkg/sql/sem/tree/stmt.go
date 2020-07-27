@@ -251,6 +251,14 @@ func (n *ControlJobs) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
+func (*ControlSchedules) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (c *ControlSchedules) StatementTag() string {
+	return fmt.Sprintf("%s SCHEDULES", c.Command)
+}
+
+// StatementType implements the Statement interface.
 func (*CancelQueries) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -939,6 +947,7 @@ func (n *Analyze) String() string                        { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }
 func (n *BeginTransaction) String() string               { return AsString(n) }
 func (n *ControlJobs) String() string                    { return AsString(n) }
+func (c *ControlSchedules) String() string               { return AsString(c) }
 func (n *CancelQueries) String() string                  { return AsString(n) }
 func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }

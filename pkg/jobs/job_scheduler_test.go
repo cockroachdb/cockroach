@@ -22,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -38,19 +36,6 @@ import (
 	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
-
-func addFakeJob(t *testing.T, h *testHelper, id int64, status Status, txn *kv.Txn) {
-	payload := []byte("fake payload")
-	n, err := h.cfg.InternalExecutor.ExecEx(context.Background(), "fake-job", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		fmt.Sprintf(
-			"INSERT INTO %s (created_by_type, created_by_id, status, payload) VALUES ($1, $2, $3, $4)",
-			h.env.SystemJobsTableName()),
-		CreatedByScheduledJobs, id, status, payload,
-	)
-	require.NoError(t, err)
-	require.Equal(t, 1, n)
-}
 
 func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -78,7 +63,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 					// non terminal states.
 					for _, status := range []Status{
 						StatusRunning, StatusFailed, StatusCanceled, StatusSucceeded, StatusPaused} {
-						addFakeJob(t, h, j.ScheduleID(), status, txn)
+						_ = addFakeJob(t, h, j.ScheduleID(), status, txn)
 					}
 					return nil
 				}))
@@ -133,7 +118,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 					// Let's add few fake runs for this schedule which are in every
 					// terminal state.
 					for _, status := range []Status{StatusFailed, StatusCanceled, StatusSucceeded} {
-						addFakeJob(t, h, j.ScheduleID(), status, txn)
+						_ = addFakeJob(t, h, j.ScheduleID(), status, txn)
 					}
 					return nil
 				}))

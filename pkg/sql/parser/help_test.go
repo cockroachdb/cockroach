@@ -179,6 +179,9 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP VIEW IF ??`, `DROP VIEW`},
 		{`DROP VIEW IF EXISTS blih, bloh ??`, `DROP VIEW`},
 
+		{`DROP SCHEDULE ???`, `DROP SCHEDULES`},
+		{`DROP SCHEDULES ???`, `DROP SCHEDULES`},
+
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},
 		{`EXPLAIN INSERT INTO xx (SELECT 1) ??`, `INSERT`},
@@ -227,9 +230,17 @@ func TestContextualHelp(t *testing.T) {
 		{`GRANT ALL ON foo TO ??`, `GRANT`},
 		{`GRANT ALL ON foo TO bar ??`, `GRANT`},
 
-		{`PAUSE ??`, `PAUSE JOBS`},
+		{`PAUSE ??`, `PAUSE`},
+		{`PAUSE JOB ??`, `PAUSE JOBS`},
+		{`PAUSE JOBS ??`, `PAUSE JOBS`},
+		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
+		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
 
-		{`RESUME ??`, `RESUME JOBS`},
+		{`RESUME ??`, `RESUME`},
+		{`RESUME JOB ??`, `RESUME JOBS`},
+		{`RESUME JOBS ??`, `RESUME JOBS`},
+		{`RESUME SCHEDULE ??`, `RESUME SCHEDULES`},
+		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
