@@ -101,7 +101,7 @@ require (
 	github.com/kr/pretty v0.2.0
 	github.com/kr/text v0.2.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lib/pq v1.7.1
+	github.com/lib/pq v1.8.0
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/lightstep/lightstep-tracer-go v0.15.6
 	github.com/linkedin/goavro/v2 v2.8.1
