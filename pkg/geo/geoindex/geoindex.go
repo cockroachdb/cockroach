@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -280,10 +281,10 @@ type KeySpan struct {
 }
 
 // UnionKeySpans is the set of indexed spans to retrieve and combine via set
-// union. The spans are guaranteed to be non-overlapping. Duplicate primary
-// keys will not be retrieved by any individual key, but they may be present
-// if more than one key is retrieved (including duplicates in a single span
-// where End - Start > 1).
+// union. The spans are guaranteed to be non-overlapping and sorted in
+// increasing order. Duplicate primary keys will not be retrieved by any
+// individual key, but they may be present if more than one key is retrieved
+// (including duplicates in a single span where End - Start > 1).
 type UnionKeySpans []KeySpan
 
 func (s UnionKeySpans) String() string {
@@ -359,6 +360,8 @@ func (x RPKeyExpr) String() string {
 
 // covererInterface provides a covering for a set of regions.
 type covererInterface interface {
+	// covering returns a normalized CellUnion, i.e., it is sorted, and does not
+	// contain redundancy.
 	covering(regions []s2.Region) s2.CellUnion
 }
 
@@ -540,6 +543,7 @@ func intersectsUsingCovering(covering s2.CellUnion) UnionKeySpans {
 	for _, cid := range ancestorCells(covering) {
 		querySpans = append(querySpans, KeySpan{Start: Key(cid), End: Key(cid)})
 	}
+	sort.Slice(querySpans, func(i, j int) bool { return querySpans[i].Start < querySpans[j].Start })
 	return querySpans
 }
 
