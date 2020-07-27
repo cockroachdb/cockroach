@@ -1427,7 +1427,7 @@ norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-a
 SELECT *
 FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
 INNER JOIN ab
-ON a = y AND b = v
+ON a = y AND (b = v OR v IS NULL)
 LIMIT 10
 ----
 limit
@@ -1440,7 +1440,7 @@ limit
  │    ├── scan ab
  │    └── filters
  │         ├── a = y
- │         └── b = v
+ │         └── (b = v) OR (v IS NULL)
  └── 10
 
 # No-op case because one of the joins has a join hint.

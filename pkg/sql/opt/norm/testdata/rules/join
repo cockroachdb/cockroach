@@ -821,8 +821,8 @@ project
  │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    ├── immutable
  │    │    │    ├── fd: (5)==(11), (11)==(5)
- │    │    │    ├── full-join (cross)
- │    │    │    │    ├── columns: b.x:5
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── columns: b.x:5!null
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:5!null
@@ -874,32 +874,34 @@ project
  │    │    ├── scan c
  │    │    │    ├── columns: c.x:1!null
  │    │    │    └── key: (1)
- │    │    ├── inner-join (hash)
+ │    │    ├── left-join (cross)
  │    │    │    ├── columns: k:5!null b.x:11!null
  │    │    │    ├── outer: (1)
- │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │    │    ├── immutable
  │    │    │    ├── fd: (5)==(11), (11)==(5)
- │    │    │    ├── select
- │    │    │    │    ├── columns: k:5!null
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: k:5!null b.x:11!null
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    │    ├── immutable
- │    │    │    │    ├── key: (5)
- │    │    │    │    ├── scan a
+ │    │    │    │    ├── key: (11)
+ │    │    │    │    ├── fd: (5)==(11), (11)==(5)
+ │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: k:5!null
- │    │    │    │    │    └── key: (5)
- │    │    │    │    └── filters
- │    │    │    │         └── (k:5 + k:5) < 5 [outer=(5), immutable]
- │    │    │    ├── full-join (cross)
- │    │    │    │    ├── columns: b.x:11
- │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── immutable
+ │    │    │    │    │    ├── key: (5)
+ │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    ├── columns: k:5!null
+ │    │    │    │    │    │    └── key: (5)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── (k:5 + k:5) < 5 [outer=(5), immutable]
  │    │    │    │    ├── scan b
  │    │    │    │    │    ├── columns: b.x:11!null
  │    │    │    │    │    └── key: (11)
- │    │    │    │    ├── scan b2
  │    │    │    │    └── filters
- │    │    │    │         └── c.x:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │    │    │    │         └── k:5 = b.x:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+ │    │    │    ├── scan b2
  │    │    │    └── filters
- │    │    │         └── k:5 = b.x:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+ │    │    │         └── c.x:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  │    │    └── filters (true)
  │    └── aggregations
  │         └── const-agg [as=b.x:11, outer=(11)]
