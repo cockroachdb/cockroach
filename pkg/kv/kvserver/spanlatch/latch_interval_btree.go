@@ -416,12 +416,17 @@ func (n *node) removeMax() *latch {
 		n.adjustUpperBoundOnRemoval(out, nil)
 		return out
 	}
-	child := mut(&n.children[n.count])
-	if child.count <= minItems {
-		n.rebalanceOrMerge(int(n.count))
-		return n.removeMax()
+	// Recurse into max child.
+	i := int(n.count)
+	if n.children[i].count <= minItems {
+		// Child not large enough to remove from.
+		n.rebalanceOrMerge(i)
+		return n.removeMax() // redo
 	}
-	return child.removeMax()
+	child := mut(&n.children[i])
+	out := child.removeMax()
+	n.adjustUpperBoundOnRemoval(out, nil)
+	return out
 }
 
 // remove removes a item from the subtree rooted at this node. Returns
@@ -439,7 +444,7 @@ func (n *node) remove(item *latch) (out *latch, newBound bool) {
 	if n.children[i].count <= minItems {
 		// Child not large enough to remove from.
 		n.rebalanceOrMerge(i)
-		return n.remove(item)
+		return n.remove(item) // redo
 	}
 	child := mut(&n.children[i])
 	if found {
@@ -619,7 +624,7 @@ func (n *node) adjustUpperBoundOnInsertion(item *latch, child *node) bool {
 }
 
 // adjustUpperBoundOnRemoval adjusts the upper key bound for this node
-// given a item and an optional child node that were removed. Returns
+// given a item and an optional child node that was removed. Returns
 // true is the upper bound was changed and false if not.
 func (n *node) adjustUpperBoundOnRemoval(item *latch, child *node) bool {
 	up := upperBound(item)
