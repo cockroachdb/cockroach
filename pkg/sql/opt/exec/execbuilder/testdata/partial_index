@@ -683,9 +683,8 @@ CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
 query TTT
 EXPLAIN SELECT b FROM t WHERE b > 10
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     table          t@b_partial
-·     spans          FULL SCAN
-·     partial index  ·
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         t@b_partial (partial index)
+·     spans         FULL SCAN
