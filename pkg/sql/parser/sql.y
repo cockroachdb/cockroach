@@ -645,7 +645,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
-%token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
+%token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
+%token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
@@ -852,6 +853,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
+%type <tree.Statement> show_transactions_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
@@ -4078,6 +4080,7 @@ show_stmt:
 | show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
 | show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
+| show_transactions_stmt    // EXTEND WITH HELP: SHOW TRANSACTIONS
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
@@ -4576,6 +4579,21 @@ show_tables_stmt:
     $$.val = &tree.ShowTables{WithComment: $3.bool()}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+// %Help: SHOW TRANSACTIONS - list open client transactions
+// %Category: Misc
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] TRANSACTIONS
+show_transactions_stmt:
+  SHOW opt_cluster TRANSACTIONS
+  {
+    $$.val = &tree.ShowTransactions{Cluster: $2.bool()}
+  }
+| SHOW opt_cluster TRANSACTIONS error // SHOW HELP: SHOW TRANSACTIONS
+| SHOW ALL opt_cluster TRANSACTIONS
+  {
+    $$.val = &tree.ShowTransactions{All: true, Cluster: $3.bool()}
+  }
+| SHOW ALL opt_cluster TRANSACTIONS error // SHOW HELP: SHOW TRANSACTIONS
 
 with_comment:
   WITH COMMENT { $$.val = true }
@@ -11235,6 +11253,7 @@ unreserved_keyword:
 | TIES
 | TRACE
 | TRANSACTION
+| TRANSACTIONS
 | TRIGGER
 | TRUNCATE
 | TRUSTED
