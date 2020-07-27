@@ -678,7 +678,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		default:
 			panic("unexpected")
 		}
-		r.Add(testSpec{
+		spec := testSpec{
 			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:      OwnerKV,
 			MinVersion: "v19.2.0",
@@ -686,6 +686,10 @@ func registerKVRangeLookups(r *testRegistry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
-		})
+		}
+		if workloadName == "split" {
+			spec.Skip = "https://github.com/cockroachdb/cockroach/issues/51096"
+		}
+		r.Add(spec)
 	}
 }
