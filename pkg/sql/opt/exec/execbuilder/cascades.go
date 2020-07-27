@@ -56,7 +56,7 @@ import (
 // The expression above does contain a reference to a memo.CascadeBuilder which
 // will be invoked to build the query at a later time.
 //
-// When execbuilding the query above, a BufferNode is constructed for the
+// When execbuilding the query above, a buffer node is constructed for the
 // mutation input (binding &1 above) and a cascadeBuilder object is constructed
 // for the cascade.
 //
@@ -71,7 +71,7 @@ import (
 // following happens:
 //
 //  1. We set up a new empty memo and add metadata for the columns of the
-//     BufferNode (binding &1).
+//     buffer node (binding &1).
 //
 //  2. We invoke the memo.CascadeBuilder to optbuild the cascading query. At this
 //     point, the new memo will contain the following expression:
@@ -110,7 +110,7 @@ import (
 //
 type cascadeBuilder struct {
 	b              *Builder
-	mutationBuffer exec.BufferNode
+	mutationBuffer exec.Node
 	// mutationBufferCols maps With column IDs from the original memo to buffer
 	// node column ordinals; see builtWithExpr.outputCols.
 	mutationBufferCols opt.ColMap
@@ -157,7 +157,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 			semaCtx *tree.SemaContext,
 			evalCtx *tree.EvalContext,
 			execFactory exec.Factory,
-			bufferRef exec.BufferNode,
+			bufferRef exec.Node,
 			numBufferedRows int,
 		) (exec.Plan, error) {
 			return cb.planCascade(ctx, semaCtx, evalCtx, execFactory, cascade, bufferRef, numBufferedRows)
@@ -177,7 +177,7 @@ func (cb *cascadeBuilder) planCascade(
 	evalCtx *tree.EvalContext,
 	execFactory exec.Factory,
 	cascade *memo.FKCascade,
-	bufferRef exec.BufferNode,
+	bufferRef exec.Node,
 	numBufferedRows int,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
