@@ -782,6 +782,13 @@ func userClusterNameRegexp() (*regexp.Regexp, error) {
 			pattern += fmt.Sprintf("(^%s-)", regexp.QuoteMeta(account))
 		}
 	}
+
+	// Also include local clusters, if any.
+	if len(pattern) > 0 {
+		pattern += "|"
+	}
+	pattern += "^local$"
+
 	return regexp.Compile(pattern)
 }
 
