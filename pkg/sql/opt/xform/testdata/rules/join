@@ -2401,11 +2401,11 @@ memo (optimized, ~23KB, required=[presentation: name:14,popn_per_sqkm:18])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:14,popn_per_sqkm:18]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 7508.97
+ │         └── cost: 7308.28
  ├── G2: (group-by G4 G5 cols=(14,15))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(14,15))
- │         └── cost: 7508.92
+ │         └── cost: 7308.23
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,13-15))
  │    └── []
