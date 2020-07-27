@@ -181,9 +181,9 @@ type importDefaultExprVisitor struct {
 	ctx         context.Context
 	annotations *tree.Annotations
 	semaCtx     *tree.SemaContext
-	// The volatile flag will be set if there's at least one volatile
+	// The volatility flag will be set if there's at least one volatile
 	// function appearing in the default expression.
-	volatile overrideVolatility
+	volatility overrideVolatility
 }
 
 // VisitPre implements tree.Visitor interface.
@@ -208,11 +208,11 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 					// builtin.go.
 					return expr
 				}
-				// Override exists, so we turn the volatile flag of the visitor to true.
+				// Override exists, so we turn the volatility flag of the visitor to true.
 				// In addition, the sideEffect function needs to be called to update any
 				// relevant counter (e.g. the total number of occurrences of the
 				// unique_rowid function in an expression).
-				v.volatile = overrideVolatile
+				v.volatility = overrideVolatile
 				if custom.visitorSideEffect != nil {
 					custom.visitorSideEffect(v.annotations)
 				}
@@ -260,7 +260,7 @@ func SanitizeExprsForImport(
 		return nil, overrideErrorTerm,
 			unsafeExpressionError(v.err, "expr walking error", expr.String())
 	}
-	return newExpr.(tree.TypedExpr), v.volatile, nil
+	return newExpr.(tree.TypedExpr), v.volatility, nil
 }
 
 // KVInserter implements the putter interface.
@@ -570,9 +570,9 @@ func NewDatumRowConverter(
 				}
 			} else {
 				c.defaultCache[i] = typedExpr
-				// This default expression isn't volatile, so we can evaluate once here
-				// and memoize it.
 				if volatile == overrideImmutable {
+					// This default expression isn't volatile, so we can evaluate once
+					// here and memoize it.
 					c.defaultCache[i], err = c.defaultCache[i].Eval(c.EvalCtx)
 					if err != nil {
 						return nil, errors.Wrapf(err, "error evaluating default expression")
