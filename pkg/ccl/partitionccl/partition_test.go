@@ -132,7 +132,7 @@ func (pt *partitioningTest) parse() error {
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
 		mutDesc, err := importccl.MakeSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
+			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
 		}

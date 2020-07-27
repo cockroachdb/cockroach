@@ -44,7 +44,7 @@ func ToTableDescriptor(
 	}
 	const parentID sqlbase.ID = keys.MaxReservedDescID
 	tableDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, &semaCtx, nil /* settings */, createTable, parentID, tableID, importccl.NoFKs, ts.UnixNano())
+		ctx, &semaCtx, nil /* settings */, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, ts.UnixNano())
 	if err != nil {
 		return nil, err
 	}

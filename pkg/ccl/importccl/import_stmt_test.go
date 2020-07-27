@@ -1829,6 +1829,26 @@ IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 			t.Fatalf("expected %d rows, got %d", rowsPerFile, result)
 		}
 	})
+
+	t.Run("user-defined-schemas", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE uds`)
+		sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true`)
+		sqlDB.Exec(t, `USE uds`)
+		sqlDB.Exec(t, `CREATE SCHEMA sc`)
+		// Now import into a table under sc.
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE uds.sc.t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
+		// Verify that the table was created and has the right number of rows.
+		var result int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
+		require.Equal(t, rowsPerFile, result)
+		// Try the same thing, but with IMPORT INTO.
+		sqlDB.Exec(t, `DROP TABLE uds.sc.t`)
+		sqlDB.Exec(t, `CREATE TABLE uds.sc.t (a INT8 PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO uds.sc.t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
+		require.Equal(t, rowsPerFile, result)
+		fmt.Println("we done")
+	})
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
@@ -2915,7 +2935,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3364,7 +3384,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3465,7 +3485,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100),
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID,
 		sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
@@ -4686,6 +4706,22 @@ func TestImportAvro(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("user-defined-schemas", func(t *testing.T) {
+		sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true`)
+		sqlDB.Exec(t, `CREATE SCHEMA myschema`)
+		// Test with normal IMPORT.
+		sqlDB.Exec(t, `IMPORT TABLE myschema.simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`, simpleOcf)
+		var numRows int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
+		require.True(t, numRows > 0)
+		// Test with IMPORT INTO.
+		sqlDB.Exec(t, `DROP TABLE myschema.simple`)
+		sqlDB.Exec(t, `CREATE TABLE myschema.simple (i INT8 PRIMARY KEY, s text, b bytea)`)
+		sqlDB.Exec(t, `IMPORT INTO myschema.simple (i, s, b) AVRO DATA ($1)`, simpleOcf)
+		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
+		require.True(t, numRows > 0)
+	})
 }
 
 // TestImportClientDisconnect ensures that an import job can complete even if
