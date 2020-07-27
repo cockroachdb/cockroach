@@ -15,7 +15,7 @@ import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
 import * as protos from  "src/js/protos";
-import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
+import { HoverState, hoverOn, hoverOff } from "@cockroachlabs/admin-ui-components";
 import { findChildrenOfType } from "src/util/find";
 import {
   ConfigureLineChart, InitLineChart, CHART_MARGINS, ConfigureLinkedGuideline,

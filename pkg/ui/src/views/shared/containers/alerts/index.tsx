@@ -14,8 +14,8 @@ import { Dispatch, Action, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
-import { AdminUIState } from "src/redux/state";
-import { Alert, panelAlertsSelector } from "src/redux/alerts";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import { Alert, panelAlertsSelector } from "@cockroachlabs/admin-ui-components";
 
 interface AlertSectionProps {
   /**

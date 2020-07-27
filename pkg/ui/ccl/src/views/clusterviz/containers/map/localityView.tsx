@@ -10,11 +10,11 @@ import React from "react";
 import { RouteComponentProps } from "react-router";
 import { withRouter } from "react-router-dom";
 
-import { LocalityTree } from "src/redux/localities";
+import { LocalityTree } from "@cockroachlabs/admin-ui-components";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel, getLeaves } from "src/util/localities";
 
-import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
+import { sumNodeStats, NodeLivenessStatus } from "@cockroachlabs/admin-ui-components";
 import { pluralize } from "src/util/pluralize";
 import { trustIcon } from "src/util/trust";
 import localityIcon from "!!raw-loader!assets/localityIcon.svg";
@@ -25,7 +25,7 @@ import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 
 interface LocalityViewProps {
   localityTree: LocalityTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
 }
 
 const SCALE_FACTOR = 0.8;

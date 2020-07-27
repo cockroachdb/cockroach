@@ -8,7 +8,7 @@
 import { assert } from "chai";
 
 import { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier } from "@cockroachlabs/admin-ui-components";
 
 describe("InstructionsBox component", () => {
 

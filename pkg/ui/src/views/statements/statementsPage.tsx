@@ -15,9 +15,9 @@ import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
-} from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+} from "@cockroachlabs/admin-ui-components";
+import { CachedDataReducerState } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { StatementsResponseMessage } from "src/util/api";
 import {
   aggregateStatementStats,
@@ -31,17 +31,17 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import {
   selectLastDiagnosticsReportPerStatement,
-} from "src/redux/statements/statementsSelectors";
-import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+} from "@cockroachlabs/admin-ui-components";
+import { createStatementDiagnosticsAlertLocalSetting } from "@cockroachlabs/admin-ui-components";
 import { getMatchParamByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/admin-ui-components";
-import { createOpenDiagnosticsModalAction, createStatementDiagnosticsReportAction } from "src/redux/statements";
+import { createOpenDiagnosticsModalAction, createStatementDiagnosticsReportAction } from "@cockroachlabs/admin-ui-components";
 import {
   trackStatementsPaginationAction,
   trackStatementsSearchAction,
   trackTableSortAction,
-} from "src/redux/analyticsActions";
+} from "@cockroachlabs/admin-ui-components";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 

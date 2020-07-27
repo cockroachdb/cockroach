@@ -15,11 +15,11 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { refreshSettings } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import Loading from "src/views/shared/components/loading";
 import "./index.styl";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "@cockroachlabs/admin-ui-components";
 
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;

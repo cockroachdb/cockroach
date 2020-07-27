@@ -10,8 +10,8 @@
 
 import { assert } from "chai";
 
-import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { LocationTree } from "src/redux/locations";
+import { LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { LocationTree } from "@cockroachlabs/admin-ui-components";
 import { findMostSpecificLocation, findOrCalculateLocation } from "./locations";
 
 const nycLocality: LocalityTier[] = [

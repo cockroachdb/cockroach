@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "@cockroachlabs/admin-ui-components";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";

@@ -12,7 +12,7 @@ import { StatementsPageProps } from "@cockroachlabs/admin-ui-components";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "src/js/protos";
-import {refreshStatementDiagnosticsRequests, refreshStatements} from "src/redux/apiReducers";
+import {refreshStatementDiagnosticsRequests, refreshStatements} from "@cockroachlabs/admin-ui-components";
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"]});

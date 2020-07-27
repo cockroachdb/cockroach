@@ -14,9 +14,9 @@ import { queryByName, queryToObj, queryToString } from "src/util/query";
 import React, { useEffect, useState } from "react";
 import { connect } from "react-redux";
 import { useLocation, useHistory } from "react-router-dom";
-import { refreshNodes } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import * as timewindow from "src/redux/timewindow";
+import { refreshNodes } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import * as timewindow from "@cockroachlabs/admin-ui-components";
 import { trackTimeFrameChange } from "src/util/analytics";
 import Dropdown, {
   ArrowDirection,

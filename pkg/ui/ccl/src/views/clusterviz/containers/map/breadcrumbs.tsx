@@ -11,7 +11,7 @@ import _ from "lodash";
 import { Link } from "react-router-dom";
 
 import { generateLocalityRoute } from "src/util/localities";
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier } from "@cockroachlabs/admin-ui-components";
 import { intersperse } from "src/util/intersperse";
 import { getLocalityLabel } from "src/util/localities";
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";

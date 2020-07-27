@@ -8,12 +8,12 @@
 
 import React from "react";
 
-import { LocalityTree } from "src/redux/localities";
+import { LocalityTree } from "@cockroachlabs/admin-ui-components";
 import { getChildLocalities } from "src/util/localities";
 
 import { LocalityView } from "./localityView";
 import { NodeView } from "./nodeView";
-import { LivenessStatus } from "src/redux/nodes";
+import { NodeLivenessStatus } from "@cockroachlabs/admin-ui-components";
 import { cockroach } from "src/js/protos";
 
 type Liveness = cockroach.kv.kvserver.storagepb.ILiveness;
@@ -23,7 +23,7 @@ const PADDING = 150;
 
 interface CircleLayoutProps {
   localityTree: LocalityTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
   livenesses: { [id: string]: Liveness };
   viewportSize: [number, number];
 }

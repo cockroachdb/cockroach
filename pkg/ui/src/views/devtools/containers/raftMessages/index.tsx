@@ -14,10 +14,10 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import {RouteComponentProps, withRouter} from "react-router-dom";
 
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
-import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshLiveness, refreshNodes } from "@cockroachlabs/admin-ui-components";
+import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "@cockroachlabs/admin-ui-components";
+import { NodesSummary, nodesSummarySelector } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { nodeIDAttr } from "src/util/constants";
 import { GraphDashboardProps, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";

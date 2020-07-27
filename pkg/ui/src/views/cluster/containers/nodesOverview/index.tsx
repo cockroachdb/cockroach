@@ -17,14 +17,15 @@ import _ from "lodash";
 
 import {
   LivenessStatus,
+  NodeLivenessStatus,
   nodeCapacityStats,
   nodesSummarySelector,
   partitionedStatuses,
   selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
+} from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import { refreshNodes, refreshLiveness } from "@cockroachlabs/admin-ui-components";
+import { LocalSetting } from "@cockroachlabs/admin-ui-components";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
@@ -32,7 +33,7 @@ import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps } fro
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier } from "@cockroachlabs/admin-ui-components";
 import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";
@@ -82,7 +83,7 @@ export interface NodeStatusRow {
   * If all nested nodes have Live status then the current item has Ready status.
   * Otherwise, it has Warning status.
   * */
-  status: LivenessStatus | AggregatedNodeStatus;
+  status: NodeLivenessStatus | AggregatedNodeStatus;
   children?: Array<NodeStatusRow>;
 }
 
@@ -90,7 +91,7 @@ interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
   nodeName: string;
-  status: LivenessStatus;
+  status: NodeLivenessStatus;
   decommissionedDate: Moment;
 }
 
@@ -114,7 +115,7 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
   isCollapsible: boolean;
 }
 
-const getBadgeTypeByNodeStatus = (status: LivenessStatus | AggregatedNodeStatus): BadgeProps["status"] => {
+const getBadgeTypeByNodeStatus = (status: NodeLivenessStatus | AggregatedNodeStatus): BadgeProps["status"] => {
   switch (status) {
     case LivenessStatus.NODE_STATUS_UNKNOWN:
       return "warning";

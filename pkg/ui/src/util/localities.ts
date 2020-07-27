@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 
-import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
 import { INodeStatus } from "src/util/proto";
 
 /*

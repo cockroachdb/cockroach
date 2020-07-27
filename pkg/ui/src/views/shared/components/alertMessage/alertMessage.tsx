@@ -12,7 +12,7 @@ import React from "react";
 import { Alert, Icon } from "antd";
 import { Link } from "react-router-dom";
 
-import { AlertInfo, AlertLevel } from "src/redux/alerts";
+import { AlertInfo, AlertLevel } from "@cockroachlabs/admin-ui-components";
 import "./alertMessage.styl";
 
 interface AlertMessageProps extends AlertInfo {

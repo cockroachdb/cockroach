@@ -23,9 +23,9 @@ import {
   refreshAllocatorRange,
   refreshRange,
   refreshRangeLog,
-} from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+} from "@cockroachlabs/admin-ui-components";
+import { CachedDataReducerState } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";

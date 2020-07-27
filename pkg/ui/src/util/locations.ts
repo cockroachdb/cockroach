@@ -10,8 +10,8 @@
 
 import _ from "lodash";
 
-import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { ILocation, LocationTree } from "src/redux/locations";
+import { LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { ILocation, LocationTree } from "@cockroachlabs/admin-ui-components";
 import * as vector from "src/util/vector";
 
 /*

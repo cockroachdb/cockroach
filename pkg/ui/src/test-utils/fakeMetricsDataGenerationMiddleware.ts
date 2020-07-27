@@ -11,8 +11,8 @@
 import {Store, Action, Dispatch} from "redux";
 import Long from "long";
 import {clone} from "lodash";
-import {AdminUIState} from "src/redux/state";
-import {RECEIVE, RequestWithResponse, WithID} from "src/redux/metrics";
+import {AdminUIState} from "@cockroachlabs/admin-ui-components";
+import {RECEIVE, RequestWithResponse, WithID} from "@cockroachlabs/admin-ui-components";
 import {PayloadAction} from "src/interfaces/action";
 import {cockroach} from "src/js/protos";
 import ITimeSeriesDatapoint = cockroach.ts.tspb.ITimeSeriesDatapoint;

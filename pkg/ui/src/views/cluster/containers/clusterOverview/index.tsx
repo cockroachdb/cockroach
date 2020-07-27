@@ -15,13 +15,13 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
-import { AdminUIState } from "src/redux/state";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import { nodesSummarySelector, NodesSummary } from "@cockroachlabs/admin-ui-components";
 import { Bytes as formatBytes } from "src/util/format";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { refreshNodes, refreshLiveness } from "@cockroachlabs/admin-ui-components";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
 import { CapacityUsageTooltip, UsedTooltip, UsableTooltip, LiveNodesTooltip, SuspectNodesTooltip, DeadNodesTooltip, TotalRangesTooltip, UnderReplicatedRangesTooltip, UnavailableRangesTooltip } from "./tooltips";

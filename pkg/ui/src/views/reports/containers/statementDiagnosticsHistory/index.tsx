@@ -19,17 +19,17 @@ import { isUndefined } from "lodash";
 
 import { Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
   selectStatementDiagnosticsReports, selectStatementByFingerprint, statementDiagnosticsReportsInFlight,
-} from "src/redux/statements/statementsSelectors";
+} from "@cockroachlabs/admin-ui-components";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
+} from "@cockroachlabs/admin-ui-components";
 import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";

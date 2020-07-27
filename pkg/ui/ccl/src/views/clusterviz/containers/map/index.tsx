@@ -18,8 +18,8 @@ import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
-import { AdminUIState } from "src/redux/state";
-import { selectEnterpriseEnabled } from "src/redux/license";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import { selectEnterpriseEnabled } from "@cockroachlabs/admin-ui-components";
 import { Dropdown } from "src/components/dropdown";
 import { parseSplatParams } from "src/util/parseSplatParams";
 

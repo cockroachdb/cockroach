@@ -14,8 +14,8 @@ import cn from "classnames";
 import { Icon } from "antd";
 import { Action, Dispatch } from "redux";
 
-import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { LocalSetting, setLocalSetting } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { Text, TextTypes } from "src/components";
 
 import "./tableSection.styl";

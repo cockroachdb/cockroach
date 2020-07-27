@@ -16,9 +16,9 @@ import { connect } from "react-redux";
 import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshStatementDiagnosticsRequests, refreshStatements } from "@cockroachlabs/admin-ui-components";
+import { nodeDisplayNameByIDSelector, NodesSummary } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import {
   combineStatementStats,
   ExecutionStatistics,
@@ -46,7 +46,7 @@ import DiagnosticsView from "./diagnostics";
 import classNames from "classnames/bind";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
-} from "src/redux/statements/statementsSelectors";
+} from "@cockroachlabs/admin-ui-components";
 import { Button } from "src/components/button";
 import { BackIcon } from "src/components/icon";
 import { trackSubnavSelection } from "src/util/analytics";

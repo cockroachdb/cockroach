@@ -11,8 +11,8 @@ import * as d3 from "d3";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { LocalityTree } from "src/redux/localities";
-import { LocationTree } from "src/redux/locations";
+import { LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { LocationTree } from "@cockroachlabs/admin-ui-components";
 import { getChildLocalities } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 import * as vector from "src/util/vector";
@@ -20,14 +20,14 @@ import * as vector from "src/util/vector";
 import { LocalityView } from "./localityView";
 import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
-import { LivenessStatus } from "src/redux/nodes";
+import { NodeLivenessStatus } from "@cockroachlabs/admin-ui-components";
 
 import "./mapLayout.styl";
 
 interface MapLayoutProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
   viewportSize: [number, number];
 }
 

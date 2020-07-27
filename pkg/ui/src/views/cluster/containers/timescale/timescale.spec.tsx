@@ -19,9 +19,9 @@ import {
   timeFormat,
   dateFormat,
 } from "./index";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "@cockroachlabs/admin-ui-components";
 import moment from "moment";
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshNodes } from "@cockroachlabs/admin-ui-components";
 import "src/enzymeInit";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "../../components/controls";

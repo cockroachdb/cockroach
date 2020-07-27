@@ -15,8 +15,8 @@ import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 
 import * as protos from "src/js/protos";
-import { refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { refreshTableDetails, refreshTableStats } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { selectTableInfo } from "src/views/databases/containers/tableDetails";
 import { TableInfo } from "src/views/databases/data/tableInfo";

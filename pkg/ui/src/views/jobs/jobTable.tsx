@@ -16,7 +16,7 @@ import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "src/views/jobs/jobStatusCell";
 import {Icon, Pagination} from "antd";
 import {SortSetting} from "src/views/shared/components/sortabletable";
-import {CachedDataReducerState} from "src/redux/cachedDataReducer";
+import {CachedDataReducerState} from "@cockroachlabs/admin-ui-components";
 import { isEmpty, isEqual, map } from "lodash";
 import {JobDescriptionCell} from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;

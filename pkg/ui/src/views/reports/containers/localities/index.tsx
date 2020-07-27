@@ -14,16 +14,16 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 
-import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
-import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
-import { LocationTree, selectLocationsRequestStatus, selectLocationTree } from "src/redux/locations";
-import { selectNodeRequestStatus } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshLocations, refreshNodes } from "@cockroachlabs/admin-ui-components";
+import { LocalityTier, LocalityTree, selectLocalityTree } from "@cockroachlabs/admin-ui-components";
+import { LocationTree, selectLocationsRequestStatus, selectLocationTree } from "@cockroachlabs/admin-ui-components";
+import { selectNodeRequestStatus } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import Loading from "src/views/shared/components/loading";
 import "./localities.styl";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "@cockroachlabs/admin-ui-components";
 
 function formatCoord(coordinate: number) {
   return coordinate.toFixed(4);

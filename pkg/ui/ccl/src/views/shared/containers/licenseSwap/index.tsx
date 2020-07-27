@@ -10,8 +10,8 @@ import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 
-import { selectEnterpriseEnabled } from "src/redux/license";
-import { AdminUIState } from "src/redux/state";
+import { selectEnterpriseEnabled } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 
 // Some of the type magic is adapted from @types/react-redux.
 // Some of the code is adapted from react-redux.

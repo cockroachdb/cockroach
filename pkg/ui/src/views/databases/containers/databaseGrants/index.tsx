@@ -11,8 +11,8 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { LocalSetting } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
@@ -21,7 +21,7 @@ import { DatabaseIcon } from "src/components/icon/databaseIcon";
 import Stack from "assets/stack.svg";
 import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
-import { refreshDatabaseDetails } from "src/redux/apiReducers";
+import { refreshDatabaseDetails } from "@cockroachlabs/admin-ui-components";
 import { privileges } from "src/util/docs";
 
 class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}

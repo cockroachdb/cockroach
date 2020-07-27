@@ -8,8 +8,8 @@
 
 import _ from "lodash";
 
-import { LocalityTree } from "src/redux/localities";
-import { LocationTree } from "src/redux/locations";
+import { LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { LocationTree } from "@cockroachlabs/admin-ui-components";
 import { getChildLocalities } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 

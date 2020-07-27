@@ -12,14 +12,14 @@ import React from "react";
 import { connect } from "react-redux";
 
 import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscriptionForm";
-import { signUpForEmailSubscription } from "src/redux/customAnalytics";
-import { AdminUIState } from "src/redux/state";
-import { clusterIdSelector } from "src/redux/nodes";
+import { signUpForEmailSubscription } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
+import { clusterIdSelector } from "@cockroachlabs/admin-ui-components";
 
 import "./emailSubscription.styl";
-import { loadUIData, RELEASE_NOTES_SIGNUP_DISMISSED_KEY, saveUIData } from "src/redux/uiData";
-import { dismissReleaseNotesSignupForm } from "src/redux/uiDataSelectors";
-import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
+import { loadUIData, RELEASE_NOTES_SIGNUP_DISMISSED_KEY, saveUIData } from "@cockroachlabs/admin-ui-components";
+import { dismissReleaseNotesSignupForm } from "@cockroachlabs/admin-ui-components";
+import { emailSubscriptionAlertLocalSetting } from "@cockroachlabs/admin-ui-components";
 
 type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
 

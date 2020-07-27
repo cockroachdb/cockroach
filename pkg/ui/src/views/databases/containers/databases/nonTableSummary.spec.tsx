@@ -16,7 +16,7 @@ import Long from "long";
 
 import "src/enzymeInit";
 import { NonTableSummary } from "./nonTableSummary";
-import { refreshNonTableStats } from "src/redux/apiReducers";
+import { refreshNonTableStats } from "@cockroachlabs/admin-ui-components";
 import { cockroach } from "src/js/protos";
 import Loading from "src/views/shared/components/loading";
 import NonTableStatsResponse = cockroach.server.serverpb.NonTableStatsResponse;

@@ -12,7 +12,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import * as d3 from "d3";
 
-import { NodesSummary } from "src/redux/nodes";
+import { NodesSummary } from "@cockroachlabs/admin-ui-components";
 import { Bytes } from "src/util/format";
 import { NanoToMilli } from "src/util/convert";
 

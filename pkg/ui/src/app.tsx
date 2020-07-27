@@ -16,7 +16,7 @@ import { Provider } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 import { appAttr, dashboardNameAttr, databaseNameAttr, implicitTxnAttr, nodeIDAttr, rangeIDAttr, statementAttr, tableNameAttr } from "src/util/constants";

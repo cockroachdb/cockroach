@@ -11,7 +11,7 @@ import moment from "moment";
 import { Link } from "react-router-dom";
 
 import { INodeStatus } from "src/util/proto";
-import { nodeCapacityStats, livenessNomenclature } from "src/redux/nodes";
+import { nodeCapacityStats, livenessNomenclature } from "@cockroachlabs/admin-ui-components";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";

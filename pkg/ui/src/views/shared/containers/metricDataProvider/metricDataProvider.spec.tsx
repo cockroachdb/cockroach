@@ -16,7 +16,7 @@ import React, { Fragment } from "react";
 import * as sinon from "sinon";
 import "src/enzymeInit";
 import * as protos from "src/js/protos";
-import { MetricsQuery, requestMetrics } from "src/redux/metrics";
+import { MetricsQuery, requestMetrics } from "@cockroachlabs/admin-ui-components";
 import { Axis, Metric, MetricsDataComponentProps, QueryTimeInfo } from "src/views/shared/components/metricQuery";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 

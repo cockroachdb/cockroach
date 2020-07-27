@@ -15,16 +15,16 @@ import { Link, withRouter } from "react-router-dom";
 import { Moment } from "moment";
 import _ from "lodash";
 
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import {
   nodesSummarySelector,
   partitionedStatuses,
-} from "src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+} from "@cockroachlabs/admin-ui-components";
+import { refreshLiveness, refreshNodes } from "@cockroachlabs/admin-ui-components";
 import { INodeStatus } from "src/util/proto";
 import { LongToMoment } from "src/util/convert";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { LocalSetting } from "src/redux/localsettings";
+import { LocalSetting } from "@cockroachlabs/admin-ui-components";
 
 import "./decommissionedNodeHistory.styl";
 import { ColumnsConfig, Table, Text } from "src/components";

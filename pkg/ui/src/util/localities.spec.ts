@@ -11,7 +11,7 @@
 import { assert } from "chai";
 
 import * as protos from "src/js/protos";
-import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
 import {
   generateLocalityRoute,
   parseLocalityRoute,

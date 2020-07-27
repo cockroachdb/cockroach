@@ -13,8 +13,8 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { doLogin, LoginAPIState } from "src/redux/login";
-import { AdminUIState } from "src/redux/state";
+import { doLogin, LoginAPIState } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import * as docsURL from "src/util/docs";
 
 import "./loginPage.styl";

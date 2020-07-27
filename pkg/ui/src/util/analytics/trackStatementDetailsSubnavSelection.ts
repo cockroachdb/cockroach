@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { analytics } from "src/redux/analytics";
+import { analytics } from "@cockroachlabs/admin-ui-components";
 
 export const track = (fn: Function) => (selection: string) => {
   fn({

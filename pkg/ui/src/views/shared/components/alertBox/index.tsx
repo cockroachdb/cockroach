@@ -13,7 +13,7 @@ import classNames from "classnames";
 
 import "./alertbox.styl";
 
-import { AlertInfo, AlertLevel } from "src/redux/alerts";
+import { AlertInfo, AlertLevel } from "@cockroachlabs/admin-ui-components";
 import { warningIcon, notificationIcon, criticalIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 

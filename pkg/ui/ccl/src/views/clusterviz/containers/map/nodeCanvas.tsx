@@ -14,9 +14,9 @@ import { CircleLayout } from "./circleLayout";
 import { renderAsMap } from "./layout";
 import { MapLayout } from "./mapLayout";
 
-import { LivenessStatus } from "src/redux/nodes";
-import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { LocationTree } from "src/redux/locations";
+import { NodeLivenessStatus } from "@cockroachlabs/admin-ui-components";
+import { LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { LocationTree } from "@cockroachlabs/admin-ui-components";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
@@ -31,7 +31,7 @@ const BACK_BUTTON_OFFSET = 26;
 interface NodeCanvasProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
   livenesses: { [id: string]: Liveness };
   tiers: LocalityTier[];
 }

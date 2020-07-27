@@ -25,14 +25,14 @@ import {
   DownloadFile,
   DownloadFileRef,
 } from "src/components";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { getStatementDiagnostics } from "src/util/api";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import {
   selectDiagnosticsReportsByStatementFingerprint,
   selectDiagnosticsReportsCountByStatementFingerprint,
-} from "src/redux/statements/statementsSelectors";
-import { createStatementDiagnosticsReportAction } from "src/redux/statements";
+} from "@cockroachlabs/admin-ui-components";
+import { createStatementDiagnosticsReportAction } from "@cockroachlabs/admin-ui-components";
 import { trustIcon } from "src/util/trust";
 
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
@@ -43,7 +43,7 @@ import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnos
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
-import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { createStatementDiagnosticsAlertLocalSetting } from "@cockroachlabs/admin-ui-components";
 import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { Empty } from "src/components/empty";
 

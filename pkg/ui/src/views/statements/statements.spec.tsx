@@ -22,7 +22,7 @@ import { appAttr, statementAttr } from "src/util/constants";
 import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset } from "./statementsPage";
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { AdminUIState, createAdminUIStore } from "@cockroachlabs/admin-ui-components";
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 

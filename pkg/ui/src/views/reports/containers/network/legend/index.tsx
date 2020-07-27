@@ -11,7 +11,7 @@
 import { Divider, Icon, Tooltip } from "antd";
 import { Chip } from "src/views/app/components/chip";
 import Modal from "src/views/app/components/modal";
-import { getDisplayName } from "src/redux/nodes";
+import { getDisplayName } from "@cockroachlabs/admin-ui-components";
 import React from "react";
 import { NoConnection } from "..";
 import "./legend.styl";

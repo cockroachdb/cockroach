@@ -13,19 +13,19 @@ import { withRouter, RouteComponentProps } from "react-router-dom";
 import { createSelector } from "reselect";
 
 import { cockroach } from "src/js/protos";
-import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
-import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
-import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
+import { refreshNodes, refreshLiveness, refreshLocations } from "@cockroachlabs/admin-ui-components";
+import { selectLocalityTree, LocalityTier, LocalityTree } from "@cockroachlabs/admin-ui-components";
+import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "@cockroachlabs/admin-ui-components";
 import {
   nodesSummarySelector,
   NodesSummary,
   selectNodeRequestStatus,
   selectLivenessRequestStatus,
   livenessStatusByNodeIDSelector,
-  LivenessStatus,
+  NodeLivenessStatus,
   livenessByNodeIDSelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+} from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
@@ -37,7 +37,7 @@ interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
   livenesses: { [id: string]: Liveness };
   dataExists: boolean;
   dataIsValid: boolean;

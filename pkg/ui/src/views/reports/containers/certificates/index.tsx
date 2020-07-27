@@ -15,8 +15,8 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { certificatesRequestKey, refreshCertificates } from "@cockroachlabs/admin-ui-components";
+import { AdminUIState } from "@cockroachlabs/admin-ui-components";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
 import Loading from "src/views/shared/components/loading";
