@@ -311,18 +311,14 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := n.run.ti.atBatchEnd(params.ctx, n.run.traceKV); err != nil {
-		return false, err
-	}
-
-	if _, err := n.run.ti.finalize(params.ctx, n.run.traceKV); err != nil {
+	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err
 	}
 	// Remember we're done for the next call to BatchedNext().
 	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc().ID, len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.ID, len(n.input))
 
 	return true, nil
 }
@@ -331,13 +327,10 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 func (n *insertFastPathNode) BatchedCount() int { return len(n.input) }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.run.rows.At(rowIdx) }
+func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.run.ti.rows.At(rowIdx) }
 
 func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
-	if n.run.rows != nil {
-		n.run.rows.Close(ctx)
-	}
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
 }
