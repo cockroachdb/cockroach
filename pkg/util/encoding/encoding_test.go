@@ -1147,15 +1147,19 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeGeo(t *testing.T) {
+func TestEncodeDecodeGeometry(t *testing.T) {
 	testCases := []string{
-		"SRID=4326;POINT(1.0 1.0)",
-		"POINT(2.0 2.0)",
+		"SRID=4326;POLYGON EMPTY",
+		"SRID=4326;POINT EMPTY",
+		"SRID=4326;LINESTRING(0 0, -90 -80)",
+		"SRID=4326;POINT(-80 80)",
+		"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
 	}
-	for _, tc := range testCases {
-		t.Run(tc, func(t *testing.T) {
-			for _, dir := range []Direction{Ascending, Descending} {
-				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+	for _, dir := range []Direction{Ascending, Descending} {
+		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+			var lastEncoded []byte
+			for i, tc := range testCases {
+				t.Run(tc, func(t *testing.T) {
 					parsed, err := geo.ParseGeometry(tc)
 					require.NoError(t, err)
 					spatialObject := parsed.SpatialObject()
@@ -1163,18 +1167,76 @@ func TestEncodeDecodeGeo(t *testing.T) {
 					var b []byte
 					var decoded geopb.SpatialObject
 					if dir == Ascending {
-						b, err = EncodeGeoAscending(b, &spatialObject)
+						b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
 						require.NoError(t, err)
 						_, decoded, err = DecodeGeoAscending(b)
 						require.NoError(t, err)
 					} else {
-						b, err = EncodeGeoDescending(b, &spatialObject)
+						b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
 						require.NoError(t, err)
 						_, decoded, err = DecodeGeoDescending(b)
 						require.NoError(t, err)
 					}
 					require.Equal(t, spatialObject, decoded)
 					testPeekLength(t, b)
+
+					if i > 0 {
+						if dir == Ascending {
+							assert.True(t, bytes.Compare(b, lastEncoded) > 0)
+						} else {
+							assert.True(t, bytes.Compare(b, lastEncoded) < 0)
+						}
+					}
+
+					lastEncoded = b
+				})
+			}
+		})
+	}
+}
+
+func TestEncodeDecodeGeography(t *testing.T) {
+	testCases := []string{
+		"SRID=4326;POLYGON EMPTY",
+		"SRID=4326;POINT EMPTY",
+		"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+		"SRID=4326;POINT(-80 80)",
+		"SRID=4326;LINESTRING(0 0, -90 -80)",
+	}
+	for _, dir := range []Direction{Ascending, Descending} {
+		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+			var lastEncoded []byte
+			for i, tc := range testCases {
+				t.Run(tc, func(t *testing.T) {
+					parsed, err := geo.ParseGeography(tc)
+					require.NoError(t, err)
+					spatialObject := parsed.SpatialObject()
+
+					var b []byte
+					var decoded geopb.SpatialObject
+					if dir == Ascending {
+						b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+						require.NoError(t, err)
+						_, decoded, err = DecodeGeoAscending(b)
+						require.NoError(t, err)
+					} else {
+						b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+						require.NoError(t, err)
+						_, decoded, err = DecodeGeoDescending(b)
+						require.NoError(t, err)
+					}
+					require.Equal(t, spatialObject, decoded)
+					testPeekLength(t, b)
+
+					if i > 0 {
+						if dir == Ascending {
+							assert.True(t, bytes.Compare(b, lastEncoded) > 0)
+						} else {
+							assert.True(t, bytes.Compare(b, lastEncoded) < 0)
+						}
+					}
+
+					lastEncoded = b
 				})
 			}
 		})
@@ -1259,9 +1321,9 @@ func TestPeekType(t *testing.T) {
 	require.NoError(t, err)
 	encodedDurationDescending, err := EncodeDurationDescending(nil, duration.Duration{})
 	require.NoError(t, err)
-	encodedGeoAscending, err := EncodeGeoAscending(nil, &geopb.SpatialObject{})
+	encodedGeoAscending, err := EncodeGeoAscending(nil, 0, &geopb.SpatialObject{})
 	require.NoError(t, err)
-	encodedGeoDescending, err := EncodeGeoDescending(nil, &geopb.SpatialObject{})
+	encodedGeoDescending, err := EncodeGeoDescending(nil, 0, &geopb.SpatialObject{})
 	require.NoError(t, err)
 	testCases := []struct {
 		enc []byte
