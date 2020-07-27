@@ -53,6 +53,28 @@ const STORAGE = logpb.Channel_STORAGE
 // numbering and synchronous writes.
 const SESSIONS = logpb.Channel_SESSIONS
 
+// USER_ADMIN is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+const USER_ADMIN = logpb.Channel_USER_ADMIN
+
+// PRIVILEGES is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+const PRIVILEGES = logpb.Channel_PRIVILEGES
+
 // SENSITIVE_ACCESS is the channel used to report SQL
 // data access to sensitive data (when enabled):
 //

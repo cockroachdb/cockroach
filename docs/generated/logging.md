@@ -78,6 +78,30 @@ The SESSIONS channel is the channel used to report client network activity:
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
+## USER_ADMIN
+
+The USER_ADMIN channel is the channel used to report changes
+in users and roles, including:
+
+- users added/dropped.
+- changes to authentication credentials, incl passwords, validity etc.
+- role grants/revocations.
+- role option grants/revocations.
+
+This is typically configured in "audit" mode, with event
+numbering and synchronous writes.
+
+## PRIVILEGES
+
+The PRIVILEGES channel is the channel used to report data
+authorization changes, including:
+
+- privilege grants/revocations on database, objects etc.
+- object ownership changes.
+
+This is typically configured in "audit" mode, with event
+numbering and synchronous writes.
+
 ## SENSITIVE_ACCESS
 
 The SENSITIVE_ACCESS channel is the channel used to report SQL
