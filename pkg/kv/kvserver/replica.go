@@ -192,8 +192,8 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 type Replica struct {
 	log.AmbientContext
 
-	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID roachpb.RangeID // Only set by the constructor
+	RangeID  roachpb.RangeID  // Only set by the constructor
+	tenantID roachpb.TenantID // Set when first initialized, not modified after
 
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -1050,6 +1050,10 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 				}
 				return true // done
 			})
+		}
+
+		if r.tenantID != (roachpb.TenantID{}) {
+			ri.TenantID = r.tenantID.ToUint64()
 		}
 	}
 	return ri

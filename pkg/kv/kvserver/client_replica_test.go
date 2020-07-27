@@ -3382,3 +3382,98 @@ func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
 	}
 	return targets
 }
+
+// TestTenantID tests that the tenant ID is properly set.
+// This test examines the following behaviors:
+//
+//  (1) When range is split off for a tenant, that it gets the right tenant ID.
+//  (2) When a replica is created with a raft message, it does not have a
+//     tenant ID, but then when it is initialized, it gets one.
+//  (3) When a store starts up, it assigns the right tenant ID.
+func TestTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer server.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	// Create a config with a sticky-in-mem engine so we can restart the server.
+	stickySpecTestServerArgs := base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			{
+				InMemory:               true,
+				StickyInMemoryEngineID: "1",
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      stickySpecTestServerArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tenant2 := roachpb.MakeTenantID(2)
+	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	t.Run("(1) initial set", func(t *testing.T) {
+		// Ensure that a normal range has the system tenant.
+		{
+			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
+			ri := repl.State()
+			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
+		}
+		// Ensure that a range with a tenant prefix has the proper tenant ID.
+		tc.SplitRangeOrFatal(t, tenant2Prefix)
+		{
+			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+			ri := repl.State()
+			require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+		}
+	})
+	t.Run("(2) not set before snapshot", func(t *testing.T) {
+		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+		sawSnapshot := make(chan struct{}, 1)
+		blockSnapshot := make(chan struct{})
+		tc.AddServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BeforeSnapshotSSTIngestion: func(
+						snapshot kvserver.IncomingSnapshot,
+						request_type kvserver.SnapshotRequest_Type,
+						strings []string,
+					) error {
+						if snapshot.State.Desc.RangeID == repl.RangeID {
+							select {
+							case sawSnapshot <- struct{}{}:
+							default:
+							}
+							<-blockSnapshot
+						}
+						return nil
+					},
+				},
+			},
+		})
+		// We're going to block the snapshot.
+		addReplicaErr := make(chan error)
+		go func() {
+			_, err := tc.AddReplicas(tenant2Prefix, tc.Target(1))
+			addReplicaErr <- err
+		}()
+
+		<-sawSnapshot
+		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(repl.RangeID)
+		require.NoError(t, err)
+		ri := uninitializedRepl.State()
+		require.Equal(t, uint64(0), ri.TenantID)
+		close(blockSnapshot)
+		require.NoError(t, <-addReplicaErr)
+		ri = uninitializedRepl.State() // now initialized
+		require.Equal(t, tenant2.ToUint64(), ri.TenantID)
+	})
+	t.Run("(3) upon restart", func(t *testing.T) {
+		tc.StopServer(0)
+		tc.AddServer(t, stickySpecTestServerArgs)
+		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
+		ri := repl.State()
+		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+	})
+
+}

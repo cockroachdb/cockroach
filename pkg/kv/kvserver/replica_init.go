@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -293,6 +294,18 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	if found && replDesc.ReplicaID != r.mu.replicaID {
 		log.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
 			r.mu.replicaID, replDesc.ReplicaID)
+	}
+
+	// Initialize the tenant. The must be the first time that the descriptor has
+	// been initialized. Note that the desc.StartKey never changes throughout the
+	// life of a range.
+	if desc.IsInitialized() && r.tenantID == (roachpb.TenantID{}) {
+		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
+		if err != nil {
+			log.Fatalf(ctx, "failed to decode tenant prefix from key for "+
+				"replica %v: %v", r, err)
+		}
+		r.tenantID = tenantID
 	}
 
 	// Determine if a new replica was added. This is true if the new max replica
