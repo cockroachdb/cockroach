@@ -963,6 +963,22 @@ func (stmt *ControlJobs) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *ControlSchedules) copyNode() *ControlSchedules {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *ControlSchedules) walkStmt(v Visitor) Statement {
+	sel, changed := walkStmt(v, stmt.Schedules)
+	if changed {
+		stmt = stmt.copyNode()
+		stmt.Schedules = sel.(*Select)
+	}
+	return stmt
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Import) copyNode() *Import {
 	stmtCopy := *stmt
 	stmtCopy.Files = append(Exprs(nil), stmt.Files...)

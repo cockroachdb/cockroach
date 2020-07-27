@@ -623,7 +623,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
-%token <str> SAVEPOINT SCATTER SCHEDULE SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
@@ -780,10 +780,10 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
-%type <tree.Statement> pause_stmt
+%type <tree.Statement> pause_jobs_stmt pause_schedules_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
-%type <tree.Statement> resume_stmt
+%type <tree.Statement> resume_jobs_stmt resume_schedules_stmt drop_schedule_stmt
 %type <tree.Statement> restore_stmt
 %type <tree.PartitionedBackup> partitioned_backup
 %type <[]tree.PartitionedBackup> partitioned_backup_list
@@ -2915,6 +2915,7 @@ discard_stmt:
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
+| drop_schedule_stmt // EXTEND WITH HELP: DROP SCHEDULES
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
@@ -3181,22 +3182,24 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  alter_stmt        // help texts in sub-rule
-| backup_stmt       // EXTEND WITH HELP: BACKUP
-| cancel_stmt       // help texts in sub-rule
-| create_stmt       // help texts in sub-rule
-| delete_stmt       // EXTEND WITH HELP: DELETE
-| drop_stmt         // help texts in sub-rule
-| explain_stmt      // EXTEND WITH HELP: EXPLAIN
-| import_stmt       // EXTEND WITH HELP: IMPORT
-| insert_stmt       // EXTEND WITH HELP: INSERT
-| pause_stmt        // EXTEND WITH HELP: PAUSE JOBS
-| reset_stmt        // help texts in sub-rule
-| restore_stmt      // EXTEND WITH HELP: RESTORE
-| resume_stmt       // EXTEND WITH HELP: RESUME JOBS
-| export_stmt       // EXTEND WITH HELP: EXPORT
-| scrub_stmt        // help texts in sub-rule
-| select_stmt       // help texts in sub-rule
+  alter_stmt            // help texts in sub-rule
+| backup_stmt           // EXTEND WITH HELP: BACKUP
+| cancel_stmt           // help texts in sub-rule
+| create_stmt           // help texts in sub-rule
+| delete_stmt           // EXTEND WITH HELP: DELETE
+| drop_stmt             // help texts in sub-rule
+| explain_stmt          // EXTEND WITH HELP: EXPLAIN
+| import_stmt           // EXTEND WITH HELP: IMPORT
+| insert_stmt           // EXTEND WITH HELP: INSERT
+| pause_jobs_stmt       // EXTEND WITH HELP: PAUSE JOBS
+| pause_schedules_stmt  // EXTEND WITH HELP: PAUSE SCHEDULES
+| reset_stmt            // help texts in sub-rule
+| restore_stmt          // EXTEND WITH HELP: RESTORE
+| resume_jobs_stmt       // EXTEND WITH HELP: RESUME JOBS
+| resume_schedules_stmt  // EXTEND WITH HELP: RESUME SCHEDULES
+| export_stmt           // EXTEND WITH HELP: EXPORT
+| scrub_stmt            // help texts in sub-rule
+| select_stmt           // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
@@ -4745,7 +4748,7 @@ for_grantee_clause:
 // PAUSE JOBS <selectclause>
 // PAUSE JOB <jobid>
 // %SeeAlso: SHOW JOBS, CANCEL JOBS, RESUME JOBS
-pause_stmt:
+pause_jobs_stmt:
   PAUSE JOB a_expr
   {
     $$.val = &tree.ControlJobs{
@@ -4759,7 +4762,35 @@ pause_stmt:
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob}
   }
-| PAUSE error // SHOW HELP: PAUSE JOBS
+| PAUSE JOBS error // SHOW HELP: PAUSE JOBS
+
+// %Help: PAUSE SCHEDULES - pause scheduled jobs
+// %Category: Misc
+// %Text:
+// PAUSE SCHEDULES <selectclause>
+//   select clause: select statement returning schedule id to pause.
+// PAUSE SCHEDULE <scheduleID>
+// %SeeAlso: RESUME SCHEDULES, SHOW JOBS, CANCEL JOBS
+pause_schedules_stmt:
+  PAUSE SCHEDULE a_expr
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.PauseSchedule,
+    }
+  }
+| PAUSE SCHEDULE error // SHOW HELP: PAUSE SCHEDULES
+| PAUSE SCHEDULES select_stmt
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: $3.slct(),
+      Command: tree.PauseSchedule,
+    }
+  }
+| with_clause PAUSE SCHEDULES
+| PAUSE SCHEDULES error // SHOW HELP: PAUSE SCHEDULES
 
 // %Help: CREATE SCHEMA - create a new schema
 // %Category: DDL
@@ -6183,7 +6214,7 @@ release_stmt:
 // RESUME JOBS <selectclause>
 // RESUME JOB <jobid>
 // %SeeAlso: SHOW JOBS, CANCEL JOBS, PAUSE JOBS
-resume_stmt:
+resume_jobs_stmt:
   RESUME JOB a_expr
   {
     $$.val = &tree.ControlJobs{
@@ -6193,11 +6224,70 @@ resume_stmt:
       Command: tree.ResumeJob,
     }
   }
+| RESUME JOB error // SHOW HELP: RESUME JOBS
 | RESUME JOBS select_stmt
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.ResumeJob}
   }
-| RESUME error // SHOW HELP: RESUME JOBS
+| RESUME JOBS error // SHOW HELP: RESUME JOBS
+
+// %Help: RESUME SCHEDULES - resume executing scheduled jobs
+// %Category: Misc
+// %Text:
+// RESUME SCHEDULES <selectclause>
+//  selectclause: select statement returning schedule IDs to resume.
+//
+// RESUME SCHEDULES <jobid>
+//
+// %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, RESUME JOBS
+resume_schedules_stmt:
+  RESUME SCHEDULE a_expr
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.ResumeSchedule,
+    }
+  }
+| RESUME SCHEDULE error // SHOW HELP: RESUME SCHEDULES
+| RESUME SCHEDULES select_stmt
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: $3.slct(),
+      Command: tree.ResumeSchedule,
+    }
+  }
+| RESUME SCHEDULES error // SHOW HELP: RESUME SCHEDULES
+
+// %Help: DROP SCHEDULES - destroy specified schedules
+// %Category: Misc
+// %Text:
+// DROP SCHEDULES <selectclause>
+//  selectclause: select statement returning schedule IDs to resume.
+//
+// DROP SCHEDULES <jobid>
+//
+// %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
+drop_schedule_stmt:
+  DROP SCHEDULE a_expr
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.DropSchedule,
+    }
+  }
+| DROP SCHEDULE error // SHOW HELP: DROP SCHEDULES
+| DROP SCHEDULES select_stmt
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: $3.slct(),
+      Command: tree.DropSchedule,
+    }
+  }
+| DROP SCHEDULES error // SHOW HELP: DROP SCHEDULES
 
 // %Help: SAVEPOINT - start a sub-transaction
 // %Category: Txn
@@ -10684,6 +10774,7 @@ unreserved_keyword:
 | ROWS
 | RULE
 | SCHEDULE
+| SCHEDULES
 | SETTING
 | SETTINGS
 | STATUS

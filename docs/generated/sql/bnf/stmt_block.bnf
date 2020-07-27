@@ -30,10 +30,12 @@ preparable_stmt ::=
 	| explain_stmt
 	| import_stmt
 	| insert_stmt
-	| pause_stmt
+	| pause_jobs_stmt
+	| pause_schedules_stmt
 	| reset_stmt
 	| restore_stmt
-	| resume_stmt
+	| resume_jobs_stmt
+	| resume_schedules_stmt
 	| export_stmt
 	| scrub_stmt
 	| select_stmt
@@ -123,6 +125,7 @@ delete_stmt ::=
 drop_stmt ::=
 	drop_ddl_stmt
 	| drop_role_stmt
+	| drop_schedule_stmt
 
 explain_stmt ::=
 	'EXPLAIN' preparable_stmt
@@ -144,9 +147,14 @@ insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
 	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
-pause_stmt ::=
+pause_jobs_stmt ::=
 	'PAUSE' 'JOB' a_expr
 	| 'PAUSE' 'JOBS' select_stmt
+
+pause_schedules_stmt ::=
+	'PAUSE' 'SCHEDULE' a_expr
+	| 'PAUSE' 'SCHEDULES' select_stmt
+	| with_clause 'PAUSE' 'SCHEDULES'
 
 reset_stmt ::=
 	reset_session_stmt
@@ -156,9 +164,13 @@ restore_stmt ::=
 	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 
-resume_stmt ::=
+resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
 	| 'RESUME' 'JOBS' select_stmt
+
+resume_schedules_stmt ::=
+	'RESUME' 'SCHEDULE' a_expr
+	| 'RESUME' 'SCHEDULES' select_stmt
 
 export_stmt ::=
 	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
@@ -409,6 +421,10 @@ drop_role_stmt ::=
 	'DROP' role_or_group_or_user string_or_placeholder_list
 	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder_list
 
+drop_schedule_stmt ::=
+	'DROP' 'SCHEDULE' a_expr
+	| 'DROP' 'SCHEDULES' select_stmt
+
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
@@ -443,6 +459,10 @@ on_conflict ::=
 
 a_expr ::=
 	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'SQRT' a_expr | 'CBRT' a_expr | 'NOT' a_expr | 'NOT' a_expr | 'DEFAULT' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' collation_name | 'AT' 'TIME' 'ZONE' a_expr | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'JSON_SOME_EXISTS' a_expr | 'JSON_ALL_EXISTS' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'INET_CONTAINED_BY_OR_EQUALS' a_expr | 'AND_AND' a_expr | 'INET_CONTAINS_OR_EQUALS' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'LIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'LIKE' a_expr | 'NOT' 'LIKE' a_expr 'ESCAPE' a_expr | 'ILIKE' a_expr | 'ILIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr 'ESCAPE' a_expr | 'SIMILAR' 'TO' a_expr | 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'ISNULL' | 'IS' 'NOT' 'NULL' | 'NOTNULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
+
+with_clause ::=
+	'WITH' cte_list
+	| 'WITH' 'RECURSIVE' cte_list
 
 reset_session_stmt ::=
 	'RESET' session_var
@@ -833,6 +853,7 @@ unreserved_keyword ::=
 	| 'ROWS'
 	| 'RULE'
 	| 'SCHEDULE'
+	| 'SCHEDULES'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -1121,10 +1142,6 @@ opt_with_schedule_options ::=
 	| 'WITH' 'EXPERIMENTAL' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
-with_clause ::=
-	'WITH' cte_list
-	| 'WITH' 'RECURSIVE' cte_list
-
 table_name_opt_idx ::=
 	table_name opt_index_flags
 
@@ -1226,6 +1243,9 @@ sub_type ::=
 	'ANY'
 	| 'SOME'
 	| 'ALL'
+
+cte_list ::=
+	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
 session_var ::=
 	'identifier'
@@ -1549,9 +1569,6 @@ sconst_or_placeholder ::=
 	'SCONST'
 	| 'PLACEHOLDER'
 
-cte_list ::=
-	( common_table_expr ) ( ( ',' common_table_expr ) )*
-
 opt_index_flags ::=
 	'@' index_name
 	| '@' '[' iconst64 ']'
@@ -1681,6 +1698,10 @@ math_op ::=
 	| 'LESS_EQUALS'
 	| 'GREATER_EQUALS'
 	| 'NOT_EQUALS'
+
+common_table_expr ::=
+	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
+	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
 
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
@@ -1892,10 +1913,6 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
-common_table_expr ::=
-	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
-	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
-
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
 
@@ -2015,6 +2032,10 @@ tuple1_ambiguous_values ::=
 	a_expr
 	| a_expr ','
 	| a_expr ',' expr_list
+
+materialize_clause ::=
+	'MATERIALIZED'
+	| 'NOT' 'MATERIALIZED'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -2188,10 +2209,6 @@ create_as_col_qual_list ::=
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
-
-materialize_clause ::=
-	'MATERIALIZED'
-	| 'NOT' 'MATERIALIZED'
 
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name

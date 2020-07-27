@@ -96,3 +96,35 @@ func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (o
 	)
 	return outScope
 }
+
+func (b *Builder) buildControlSchedules(
+	n *tree.ControlSchedules, inScope *scope,
+) (outScope *scope) {
+	if err := b.catalog.RequireAdminRole(b.ctx, n.StatementTag()); err != nil {
+		panic(err)
+	}
+
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	emptyScope := b.allocScope()
+	colTypes := []*types.T{types.Int}
+	inputScope := b.buildStmt(n.Schedules, colTypes, emptyScope)
+
+	checkInputColumns(
+		fmt.Sprintf("%s SCHEDULES", n.Command),
+		inputScope,
+		[]string{"schedule_id"},
+		colTypes,
+		1, /* minPrefix */
+	)
+
+	outScope = inScope.push()
+	outScope.expr = b.factory.ConstructControlSchedules(
+		inputScope.expr.(memo.RelExpr),
+		&memo.ControlSchedulesPrivate{
+			Props:   inputScope.makePhysicalProps(),
+			Command: n.Command,
+		},
+	)
+	return outScope
+}

@@ -928,6 +928,12 @@ func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *p
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }
 
+func (b *logicalPropsBuilder) buildControlSchedulesProps(
+	ctl *ControlSchedulesExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildCancelQueriesProps(
 	cancel *CancelQueriesExpr, rel *props.Relational,
 ) {
