@@ -68,6 +68,11 @@ type loggingT struct {
 
 		// fatalCh is closed on fatal errors.
 		fatalCh chan struct{}
+
+		// active indicates that at least one event has been logged
+		// to this logger already.
+		active        bool
+		firstUseStack string
 	}
 }
 
@@ -236,6 +241,9 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
 
+	// Mark the logger as active, so that further configuration changes
+	// are disabled. See IsActive() and its callers for details.
+	setActive()
 	var stacks []byte
 	var fatalTrigger chan struct{}
 	if entry.Severity == Severity_FATAL {
@@ -376,6 +384,13 @@ func (l *loggerT) printPanicToFile(ctx context.Context, depth int, r interface{}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// Mark logging as active, so that further configuration changes
+	// are disabled. We need to do this ourselves here because we are
+	// not using outputLogEntry() which does it for us and
+	// this function also creates files in the logging directory.
+	// See IsActive() and its callers for details.
+	setActive()
+
 	if err := l.ensureFile(); err != nil {
 		// We're already exiting; no need to pile an error upon an
 		// error. Simply report the logging error and continue.
@@ -399,6 +414,32 @@ func (l *loggerT) printPanicToFile(ctx context.Context, depth int, r interface{}
 func (l *loggerT) makeEntryForPanicObject(ctx context.Context, depth int, r interface{}) Entry {
 	return MakeEntry(
 		ctx, Severity_ERROR, &l.logCounter, depth+1, l.redactableLogs.Get(), "panic: %v", r)
+}
+
+func setActive() {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	if !logging.mu.active {
+		logging.mu.active = true
+		logging.mu.firstUseStack = string(debug.Stack())
+	}
+}
+
+func resetActive() (restore func()) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	prevActive, prevFirstuse := logging.mu.active, logging.mu.firstUseStack
+	// Mark loggging as non-active: a test log scope
+	// resets the active bit to override the logging destination.
+	logging.mu.active = false
+
+	return func() {
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
+		logging.mu.active = prevActive
+		logging.mu.firstUseStack = prevFirstuse
+	}
 }
 
 // printPanicToExternalStderr is used by ReportPanic() in case we

@@ -211,9 +211,11 @@ func (c *cliTest) restartServer(params cliTestParams) {
 // cleanup cleans up after the test, stopping the server if necessary.
 // The log files are removed if the test has succeeded.
 func (c *cliTest) cleanup() {
-	if c.t != nil {
-		defer c.logScope.Close(c.t)
-	}
+	defer func() {
+		if c.t != nil {
+			c.logScope.Close(c.t)
+		}
+	}()
 
 	// Restore stderr.
 	stderr = log.OrigStderr

@@ -51,6 +51,12 @@ func NewSecondaryLogger(
 ) *SecondaryLogger {
 	mainLog.mu.Lock()
 	defer mainLog.mu.Unlock()
+
+	// Any consumption of configuration off the main logger
+	// makes the logging module "active" and prevents further
+	// configuration changes.
+	setActive()
+
 	var dir string
 	if dirName != nil {
 		dir = dirName.String()

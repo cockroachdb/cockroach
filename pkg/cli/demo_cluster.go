@@ -54,9 +54,9 @@ type transientCluster struct {
 	servers    []*server.TestServer
 }
 
-func setupTransientCluster(
-	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
-) (c transientCluster, err error) {
+func (c *transientCluster) checkConfigAndSetupLogging(
+	ctx context.Context, cmd *cobra.Command,
+) (err error) {
 	// useSockets is true on unix, false on windows.
 	c.useSockets = useUnixSocketsInDemo()
 
@@ -65,7 +65,7 @@ func setupTransientCluster(
 		// Error out of localities don't line up with requested node
 		// count before doing any sort of setup.
 		if len(demoCtx.localities) != demoCtx.nodes {
-			return c, errors.Errorf("number of localities specified must equal number of nodes")
+			return errors.Errorf("number of localities specified must equal number of nodes")
 		}
 	} else {
 		demoCtx.localities = make([]roachpb.Locality, demoCtx.nodes)
@@ -90,7 +90,7 @@ func setupTransientCluster(
 	}
 	c.stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd)
 	if err != nil {
-		return c, err
+		return err
 	}
 	maybeWarnMemSize(ctx)
 
@@ -98,15 +98,21 @@ func setupTransientCluster(
 	// the unix sockets.
 	// The directory is removed in the cleanup() method.
 	if c.demoDir, err = ioutil.TempDir("", "demo"); err != nil {
-		return c, err
+		return err
 	}
 
 	if !demoCtx.insecure {
 		if err := generateCerts(c.demoDir); err != nil {
-			return c, err
+			return err
 		}
 	}
 
+	return nil
+}
+
+func (c *transientCluster) start(
+	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
+) (err error) {
 	serverFactory := server.TestServerFactory
 	var servers []*server.TestServer
 
@@ -174,7 +180,7 @@ func setupTransientCluster(
 			<-servRPCReadyCh
 		} else {
 			if err := serv.Start(args); err != nil {
-				return c, err
+				return err
 			}
 			// Block until the ReadyFn has been called before continuing.
 			<-servReadyFnCh
@@ -245,14 +251,14 @@ func setupTransientCluster(
 			case e := <-errCh:
 				err = errors.CombineErrors(err, e)
 			case <-time.After(timeRemaining):
-				return c, errors.New("failed to setup transientCluster in time")
+				return errors.New("failed to setup transientCluster in time")
 			}
 			updateTime := timeutil.Now()
 			timeRemaining -= updateTime.Sub(lastUpdateTime)
 			lastUpdateTime = updateTime
 		}
 		if err != nil {
-			return c, err
+			return err
 		}
 	}
 
@@ -260,7 +266,7 @@ func setupTransientCluster(
 	// need that for the URL.
 	if !demoCtx.insecure {
 		if err := c.setupUserAuth(ctx); err != nil {
-			return c, err
+			return err
 		}
 	}
 
@@ -268,14 +274,14 @@ func setupTransientCluster(
 		// Set up the default zone configuration. We are using an in-memory store
 		// so we really want to disable replication.
 		if err := cliDisableReplication(ctx, c.s.Server); err != nil {
-			return c, err
+			return err
 		}
 	}
 
 	// Prepare the URL for use by the SQL shell.
 	c.connURL, err = c.getNetworkURLForServer(0, gen, true /* includeAppName */)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	// Start up the update check loop.
@@ -284,7 +290,7 @@ func setupTransientCluster(
 	if !demoCtx.disableTelemetry {
 		c.s.PeriodicallyCheckForUpdates(ctx)
 	}
-	return c, nil
+	return nil
 }
 
 // testServerArgsForTransientCluster creates the test arguments for

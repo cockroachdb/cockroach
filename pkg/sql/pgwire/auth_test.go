@@ -145,6 +145,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
 		defer cleanup()
 
+		// We really need to have the logs go to files, so that -show-logs
+		// does not break the "authlog" directives.
+		defer log.ScopeWithoutShowLogs(t).Close(t)
+
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.Background())
@@ -153,12 +157,6 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		s.(*server.TestServer).PGServer().TestingEnableConnAuthLogging()
-
-		// We really need to have the logs go to files, so that -show-logs
-		// does not break the "authlog" directives. We also must call
-		// this here and not earlier, because it needs to enforce the
-		// redirect on the secondary loggers created by StartServer().
-		defer log.ScopeWithoutShowLogs(t).Close(t)
 
 		pgServer := s.(*server.TestServer).PGServer()
 
