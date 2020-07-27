@@ -595,14 +595,14 @@ with &2 (cte)
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
- │    ├── stats: [rows=1]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    ├── cost: 1037.6025
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:4(int!null) column2:5(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1]
+ │    │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(4,5)

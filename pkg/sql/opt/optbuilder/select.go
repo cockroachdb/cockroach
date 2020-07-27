@@ -95,12 +95,11 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:         cte.id,
-				Name:         string(cte.name.Alias),
-				InCols:       inCols,
-				OutCols:      outCols,
-				BindingProps: cte.bindingProps,
-				ID:           b.factory.Metadata().NextUniqueID(),
+				With:    cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      b.factory.Metadata().NextUniqueID(),
 			})
 
 			return outScope
@@ -164,13 +163,13 @@ func (b *Builder) buildDataSource(
 		}
 
 		id := b.factory.Memo().NextWithID()
+		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
 		cte := cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
 			originalExpr: source.Statement,
 			expr:         innerScope.expr,
 			id:           id,
-			bindingProps: innerScope.expr.Relational(),
 		}
 		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
 
@@ -193,12 +192,11 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:         cte.id,
-			Name:         string(cte.name.Alias),
-			InCols:       inCols,
-			OutCols:      outCols,
-			BindingProps: cte.bindingProps,
-			ID:           b.factory.Metadata().NextUniqueID(),
+			With:    cte.id,
+			Name:    string(cte.name.Alias),
+			InCols:  inCols,
+			OutCols: outCols,
+			ID:      b.factory.Metadata().NextUniqueID(),
 		})
 
 		return outScope
@@ -829,13 +827,13 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		}
 
 		id := b.factory.Memo().NextWithID()
+		b.factory.Metadata().AddWithBinding(id, cteExpr)
 
 		addedCTEs[i] = cteSource{
 			name:         cte.Name,
 			cols:         cteCols,
 			originalExpr: cte.Stmt,
 			expr:         cteExpr,
-			bindingProps: cteExpr.Relational(),
 			id:           id,
 			mtr:          cte.Mtr,
 		}

@@ -155,7 +155,7 @@ func (g *factoryGen) genReplace() {
 	g.w.writeIndent("// callback. The caller can continue traversing the expression tree within the\n")
 	g.w.writeIndent("// callback by recursively calling Replace. It can also return a replacement\n")
 	g.w.writeIndent("// expression; if it does, then Replace will rebuild the operator and its\n")
-	g.w.writeIndent("// ancestors via a calls to the corresponding factory Construct methods. Here\n")
+	g.w.writeIndent("// ancestors via a call to the corresponding factory Construct methods. Here\n")
 	g.w.writeIndent("// is example usage:\n")
 	g.w.writeIndent("//\n")
 	g.w.writeIndent("//   var replace func(e opt.Expr) opt.Expr\n")
@@ -333,10 +333,26 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 
 		g.w.nestIndent("case *%s:\n", opTyp.name)
 		if define.Tags.Contains("Relational") || len(childFields) != 0 {
-			// If the operator has no children, then call Memoize directly, since
-			// all normalizations were already applied on the source operator.
 			if len(childFields) != 0 {
-				g.w.nestIndent("return f.Construct%s(\n", define.Name)
+				if define.Tags.Contains("WithBinding") {
+					// Operators that create a with binding need a bit of special code:
+					// after building the first input, we must set the binding in the
+					// metadata so that other children can refer to it (via WithScan).
+					childTyp := g.md.typeOf(childFields[0])
+					childName := g.md.fieldName(childFields[0])
+					g.w.writeIndent(
+						"%s := f.invokeReplace(t.%s, replace).(%s)\n",
+						unTitle(childName), childName, childTyp.asField(),
+					)
+					g.w.nestIndent("if id := t.WithBindingID(); id != 0 {\n")
+					g.w.writeIndent("f.Metadata().AddWithBinding(id, %s)", unTitle(childName))
+					g.w.unnest("}\n")
+					g.w.nestIndent("return f.Construct%s(\n", define.Name)
+					g.w.writeIndent("%s,\n", unTitle(childName))
+					childFields = childFields[1:]
+				} else {
+					g.w.nestIndent("return f.Construct%s(\n", define.Name)
+				}
 				for _, child := range childFields {
 					childTyp := g.md.typeOf(child)
 					childName := g.md.fieldName(child)
@@ -357,6 +373,8 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 				}
 				g.w.unnest(")\n")
 			} else {
+				// If the operator has no children, then call Memoize directly, since
+				// all normalizations were already applied on the source operator.
 				g.w.writeIndent("return f.mem.Memoize%s(", define.Name)
 				if privateField != nil {
 					// Use fieldLoadPrefix, since the field is a parameter to the

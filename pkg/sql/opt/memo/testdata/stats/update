@@ -50,17 +50,17 @@ with &1
  │    ├── update-mapping:
  │    │    └── y_new:9 => xyz.y:2
  │    ├── volatile, mutations
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(2,3)
  │    └── project
  │         ├── columns: y_new:9(int!null) xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float!null) crdb_internal_mvcc_timestamp:8(decimal)
- │         ├── stats: [rows=10]
+ │         ├── stats: [rows=10, distinct(5)=10, null(5)=0, distinct(7)=1, null(7)=0, distinct(9)=1, null(9)=0]
  │         ├── key: (5)
  │         ├── fd: ()-->(7,9), (5)-->(6,8)
  │         ├── select
  │         │    ├── columns: xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float!null) crdb_internal_mvcc_timestamp:8(decimal)
- │         │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
+ │         │    ├── stats: [rows=10, distinct(5)=10, null(5)=0, distinct(7)=1, null(7)=0]
  │         │    ├── key: (5)
  │         │    ├── fd: ()-->(7), (5)-->(6,8)
  │         │    ├── scan xyz

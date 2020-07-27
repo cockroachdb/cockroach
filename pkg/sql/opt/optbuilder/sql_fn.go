@@ -83,13 +83,13 @@ func (b *Builder) buildSQLFn(
 	innerScope := b.buildStmt(stmt.AST, nil /* desiredTypes */, emptyScope)
 
 	id := b.factory.Memo().NextWithID()
+	b.factory.Metadata().AddWithBinding(id, innerScope.expr)
 	cte := cteSource{
 		name:         tree.AliasClause{},
 		cols:         innerScope.makePresentationWithHiddenCols(),
 		originalExpr: stmt.AST,
 		expr:         innerScope.expr,
 		id:           id,
-		bindingProps: innerScope.expr.Relational(),
 	}
 	b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
 

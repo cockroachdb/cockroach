@@ -134,6 +134,10 @@ type Metadata struct {
 	// currUniqueID is the highest UniqueID that has been assigned.
 	currUniqueID UniqueID
 
+	// withBindings store bindings for relational expressions inside With or
+	// mutation operators, used to determine the logical properties of WithScan.
+	withBindings map[WithID]Expr
+
 	// NOTE! When adding fields here, update Init, CopyFrom and TestMetadata.
 }
 
@@ -197,6 +201,8 @@ func (md *Metadata) Init() {
 	md.views = md.views[:0]
 
 	md.currUniqueID = 0
+
+	md.withBindings = nil
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -225,6 +231,9 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.deps = append(md.deps, from.deps...)
 	md.views = append(md.views, from.views...)
 	md.currUniqueID = from.currUniqueID
+
+	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
+	md.withBindings = nil
 }
 
 // DepByName is used with AddDependency when the data source was looked up using a
@@ -566,3 +575,21 @@ func (md *Metadata) AllDataSourceNames(
 // WithID=0 is reserved to mean "unknown expression".
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
+
+// AddWithBinding associates a WithID to its bound expression.
+func (md *Metadata) AddWithBinding(id WithID, expr Expr) {
+	if md.withBindings == nil {
+		md.withBindings = make(map[WithID]Expr)
+	}
+	md.withBindings[id] = expr
+}
+
+// WithBinding returns the bound expression for the given WithID.
+// Panics with an assertion error if there is none.
+func (md *Metadata) WithBinding(id WithID) Expr {
+	res, ok := md.withBindings[id]
+	if !ok {
+		panic(errors.AssertionFailedf("no binding for WithID %d", id))
+	}
+	return res
+}
