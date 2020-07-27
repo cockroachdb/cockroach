@@ -19,14 +19,14 @@ SELECT ltable.k, rtable.k FROM ltable JOIN rtable ON ST_Intersects(ltable.geom, 
 project
  ├── columns: k:1(int!null) k:4(int!null)
  ├── immutable
- ├── stats: [rows=333333.333]
+ ├── stats: [rows=10000]
  ├── key: (1,4)
  └── inner-join (lookup rtable)
       ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null) rtable.geom:5(geometry)
       ├── key columns: [4] = [4]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=333333.333]
+      ├── stats: [rows=10000]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
       ├── inner-join (inverted-lookup rtable@geom_index)
@@ -51,14 +51,14 @@ SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(lt
 project
  ├── columns: k:1(int!null) k:4(int!null)
  ├── immutable
- ├── stats: [rows=333333.333]
+ ├── stats: [rows=10000]
  ├── key: (1,4)
  └── inner-join (lookup rtable)
       ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null) rtable.geom:5(geometry)
       ├── key columns: [4] = [4]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=333333.333]
+      ├── stats: [rows=10000]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
       ├── inner-join (inverted-lookup rtable@geom_index)
