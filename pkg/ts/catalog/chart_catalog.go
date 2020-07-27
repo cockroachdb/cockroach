@@ -596,8 +596,8 @@ var charts = []sectionDescription{
 				Metrics: []string{"kv.closed_timestamp.max_behind_nanos"},
 			},
 			{
-				Title:   "Count",
-				Metrics: []string{"follower_reads.success_count"},
+				Title:   "Successful Reads",
+				Metrics: []string{"requests.success.follower_read_count"},
 			},
 		},
 	},
@@ -702,6 +702,13 @@ var charts = []sectionDescription{
 					"exec.error",
 					"exec.success",
 				},
+			},
+			{
+				Title:       "Successful Reads",
+				Downsampler: DescribeAggregator_MAX,
+				Rate:        DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
+				Percentiles: false,
+				Metrics:     []string{"requests.success.total_read_count"},
 			},
 			{
 				Title:       "Storage Engine Stalls",

@@ -59,10 +59,10 @@ func (s *Store) MergeRange(
 	if leftRepl.replicaStats != nil {
 		leftRepl.replicaStats.resetRequestCounts()
 	}
+	// Note: this could be drastically improved by adding a replicaStats method
+	// that merges stats. Resetting stats is typically bad for the rebalancing
+	// logic that depends on them.
 	if leftRepl.writeStats != nil {
-		// Note: this could be drastically improved by adding a replicaStats method
-		// that merges stats. Resetting stats is typically bad for the rebalancing
-		// logic that depends on them.
 		leftRepl.writeStats.resetRequestCounts()
 	}
 

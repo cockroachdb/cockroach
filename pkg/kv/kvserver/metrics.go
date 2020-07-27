@@ -286,11 +286,11 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// Metric for tracking follower reads.
+	// Metrics for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
-		Name:        "follower_reads.success_count",
+		Name:        "requests.success.follower_read_count",
 		Help:        "Number of reads successfully processed by any replica",
-		Measurement: "Read Ops",
+		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -960,6 +960,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Leaseholder request metrics
+	metaTotalReadsCount = metric.Metadata{
+		Name:        "requests.success.total_read_count",
+		Help:        "Number of read requests successfully served by any replica",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
 		Name:        "requests.backpressure.split",
@@ -1063,7 +1071,8 @@ type StoreMetrics struct {
 	AverageQueriesPerSecond *metric.GaugeFloat64
 	AverageWritesPerSecond  *metric.GaugeFloat64
 
-	// Follower read metrics.
+	// Read request metrics.
+	TotalReadsCount    *metric.Counter
 	FollowerReadsCount *metric.Counter
 
 	// RocksDB metrics.
@@ -1431,7 +1440,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
 		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
 
-		// Follower reads metrics.
+		// Read request metrics.
+		TotalReadsCount:    metric.NewCounter(metaTotalReadsCount),
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
 
 		// RocksDB metrics.

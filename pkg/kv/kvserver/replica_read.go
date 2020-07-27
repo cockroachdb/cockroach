@@ -106,6 +106,7 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr != nil {
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
+		r.store.metrics.TotalReadsCount.Inc(1)
 		log.Event(ctx, "read completed")
 	}
 	return br, nil, pErr
