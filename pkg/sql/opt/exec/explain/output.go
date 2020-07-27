@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -98,13 +99,13 @@ func (ob *OutputBuilder) AddField(key, value string) {
 // entry in ob.entries.
 func (ob *OutputBuilder) buildTreeRows() []string {
 	// We reconstruct the hierarchy using the levels.
-	// n keeps track of the current node on each level.
+	// stack keeps track of the current node on each level.
 	tp := treeprinter.New()
-	n := []treeprinter.Node{tp}
+	stack := []treeprinter.Node{tp}
 
 	for _, entry := range ob.entries {
 		if entry.isNode() {
-			n = append(n[:entry.level], n[entry.level-1].Child(entry.node))
+			stack = append(stack[:entry.level], stack[entry.level-1].Child(entry.node))
 		} else {
 			tp.AddEmptyLine()
 		}
@@ -170,4 +171,31 @@ func (ob *OutputBuilder) BuildString() string {
 	}
 	_ = tw.Flush()
 	return util.RemoveTrailingSpaces(buf.String())
+}
+
+// BuildProtoTree creates a representation of the plan as a tree of
+// roachpb.ExplainTreePlanNodes.
+func (ob *OutputBuilder) BuildProtoTree() *roachpb.ExplainTreePlanNode {
+	// We reconstruct the hierarchy using the levels.
+	// stack keeps track of the current node on each level. We use a sentinel node
+	// for level 0.
+	sentinel := &roachpb.ExplainTreePlanNode{}
+	stack := []*roachpb.ExplainTreePlanNode{sentinel}
+
+	for _, entry := range ob.entries {
+		if entry.isNode() {
+			parent := stack[entry.level-1]
+			child := &roachpb.ExplainTreePlanNode{Name: entry.node}
+			parent.Children = append(parent.Children, child)
+			stack = append(stack[:entry.level], child)
+		} else {
+			node := stack[len(stack)-1]
+			node.Attrs = append(node.Attrs, &roachpb.ExplainTreePlanNode_Attr{
+				Key:   entry.field,
+				Value: entry.fieldVal,
+			})
+		}
+	}
+
+	return sentinel.Children[0]
 }

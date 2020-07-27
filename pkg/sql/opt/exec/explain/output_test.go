@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func ExampleOutputBuilder() {
@@ -80,7 +81,12 @@ func ExampleOutputBuilder() {
 
 		fmt.Printf("\n-- %s (string) --\n", name)
 		fmt.Print(ob.BuildString())
-		fmt.Printf("\n")
+
+		treeYaml, err := yaml.Marshal(ob.BuildProtoTree())
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("\n-- %s (tree) --\n%s\n", name, treeYaml)
 	}
 
 	example("basic", explain.Flags{})
@@ -114,6 +120,33 @@ func ExampleOutputBuilder() {
 	//            └── scan
 	//                      table        bar
 	//
+	// -- basic (tree) --
+	// name: meta
+	// attrs: []
+	// children:
+	// - name: render
+	//   attrs:
+	//   - key: render 0
+	//     value: foo
+	//   - key: render 1
+	//     value: bar
+	//   children:
+	//   - name: join
+	//     attrs:
+	//     - key: type
+	//       value: outer
+	//     children:
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: foo
+	//       children: []
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: bar
+	//       children: []
+	//
 	// -- verbose (datums) --
 	//                      0          distributed  true
 	// meta                 0  meta
@@ -140,6 +173,33 @@ func ExampleOutputBuilder() {
 	//            └── scan                      ()
 	//                      table        bar
 	//
+	// -- verbose (tree) --
+	// name: meta
+	// attrs: []
+	// children:
+	// - name: render
+	//   attrs:
+	//   - key: render 0
+	//     value: foo
+	//   - key: render 1
+	//     value: bar
+	//   children:
+	//   - name: join
+	//     attrs:
+	//     - key: type
+	//       value: outer
+	//     children:
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: foo
+	//       children: []
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: bar
+	//       children: []
+	//
 	// -- verbose+types (datums) --
 	//                      0          distributed  true
 	// meta                 0  meta
@@ -165,4 +225,31 @@ func ExampleOutputBuilder() {
 	//            │         table        foo
 	//            └── scan                      ()
 	//                      table        bar
+	//
+	// -- verbose+types (tree) --
+	// name: meta
+	// attrs: []
+	// children:
+	// - name: render
+	//   attrs:
+	//   - key: render 0
+	//     value: foo
+	//   - key: render 1
+	//     value: bar
+	//   children:
+	//   - name: join
+	//     attrs:
+	//     - key: type
+	//       value: outer
+	//     children:
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: foo
+	//       children: []
+	//     - name: scan
+	//       attrs:
+	//       - key: table
+	//         value: bar
+	//       children: []
 }
