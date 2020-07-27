@@ -13,9 +13,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/stretchr/testify/require"
 )
 
 type backgroundFn func(ctx context.Context, u *versionUpgradeTest) error
@@ -55,10 +59,11 @@ func (s *backgroundStepper) launch(ctx context.Context, _ *test, u *versionUpgra
 
 func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgradeTest) {
 	s.m.cancel()
-	// We don't care about the workload failing since we only use it to produce a
-	// few `IMPORT` jobs. And indeed workload will fail because it does not
-	// tolerate pausing of its jobs.
+	// The connection on which we originally started the BACKUP job has been
+	// restarted, so it will likely return an error. We should check for any error
+	// by checking the state of the job itself.
 	_ = s.m.WaitE()
+
 	db := u.conn(ctx, t, 1)
 	t.l.Printf("Resuming any paused jobs left")
 	for {
@@ -92,23 +97,25 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Ensure that the backup finished successfully.
+	row := db.QueryRow(
+		"SELECT count(*) FROM [SHOW JOBS] WHERE status = $1 AND job_type='BACKUP'",
+		jobs.StatusSucceeded,
+	)
+	var successfulBackups int
+	if err := row.Scan(&successfulBackups); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, 1, successfulBackups)
 }
 
-func backgroundTPCCWorkload(warehouses int, tpccDB string) backgroundStepper {
+func makeBackupJobStepper(t *test, url string) backgroundStepper {
 	return makeBackgroundStepper(func(ctx context.Context, u *versionUpgradeTest) error {
-		cmd := []string{
-			"./workload fixtures import tpcc",
-			fmt.Sprintf("--warehouses=%d", warehouses),
-			fmt.Sprintf("--db=%s", tpccDB),
-		}
-		// The workload has to run on one of the nodes of the cluster.
-		err := u.c.RunE(ctx, u.c.Node(1), cmd...)
-		if ctx.Err() != nil {
-			// If the context is canceled, that's probably why the workload  returned
-			// so swallow error. (This is how the harness tells us to shut down the
-			// workload).
-			return nil
-		}
+		db := u.conn(ctx, t, 1)
+		t.l.Printf("starting backup job")
+		_, err := db.ExecContext(ctx, `BACKUP TO $1`, fmt.Sprintf("%s/%s", url, "backup"))
+		t.l.Printf("done running backup job, received err: %+v", err)
 		return err
 	})
 }
@@ -150,6 +157,8 @@ func makeResumeAllJobsAndWaitStep(d time.Duration) versionStep {
 			t.Fatal(err)
 		}
 
+		// TODO(pbardea): This query sometimes runs too quickly and does not see the
+		// jobs that were just resumed.
 		row := db.QueryRow(
 			"SELECT count(*) FROM [SHOW JOBS] WHERE status = $1",
 			jobs.StatusRunning,
@@ -199,23 +208,37 @@ FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 	}
 }
 
-func runJobsMixedVersions(
-	ctx context.Context, t *test, c *cluster, warehouses int, predecessorVersion string,
-) {
+func unblockChannelStep(ch chan struct{}) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		close(ch)
+	}
+}
+
+func runJobsMixedVersions(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
+	blockCh := make(chan struct{})
+	blockFn := func(r *http.Request) {
+		if r.Method == "PUT" && strings.Contains(r.URL.Path, "sst") {
+			<-blockCh
+		}
+	}
+
+	srv := backupccl.NewMockServer(blockFn)
+	defer srv.Close()
+
+	backupJobStepper := makeBackupJobStepper(t, srv.URL)
+
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
 	const mainVersion = ""
 	roachNodes := c.All()
-	backgroundTPCC := backgroundTPCCWorkload(warehouses, "tpcc")
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
-	c.Put(ctx, workload, "./workload", c.Node(1))
 
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),
 		waitForUpgradeStep(roachNodes),
 		preventAutoUpgradeStep(1),
 
-		backgroundTPCC.launch,
+		backupJobStepper.launch,
 		func(ctx context.Context, _ *test, u *versionUpgradeTest) {
 			time.Sleep(10 * time.Second)
 		},
@@ -290,7 +313,8 @@ func runJobsMixedVersions(
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(roachNodes),
 		resumeAllJobsAndWaitStep,
-		backgroundTPCC.stop,
+		unblockChannelStep(blockCh),
+		backupJobStepper.stop,
 		checkForFailedJobsStep,
 	)
 	u.run(ctx, t)
@@ -313,11 +337,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			warehouses := 200
-			if local {
-				warehouses = 20
-			}
-			runJobsMixedVersions(ctx, t, c, warehouses, predV)
+			runJobsMixedVersions(ctx, t, c, predV)
 		},
 	})
 }
