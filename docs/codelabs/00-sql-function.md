@@ -35,7 +35,7 @@ type Overload struct {
 
 `Overload` contains a number of fields, reflecting the
 diversity of built-in functions. Three important fields for us to pay
-attention to our the argument types (`Types`), the return type
+attention to are the argument types (`Types`), the return type
 (`ReturnType`) and the implementation function pointer (`Fn`).
 
 Multiple function overloads are then grouped into a single "built-in
