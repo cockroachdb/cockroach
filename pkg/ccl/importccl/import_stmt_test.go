@@ -3263,6 +3263,11 @@ func TestImportDefault(t *testing.T) {
 				rowIDCols:  []string{selectNotNull("a")},
 			},
 			{
+				// unique_rowid()+unique_rowid() won't work as the rowid produced by import
+				// has its leftmost bit set to 1, and adding them causes overflow. A way to
+				// get around is to have each unique_rowid() modulo a number, M. Here M = 1e9+7
+				// is used 1e9+7 here given that it's big enough and is a prime, which is
+				// generally effective in avoiding collisions.
 				name: "rowid+rowid",
 				create: fmt.Sprintf(
 					`a INT DEFAULT (unique_rowid() %% %d) + (unique_rowid() %% %d), b INT PRIMARY KEY, c STRING`, M, M),
@@ -4430,14 +4435,12 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 	// Verify both created tables are identical.
 	importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
-	// Families are slightly different due to that rowid shows up in exec
-	// but not import (possibly due to the ALTER TABLE statement that makes
+	// Families are slightly different due to rowid showing up in exec but
+	// not import (possibly due to the ALTER TABLE statement that makes
 	// gid a primary key), so add that into import to match exec.
 	importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
 	sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
 
-	// Drop the comparison of gid for import vs exec, then check that gid
-	// in import is indeed valid rowid.
 	importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
 	importSelect := sqlDB.QueryStr(t, fmt.Sprintf(
 		"SELECT (%s) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks",

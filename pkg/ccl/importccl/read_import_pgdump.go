@@ -508,7 +508,7 @@ func newPgDumpReader(
 			for i, col := range table.Desc.VisibleColumns() {
 				colSubMap[col.Name] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, table.Desc, targetCols, evalCtx.Copy(), kvCh)
+			conv, err := row.NewDatumRowConverter(ctx, table.Desc, targetCols, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
