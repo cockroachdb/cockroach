@@ -292,32 +292,62 @@ type traceLogData struct {
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
-	var logs []traceLogData
+	var buf strings.Builder
 	var start time.Time
-	for _, sp := range r {
-		if sp.ParentSpanID == 0 {
-			if start == (time.Time{}) {
-				start = sp.StartTime
+	writeLogs := func(logs []traceLogData) {
+		for _, entry := range logs {
+			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
+				1000*entry.Timestamp.Sub(start).Seconds(),
+				1000*entry.timeSincePrev.Seconds(),
+				strings.Repeat("    ", entry.depth+1))
+			for i, f := range entry.Fields {
+				if i != 0 {
+					buf.WriteByte(' ')
+				}
+				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
 			}
-			logs = append(logs, r.visitSpan(sp, 0 /* depth */)...)
+			buf.WriteByte('\n')
 		}
 	}
 
-	var buf strings.Builder
-	for _, entry := range logs {
-		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
-			1000*entry.Timestamp.Sub(start).Seconds(),
-			1000*entry.timeSincePrev.Seconds(),
-			strings.Repeat("    ", entry.depth+1))
-		for i, f := range entry.Fields {
-			if i != 0 {
-				buf.WriteByte(' ')
-			}
-			fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
+	logs := r.visitSpan(r[0], 0 /* depth */)
+	writeLogs(logs)
+
+	// Check if there's any orphan spans (spans for which the parent is missing).
+	// This shouldn't happen, but we're protecting against incomplete traces. For
+	// example, ingesting of remote spans through DistSQL is complex. Orphan spans
+	// would not be reflected in the output string at all without this.
+	orphans := r.OrphanSpans()
+	if len(orphans) > 0 {
+		// This shouldn't happen.
+		buf.WriteString("orphan spans (trace is missing spans):\n")
+		for _, o := range orphans {
+			logs := r.visitSpan(o, 0 /* depth */)
+			writeLogs(logs)
 		}
-		buf.WriteByte('\n')
 	}
 	return buf.String()
+}
+
+// OrphanSpans returns the spans with parents missing from the recording.
+func (r Recording) OrphanSpans() []RecordedSpan {
+	spanIDs := make(map[uint64]struct{})
+	for _, sp := range r {
+		spanIDs[sp.SpanID] = struct{}{}
+	}
+
+	var orphans []RecordedSpan
+	for i, sp := range r {
+		if i == 0 {
+			// The first span can be a root span. Note that any other root span will
+			// be considered an orphan.
+			continue
+		}
+		if _, ok := spanIDs[sp.ParentSpanID]; !ok {
+			orphans = append(orphans, sp)
+		}
+	}
+	return orphans
 }
 
 // FindLogMessage returns the first log message in the recording that matches
@@ -555,6 +585,12 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	if group == nil {
 		return errors.New("adding Raw Spans to a span that isn't recording")
 	}
+
+	// Change the root of the remote recording to be a child of this span. This is
+	// usually already the case, except with DistSQL traces where remote
+	// processors run in spans that FollowFrom an RPC span that we don't collect.
+	remoteSpans[0].ParentSpanID = s.SpanID
+
 	group.Lock()
 	group.remoteSpans = append(group.remoteSpans, remoteSpans...)
 	group.Unlock()
