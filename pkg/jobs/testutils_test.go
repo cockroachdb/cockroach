@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,13 +46,12 @@ type testHelper struct {
 // is disabled by this test helper.
 // If you want to run daemon, invoke it directly.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: &TestingKnobs{
-				TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
-				},
-			},
+	knobs := &TestingKnobs{
+		TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
 		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: knobs},
 	})
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -69,6 +69,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 				Settings:         s.ClusterSettings(),
 				InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
 				DB:               kvDB,
+				TestingKnobs:     knobs,
 			},
 			sqlDB: sqlDB,
 		}, func() {
@@ -128,4 +129,22 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 	return func() {
 		delete(registeredExecutorFactories, name)
 	}
+}
+
+// addFakeJob adds a fake job associated with the specified scheduleID.
+// Returns the id of the newly created job.
+func addFakeJob(t *testing.T, h *testHelper, scheduleID int64, status Status, txn *kv.Txn) int64 {
+	payload := []byte("fake payload")
+	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		fmt.Sprintf(`
+INSERT INTO %s (created_by_type, created_by_id, status, payload) 
+VALUES ($1, $2, $3, $4) 
+RETURNING id`,
+			h.env.SystemJobsTableName(),
+		),
+		CreatedByScheduledJobs, scheduleID, status, payload,
+	)
+	require.NoError(t, err)
+	return int64(tree.MustBeDInt(datums[0]))
 }

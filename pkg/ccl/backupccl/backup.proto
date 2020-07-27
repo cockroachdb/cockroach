@@ -169,3 +169,10 @@ message ScheduledBackupExecutionArgs {
   BackupType backup_type = 1;
   string backup_statement = 2;
 }
+
+// RestoreProgress is the information that the RestoreData processor sends back
+// to the restore coordinator to update the job progress.
+message RestoreProgress {
+  RowCount summary = 1 [(gogoproto.nullable) = false];
+  int64 progressIdx = 2;
+}
