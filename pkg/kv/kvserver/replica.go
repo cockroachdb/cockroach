@@ -193,7 +193,8 @@ type Replica struct {
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID roachpb.RangeID // Only set by the constructor
+	RangeID  roachpb.RangeID  // Only set by the constructor
+	tenantID roachpb.TenantID // Set when first initialized, not modified after
 
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -1050,6 +1051,13 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 				}
 				return true // done
 			})
+		}
+
+		// The tenantID field is set when the replica first is initialized with a
+		// descriptor so we know that it is safe to read here. If the descriptor is
+		// not initialized, then we'll just leave the tenant ID as zero.
+		if desc.IsInitialized() {
+			ri.TenantID = r.tenantID.ToUint64()
 		}
 	}
 	return ri
