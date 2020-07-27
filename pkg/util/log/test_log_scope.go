@@ -66,6 +66,13 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Mark the main log as non-active: the test log scope
+	// ignores the active bit to override the logging destination.
+	mainLog.mu.Lock()
+	mainLog.mu.active = false
+	mainLog.mu.Unlock()
+
 	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}

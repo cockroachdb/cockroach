@@ -122,6 +122,10 @@ type loggerT struct {
 	mu struct {
 		syncutil.Mutex
 
+		// active indicates that at least one event has been logged
+		// to this logger already.
+		active bool
+
 		// file holds the log file writer.
 		file flushSyncWriter
 
@@ -236,6 +240,11 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
 
+	// Mark the logger as active, so that further configuration changes
+	// are disabled.
+	if !l.mu.active {
+		l.mu.active = true
+	}
 	var stacks []byte
 	var fatalTrigger chan struct{}
 	if entry.Severity == Severity_FATAL {
@@ -376,6 +385,13 @@ func (l *loggerT) printPanicToFile(ctx context.Context, depth int, r interface{}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// Mark the logger as active, so that further configuration changes
+	// are disabled. We need to do this ourselves here because we are
+	// not using outputLogEntry() which does it for us and
+	// this function also creates files in the logging directory.
+	if !l.mu.active {
+		l.mu.active = true
+	}
 	if err := l.ensureFile(); err != nil {
 		// We're already exiting; no need to pile an error upon an
 		// error. Simply report the logging error and continue.
