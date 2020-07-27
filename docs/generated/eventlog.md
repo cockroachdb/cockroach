@@ -140,30 +140,8 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
 in each tenant's own system.eventlog table.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to channel SQL_SCHEMA.
 
-
-## `alter_database_owner`
-
-An event of type `alter_database_owner` is recorded when a database's owner is changed.
-
-
-| Field | Description |
-|--|--|
-| `DatabaseName` | The name of the database being affected. |
-| `Owner` | The name of the new owner. |
-
-
-### Common fields
-
-| Field | Description |
-|--|--|
-| `Timestamp` | The timestamp of the event. |
-| `EventType` | The type of the event. |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. |
-| `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_index`
 
@@ -175,28 +153,6 @@ An event of type `alter_index` is recorded when an index is altered.
 | `TableName` | The name of the table containing the affected index. |
 | `IndexName` | The name of the affected index. |
 | `MutationID` | The mutation ID for the asynchronous job that is processing the index update. |
-
-
-### Common fields
-
-| Field | Description |
-|--|--|
-| `Timestamp` | The timestamp of the event. |
-| `EventType` | The type of the event. |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. |
-| `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
-
-## `alter_schema_owner`
-
-An event of type `alter_schema_owner` is recorded when a schema's owner is changed.
-
-
-| Field | Description |
-|--|--|
-| `SchemaName` | The name of the affected schema. |
-| `Owner` | The name of the new owner. |
 
 
 ### Common fields
@@ -262,28 +218,6 @@ EventAlterType is recorded when a user-defined type is altered.
 | Field | Description |
 |--|--|
 | `TypeName` | The name of the affected type. |
-
-
-### Common fields
-
-| Field | Description |
-|--|--|
-| `Timestamp` | The timestamp of the event. |
-| `EventType` | The type of the event. |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. |
-| `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
-
-## `alter_type_owner`
-
-An event of type `alter_type_owner` is recorded when the owner of a user-defiend type is changed.
-
-
-| Field | Description |
-|--|--|
-| `TypeName` | The name of the affected type. |
-| `Owner` | The name of the new owner. |
 
 
 ### Common fields
@@ -1079,8 +1013,74 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
 in each tenant's own system.eventlog table.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to channel PRIVILEGES.
 
+
+## `alter_database_owner`
+
+An event of type `alter_database_owner` is recorded when a database's owner is changed.
+
+
+| Field | Description |
+|--|--|
+| `DatabaseName` | The name of the database being affected. |
+| `Owner` | The name of the new owner. |
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+
+## `alter_schema_owner`
+
+An event of type `alter_schema_owner` is recorded when a schema's owner is changed.
+
+
+| Field | Description |
+|--|--|
+| `SchemaName` | The name of the affected schema. |
+| `Owner` | The name of the new owner. |
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+
+## `alter_type_owner`
+
+An event of type `alter_type_owner` is recorded when the owner of a user-defiend type is changed.
+
+
+| Field | Description |
+|--|--|
+| `TypeName` | The name of the affected type. |
+| `Owner` | The name of the new owner. |
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `change_database_privilege`
 
@@ -1191,7 +1191,7 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
 in each tenant's own system.eventlog table.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to channel USER_ADMIN.
 
 
 ## `alter_role`

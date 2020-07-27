@@ -30,6 +30,43 @@ const STORAGE = logpb.Channel_STORAGE
 // numbering and synchronous writes.
 const SESSIONS = logpb.Channel_SESSIONS
 
+// SQL_SCHEMA is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+const SQL_SCHEMA = logpb.Channel_SQL_SCHEMA
+
+// USER_ADMIN is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+const USER_ADMIN = logpb.Channel_USER_ADMIN
+
+// PRIVILEGES is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+const PRIVILEGES = logpb.Channel_PRIVILEGES
+
 // SENSITIVE_ACCESS is the channel used to report SQL
 // data access to sensitive data (when enabled):
 //

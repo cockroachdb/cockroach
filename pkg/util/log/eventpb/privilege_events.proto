@@ -16,7 +16,7 @@ import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
 
 // Category: SQL Privilege changes
-// Channel: DEV
+// Channel: PRIVILEGES
 //
 // Events in this category pertain to DDL (Data Definition Language)
 // operations performed by SQL statements that modify the privilege
@@ -81,3 +81,38 @@ message ChangeTypePrivilege {
   // The name of the affected type.
   string type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+
+// AlterDatabaseOwner is recorded when a database's owner is changed.
+message AlterDatabaseOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the database being affected.
+  string database_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterSchemaOwner is recorded when a schema's owner is changed.
+message AlterSchemaOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected schema.
+  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterTypeOwner is recorded when the owner of a user-defiend type is changed.
+message AlterTypeOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected type.
+  string type_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// TODO(knz): add AlterTableOwner here.
+// see: https://github.com/cockroachdb/cockroach/issues/57901
+
