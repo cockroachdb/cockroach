@@ -273,30 +273,6 @@ DROP TABLE sharded_secondary
 statement ok
 CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
 
-query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
-----
-·                           distributed    false                                              ·                                    ·
-·                           vectorized     false                                              ·                                    ·
-count                       ·              ·                                                  ()                                   ·
-    └── insert                 ·              ·                                                  ()                                   ·
-        │                     into           sharded_secondary(a, crdb_internal_a_shard_12, rowid)   ·                                    ·
-        │                     strategy       inserter                                           ·                                    ·
-        │                     auto commit    ·                                                  ·                                    ·
-        └── render            ·              ·                                                  (column1, column6, column5, check1)  ·
-            │                render 0       column1                                            ·                                    ·
-            │                render 1       column6                                            ·                                    ·
-            │                render 2       column5                                            ·                                    ·
-            │                render 3       column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)  ·                                    ·
-            └── render       ·              ·                                                  (column6, column5, column1)          ·
-                │           render 0       mod(fnv32(column1::STRING), 12)                    ·                                    ·
-                │           render 1       unique_rowid()                                     ·                                    ·
-                │           render 2       column1                                            ·                                    ·
-                └── values  ·              ·                                                  (column1)                            ·
-·                           size           1 column, 2 rows                                   ·                                    ·
-·                           row 0, expr 0  1                                                  ·                                    ·
-·                           row 1, expr 0  2                                                  ·                                    ·
-
 # Ensure that hash sharded indexes can be created on columns that are added in the same
 # statement, just like non-sharded indexes.
 statement ok
@@ -388,31 +364,6 @@ DROP INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx
 
 statement ok
 DROP TABLE sharded_primary
-
-statement ok
-CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=11)
-
-query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
-----
-·                           distributed    false                                          ·                           ·
-·                           vectorized     false                                          ·                           ·
-count                       ·              ·                                              ()                          ·
-    └── insert                 ·              ·                                              ()                          ·
-        │                     into           sharded_primary(crdb_internal_a_shard_11, a)        ·                           ·
-        │                     strategy       inserter                                       ·                           ·
-        │                     auto commit    ·                                              ·                           ·
-        └── render            ·              ·                                              (column4, column1, check1)  ·
-            │                render 0       column4                                        ·                           ·
-            │                render 1       column1                                        ·                           ·
-            │                render 2       column4 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
-            └── render       ·              ·                                              (column4, column1)          ·
-                │           render 0       mod(fnv32(column1::STRING), 11)                ·                           ·
-                │           render 1       column1                                        ·                           ·
-                └── values  ·              ·                                              (column1)                   ·
-·                           size           1 column, 2 rows                               ·                           ·
-·                           row 0, expr 0  1                                              ·                           ·
-·                           row 1, expr 0  2                                              ·                           ·
 
 statement ok
 SET experimental_enable_hash_sharded_indexes = false
@@ -510,3 +461,102 @@ ROLLBACK;
 
 statement ok
 DROP TABLE create_idx_drop_column;
+
+# Test that NULL values can be a part of a hash-sharded index.
+subtest null_values_in_sharded_columns
+
+statement ok
+CREATE TABLE sharded_index_with_nulls (
+     a INT8 PRIMARY KEY,
+     b INT8,
+     INDEX (b) USING HASH WITH BUCKET_COUNT = 8
+)
+
+statement ok
+INSERT INTO sharded_index_with_nulls VALUES (1, NULL);
+
+statement ok
+DROP TABLE sharded_index_with_nulls;
+
+# Test that renaming a column which is a member of a hash sharded index works.
+subtest rename_column
+
+statement ok
+CREATE TABLE rename_column (
+    c0 INT,
+    c1 INT,
+    c2 INT,
+    PRIMARY KEY (c0, c1) USING HASH WITH BUCKET_COUNT = 8,
+    INDEX (c2) USING HASH WITH BUCKET_COUNT = 8,
+    FAMILY "primary" (c0, c1, c2)
+);
+
+statement ok
+INSERT INTO rename_column VALUES (1, 2, 3);
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c0 INT8 NOT NULL,
+               c1 INT8 NOT NULL,
+               c2 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c0, c1, c2, crdb_internal_c0_c1_shard_8, crdb_internal_c2_shard_8)
+)
+
+statement ok
+ALTER TABLE rename_column RENAME c2 TO c3;
+
+# Test mucking with primary key columns.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c2;
+
+statement ok
+ALTER TABLE rename_column RENAME c0 TO c1;
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c1 INT8 NOT NULL,
+               c2 INT8 NOT NULL,
+               c3 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c3 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c1, c2, c3, crdb_internal_c1_c2_shard_8, crdb_internal_c3_shard_8)
+)
+
+query III
+SELECT c3, c2, c1 FROM rename_column
+----
+3 2 1
+
+# Test both at the same time.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c0, RENAME c2 TO c1, RENAME c3 TO c2;
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c0 INT8 NOT NULL,
+               c1 INT8 NOT NULL,
+               c2 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c0, c1, c2, crdb_internal_c0_c1_shard_8, crdb_internal_c2_shard_8)
+)
+
+query III
+SELECT c2, c1, c0 FROM rename_column
+----
+3 2 1
+
+# Ensure that renaming a shard column fails.
+statement error cannot rename shard column
+ALTER TABLE rename_column RENAME crdb_internal_c2_shard_8 TO foo;
+
+statement ok
+DROP TABLE rename_column;
