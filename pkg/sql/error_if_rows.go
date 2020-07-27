@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -23,7 +24,7 @@ type errorIfRowsNode struct {
 
 	// mkErr creates the error message, given the values of the first row
 	// produced.
-	mkErr func(values tree.Datums) error
+	mkErr exec.MkErrFn
 
 	nexted bool
 }

@@ -34,9 +34,6 @@ type bufferNode struct {
 	label string
 }
 
-// BufferNodeMarker is part of the exec.BufferNode interface.
-func (n *bufferNode) BufferNodeMarker() {}
-
 func (n *bufferNode) startExec(params runParams) error {
 	n.bufferedRows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
