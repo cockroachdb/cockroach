@@ -382,9 +382,9 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 		// while CountOp and CountRowsOp both output int values.
 		return outer == SumIntOp
 
-	case ArrayAggOp, AvgOp, ConcatAggOp, CorrOp, JsonAggOp,
-		JsonbAggOp, PercentileContOp, PercentileDiscOp, SqrDiffOp,
-		StdDevOp, StringAggOp, VarianceOp, StdDevPopOp, VarPopOp:
+	case ArrayAggOp, AvgOp, ConcatAggOp, CorrOp, JsonAggOp, JsonbAggOp,
+		JsonObjectAggOp, JsonbObjectAggOp, PercentileContOp, PercentileDiscOp,
+		SqrDiffOp, StdDevOp, StringAggOp, VarianceOp, StdDevPopOp, VarPopOp:
 		return false
 
 	default:
@@ -402,7 +402,8 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 
 	case ArrayAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp, SumIntOp,
 		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
-		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, VarPopOp:
+		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, VarPopOp,
+		JsonObjectAggOp, JsonbObjectAggOp:
 		return false
 
 	default:

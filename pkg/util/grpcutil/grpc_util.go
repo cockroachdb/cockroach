@@ -54,6 +54,15 @@ func IsTimeout(err error) bool {
 	return false
 }
 
+// IsContextCanceled returns true if err's Cause is an error produced by gRPC
+// on context cancellation.
+func IsContextCanceled(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		return s.Code() == codes.Canceled && s.Message() == context.Canceled.Error()
+	}
+	return false
+}
+
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {

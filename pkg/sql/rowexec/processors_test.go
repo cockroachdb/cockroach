@@ -860,11 +860,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 				if testCase.skip != "" {
 					skip.IgnoreLint(t, testCase.skip)
 				}
-				if vectorize {
-					// TODO(asubiotto): figure out why this race occurs.
-					skip.WithIssue(t, 51647, "vectorize option is temporarily skipped because there appears to be "+
-						"a race between the expected error and the context cancellation error")
-				}
 				func() {
 					_, err := defaultConn.Exec(fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)

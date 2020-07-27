@@ -30,11 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // createStatsPostEvents controls the cluster setting for logging
@@ -440,10 +439,8 @@ func (r *createStatsResumer) Resume(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
-			if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
-				if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
-					return jobs.NewRetryJobError("node failure")
-				}
+			if grpcutil.IsContextCanceled(err) {
+				return jobs.NewRetryJobError("node failure")
 			}
 
 			// If the job was canceled, any of the distsql processors could have been
