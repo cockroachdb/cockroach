@@ -77,6 +77,7 @@ require (
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.4.0
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/hilbert v0.0.0-20181122061418-320f2e35a565
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
