@@ -1885,15 +1885,7 @@ func (s *statusServer) CancelSession(
 		}
 	}
 
-	output := &serverpb.CancelSessionResponse{}
-	canceled, err := s.sessionRegistry.CancelSession(req.SessionID)
-
-	if err != nil {
-		output.Error = err.Error()
-	}
-
-	output.Canceled = canceled
-	return output, nil
+	return s.sessionRegistry.CancelSession(req.SessionID)
 }
 
 // CancelQuery responds to a query cancellation request, and cancels
