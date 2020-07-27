@@ -148,6 +148,7 @@ func (tu *optTableUpserter) init(
 
 // flushAndStartNewBatch is part of the tableWriter interface.
 func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+	tu.resultCount = 0
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
