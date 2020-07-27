@@ -173,25 +173,34 @@ func minDistanceInternal(
 func distanceInternal(
 	a *geo.Geometry, b *geo.Geometry, c geodist.DistanceCalculator, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
-	aGeoms, err := flattenGeometry(a, emptyBehavior)
-	if err != nil {
-		return 0, err
-	}
-	bGeoms, err := flattenGeometry(b, emptyBehavior)
-	if err != nil {
-		return 0, err
-	}
-	// If either side has no geoms, then we error out.
-	if len(aGeoms) == 0 || len(bGeoms) == 0 {
+	// If either side has no geoms, then we error out regardless of emptyBehavior.
+	if a.Empty() || b.Empty() {
 		return 0, geo.NewEmptyGeometryError()
 	}
 
-	for _, aGeom := range aGeoms {
+	aGeomT, err := a.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+	bGeomT, err := b.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+	aIt := geo.NewGeomTIterator(aGeomT, emptyBehavior)
+
+	aGeom, aNext, aErr := aIt.Next()
+	for aNext {
 		aGeodist, err := geomToGeodist(aGeom)
 		if err != nil {
 			return 0, err
 		}
-		for _, bGeom := range bGeoms {
+
+		bIt := geo.NewGeomTIterator(bGeomT, emptyBehavior)
+		bGeom, bNext, bErr := bIt.Next()
+		if bErr != nil {
+			return 0, err
+		}
+		for bNext {
 			bGeodist, err := geomToGeodist(bGeom)
 			if err != nil {
 				return 0, err
@@ -203,6 +212,16 @@ func distanceInternal(
 			if earlyExit {
 				return c.DistanceUpdater().Distance(), nil
 			}
+
+			bGeom, bNext, bErr = bIt.Next()
+			if bErr != nil {
+				return 0, err
+			}
+		}
+
+		aGeom, aNext, aErr = aIt.Next()
+		if aErr != nil {
+			return 0, err
 		}
 	}
 	return c.DistanceUpdater().Distance(), nil
