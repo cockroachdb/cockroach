@@ -410,6 +410,310 @@ func TestBTreeSeekOverlap(t *testing.T) {
 	}
 }
 
+// TestBTreeCmp tests the btree item comparison.
+func TestBTreeCmp(t *testing.T) {
+	// NB: go_generics doesn't do well with anonymous types, so name this type.
+	// Avoid the slice literal syntax, which GofmtSimplify mandates the use of
+	// anonymous constructors with.
+	type testCase struct {
+		spanA, spanB roachpb.Span
+		idA, idB     uint64
+		exp          int
+	}
+	var testCases []testCase
+	testCases = append(testCases,
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a")},
+			spanB: roachpb.Span{Key: roachpb.Key("a")},
+			idA:   1,
+			idB:   1,
+			exp:   0,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a")},
+			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			idA:   1,
+			idB:   1,
+			exp:   -1,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			idA:   1,
+			idB:   1,
+			exp:   1,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			idA:   1,
+			idB:   1,
+			exp:   0,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a")},
+			spanB: roachpb.Span{Key: roachpb.Key("a")},
+			idA:   1,
+			idB:   2,
+			exp:   -1,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("a")},
+			spanB: roachpb.Span{Key: roachpb.Key("a")},
+			idA:   2,
+			idB:   1,
+			exp:   1,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("b")},
+			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			idA:   1,
+			idB:   1,
+			exp:   1,
+		},
+		testCase{
+			spanA: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")},
+			spanB: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+			idA:   1,
+			idB:   1,
+			exp:   -1,
+		},
+	)
+	for _, tc := range testCases {
+		name := fmt.Sprintf("cmp(%s:%d,%s:%d)", tc.spanA, tc.idA, tc.spanB, tc.idB)
+		t.Run(name, func(t *testing.T) {
+			laA := newItem(tc.spanA)
+			laA.SetID(tc.idA)
+			laB := newItem(tc.spanB)
+			laB.SetID(tc.idB)
+			require.Equal(t, tc.exp, cmp(laA, laB))
+		})
+	}
+}
+
+// TestIterStack tests the interface of the iterStack type.
+func TestIterStack(t *testing.T) {
+	f := func(i int) iterFrame { return iterFrame{pos: int16(i)} }
+	var is iterStack
+	for i := 1; i <= 2*len(iterStackArr{}); i++ {
+		var j int
+		for j = 0; j < i; j++ {
+			is.push(f(j))
+		}
+		require.Equal(t, j, is.len())
+		for j--; j >= 0; j-- {
+			require.Equal(t, f(j), is.pop())
+		}
+		is.reset()
+	}
+}
+
+//////////////////////////////////////////
+//        Randomized Unit Tests         //
+//////////////////////////////////////////
+
+// perm returns a random permutation of items with spans in the range [0, n).
+func perm(n int) (out []*lockState) {
+	for _, i := range rand.Perm(n) {
+		out = append(out, newItem(spanWithEnd(i, i+1)))
+	}
+	return out
+}
+
+// rang returns an ordered list of items with spans in the range [m, n].
+func rang(m, n int) (out []*lockState) {
+	for i := m; i <= n; i++ {
+		out = append(out, newItem(spanWithEnd(i, i+1)))
+	}
+	return out
+}
+
+// all extracts all items from a tree in order as a slice.
+func all(tr *btree) (out []*lockState) {
+	it := tr.MakeIter()
+	it.First()
+	for it.Valid() {
+		out = append(out, it.Cur())
+		it.Next()
+	}
+	return out
+}
+
+func run(tb testing.TB, name string, f func(testing.TB)) {
+	switch v := tb.(type) {
+	case *testing.T:
+		v.Run(name, func(t *testing.T) {
+			f(t)
+		})
+	case *testing.B:
+		v.Run(name, func(b *testing.B) {
+			f(b)
+		})
+	default:
+		tb.Fatalf("unknown %T", tb)
+	}
+}
+
+func verify(tb testing.TB, tr *btree) {
+	if tt, ok := tb.(*testing.T); ok {
+		tr.Verify(tt)
+	}
+}
+
+func resetTimer(tb testing.TB) {
+	if b, ok := tb.(*testing.B); ok {
+		b.ResetTimer()
+	}
+}
+
+func stopTimer(tb testing.TB) {
+	if b, ok := tb.(*testing.B); ok {
+		b.StopTimer()
+	}
+}
+
+func startTimer(tb testing.TB) {
+	if b, ok := tb.(*testing.B); ok {
+		b.StartTimer()
+	}
+}
+
+func runBTreeInsert(tb testing.TB, count, iters int) {
+	insertP := perm(count)
+	resetTimer(tb)
+	for i := 0; i < iters; {
+		var tr btree
+		for _, item := range insertP {
+			tr.Set(item)
+			verify(tb, &tr)
+			i++
+			if i >= iters {
+				return
+			}
+		}
+	}
+}
+
+func runBTreeDelete(tb testing.TB, count, iters int) {
+	insertP, removeP := perm(count), perm(count)
+	resetTimer(tb)
+	for i := 0; i < iters; {
+		stopTimer(tb)
+		var tr btree
+		for _, item := range insertP {
+			tr.Set(item)
+			verify(tb, &tr)
+		}
+		startTimer(tb)
+		for _, item := range removeP {
+			tr.Delete(item)
+			verify(tb, &tr)
+			i++
+			if i >= iters {
+				return
+			}
+		}
+		if tr.Len() > 0 {
+			tb.Fatalf("tree not empty: %s", &tr)
+		}
+	}
+}
+
+func runBTreeDeleteInsert(tb testing.TB, count, iters int) {
+	insertP := perm(count)
+	var tr btree
+	for _, item := range insertP {
+		tr.Set(item)
+		verify(tb, &tr)
+	}
+	resetTimer(tb)
+	for i := 0; i < iters; i++ {
+		item := insertP[i%count]
+		tr.Delete(item)
+		verify(tb, &tr)
+		tr.Set(item)
+		verify(tb, &tr)
+	}
+}
+
+func runBTreeDeleteInsertCloneOnce(tb testing.TB, count, iters int) {
+	insertP := perm(count)
+	var tr btree
+	for _, item := range insertP {
+		tr.Set(item)
+		verify(tb, &tr)
+	}
+	tr = tr.Clone()
+	resetTimer(tb)
+	for i := 0; i < iters; i++ {
+		item := insertP[i%count]
+		tr.Delete(item)
+		verify(tb, &tr)
+		tr.Set(item)
+		verify(tb, &tr)
+	}
+}
+
+func runBTreeDeleteInsertCloneEachTime(tb testing.TB, count, iters int) {
+	for _, reset := range []bool{false, true} {
+		run(tb, fmt.Sprintf("reset=%t", reset), func(tb testing.TB) {
+			insertP := perm(count)
+			var tr, trReset btree
+			for _, item := range insertP {
+				tr.Set(item)
+				verify(tb, &tr)
+			}
+			resetTimer(tb)
+			for i := 0; i < iters; i++ {
+				item := insertP[i%count]
+				if reset {
+					trReset.Reset()
+					trReset = tr
+				}
+				tr = tr.Clone()
+				tr.Delete(item)
+				verify(tb, &tr)
+				tr.Set(item)
+				verify(tb, &tr)
+			}
+		})
+	}
+}
+
+// randN returns a random integer in the range [min, max).
+func randN(min, max int) int { return rand.Intn(max-min) + min }
+func randCount() int {
+	if testing.Short() {
+		return randN(1, 128)
+	}
+	return randN(1, 1024)
+}
+
+func TestBTreeInsert(t *testing.T) {
+	count := randCount()
+	runBTreeInsert(t, count, count)
+}
+
+func TestBTreeDelete(t *testing.T) {
+	count := randCount()
+	runBTreeDelete(t, count, count)
+}
+
+func TestBTreeDeleteInsert(t *testing.T) {
+	count := randCount()
+	runBTreeDeleteInsert(t, count, count)
+}
+
+func TestBTreeDeleteInsertCloneOnce(t *testing.T) {
+	count := randCount()
+	runBTreeDeleteInsertCloneOnce(t, count, count)
+}
+
+func TestBTreeDeleteInsertCloneEachTime(t *testing.T) {
+	count := randCount()
+	runBTreeDeleteInsertCloneEachTime(t, count, count)
+}
+
 // TestBTreeSeekOverlapRandom tests btree iterator overlap operations using
 // randomized input.
 func TestBTreeSeekOverlapRandom(t *testing.T) {
@@ -542,134 +846,9 @@ func TestBTreeCloneConcurrentOperations(t *testing.T) {
 	}
 }
 
-// TestBTreeCmp tests the btree item comparison.
-func TestBTreeCmp(t *testing.T) {
-	// NB: go_generics doesn't do well with anonymous types, so name this type.
-	// Avoid the slice literal syntax, which GofmtSimplify mandates the use of
-	// anonymous constructors with.
-	type testCase struct {
-		spanA, spanB roachpb.Span
-		idA, idB     uint64
-		exp          int
-	}
-	var testCases []testCase
-	testCases = append(testCases,
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a")},
-			spanB: roachpb.Span{Key: roachpb.Key("a")},
-			idA:   1,
-			idB:   1,
-			exp:   0,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a")},
-			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-			idA:   1,
-			idB:   1,
-			exp:   -1,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-			idA:   1,
-			idB:   1,
-			exp:   1,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-			idA:   1,
-			idB:   1,
-			exp:   0,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a")},
-			spanB: roachpb.Span{Key: roachpb.Key("a")},
-			idA:   1,
-			idB:   2,
-			exp:   -1,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("a")},
-			spanB: roachpb.Span{Key: roachpb.Key("a")},
-			idA:   2,
-			idB:   1,
-			exp:   1,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("b")},
-			spanB: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-			idA:   1,
-			idB:   1,
-			exp:   1,
-		},
-		testCase{
-			spanA: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")},
-			spanB: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
-			idA:   1,
-			idB:   1,
-			exp:   -1,
-		},
-	)
-	for _, tc := range testCases {
-		name := fmt.Sprintf("cmp(%s:%d,%s:%d)", tc.spanA, tc.idA, tc.spanB, tc.idB)
-		t.Run(name, func(t *testing.T) {
-			laA := newItem(tc.spanA)
-			laA.SetID(tc.idA)
-			laB := newItem(tc.spanB)
-			laB.SetID(tc.idB)
-			require.Equal(t, tc.exp, cmp(laA, laB))
-		})
-	}
-}
-
-// TestIterStack tests the interface of the iterStack type.
-func TestIterStack(t *testing.T) {
-	f := func(i int) iterFrame { return iterFrame{pos: int16(i)} }
-	var is iterStack
-	for i := 1; i <= 2*len(iterStackArr{}); i++ {
-		var j int
-		for j = 0; j < i; j++ {
-			is.push(f(j))
-		}
-		require.Equal(t, j, is.len())
-		for j--; j >= 0; j-- {
-			require.Equal(t, f(j), is.pop())
-		}
-		is.reset()
-	}
-}
-
 //////////////////////////////////////////
 //              Benchmarks              //
 //////////////////////////////////////////
-
-// perm returns a random permutation of items with spans in the range [0, n).
-func perm(n int) (out []*lockState) {
-	for _, i := range rand.Perm(n) {
-		out = append(out, newItem(spanWithEnd(i, i+1)))
-	}
-	return out
-}
-
-// rang returns an ordered list of items with spans in the range [m, n].
-func rang(m, n int) (out []*lockState) {
-	for i := m; i <= n; i++ {
-		out = append(out, newItem(spanWithEnd(i, i+1)))
-	}
-	return out
-}
-
-// all extracts all items from a tree in order as a slice.
-func all(tr *btree) (out []*lockState) {
-	it := tr.MakeIter()
-	it.First()
-	for it.Valid() {
-		out = append(out, it.Cur())
-		it.Next()
-	}
-	return out
-}
 
 func forBenchmarkSizes(b *testing.B, f func(b *testing.B, count int)) {
 	for _, count := range []int{16, 128, 1024, 8192, 65536} {
@@ -682,61 +861,21 @@ func forBenchmarkSizes(b *testing.B, f func(b *testing.B, count int)) {
 // BenchmarkBTreeInsert measures btree insertion performance.
 func BenchmarkBTreeInsert(b *testing.B) {
 	forBenchmarkSizes(b, func(b *testing.B, count int) {
-		insertP := perm(count)
-		b.ResetTimer()
-		for i := 0; i < b.N; {
-			var tr btree
-			for _, item := range insertP {
-				tr.Set(item)
-				i++
-				if i >= b.N {
-					return
-				}
-			}
-		}
+		runBTreeInsert(b, count, b.N)
 	})
 }
 
 // BenchmarkBTreeDelete measures btree deletion performance.
 func BenchmarkBTreeDelete(b *testing.B) {
 	forBenchmarkSizes(b, func(b *testing.B, count int) {
-		insertP, removeP := perm(count), perm(count)
-		b.ResetTimer()
-		for i := 0; i < b.N; {
-			b.StopTimer()
-			var tr btree
-			for _, item := range insertP {
-				tr.Set(item)
-			}
-			b.StartTimer()
-			for _, item := range removeP {
-				tr.Delete(item)
-				i++
-				if i >= b.N {
-					return
-				}
-			}
-			if tr.Len() > 0 {
-				b.Fatalf("tree not empty: %s", &tr)
-			}
-		}
+		runBTreeDelete(b, count, b.N)
 	})
 }
 
 // BenchmarkBTreeDeleteInsert measures btree deletion and insertion performance.
 func BenchmarkBTreeDeleteInsert(b *testing.B) {
 	forBenchmarkSizes(b, func(b *testing.B, count int) {
-		insertP := perm(count)
-		var tr btree
-		for _, item := range insertP {
-			tr.Set(item)
-		}
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			item := insertP[i%count]
-			tr.Delete(item)
-			tr.Set(item)
-		}
+		runBTreeDeleteInsert(b, count, b.N)
 	})
 }
 
@@ -744,46 +883,16 @@ func BenchmarkBTreeDeleteInsert(b *testing.B) {
 // performance after the tree has been copy-on-write cloned once.
 func BenchmarkBTreeDeleteInsertCloneOnce(b *testing.B) {
 	forBenchmarkSizes(b, func(b *testing.B, count int) {
-		insertP := perm(count)
-		var tr btree
-		for _, item := range insertP {
-			tr.Set(item)
-		}
-		tr = tr.Clone()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			item := insertP[i%count]
-			tr.Delete(item)
-			tr.Set(item)
-		}
+		runBTreeDeleteInsertCloneOnce(b, count, b.N)
 	})
 }
 
 // BenchmarkBTreeDeleteInsertCloneEachTime measures btree deletion and insertion
 // performance while the tree is repeatedly copy-on-write cloned.
 func BenchmarkBTreeDeleteInsertCloneEachTime(b *testing.B) {
-	for _, reset := range []bool{false, true} {
-		b.Run(fmt.Sprintf("reset=%t", reset), func(b *testing.B) {
-			forBenchmarkSizes(b, func(b *testing.B, count int) {
-				insertP := perm(count)
-				var tr, trReset btree
-				for _, item := range insertP {
-					tr.Set(item)
-				}
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					item := insertP[i%count]
-					if reset {
-						trReset.Reset()
-						trReset = tr
-					}
-					tr = tr.Clone()
-					tr.Delete(item)
-					tr.Set(item)
-				}
-			})
-		})
-	}
+	forBenchmarkSizes(b, func(b *testing.B, count int) {
+		runBTreeDeleteInsertCloneEachTime(b, count, b.N)
+	})
 }
 
 // BenchmarkBTreeMakeIter measures the cost of creating a btree iterator.
