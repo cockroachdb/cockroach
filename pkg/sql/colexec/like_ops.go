@@ -33,6 +33,8 @@ const (
 	likeSuffixNegate
 	likePrefix
 	likePrefixNegate
+	likeContains
+	likeContainsNegate
 	likeRegexp
 	likeRegexpNegate
 )
@@ -76,6 +78,13 @@ func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error
 				return likePrefixNegate, prefix, nil
 			}
 			return likePrefix, prefix, nil
+		}
+		if firstChar == '%' && lastChar == '%' {
+			contains := pattern[1 : len(pattern)-1]
+			if negate {
+				return likeContainsNegate, contains, nil
+			}
+			return likeContains, contains, nil
 		}
 	}
 	// Default (slow) case: execute as a regular expression match.
@@ -140,6 +149,16 @@ func GetLikeOperator(
 		}, nil
 	case likePrefixNegate:
 		return &selNotPrefixBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       pat,
+		}, nil
+	case likeContains:
+		return &selContainsBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       pat,
+		}, nil
+	case likeContainsNegate:
+		return &selNotContainsBytesBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
@@ -234,6 +253,16 @@ func GetLikeProjectionOperator(
 		}, nil
 	case likePrefixNegate:
 		return &projNotPrefixBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        pat,
+		}, nil
+	case likeContains:
+		return &projContainsBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        pat,
+		}, nil
+	case likeContainsNegate:
+		return &projNotContainsBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil

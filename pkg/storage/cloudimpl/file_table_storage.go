@@ -33,6 +33,7 @@ const defaultUserfileScheme = "userfile"
 type fileTableStorage struct {
 	fs     *filetable.FileToTableSystem
 	cfg    roachpb.ExternalStorage_FileTable
+	db     *kv.DB
 	prefix string // relative filepath
 }
 
@@ -71,6 +72,7 @@ func makeFileTableStorage(
 	return &fileTableStorage{
 		fs:     fileToTableSystem,
 		cfg:    cfg,
+		db:     db,
 		prefix: cfg.Path,
 	}, nil
 }
@@ -166,20 +168,24 @@ func (f *fileTableStorage) WriteFile(
 	if err != nil {
 		return err
 	}
-	writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
-	if err != nil {
-		return err
-	}
+	err = f.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize, txn)
+		if err != nil {
+			return err
+		}
 
-	if _, err = io.Copy(writer, content); err != nil {
-		return errors.Wrap(err, "failed to write using the FileTable writer")
-	}
+		if _, err = io.Copy(writer, content); err != nil {
+			return errors.Wrap(err, "failed to write using the FileTable writer")
+		}
 
-	if err := writer.Close(); err != nil {
-		return errors.Wrap(err, "failed to close the FileTable writer")
-	}
+		if err := writer.Close(); err != nil {
+			return errors.Wrap(err, "failed to close the FileTable writer")
+		}
 
-	return nil
+		return nil
+	})
+
+	return err
 }
 
 // This method is different from the utility method getPrefixBeforeWildcard() in

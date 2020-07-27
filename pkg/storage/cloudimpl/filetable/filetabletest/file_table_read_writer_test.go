@@ -20,6 +20,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -36,28 +37,32 @@ const qualifiedTableName = database + ".public.file_table_read_writer"
 // uploadFile generates random data and copies it to the FileTableSystem via
 // the FileWriter.
 func uploadFile(
-	ctx context.Context, filename string, fileSize, chunkSize int, ft *filetable.FileToTableSystem,
+	ctx context.Context,
+	filename string,
+	fileSize, chunkSize int,
+	ft *filetable.FileToTableSystem,
+	db *kv.DB,
 ) ([]byte, error) {
 	data := make([]byte, fileSize)
 	randGen, _ := randutil.NewPseudoRand()
 	randutil.ReadTestdataBytes(randGen, data)
 
-	writer, err := ft.NewFileWriter(ctx, filename, chunkSize)
-	if err != nil {
-		return nil, err
-	}
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		writer, err := ft.NewFileWriter(ctx, filename, chunkSize, txn)
+		if err != nil {
+			return err
+		}
 
-	_, err = io.Copy(writer, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
+		_, err = io.Copy(writer, bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
 
-	err = writer.Close()
-	if err != nil {
-		return nil, err
-	}
+		err = writer.Close()
+		return err
+	})
 
-	return data, nil
+	return data, err
 }
 
 // Checks that filename has been divided into the expected number of chunks
@@ -104,15 +109,15 @@ func TestListAndDeleteFiles(t *testing.T) {
 	// Create first test file with multiple chunks.
 	const size = 1024
 	const chunkSize = 8
-	_, err = uploadFile(ctx, "file1", size, chunkSize, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file1", size, chunkSize, fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 
 	// Create second test file with multiple chunks.
-	_, err = uploadFile(ctx, "file2", size, chunkSize, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file2", size, chunkSize, fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 
 	// Create third test file with multiple chunks.
-	_, err = uploadFile(ctx, "file3", size, chunkSize, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file3", size, chunkSize, fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 
 	// List files before delete.
@@ -134,7 +139,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	require.NoError(t, filetable.DestroyUserFileSystem(ctx, fileTableReadWriter))
 
 	// Attempt to write after the user system has been destroyed.
-	_, err = uploadFile(ctx, "file4", size, chunkSize, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file4", size, chunkSize, fileTableReadWriter, kvDB)
 	require.Error(t, err)
 }
 
@@ -176,7 +181,7 @@ func TestReadWriteFile(t *testing.T) {
 
 	for _, testCase := range testCases {
 		expected, err := uploadFile(ctx, testFileName, testCase.fileSize, testCase.chunkSize,
-			fileTableReadWriter)
+			fileTableReadWriter, kvDB)
 		require.NoError(t, err)
 
 		// Check size.
@@ -200,27 +205,26 @@ func TestReadWriteFile(t *testing.T) {
 	}
 
 	t.Run("file-already-exists", func(t *testing.T) {
-		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter)
-		require.NoError(t, err)
-		_, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, 2)
+		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
 		require.NoError(t, err)
 
 		// Upload the same file again, and expect a PK violation.
-		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter)
+		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
 		require.Error(t, err)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	})
 
 	t.Run("write-delete-write", func(t *testing.T) {
-		write1, err := uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter)
+		write1, err := uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
 		require.NoError(t, err)
 		require.True(t, isContentEqual(testFileName, write1, fileTableReadWriter))
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 
 		// Write same file name but different size configuration.
-		write2, err := uploadFile(ctx, testFileName, 1024, 4, fileTableReadWriter)
+		write2, err := uploadFile(ctx, testFileName, 1024, 4, fileTableReadWriter,
+			kvDB)
 		require.NoError(t, err)
 		require.True(t, isContentEqual(testFileName, write2, fileTableReadWriter))
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
@@ -234,16 +238,23 @@ func TestReadWriteFile(t *testing.T) {
 		randGen, _ := randutil.NewPseudoRand()
 		randutil.ReadTestdataBytes(randGen, data)
 
-		writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize)
+		err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize, txn)
+			if err != nil {
+				return err
+			}
+
+			// Write two 1 Kib files using the same writer.
+			for i := 0; i < 2; i++ {
+				_, err = io.Copy(writer, bytes.NewReader(data))
+				if err != nil {
+					return err
+				}
+			}
+
+			return writer.Close()
+		})
 		require.NoError(t, err)
-
-		// Write two 1 Kib files using the same writer.
-		for i := 0; i < 2; i++ {
-			_, err = io.Copy(writer, bytes.NewReader(data))
-			require.NoError(t, err)
-		}
-
-		require.NoError(t, writer.Close())
 
 		// Check content.
 		expectedContent := append(data, data...)
@@ -290,7 +301,8 @@ func TestUserGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	// Upload a file to test INSERT privilege.
-	expected, err := uploadFile(ctx, "file1", 1024, 1, fileTableReadWriter)
+	expected, err := uploadFile(ctx, "file1", 1024, 1, fileTableReadWriter,
+		kvDB)
 	require.NoError(t, err)
 
 	// Read file to test SELECT privilege.
@@ -369,7 +381,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 		executor, "john")
 	require.NoError(t, err)
 
-	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 
 	// Under normal circumstances Doe should have ALL privileges on the file and
@@ -425,7 +437,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 		executor, "john")
 	require.NoError(t, err)
 
-	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter)
+	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 
 	// Under normal circumstances Doe should have ALL privileges on the file and
@@ -459,7 +471,8 @@ func TestDatabaseScope(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify defaultdb has the file we wrote.
-	uploadedContent, err := uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter)
+	uploadedContent, err := uploadFile(ctx, "file1", 1024, 10,
+		fileTableReadWriter, kvDB)
 	require.NoError(t, err)
 	oldDBReader, err := fileTableReadWriter.ReadFile(ctx, "file1")
 	require.NoError(t, err)

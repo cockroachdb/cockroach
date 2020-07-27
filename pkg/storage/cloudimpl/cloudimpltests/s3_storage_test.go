@@ -55,7 +55,7 @@ func TestPutS3(t *testing.T) {
 			`%s is set to '%s', but %s is not set`,
 			cloudimpl.AuthParam,
 			cloudimpl.AuthParamSpecified,
-			cloudimpl.S3AccessKeyParam,
+			cloudimpl.AWSAccessKeyParam,
 		))
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
@@ -80,15 +80,15 @@ func TestPutS3(t *testing.T) {
 		testExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test",
-			cloudimpl.S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-			cloudimpl.S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+			cloudimpl.AWSAccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+			cloudimpl.AWSSecretParam, url.QueryEscape(creds.SecretAccessKey),
 		), false, user, nil, nil)
 		testListFiles(t,
 			fmt.Sprintf(
 				"s3://%s/%s?%s=%s&%s=%s",
 				bucket, "listing-test",
-				cloudimpl.S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-				cloudimpl.S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+				cloudimpl.AWSAccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+				cloudimpl.AWSSecretParam, url.QueryEscape(creds.SecretAccessKey),
 			),
 			user, nil, nil,
 		)
@@ -100,10 +100,10 @@ func TestPutS3Endpoint(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        cloudimpl.S3EndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    cloudimpl.S3AccessKeyParam,
+		"AWS_S3_ENDPOINT":        cloudimpl.AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    cloudimpl.AWSAccessKeyParam,
 		"AWS_S3_ENDPOINT_REGION": cloudimpl.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": cloudimpl.S3SecretParam,
+		"AWS_S3_ENDPOINT_SECRET": cloudimpl.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -161,10 +161,10 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        cloudimpl.S3EndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    cloudimpl.S3AccessKeyParam,
+		"AWS_S3_ENDPOINT":        cloudimpl.AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    cloudimpl.AWSAccessKeyParam,
 		"AWS_S3_ENDPOINT_REGION": cloudimpl.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": cloudimpl.S3SecretParam,
+		"AWS_S3_ENDPOINT_SECRET": cloudimpl.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)

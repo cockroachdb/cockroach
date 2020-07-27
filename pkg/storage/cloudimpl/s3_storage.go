@@ -47,10 +47,10 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 			q.Set(key, value)
 		}
 	}
-	setIf(S3AccessKeyParam, conf.AccessKey)
-	setIf(S3SecretParam, conf.Secret)
-	setIf(S3TempTokenParam, conf.TempToken)
-	setIf(S3EndpointParam, conf.Endpoint)
+	setIf(AWSAccessKeyParam, conf.AccessKey)
+	setIf(AWSSecretParam, conf.Secret)
+	setIf(AWSTempTokenParam, conf.TempToken)
+	setIf(AWSEndpointParam, conf.Endpoint)
 	setIf(S3RegionParam, conf.Region)
 	setIf(AuthParam, conf.Auth)
 
@@ -97,7 +97,7 @@ func MakeS3Storage(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
 				AuthParamSpecified,
-				S3AccessKeyParam,
+				AWSAccessKeyParam,
 			)
 		}
 		if conf.Secret == "" {
@@ -105,7 +105,7 @@ func MakeS3Storage(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
 				AuthParamSpecified,
-				S3SecretParam,
+				AWSSecretParam,
 			)
 		}
 		opts.Config.MergeIn(config)

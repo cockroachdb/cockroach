@@ -35,16 +35,20 @@ import (
 )
 
 const (
-	// S3AccessKeyParam is the query parameter for access_key in an S3 URI.
-	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
-	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
-	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
-	// S3TempTokenParam is the query parameter for session_token in an S3 URI.
-	S3TempTokenParam = "AWS_SESSION_TOKEN"
-	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
-	S3EndpointParam = "AWS_ENDPOINT"
+	// AWSAccessKeyParam is the query parameter for access_key in an AWS URI.
+	AWSAccessKeyParam = "AWS_ACCESS_KEY_ID"
+	// AWSSecretParam is the query parameter for the 'secret' in an AWS URI.
+	AWSSecretParam = "AWS_SECRET_ACCESS_KEY"
+	// AWSTempTokenParam is the query parameter for session_token in an AWS URI.
+	AWSTempTokenParam = "AWS_SESSION_TOKEN"
+	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
+	AWSEndpointParam = "AWS_ENDPOINT"
+
 	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
 	S3RegionParam = "AWS_REGION"
+
+	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
+	KMSRegionParam = "REGION"
 
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -94,8 +98,8 @@ const (
 
 // See SanitizeExternalStorageURI.
 var redactedQueryParams = map[string]struct{}{
-	S3SecretParam:        {},
-	S3TempTokenParam:     {},
+	AWSSecretParam:       {},
+	AWSTempTokenParam:    {},
 	AzureAccountKeyParam: {},
 	CredentialsParam:     {},
 }
@@ -121,10 +125,10 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.S3Config = &roachpb.ExternalStorage_S3{
 			Bucket:    uri.Host,
 			Prefix:    uri.Path,
-			AccessKey: uri.Query().Get(S3AccessKeyParam),
-			Secret:    uri.Query().Get(S3SecretParam),
-			TempToken: uri.Query().Get(S3TempTokenParam),
-			Endpoint:  uri.Query().Get(S3EndpointParam),
+			AccessKey: uri.Query().Get(AWSAccessKeyParam),
+			Secret:    uri.Query().Get(AWSSecretParam),
+			TempToken: uri.Query().Get(AWSTempTokenParam),
+			Endpoint:  uri.Query().Get(AWSEndpointParam),
 			Region:    uri.Query().Get(S3RegionParam),
 			Auth:      uri.Query().Get(AuthParam),
 			/* NB: additions here should also update s3QueryParams() serializer */
