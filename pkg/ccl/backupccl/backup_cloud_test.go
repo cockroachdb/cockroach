@@ -56,8 +56,8 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(cloudimpl.S3AccessKeyParam, creds.AccessKeyID)
-	values.Add(cloudimpl.S3SecretParam, creds.SecretAccessKey)
+	values.Add(cloudimpl.AWSAccessKeyParam, creds.AccessKeyID)
+	values.Add(cloudimpl.AWSSecretParam, creds.SecretAccessKey)
 	uri.RawQuery = values.Encode()
 
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
