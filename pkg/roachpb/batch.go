@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -549,6 +550,16 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		ba.Requests = ba.Requests[len(part):]
 	}
 	return parts
+}
+
+// RequestsSafe lists all the request types in the batch. Also see Summary().
+func (ba BatchRequest) RequestsSafe() log.SafeType {
+	var sb strings.Builder
+	for _, arg := range ba.Requests {
+		req := arg.GetInner()
+		sb.WriteString(req.Method().String() + " ")
+	}
+	return log.Safe(sb.String())
 }
 
 // String gives a brief summary of the contained requests and keys in the batch.
