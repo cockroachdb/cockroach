@@ -226,3 +226,24 @@ query II
 SELECT * FROM b
 ----
 1  1
+
+#### Update two rows where one is in a partial index and one is not.
+
+statement ok
+CREATE TABLE c (
+    k INT PRIMARY KEY,
+    i INT,
+    INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100
+)
+
+statement ok
+INSERT INTO c VALUES (3, 30);
+INSERT INTO c VALUES (300, 3000)
+
+statement ok
+UPDATE c SET i = i + 1
+
+query II
+SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  31
