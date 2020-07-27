@@ -124,11 +124,18 @@ func createSchemaChangeJobsFromMutations(
 	username string,
 	tableDesc *sqlbase.TableDescriptor,
 ) ([]*jobs.StartableJob, error) {
-	mutationJobs := make([]sqlbase.TableDescriptor_MutationJob, 0, len(tableDesc.MutationJobs))
-	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.MutationJobs))
-	for _, mj := range tableDesc.MutationJobs {
-		mutationID := mj.MutationID
-		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc, mj.MutationID)
+	mutationJobs := make([]sqlbase.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
+	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.Mutations))
+	seenMutations := make(map[sqlbase.MutationID]bool)
+	for _, mutation := range tableDesc.Mutations {
+		if seenMutations[mutation.MutationID] {
+			// We've already seen a mutation with this ID, so a job that handles all
+			// mutations with this ID has already been created.
+			continue
+		}
+		mutationID := mutation.MutationID
+		seenMutations[mutationID] = true
+		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc, mutationID)
 		if err != nil {
 			return nil, err
 		}
