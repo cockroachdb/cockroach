@@ -244,6 +244,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		members[i] = sqlbase.TypeDescriptor_EnumMember{
 			LogicalRepresentation:  n.EnumLabels[i],
 			PhysicalRepresentation: physReps[i],
+			Capability:             sqlbase.TypeDescriptor_EnumMember_ALL,
 		}
 	}
 

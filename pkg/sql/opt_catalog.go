@@ -390,7 +390,7 @@ func (oc *optCatalog) dataSourceForTable(
 
 	// Check to see if there's already a data source wrapper for this descriptor,
 	// and it was created with the same stats and zone config.
-	if ds, ok := oc.dataSources[desc]; ok && !ds.(*optTable).isStale(tableStats, zoneConfig) {
+	if ds, ok := oc.dataSources[desc]; ok && !ds.(*optTable).isStale(desc, tableStats, zoneConfig) {
 		return ds, nil
 	}
 
@@ -674,15 +674,8 @@ func newOptTable(
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []cat.CheckConstraint
 	for i := 0; i < ot.ColumnCount(); i++ {
+		// We do not synthesize check constraints for mutation columns.
 		if cat.IsMutationColumn(ot, i) {
-			// TODO (rohany): We don't allow referencing columns in mutations in these
-			//  expressions. However, it seems like we will need to have these checks
-			//  operate on columns in mutations. Consider the following case:
-			//  * a user adds a column with an enum type.
-			//  * the column has a default expression of an enum that is not in the
-			//    writeable state.
-			//  * We will need a check constraint here to ensure that writes to the
-			//    column are not successful, but we wouldn't be able to add that now.
 			continue
 		}
 		col := ot.Column(i)
@@ -690,15 +683,6 @@ func newOptTable(
 		if colType.UserDefined() {
 			switch colType.Family() {
 			case types.EnumFamily:
-				// TODO (rohany): When we can alter types, this logic will change.
-				//  In particular, we will want to generate two check constraints if the
-				//  enum contains values that are read only. The first constraint will
-				//  be validated, and contain all of the members of the enum. The second
-				//  will be unvalidated, and will contain only the writeable members of
-				//  the enum. The unvalidated constraint ensures that only writeable
-				//  members of the enum are written. The validated constraint ensures
-				//  that all potentially written values of the enum are considered when
-				//  planning read operations.
 				// We synthesize an (x IN (v1, v2, v3...)) check for enum types.
 				expr := &tree.ComparisonExpr{
 					Operator: tree.In,
@@ -751,9 +735,13 @@ func (ot *optTable) PostgresDescriptorID() cat.StableID {
 	return cat.StableID(ot.desc.ID)
 }
 
-// isStale checks if the optTable object needs to be refreshed because the stats
-// or zone config have changed. False positives are ok.
-func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig) bool {
+// isStale checks if the optTable object needs to be refreshed because the stats,
+// zone config, or used types have changed. False positives are ok.
+func (ot *optTable) isStale(
+	rawDesc *sqlbase.ImmutableTableDescriptor,
+	tableStats []*stats.TableStatistic,
+	zone *zonepb.ZoneConfig,
+) bool {
 	// Fast check to verify that the statistics haven't changed: we check the
 	// length and the address of the underlying array. This is not a perfect
 	// check (in principle, the stats could have left the cache and then gotten
@@ -765,6 +753,10 @@ func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *zonepb.Zon
 		return true
 	}
 	if !zone.Equal(ot.zone) {
+		return true
+	}
+	// Check if any of the version of column types have changed.
+	if !ot.desc.UserDefinedTypeColsHaveSameVersion(rawDesc) {
 		return true
 	}
 	return false
@@ -792,6 +784,11 @@ func (ot *optTable) Equals(other cat.Object) bool {
 		if !ot.stats[i].equals(&otherTable.stats[i]) {
 			return false
 		}
+	}
+
+	// Verify that all of the user defined types in the table are the same.
+	if !ot.desc.UserDefinedTypeColsHaveSameVersion(otherTable.desc) {
+		return false
 	}
 
 	// Verify that indexes are in same zones. For performance, skip deep equality
