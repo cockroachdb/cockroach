@@ -956,7 +956,7 @@ define WindowPrivate {
 # With executes Binding, making its results available to Main. Within Main, the
 # results of Binding may be referenced by a WithScan expression containing the
 # ID of this With.
-[Relational]
+[Relational, WithBinding]
 define With {
     Binding RelExpr
     Main RelExpr
@@ -981,6 +981,8 @@ define WithPrivate {
 
 # WithScan returns the results present in the With expression referenced
 # by ID.
+# Note that in order to contruct a WithScan, the WithID must have a bound
+# expression in the metadata.
 [Relational]
 define WithScan {
     _ WithScanPrivate
@@ -990,9 +992,6 @@ define WithScan {
 define WithScanPrivate {
     # With identifies the CTE to scan.
     With WithID
-
-    # BindingProps stores the relational properties of the referenced expression.
-    BindingProps RelPropsPtr
 
     # Name is used to identify the with being referenced for debugging purposes.
     Name string
@@ -1056,9 +1055,10 @@ define RecursiveCTEPrivate {
     OutCols ColList
 }
 
-# FakeRel is a mock relational operator used for testing; its logical properties
-# are pre-determined and stored in the private. It can be used as the child of
-# an operator for which we are calculating properties or statistics.
+# FakeRel is a mock relational operator used for testing and as a dummy binding
+# relation for building cascades; its logical properties are pre-determined and
+# stored in the private. It can be used as the child of an operator for which we
+# are calculating properties or statistics.
 [Relational]
 define FakeRel {
     _ FakeRelPrivate

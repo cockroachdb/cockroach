@@ -41,12 +41,12 @@ with &1 (foo)
  ├── fd: (5)-->(6,7)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    ├── stats: [rows=5000]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) crdb_internal_mvcc_timestamp:4(decimal)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-4)
  └── with-scan &1 (foo)
@@ -55,7 +55,7 @@ with &1 (foo)
       │    ├──  a.x:1(int) => x:5(int)
       │    ├──  a.y:2(int) => y:6(int)
       │    └──  a.s:3(string) => s:7(string)
-      ├── stats: [rows=5000, distinct(5)=5000, null(5)=0, distinct(6)=500, null(6)=50, distinct(7)=500, null(7)=50]
+      ├── stats: [rows=5000, distinct(5)=5000, null(5)=0, distinct(6)=400, null(6)=0, distinct(7)=10, null(7)=0]
       ├── key: (5)
       └── fd: (5)-->(6,7)
 

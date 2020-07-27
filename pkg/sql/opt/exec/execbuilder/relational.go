@@ -674,6 +674,10 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightProps := rightExpr.Relational()
 	filters := join.Child(2).(*memo.FiltersExpr)
 
+	if len(memo.WithUses(rightExpr)) != 0 {
+		return execPlan{}, fmt.Errorf("references to WITH expressions from correlated subqueries are unsupported")
+	}
+
 	leftPlan, err := b.buildRelational(leftExpr)
 	if err != nil {
 		return execPlan{}, err
@@ -1810,11 +1814,9 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 	e := b.findBuiltWithExpr(withScan.With)
 	if e == nil {
-		err := errors.WithHint(
-			errors.Errorf("couldn't find WITH expression %q with ID %d", withScan.Name, withScan.With),
-			"references to WITH expressions from correlated subqueries are unsupported",
+		return execPlan{}, errors.AssertionFailedf(
+			"couldn't find With expression with ID %d", withScan.With,
 		)
-		return execPlan{}, err
 	}
 
 	var label bytes.Buffer
