@@ -40,6 +40,10 @@ var (
 	// indexes in CREATE TABLE.
 	IndexStoringMutator MultiStatementMutation = sqlbase.IndexStoringMutator
 
+	// PartialIndexMutator adds random partial index predicate expressions to
+	// indexes.
+	PartialIndexMutator MultiStatementMutation = sqlbase.PartialIndexMutator
+
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
 	// features not supported by Postgres; use PostgresCreateTableMutator
