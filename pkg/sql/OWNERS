@@ -1,0 +1,25 @@
+owners:
+  - sql-features
+  - sql-execution
+  - sql-optimizer
+  - sql-schema
+files:
+  conn_executor*:
+    owners:
+      - sql-execution
+  conn_executor_savepoint*:
+    owners:
+      - sql-execution
+      - kv
+  distsql*:
+    owners:
+      - sql-execution
+  plan*:
+    owners:
+      - sql-execution
+  scrub*:
+    owners:
+      - sql-schema
+  txn_state:
+    owners:
+      - sql-execution

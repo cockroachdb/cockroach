@@ -1,0 +1,10 @@
+owners:
+  - team_a
+  - team_b
+files:
+  afile*:
+    owners:
+      - team_c
+  file_b:
+    owners:
+      - team_b
