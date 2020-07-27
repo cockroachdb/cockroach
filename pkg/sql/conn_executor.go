@@ -2309,9 +2309,18 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
-			ID:             id,
-			Start:          ex.state.mu.txnStart,
-			TxnDescription: txn.String(),
+			ID:                    id,
+			Start:                 ex.state.mu.txnStart,
+			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
+			NumRetries:            int32(txn.Epoch()),
+			NumAutoRetries:        int32(ex.extraTxnState.autoRetryCounter),
+			TxnDescription:        txn.String(),
+			Implicit:              ex.implicitTxn(),
+			AllocBytes:            ex.state.mon.AllocBytes(),
+			MaxAllocBytes:         ex.state.mon.MaximumBytes(),
+			IsHistorical:          ex.state.isHistorical,
+			ReadOnly:              ex.state.readOnly,
+			Priority:              ex.state.priority.String(),
 		}
 	}
 
@@ -2335,21 +2344,29 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		sql := truncateSQL(query.getStatement())
+		ast, err := query.getStatement()
+		if err != nil {
+			continue
+		}
+		anonSQL := truncateSQL(anonymizeStmt(ast))
+		sql := truncateSQL(ast.String())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:         query.txnID,
 			ID:            id.String(),
 			Start:         query.start.UTC(),
 			Sql:           sql,
+			SqlAnon:       anonSQL,
 			IsDistributed: query.isDistributed,
 			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:      float32(progress),
 		})
 	}
 	lastActiveQuery := ""
+	lastActiveQueryAnon := ""
 	if ex.mu.LastActiveQuery != nil {
 		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
+		lastActiveQueryAnon = truncateSQL(anonymizeStmt(ex.mu.LastActiveQuery))
 	}
 
 	remoteStr := "<admin>"
@@ -2368,6 +2385,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		ID:              ex.sessionID.GetBytes(),
 		AllocBytes:      ex.mon.AllocBytes(),
 		MaxAllocBytes:   ex.mon.MaximumBytes(),
+
+		LastActiveQueryAnon: lastActiveQueryAnon,
 	}
 }
 
