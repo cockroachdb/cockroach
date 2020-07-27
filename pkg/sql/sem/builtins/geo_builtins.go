@@ -292,6 +292,56 @@ This variant approximates the circle into quad_seg segments per line (the defaul
 	libraryUsage: usesGEOS,
 }
 
+var usingBestGeomProjectionWarning = `
+
+This operation is done by transforming the object into a Geometry. This occurs by translating
+the Geography objects into Geometry objects before applying an LAEA, UTM or Web Mercator
+based projection based on the bounding boxes of the given Geography objects. When the result is
+calculated, the result is transformed back into a Geography with SRID 4326.`
+
+// performGeographyOperationUsingBestGeomProjection performs an operation on a
+// Geography by transforming it to a relevant Geometry SRID and applying the closure,
+// before retransforming it back into a geopb.DefaultGeographySRID geometry.
+func performGeographyOperationUsingBestGeomProjection(
+	g *geo.Geography, f func(*geo.Geometry) (*geo.Geometry, error),
+) (*geo.Geography, error) {
+	proj, err := geogfn.BestGeomProjection(g.BoundingRect())
+	if err != nil {
+		return nil, err
+	}
+
+	inLatLonGeom, err := g.AsGeometry()
+	if err != nil {
+		return nil, err
+	}
+
+	inProjectedGeom, err := geotransform.Transform(
+		inLatLonGeom,
+		geoprojbase.Projections[g.SRID()].Proj4Text,
+		proj,
+		g.SRID(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	outProjectedGeom, err := f(inProjectedGeom)
+	if err != nil {
+		return nil, err
+	}
+
+	outGeom, err := geotransform.Transform(
+		outProjectedGeom,
+		proj,
+		geoprojbase.Projections[geopb.DefaultGeographySRID].Proj4Text,
+		geopb.DefaultGeographySRID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return outGeom.AsGeography()
+}
+
 // fitMaxDecimalDigitsToBounds ensures maxDecimalDigits falls within the bounds that
 // is permitted by strconv.FormatFloat.
 func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
@@ -2625,6 +2675,68 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			},
 			tree.VolatilityImmutable,
 		),
+		geographyOverload2(
+			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
+				proj, err := geogfn.BestGeomProjection(a.Geography.BoundingRect().Union(b.Geography.BoundingRect()))
+				if err != nil {
+					return nil, err
+				}
+
+				aInGeom, err := a.Geography.AsGeometry()
+				if err != nil {
+					return nil, err
+				}
+				bInGeom, err := b.Geography.AsGeometry()
+				if err != nil {
+					return nil, err
+				}
+
+				aInProjected, err := geotransform.Transform(
+					aInGeom,
+					geoprojbase.Projections[a.Geography.SRID()].Proj4Text,
+					proj,
+					a.Geography.SRID(),
+				)
+				if err != nil {
+					return nil, err
+				}
+				bInProjected, err := geotransform.Transform(
+					bInGeom,
+					geoprojbase.Projections[b.Geography.SRID()].Proj4Text,
+					proj,
+					b.Geography.SRID(),
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				projectedIntersection, err := geomfn.Intersection(aInProjected, bInProjected)
+				if err != nil {
+					return nil, err
+				}
+
+				outGeom, err := geotransform.Transform(
+					projectedIntersection,
+					proj,
+					geoprojbase.Projections[geopb.DefaultGeographySRID].Proj4Text,
+					geopb.DefaultGeographySRID,
+				)
+				if err != nil {
+					return nil, err
+				}
+				ret, err := outGeom.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			types.Geography,
+			infoBuilder{
+				info:         "Returns the point intersections of the given geographies." + usingBestGeomProjectionWarning,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
 	),
 	"st_union": makeBuiltin(
 		defProps(),
@@ -2981,6 +3093,96 @@ The calculations are done on a sphere.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferWithParamsInfoBuilder.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				distance := *args[1].(*tree.DFloat)
+
+				ret, err := performGeographyOperationUsingBestGeomProjection(
+					g.Geography,
+					func(g *geo.Geometry) (*geo.Geometry, error) {
+						return geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), float64(distance))
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeography(ret), nil
+			},
+			Info:       stBufferInfoBuilder.String() + usingBestGeomProjectionWarning,
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"distance", types.Float},
+				{"quad_segs", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				distance := *args[1].(*tree.DFloat)
+				quadSegs := *args[2].(*tree.DInt)
+
+				ret, err := performGeographyOperationUsingBestGeomProjection(
+					g.Geography,
+					func(g *geo.Geometry) (*geo.Geometry, error) {
+						return geomfn.Buffer(
+							g,
+							geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(quadSegs)),
+							float64(distance),
+						)
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			Info:       stBufferWithQuadSegInfoBuilder.String() + usingBestGeomProjectionWarning,
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"distance", types.Float},
+				{"buffer_style_params", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				distance := *args[1].(*tree.DFloat)
+				paramsString := *args[2].(*tree.DString)
+
+				params, modifiedDistance, err := geomfn.ParseBufferParams(string(paramsString), float64(distance))
+				if err != nil {
+					return nil, err
+				}
+
+				ret, err := performGeographyOperationUsingBestGeomProjection(
+					g.Geography,
+					func(g *geo.Geometry) (*geo.Geometry, error) {
+						return geomfn.Buffer(
+							g,
+							params,
+							modifiedDistance,
+						)
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			Info:       stBufferWithParamsInfoBuilder.String() + usingBestGeomProjectionWarning,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -3532,8 +3734,7 @@ func initGeoBuiltins() {
 		"st_distance",
 		"st_dwithin",
 		"st_intersects",
-		// TODO(#48398): uncomment
-		// "st_intersection",
+		"st_intersection",
 		"st_length",
 	} {
 		builtin, exists := geoBuiltins[builtinName]
