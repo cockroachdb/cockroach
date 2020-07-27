@@ -11,7 +11,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -574,7 +573,7 @@ func (e *WriteIntentError) Error() string {
 }
 
 func (e *WriteIntentError) message(_ *Error) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	buf.WriteString("conflicting intents on ")
 
 	// If we have a lot of intents, we only want to show the first and the last.

@@ -187,7 +187,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	if err := checkAllGaugesZero(tc); err != nil {
 		t.Fatal(err.Error())
 	}
@@ -253,7 +253,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	req2.PusherTxn = *pusher2
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
@@ -371,7 +371,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
@@ -446,7 +446,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 1)
@@ -521,7 +521,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
@@ -624,7 +624,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 				}
 
 				q := tc.repl.concMgr.TxnWaitQueue()
-				q.Enable()
+				q.Enable(1 /* leaseSeq */)
 				q.EnqueueTxn(txn)
 
 				retCh := make(chan RespWithErr, 1)
@@ -738,7 +738,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -829,7 +829,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.EnqueueTxn(txn)

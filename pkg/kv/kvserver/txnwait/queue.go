@@ -198,7 +198,7 @@ func NewQueue(cfg Config) *Queue {
 // Enable allows transactions to be enqueued and waiting pushers
 // added. This method must be idempotent as it can be invoked multiple
 // times as range leases are updated for the same replica.
-func (q *Queue) Enable() {
+func (q *Queue) Enable(_ roachpb.LeaseSequence) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.mu.txns == nil {
