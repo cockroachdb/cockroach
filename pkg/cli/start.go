@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 )
 
@@ -423,9 +424,9 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		// If another process was waiting on the PID (e.g. using a FIFO),
 		// this is when we can tell them the node has started listening.
 		if startCtx.pidFile != "" {
-			log.Infof(ctx, "PID file: %s", startCtx.pidFile)
+			log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
 			if err := ioutil.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-				log.Errorf(ctx, "failed writing the PID: %v", err)
+				log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
 			}
 		}
 
@@ -439,7 +440,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		// the cluster initializes, at which point it will be picked up
 		// and let the client go through, transparently.)
 		if startCtx.listeningURLFile != "" {
-			log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+			log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
@@ -451,13 +452,13 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 			}
 
 			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644); err != nil {
-				log.Errorf(ctx, "failed writing the URL: %v", err)
+				log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
 			}
 		}
 
 		if waitForInit {
-			log.Shout(ctx, severity.INFO,
-				"initial startup completed\n"+
+			log.Ops.Shout(ctx, severity.INFO,
+				"initial startup completed.\n"+
 					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
 					"Client connections will be accepted after this completes successfully.\n"+
 					"Check the log file(s) for progress. ")
@@ -471,7 +472,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		// Signal readiness. This unblocks the process when running with
 		// --background or under systemd.
 		if err := sdnotify.Ready(); err != nil {
-			log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+			log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 		}
 	}
 
@@ -487,11 +488,11 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 If problems persist, please see %s.`
 		docLink := docs.URL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
-			log.Shoutf(context.Background(), severity.WARNING, msg, docLink)
+			log.Ops.Shoutf(context.Background(), severity.WARNING, msg, docLink)
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
-			log.Warningf(ctx, msg, docLink)
+			log.Ops.Warningf(ctx, msg, docLink)
 		}
 	}
 
@@ -499,14 +500,14 @@ If problems persist, please see %s.`
 	// We need to make sure this happens before any queries involving geospatial data is executed.
 	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
-		log.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
+		log.Ops.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
 	} else {
-		log.Infof(ctx, "GEOS loaded from directory %s", loc)
+		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
 	}
 
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
-	log.Info(ctx, "starting cockroach node")
+	log.Ops.Info(ctx, "starting cockroach node")
 
 	// Run the rest of the startup process in a goroutine separate from
 	// the main goroutine to avoid preventing proper handling of signals
@@ -617,7 +618,7 @@ If problems persist, please see %s.`
 			sCtx := rpc.MakeSecurityContext(serverCfg.Config, security.ClusterTLSSettings(serverCfg.Settings), roachpb.SystemTenantID)
 			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
-				log.Errorf(ctx, "failed computing the URL: %v", err)
+				log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
 			}
 			buf.Printf("sql:\t%s\n", pgURL)
@@ -675,7 +676,7 @@ If problems persist, please see %s.`
 				return err
 			}
 			msgS := msg.ToString()
-			log.Infof(ctx, "node startup completed:\n%s", msgS)
+			log.Ops.Infof(ctx, "node startup completed:\n%s", msgS)
 			if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
 				fmt.Print(msgS.StripMarkers())
 			}
@@ -728,7 +729,7 @@ If problems persist, please see %s.`
 		// timely, and we don't want logs to be lost.
 		log.StartSync()
 
-		log.Infof(shutdownCtx, "received signal '%s'", sig)
+		log.Ops.Infof(shutdownCtx, "received signal '%s'", sig)
 		switch sig {
 		case os.Interrupt:
 			// Graceful shutdown after an interrupt should cause the process
@@ -774,7 +775,7 @@ If problems persist, please see %s.`
 			for {
 				remaining, _, err := s.Drain(drainCtx)
 				if err != nil {
-					log.Errorf(drainCtx, "graceful drain failed: %v", err)
+					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
 					break
 				}
 				if remaining == 0 {
@@ -812,7 +813,7 @@ If problems persist, please see %s.`
 	// indicates it has stopped.
 
 	const msgDrain = "initiating graceful shutdown of server"
-	log.Info(shutdownCtx, msgDrain)
+	log.Ops.Info(shutdownCtx, msgDrain)
 	fmt.Fprintln(os.Stdout, msgDrain)
 
 	// Notify the user every 5 second of the shutdown progress.
@@ -822,7 +823,7 @@ If problems persist, please see %s.`
 		for {
 			select {
 			case <-ticker.C:
-				log.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
+				log.Ops.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
 			case <-stopper.ShouldStop():
 				return
 			case <-stopWithoutDrain:
@@ -850,13 +851,13 @@ If problems persist, please see %s.`
 			case termSignal:
 				// Double SIGTERM, or SIGTERM after another signal: continue
 				// the graceful shutdown.
-				log.Infof(shutdownCtx, "received additional signal '%s'; continuing graceful shutdown", sig)
+				log.Ops.Infof(shutdownCtx, "received additional signal '%s'; continuing graceful shutdown", sig)
 				continue
 			}
 
 			// This new signal is not welcome, as it interferes with the graceful
 			// shutdown process.
-			log.Shoutf(shutdownCtx, severity.ERROR,
+			log.Ops.Shoutf(shutdownCtx, severity.ERROR,
 				"received signal '%s' during shutdown, initiating hard shutdown%s",
 				log.Safe(sig), log.Safe(hardShutdownHint))
 			handleSignalDuringShutdown(sig)
@@ -864,12 +865,12 @@ If problems persist, please see %s.`
 
 		case <-stopper.IsStopped():
 			const msgDone = "server drained and shutdown completed"
-			log.Infof(shutdownCtx, msgDone)
+			log.Ops.Infof(shutdownCtx, msgDone)
 			fmt.Fprintln(os.Stdout, msgDone)
 
 		case <-stopWithoutDrain:
 			const msgDone = "too early to drain; used hard shutdown instead"
-			log.Infof(shutdownCtx, msgDone)
+			log.Ops.Infof(shutdownCtx, msgDone)
 			fmt.Fprintln(os.Stdout, msgDone)
 		}
 		break
@@ -902,7 +903,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
-		log.Shoutf(ctx, severity.WARNING,
+		log.Ops.Shoutf(ctx, severity.WARNING,
 			"neither --listen-addr nor --advertise-addr was specified.\n"+
 				"The server will advertise %q to other nodes, is this routable?\n\n"+
 				"Consider using:\n"+
@@ -937,7 +938,7 @@ func checkTzDatabaseAvailability(ctx context.Context) error {
 		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
 			// The user tells us they really know what they want.
 			reportedErr := &formattedError{err: reportedErr}
-			log.Shoutf(ctx, severity.WARNING, "%v", reportedErr)
+			log.Ops.Shoutf(ctx, severity.WARNING, "%v", reportedErr)
 		} else {
 			// Prevent a successful start.
 			//
@@ -956,14 +957,14 @@ func checkTzDatabaseAvailability(ctx context.Context) error {
 func reportConfiguration(ctx context.Context) {
 	serverCfg.Report(ctx)
 	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-		log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+		log.Ops.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 	}
 	// If a user ever reports "bad things have happened", any
 	// troubleshooting steps will want to rule out that the user was
 	// running as root in a multi-user environment, or using different
 	// uid/gid across runs in the same data directory. To determine
 	// this, it's easier if the information appears in the log file.
-	log.Infof(ctx, "process identity: %s", sysutil.ProcessIdentity())
+	log.Ops.Infof(ctx, "process identity: %s", sysutil.ProcessIdentity())
 }
 
 func maybeWarnMemorySizes(ctx context.Context) {
@@ -978,7 +979,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Warningf(ctx, "%s", buf.String())
+		log.Ops.Warningf(ctx, "%s", buf.String())
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -986,7 +987,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shoutf(ctx, severity.WARNING,
+			log.Ops.Shoutf(ctx, severity.WARNING,
 				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
 				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
@@ -1011,29 +1012,9 @@ func setupAndInitializeLoggingAndProfiling(
 
 	fl := flagSetForCmd(cmd)
 
-	// Default the log directory to the "logs" subdirectory of the first
-	// non-memory store. If more than one non-memory stores is detected,
-	// print a warning.
-	ambiguousLogDirs := false
-	lf := fl.Lookup(cliflags.LogDir.Name)
-	if !startCtx.logDir.IsSet() && !lf.Changed {
-		// We only override the log directory if the user has not explicitly
-		// disabled file logging using --log-dir="".
-		newDir := ""
-		for _, spec := range serverCfg.Stores.Specs {
-			if spec.InMemory {
-				continue
-			}
-			if newDir != "" {
-				ambiguousLogDirs = true
-				break
-			}
-			newDir = filepath.Join(spec.Path, "logs")
-		}
-
-		if err := startCtx.logDir.Set(newDir); err != nil {
-			return nil, err
-		}
+	ambiguousLogDirs, err := propagateDefaultLogDirectory(fl)
+	if err != nil {
+		return nil, err
 	}
 
 	if logDir := logOutputDirectory(); logDir != "" {
@@ -1083,21 +1064,14 @@ func setupAndInitializeLoggingAndProfiling(
 			// This is why we defer this call here, to ensure it only occurs
 			// after SetupRedactionAndStderrRedirects() has been called.
 			log.StartGCDaemon(ctx)
-
-			if stopper != nil {
-				// When the function complete successfully, start the loggers
-				// for the storage engines. We need to do this at the end
-				// because we need to register the loggers.
-				stopper.AddCloser(storage.InitPebbleLogger(ctx))
-			}
 		}()
 	}
 
-	// Initialize the redirection of stderr and log redaction.  Note,
-	// this function must be called even if there is no log directory
-	// configured, to verify whether the combination of requested flags
-	// is valid.
-	if _, err := log.SetupRedactionAndStderrRedirects(); err != nil {
+	// Initialize the redirection of log redaction and logging channels.
+	// Note, this function must be called even if there is no log
+	// directory configured, to verify whether the combination of
+	// requested flags is valid.
+	if _, err := log.SetupRedactionAndLoggingChannels(&startCtx.logConfig.Config); err != nil {
 		return nil, err
 	}
 
@@ -1120,8 +1094,9 @@ func setupAndInitializeLoggingAndProfiling(
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
-		log.Shout(ctx, severity.WARNING, "multiple stores configured"+
-			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
+		log.Ops.Shout(ctx, severity.WARNING,
+			"multiple stores configured"+
+				" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
 	if auditLogDir := serverCfg.AuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
@@ -1140,7 +1115,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if addr == "" {
 			addr = "any of your IP addresses"
 		}
-		log.Shoutf(context.Background(), severity.WARNING,
+		log.Ops.Shoutf(context.Background(), severity.WARNING,
 			"ALL SECURITY CONTROLS HAVE BEEN DISABLED!\n\n"+
 				"This mode is intended for non-production testing only.\n"+
 				"\n"+
@@ -1150,7 +1125,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"- Intruders can log in without password and read or write any data in the cluster.\n"+
 				"- Intruders can consume all your server's resources and cause unavailability.",
 			addr)
-		log.Shoutf(context.Background(), severity.INFO,
+		log.Ops.Shoutf(context.Background(), severity.INFO,
 			"To start a secure server without mandating TLS for clients,\n"+
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
@@ -1165,7 +1140,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Infof(ctx, "%s", info.Short())
+	log.Ops.Infof(ctx, "%s", info.Short())
 
 	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
 	initBlockProfile()
@@ -1178,6 +1153,34 @@ func setupAndInitializeLoggingAndProfiling(
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
+}
+
+func propagateDefaultLogDirectory(fl *pflag.FlagSet) (ambiguousLogDirs bool, err error) {
+	// Default the log directory to the "logs" subdirectory of the first
+	// non-memory store. If more than one non-memory stores is detected,
+	// print a warning.
+	lf := fl.Lookup(cliflags.LogDir.Name)
+	if !startCtx.logDir.IsSet() && !lf.Changed {
+		// We only override the log directory if the user has not explicitly
+		// disabled file logging using --log-dir="".
+		newDir := ""
+		for _, spec := range serverCfg.Stores.Specs {
+			if spec.InMemory {
+				continue
+			}
+			if newDir != "" {
+				ambiguousLogDirs = true
+				break
+			}
+			newDir = filepath.Join(spec.Path, "logs")
+		}
+
+		if err := startCtx.logDir.Set(newDir); err != nil {
+			return false, err
+		}
+	}
+
+	return
 }
 
 func addrWithDefaultHost(addr string) (string, error) {

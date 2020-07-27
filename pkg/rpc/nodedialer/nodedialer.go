@@ -157,7 +157,7 @@ func (n *Dialer) dial(
 	defer func() {
 		// Enforce a minimum interval between warnings for failed connections.
 		if err != nil && ctx.Err() == nil && breaker != nil && breaker.ShouldLog() {
-			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
+			log.Health.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
 		}
 	}()
 	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Connect(ctx)

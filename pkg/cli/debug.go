@@ -1167,6 +1167,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 // All other debug commands go here.
 var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
+	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
 	debugDecodeProtoCmd,

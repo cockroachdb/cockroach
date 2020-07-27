@@ -152,6 +152,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// does not break the "authlog" directives.
 		defer log.ScopeWithoutShowLogs(t).Close(t)
 
+		// Enable logging channels.
+		log.TestingResetActive()
+		cleanup, err := log.SetupRedactionAndLoggingChannels(log.DefaultConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.Background())

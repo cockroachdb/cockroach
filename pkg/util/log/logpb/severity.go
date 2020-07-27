@@ -63,3 +63,17 @@ func SeverityByName(s string) (Severity, bool) {
 	}
 	return 0, false
 }
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (s *Severity) UnmarshalYAML(fn func(interface{}) error) error {
+	var sv string
+	if err := fn(&sv); err != nil {
+		return err
+	}
+	return s.Set(sv)
+}
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (s Severity) MarshalYAML() (interface{}, error) {
+	return s.String(), nil
+}

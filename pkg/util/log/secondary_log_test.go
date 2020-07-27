@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/logtags"
 )
@@ -35,13 +36,13 @@ func TestSecondaryLog(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+	l := newSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
 	ctx = logtags.AddTag(ctx, "hello", "world")
-	l.Logf(ctx, "story time")
+	l.output(ctx, 0, severity.INFO, channel.DEV, "story time")
 	Infof(context.Background(), "test2")
 
 	// Make sure the content made it to disk.
@@ -84,7 +85,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 
 	// Take over stderr.
 	TestingResetActive()
-	cleanup, err := SetupRedactionAndStderrRedirects()
+	cleanup, err := SetupRedactionAndLoggingChannels(DefaultConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,11 +94,11 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+	l := newSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Log something on the secondary logger.
-	l.Logf(context.Background(), "test456")
+	l.output(context.Background(), 0, severity.INFO, channel.DEV, "test456")
 
 	// Send something on stderr.
 	const stderrText = "hello stderr"
@@ -131,11 +132,11 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+	l := newSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 	defer l.Close()
 
 	// Emit some logging and ensure the files gets created.
-	l.Logf(ctx, "story time")
+	l.output(ctx, 0, severity.INFO, channel.DEV, "story time")
 	Flush()
 
 	results, err := ListLogFiles()

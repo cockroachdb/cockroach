@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -146,9 +147,10 @@ func TestStandardLog(t *testing.T) {
 }
 
 func TestEntryDecoder(t *testing.T) {
-	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
+	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, msg string) string {
 		entry := logpb.Entry{
 			Severity:  s,
+			Channel:   c,
 			Time:      now.UnixNano(),
 			Goroutine: int64(gid),
 			File:      file,
@@ -169,22 +171,24 @@ func TestEntryDecoder(t *testing.T) {
 	t6 := t5.Add(time.Microsecond)
 	t7 := t6.Add(time.Microsecond)
 	t8 := t7.Add(time.Microsecond)
+	t9 := t8.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
-	preambleLength := len(formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, ""))
+	preambleLength := len(formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ""))
 	maxMessageLength := bufio.MaxScanTokenSize - preambleLength - 1
 	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
 	tooLongEntry := reallyLongEntry + "a"
 
-	contents := formatEntry(severity.INFO, t1, 0, "clog_test.go", 136, "info")
-	contents += formatEntry(severity.INFO, t2, 1, "clog_test.go", 137, "multi-\nline")
-	contents += formatEntry(severity.INFO, t3, 2, "clog_test.go", 138, reallyLongEntry)
-	contents += formatEntry(severity.INFO, t4, 3, "clog_test.go", 139, tooLongEntry)
-	contents += formatEntry(severity.WARNING, t5, 4, "clog_test.go", 140, "warning")
-	contents += formatEntry(severity.ERROR, t6, 5, "clog_test.go", 141, "error")
-	contents += formatEntry(severity.FATAL, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
-	contents += formatEntry(severity.INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
+	contents := formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, "info")
+	contents += formatEntry(severity.INFO, channel.DEV, t2, 1, "clog_test.go", 137, "multi-\nline")
+	contents += formatEntry(severity.INFO, channel.DEV, t3, 2, "clog_test.go", 138, reallyLongEntry)
+	contents += formatEntry(severity.INFO, channel.DEV, t4, 3, "clog_test.go", 139, tooLongEntry)
+	contents += formatEntry(severity.WARNING, channel.DEV, t5, 4, "clog_test.go", 140, "warning")
+	contents += formatEntry(severity.ERROR, channel.DEV, t6, 5, "clog_test.go", 141, "error")
+	contents += formatEntry(severity.FATAL, channel.DEV, t7, 6, "clog_test.go", 142, "fatal\nstack\ntrace")
+	contents += formatEntry(severity.INFO, channel.DEV, t8, 7, "clog_test.go", 143, tooLongEntry)
+	contents += formatEntry(severity.INFO, channel.OPS, t9, 8, "clog_test.go", 144, "info")
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -206,6 +210,7 @@ func TestEntryDecoder(t *testing.T) {
 	expected := []logpb.Entry{
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t1.UnixNano(),
 			Goroutine: 0,
 			File:      `clog_test.go`,
@@ -214,6 +219,7 @@ func TestEntryDecoder(t *testing.T) {
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t2.UnixNano(),
 			Goroutine: 1,
 			File:      `clog_test.go`,
@@ -223,6 +229,7 @@ line`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t3.UnixNano(),
 			Goroutine: 2,
 			File:      `clog_test.go`,
@@ -231,6 +238,7 @@ line`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
@@ -239,6 +247,7 @@ line`,
 		},
 		{
 			Severity:  severity.WARNING,
+			Channel:   channel.DEV,
 			Time:      t5.UnixNano(),
 			Goroutine: 4,
 			File:      `clog_test.go`,
@@ -247,6 +256,7 @@ line`,
 		},
 		{
 			Severity:  severity.ERROR,
+			Channel:   channel.DEV,
 			Time:      t6.UnixNano(),
 			Goroutine: 5,
 			File:      `clog_test.go`,
@@ -255,6 +265,7 @@ line`,
 		},
 		{
 			Severity:  severity.FATAL,
+			Channel:   channel.DEV,
 			Time:      t7.UnixNano(),
 			Goroutine: 6,
 			File:      `clog_test.go`,
@@ -265,11 +276,21 @@ trace`,
 		},
 		{
 			Severity:  severity.INFO,
+			Channel:   channel.DEV,
 			Time:      t8.UnixNano(),
 			Goroutine: 7,
 			File:      `clog_test.go`,
 			Line:      143,
 			Message:   tooLongEntry[:maxMessageLength],
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.OPS,
+			Time:      t9.UnixNano(),
+			Goroutine: 8,
+			File:      `clog_test.go`,
+			Line:      144,
+			Message:   `info`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -328,7 +349,7 @@ func TestV(t *testing.T) {
 	_ = logging.vmoduleConfig.verbosity.Set("2")
 	defer func() { _ = logging.vmoduleConfig.verbosity.Set("0") }()
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		log(context.Background(), severity.INFO, channel.DEV, "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -357,7 +378,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		log(context.Background(), severity.INFO, channel.DEV, "test")
 	}
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -380,7 +401,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if V(2) {
-		addStructured(context.Background(), severity.INFO, 1, "", []interface{}{"test"})
+		log(context.Background(), severity.INFO, channel.DEV, "test")
 	}
 	if contents() != "" {
 		t.Error("V logged incorrectly")
@@ -639,7 +660,7 @@ func TestRedirectStderr(t *testing.T) {
 	Infof(context.Background(), "test")
 
 	TestingResetActive()
-	cleanup, err := SetupRedactionAndStderrRedirects()
+	cleanup, err := SetupRedactionAndLoggingChannels(DefaultConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

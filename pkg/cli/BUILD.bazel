@@ -30,6 +30,7 @@ go_library(
         "init.go",
         "initial_sql.go",
         "keytype_string.go",
+        "logconfig.go",
         "mt.go",
         "mt_cert.go",
         "mt_start_sql.go",
@@ -149,6 +150,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/keysutil",
         "//pkg/util/log",
+        "//pkg/util/log/logconfig",
         "//pkg/util/log/logflags",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
@@ -205,6 +207,7 @@ go_library(
         "//vendor/google.golang.org/grpc",
         "//vendor/google.golang.org/grpc/codes",
         "//vendor/google.golang.org/grpc/status",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "//vendor/golang.org/x/sys/unix",
@@ -322,6 +325,7 @@ go_test(
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/channel",
         "//pkg/util/log/logflags",
         "//pkg/util/log/severity",
         "//pkg/util/protoutil",

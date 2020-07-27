@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -35,8 +36,9 @@ func (l *loggerT) makeStartLine(format string, args ...interface{}) logpb.Entry 
 	entry := MakeEntry(
 		context.Background(),
 		severity.INFO,
-		nil, /* logCounter */
-		2,   /* depth */
+		channel.DEV, // TODO(knz): maybe make the channel the same as the logger.
+		nil,         /* logCounter */
+		2,           /* depth */
 		l.redactableLogs.Get(),
 		format,
 		args...)
@@ -72,6 +74,7 @@ func (l *loggerT) getStartLines(now time.Time) []logpb.Entry {
 func MakeEntry(
 	ctx context.Context,
 	s Severity,
+	c Channel,
 	lc *EntryCounter,
 	depth int,
 	redactable bool,
@@ -80,6 +83,7 @@ func MakeEntry(
 ) (res logpb.Entry) {
 	res = logpb.Entry{
 		Severity:   s,
+		Channel:    c,
 		Time:       timeutil.Now().UnixNano(),
 		Goroutine:  goid.Get(),
 		Redactable: redactable,

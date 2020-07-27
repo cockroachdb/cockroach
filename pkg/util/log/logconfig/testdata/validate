@@ -1,0 +1,455 @@
+# Empty configuration: use and propagate defaults.
+yaml
+----
+file-defaults:
+  dir: /default-dir
+  filter: INFO
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    default:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,USER_ADMIN,PRIVILEGES
+    sql-audit:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SENSITIVE_ACCESS
+    sql-auth:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SESSIONS
+    sql-exec:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_EXEC
+    sql-slow:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_PERF
+    sql-slow-internal-only:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_INTERNAL_PERF
+    storage:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: STORAGE
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+
+# Check that default first-store propagates.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+file-defaults:
+  dir: /default-dir
+  filter: INFO
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    custom:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,USER_ADMIN,PRIVILEGES
+    sql-audit:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SENSITIVE_ACCESS
+    sql-auth:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SESSIONS
+    sql-exec:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_EXEC
+    sql-slow:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_PERF
+    sql-slow-internal-only:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_INTERNAL_PERF
+    storage:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: STORAGE
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+
+# Check that default dir propagates.
+yaml
+file-defaults:
+      dir: /custom
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+file-defaults:
+  dir: /custom
+  filter: INFO
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    custom:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,USER_ADMIN,PRIVILEGES
+    sql-audit:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SENSITIVE_ACCESS
+    sql-auth:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SESSIONS
+    sql-exec:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_EXEC
+    sql-slow:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_PERF
+    sql-slow-internal-only:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_INTERNAL_PERF
+    storage:
+      dir: /custom
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: STORAGE
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /custom
+
+
+# Check that default severity propagates.
+yaml
+file-defaults:
+       filter: WARNING
+sinks:
+   file-groups:
+     custom:
+       channels: DEV
+----
+file-defaults:
+  dir: /default-dir
+  filter: WARNING
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    custom:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,USER_ADMIN,PRIVILEGES
+    sql-audit:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SENSITIVE_ACCESS
+    sql-auth:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SESSIONS
+    sql-exec:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_EXEC
+    sql-slow:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_PERF
+    sql-slow-internal-only:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_INTERNAL_PERF
+    storage:
+      dir: /default-dir
+      filter: WARNING
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: STORAGE
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+
+# Check that fluent default network is filled.
+yaml
+sinks:
+   fluent-servers:
+     custom:
+        address: "127.0.0.1:5170"
+        channels: DEV
+----
+file-defaults:
+  dir: /default-dir
+  filter: INFO
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    default:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,USER_ADMIN,PRIVILEGES
+    sql-audit:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SENSITIVE_ACCESS
+    sql-auth:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SESSIONS
+    sql-exec:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_EXEC
+    sql-slow:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_PERF
+    sql-slow-internal-only:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: SQL_INTERNAL_PERF
+    storage:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: STORAGE
+  fluent-servers:
+    custom:
+      filter: INFO
+      net: tcp
+      address: 127.0.0.1:5170
+      redactable: true
+      channels: DEV
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+
+# Check that it's possible to capture all channels.
+yaml
+sinks:
+   file-groups:
+      custom:
+         channels: all
+----
+file-defaults:
+  dir: /default-dir
+  filter: INFO
+  redact: false
+  redactable: true
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+sinks:
+  file-groups:
+    custom:
+      dir: /default-dir
+      filter: INFO
+      redact: false
+      redactable: true
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+  stderr:
+    nocolor: false
+    filter: NONE
+    redactable: true
+    channels: DEV,OPS,HEALTH,STORAGE,SESSIONS,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+
+# Check that missing addr is reported.
+yaml
+sinks:
+   fluent-servers:
+     custom:
+----
+ERROR: fluent server "custom": address cannot be empty
+fluent server "custom": no channel selected

@@ -298,7 +298,7 @@ func init() {
 		}
 		switch flag.Name {
 		case logflags.DeprecatedLogFilesCombinedMaxSizeName:
-			flag.Deprecated = "use --" + logflags.LogFilesCombinedMaxSizeName + " instead"
+			flag.Deprecated = "use --" + cliflags.Log.Name + " instead to specify file-defaults.max-group-size."
 			fallthrough
 		case logflags.ShowLogsName, // test-only flag
 			logflags.RedactableLogsName: // support-only flag
@@ -444,6 +444,7 @@ func init() {
 		stringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
 
 		varFlag(f, serverCfg.AuditLogDirName, cliflags.SQLAuditLogDirName)
+		_ = f.MarkDeprecated(cliflags.SQLAuditLogDirName.Name, "use --"+cliflags.Log.Name+" instead.")
 
 		if backgroundFlagDefined {
 			boolFlag(f, &startBackground, cliflags.Background)
@@ -451,20 +452,35 @@ func init() {
 	}
 
 	// Flags that apply to commands that start servers.
-	serverCmds := append(StartCmds, demoCmd)
+	serverCmds := append(StartCmds, demoCmd, debugCheckLogConfigCmd)
 	serverCmds = append(serverCmds, demoCmd.Commands()...)
 	for _, cmd := range serverCmds {
 		f := cmd.Flags()
+
+		// Logging configuration.
+		varFlag(f, &startCtx.logConfig, cliflags.Log)
+
 		varFlag(f, &startCtx.logDir, cliflags.LogDir)
+		_ = f.MarkDeprecated(cliflags.LogDir.Name,
+			"use --"+cliflags.Log.Name+" instead to specify file-defaults.dir.")
+
 		varFlag(f,
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFilesCombinedMaxSizeName)).Value,
 			cliflags.LogDirMaxSize)
+		_ = f.MarkDeprecated(cliflags.LogDirMaxSize.Name,
+			"use --"+cliflags.Log.Name+" instead to specify file-defaults.max-group-size.")
+
 		varFlag(f,
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileMaxSizeName)).Value,
 			cliflags.LogFileMaxSize)
+		_ = f.MarkDeprecated(cliflags.LogFileMaxSize.Name,
+			"use --"+cliflags.Log.Name+" instead to specify file-defaults.max-file-size.")
+
 		varFlag(f,
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileVerbosityThresholdName)).Value,
 			cliflags.LogFileVerbosity)
+		_ = f.MarkDeprecated(cliflags.LogFileVerbosity.Name,
+			"use --"+cliflags.Log.Name+" instead to specify file-defaults.filter.")
 
 		// Report flag usage for server commands in telemetry. We do this
 		// only for server commands, as there is no point in accumulating
@@ -812,6 +828,10 @@ func init() {
 		boolFlag(f, &debugCtx.values, cliflags.Values)
 		boolFlag(f, &debugCtx.sizes, cliflags.Sizes)
 		stringFlag(f, &debugCtx.decodeAsTableDesc, cliflags.DecodeAsTable)
+	}
+	{
+		f := debugCheckLogConfigCmd.Flags()
+		varFlag(f, &serverCfg.Stores, cliflags.Store)
 	}
 	{
 		f := debugRangeDataCmd.Flags()

@@ -14,6 +14,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
@@ -76,7 +77,8 @@ func (l *loggerT) exitLocked(err error) {
 func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
 	entry := MakeEntry(
-		ctx, severity.ERROR, &l.logCounter, 2 /* depth */, l.redactableLogs.Get(),
+		ctx, severity.ERROR, channel.OPS,
+		&l.logCounter, 2 /* depth */, l.redactableLogs.Get(),
 		"logging error: %v", err)
 
 	// Either stderr or our log file is broken. Try writing the error to both

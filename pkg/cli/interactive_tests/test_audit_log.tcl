@@ -7,7 +7,7 @@ start_server $argv
 spawn $argv sql
 eexpect root@
 
-set logfile logs/db/logs/cockroach-sql-audit.log
+set logfile logs/db/logs/cockroach-sensitive-access.log
 
 start_test "Check that the audit log is not created by default"
 system "if test -e $logfile; then false; fi"
@@ -65,7 +65,7 @@ start_test "Check that audit logging works even with a custom directory"
 system "$argv start-single-node --insecure --pid-file=server_pid --background -s=path=logs/db --sql-audit-dir=logs/db/audit-new >>logs/expect-cmd.log 2>&1;
         $argv sql --insecure -e 'select 1'"
 
-set logfile logs/db/audit-new/cockroach-sql-audit.log
+set logfile logs/db/audit-new/cockroach-sensitive-access.log
 
 # Start a client and make a simple audit test.
 spawn $argv sql

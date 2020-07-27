@@ -22,3 +22,4 @@ var _ logFormatter = formatCrdbV1{}
 var _ logFormatter = formatCrdbV1WithCounter{}
 var _ logFormatter = formatCrdbV1TTY{}
 var _ logFormatter = formatCrdbV1TTYWithCounter{}
+var _ logFormatter = formatFluentJSON{}

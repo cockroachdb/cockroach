@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -96,6 +97,10 @@ type loggerT struct {
 	// clarify the semantics.
 	fileSink *fileSink
 
+	// fluentSink, if set and non-nil, will cause events to be sent to a
+	// configured fluentd collector.
+	fluentSink *fluentLogSink
+
 	// whether or not to include redaction markers.
 	// This is atomic because tests using TestLogScope might
 	// override this asynchronously with log calls.
@@ -162,7 +167,7 @@ func SetClusterID(clusterID string) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	addStructured(ctx, severity.INFO, 1, "clusterID: %s", []interface{}{clusterID})
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -258,12 +263,13 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	// We need different buffers because the different sinks use different formats.
 	// For example, the fluent sink needs JSON, and the file sink does not use
 	// the terminal escape codes that the stderr sink uses.
-	var stderrBuf, fileBuf *buffer
+	var stderrBuf, fileBuf, fluentBuf *buffer
 	defer func() {
 		// Release the buffers to the allocation pool upon returning from
 		// this function.
 		putBuffer(stderrBuf)
 		putBuffer(fileBuf)
+		putBuffer(fluentBuf)
 	}()
 
 	// The following code constructs / populates the formatted entries
@@ -275,13 +281,17 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		stderrBuf = logging.stderrFormatter.formatEntry(entry, stacks)
 	}
 
+	if l.fluentSink != nil && entry.Severity >= l.fluentSink.fluentThreshold {
+		fluentBuf = l.fluentSink.formatter.formatEntry(entry, stacks)
+	}
+
 	if fileSink != nil && entry.Severity >= fileSink.fileThreshold {
 		fileBuf = fileSink.formatter.formatEntry(entry, stacks)
 	}
 
 	// If any of the sinks is active, it is now time to send it out.
 
-	if stderrBuf != nil || fileBuf != nil {
+	if stderrBuf != nil || fileBuf != nil || fluentBuf != nil {
 		// The critical section here exists so that the output
 		// side effects from the same event (above) are emitted
 		// atomically. This ensures that the order of logging
@@ -302,6 +312,12 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 				l.exitLocked(err)
 				return // unreachable except in tests
 			}
+		}
+
+		if fluentBuf != nil {
+			// TODO(knz): add conditional exit on error here.
+			// TODO(knz): maybe add buffering here.
+			l.fluentSink.Write(fluentBuf)
 		}
 
 		if fileBuf != nil && fileSink.enabled.Get() {

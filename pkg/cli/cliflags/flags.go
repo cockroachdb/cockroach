@@ -1281,4 +1281,12 @@ Override limits on line size when importing Postgres dump files. This setting
 may need to be tweaked if the Postgres dump file has extremely long lines.
 `,
 	}
+
+	Log = FlagInfo{
+		Name: "log",
+		Description: `
+Set some logging configuration flags.
+See the online documentation for details.
+`,
+	}
 )

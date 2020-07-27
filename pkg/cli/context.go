@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -400,6 +401,9 @@ var startCtx struct {
 
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
+
+	// logConfig is the logging channel configuration.
+	logConfig logconfig.Holder
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -417,6 +421,7 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.logConfig.Config = logconfig.DefaultConfig()
 }
 
 // quitCtx captures the command-line parameters of the `quit` and

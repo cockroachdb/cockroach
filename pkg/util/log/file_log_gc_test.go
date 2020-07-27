@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -53,10 +55,13 @@ func TestSecondaryGC(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &tmpDirName, "woo", false /*enableGc*/, false /*syncWrites*/, true /*msgCount*/)
+	l := newSecondaryLogger(ctx, &tmpDirName, "woo", false /*enableGc*/, false /*syncWrites*/, true /*msgCount*/)
 	defer l.Close()
 
-	testLogGC(t, &l.logger, l.Logf)
+	testLogGC(t, &l.logger,
+		func(ctx context.Context, format string, args ...interface{}) {
+			l.output(ctx, 1, severity.INFO, channel.DEV, format, args...)
+		})
 }
 
 func testLogGC(

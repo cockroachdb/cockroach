@@ -34,16 +34,6 @@ var OrigStderr = func() *os.File {
 	return os.NewFile(fd, os.Stderr.Name())
 }()
 
-// LoggingToStderr returns true if log messages of the given severity
-// sent to the main logger are also visible on stderr. This is used
-// e.g. by the startup code to announce server details both on the
-// external stderr and to the log file.
-//
-// This is also the logic used by Shout calls.
-func LoggingToStderr(s Severity) bool {
-	return s >= logging.stderrThreshold
-}
-
 // hijackStderr replaces stderr with the given file descriptor.
 //
 // A client that wishes to use the original stderr (the process'

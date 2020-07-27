@@ -13,9 +13,13 @@ package log
 import (
 	"context"
 	"flag"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -150,23 +154,86 @@ func IsActive() (active bool, firstUse string) {
 	return logging.mu.active, logging.mu.firstUseStack
 }
 
-// SetupRedactionAndStderrRedirects should be called once after
+// auditChannels indicate which channels are to be configured
+// as "audit" logs: with event numbering and with synchronous writes.
+// Audit logs are configured this way to ensure non-repudiability.
+//
+// TODO(knz): make this flag configurable per channel.
+var auditChannels = map[Channel]bool{
+	channel.SESSIONS:         true,
+	channel.USER_ADMIN:       true,
+	channel.PRIVILEGES:       true,
+	channel.SENSITIVE_ACCESS: true,
+}
+
+// enableBackwardCompatibleLogFileNames can be set to true to name
+// secondary loggers in a way compatible with v20.1 and prior.
+//
+// When set to false, the log files are named after the channel
+// names. In a later revision, we will make the file names
+// configurable.
+//
+// This configuration flag exists so that the channel functionality
+// becomes back-portable to v20.1 and prior.
+const enableBackwardCompatibleLogFileNames = false
+
+var backwardCompatibleLogFileNames = map[Channel]string{
+	channel.SESSIONS:          "sql-auth",
+	channel.SENSITIVE_ACCESS:  "sql-audit",
+	channel.SQL_EXEC:          "sql-exec",
+	channel.SQL_PERF:          "sql-slow",
+	channel.SQL_INTERNAL_PERF: "sql-slow-internal-only",
+}
+
+// getChannelFilenamePrefix returns the secondary logger filename
+// prefix to use for a given channel. For example, the file name
+// prefix for the OPS channel is `ops` so that the generated file name
+// will be `cockroach-ops.log`.
+//
+// If getChannelFilenamePrefix is true above, then special cases are
+// implemented for certain channels, to ensure that the filenames are
+// generated in the same way as previous versions of CockroachDB.
+func getChannelFilenamePrefix(ch Channel) string {
+	if enableBackwardCompatibleLogFileNames {
+		if prefix, ok := backwardCompatibleLogFileNames[ch]; ok {
+			return prefix
+		}
+	}
+	chName, ok := logpb.Channel_name[int32(ch)]
+	if !ok {
+		panic(errors.Newf("invalid channel: %v", ch))
+	}
+	return strings.ReplaceAll(strings.ToLower(chName), "_", "-")
+}
+
+// DefaultConfig is the default logging configuration.
+var DefaultConfig = func() *logconfig.Config {
+	c := logconfig.DefaultConfig()
+	return &c
+}()
+
+// SetupRedactionAndLoggingChannels should be called once after
 // command-line flags have been parsed, and before the first log entry
 // is emitted.
 //
-// The returned cleanup fn can be invoked by the caller to terminate
-// the secondary logger. This is only useful in tests: for a
-// long-running server process the cleanup function should likely not
-// be called, to ensure that the file used to capture direct stderr
-// writes remains open up until the process entirely terminates. This
-// ensures that any Go runtime assertion failures on the way to
-// termination can be properly captured.
-func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error) {
-	// The general goal of this function is to set up a secondary logger
+// The returned cleanup fn can be invoked by the caller to close
+// the non-DEV channels and resume the default of collapsing all
+// the logging output to the DEV channel.
+// This is only useful in tests: for a long-running server process the
+// cleanup function should likely not be called, to ensure that the
+// file used to capture direct stderr writes remains open up until the
+// process entirely terminates. This ensures that any Go runtime
+// assertion failures on the way to termination can be properly
+// captured.
+func SetupRedactionAndLoggingChannels(config *logconfig.Config) (cleanupFn func(), err error) {
+	// The general goal of this function is to set up secondary loggers
+	// for the various logical channel, and also a special stderr logger
 	// to capture internal Go writes to os.Stderr / fd 2 and redirect
-	// them to a separate (non-redactable) log file, This is, of course,
-	// only possible if there is a log directory to work with -- until
-	// we extend the log package to use e.g. network sinks.
+	// them to a separate (non-redactable) log file.
+	//
+	// The stderr logger is, of course, only possible if there is a log
+	// directory to work with -- until we extend the log package to use
+	// e.g. network sinks.
 	//
 	// In case there is no log directory, we must be careful to not
 	// enable log redaction whatsoever.
@@ -185,38 +252,81 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
 	}
 
+	// TODO(knz): Change the configuration logic.
+	// for each directive:
+	//    1. instantiate a logger with that directive's config
+	//    2. for each channel in the directive
+	//           (temporarily) if there is already a logger for this channel, error out
+	//           attach the logger to the channel channels[ch] = logger
+	//    3. is there a channel without a logger yet? if yes:
+	//           build a default shared logger
+	//           for each channel:
+	//               if there is a logger override, apply it
+	//               otherwise, connect to the shared logger
+
+	hasLogDirectory := logging.logDir.IsSet()
+
+	if !hasLogDirectory {
+		// If redaction is requested and we have a chance to produce some
+		// log entries on stderr, that's a configuration we cannot support
+		// safely. Reject it.
+		if logging.redactableLogsRequested && logging.stderrThreshold != severity.NONE {
+			return nil, errors.WithHintf(
+				errors.New("cannot enable redactable logging without a logging directory"),
+				"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
+		}
+	}
+
+	// Our own cancellable context to stop the secondary loggers below.
+	//
+	// Note: we don't want to take a cancellable context from the
+	// caller, because in the usual case we don't want to stop the
+	// logger when the remainder of the process stops. See the
+	// discussion on cancel at the top of the function.
+	secLoggersCtx, secLoggersCancel := context.WithCancel(context.Background())
+
+	var secLoggers []*secondaryLogger
+	var stderrCleanupFn func()
+	cleanupFn = func() {
+		// Reset the logging channels to default.
+		channels = make(map[Channel]channelSink)
+
+		if stderrCleanupFn != nil {
+			// Restore the stderr redirect, if it was defined (see below).
+			stderrCleanupFn()
+		}
+		// Stop the GC processes.
+		secLoggersCancel()
+		// Clean up the loggers.
+		for _, l := range secLoggers {
+			l.Close()
+		}
+	}
+
 	// Regardless of what happens below, we are going to set the
 	// debugLog parameters from the outcome.
 	defer initDebugLogFromDefaultConfig()
 
-	if logging.logDir.IsSet() {
+	if hasLogDirectory {
 		// We have a log directory. We can enable stderr redirection.
-
-		// Our own cancellable context to stop the secondary logger.
-		//
-		// Note: we don't want to take a cancellable context from the
-		// caller, because in the usual case we don't want to stop the
-		// logger when the remainder of the process stops. See the
-		// discussion on cancel at the top of the function.
-		ctx, cancel := context.WithCancel(context.Background())
-		secLogger := NewSecondaryLogger(ctx, &logging.logDir, "stderr",
+		secLogger := newSecondaryLogger(secLoggersCtx, &logging.logDir, "stderr",
 			true /* enableGC */, true /* forceSyncWrites */, false /* enableMsgCount */)
+		secLoggers = append(secLoggers, secLogger)
 
 		// Stderr capture produces unsafe strings. This logger
 		// thus generally produces non-redactable entries.
 		secLogger.logger.redactableLogs.Set(false)
 
 		// Force a log entry. This does two things: it forces
-		// the creation of a file and introduces a timestamp marker
-		// for any writes to the file performed after this point.
-		secLogger.Logf(ctx, "stderr capture started")
+		// the creation of a file and the redirection of fd 2 / os.Stderr.
+		// It also introduces a timestamp marker.
+		secLogger.output(secLoggersCtx, 0, severity.INFO, channel.DEV, "stderr capture started")
 
 		// Now tell this logger to capture internal stderr writes.
 		if err := secLogger.logger.fileSink.takeOverInternalStderr(&secLogger.logger); err != nil {
 			// Oof, it turns out we can't use this logger after all. Give up
-			// on it.
-			cancel()
-			secLogger.Close()
+			// on everything we did.
+			cleanupFn()
 			return nil, err
 		}
 
@@ -226,7 +336,7 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		stderrLog = &secLogger.logger
 
 		// The cleanup fn is for use in tests.
-		cleanup := func() {
+		stderrCleanupFn = func() {
 			// Relinquish the stderr redirect.
 			if err := secLogger.logger.fileSink.relinquishInternalStderr(); err != nil {
 				// This should not fail. If it does, some caller messed up by
@@ -238,37 +348,42 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 			// Restore the apparent stderr logger used by Shout() and tests.
 			stderrLog = prevStderrLogger
 
-			// Cancel the gc process for the secondary logger.
-			cancel()
-
-			// Close the logger.
-			secLogger.Close()
+			// Note: the remainder of the code in cleanupFn()
+			// will remove the logger and close it. No need to also do it here.
 		}
 
 		// Now that stderr is properly redirected, we can enable log file
 		// redaction as requested. It is safe because no interleaving
 		// is possible any more.
 		logging.redactableLogs = logging.redactableLogsRequested
-
-		return cleanup, nil
 	}
 
-	// There is no log directory.
+	// Set up the default channel loggers.
+	// TODO(knz): make this more configurable.
+	for chi := range logpb.Channel_name {
+		ch := Channel(chi)
+		if ch == channel.DEV {
+			// DEV uses mainLog for now.
+			continue
+		}
+		isAuditLog := auditChannels[ch]
+		fileNamePrefix := getChannelFilenamePrefix(Channel(ch))
+		secLogger := newSecondaryLogger(secLoggersCtx, &logging.logDir, fileNamePrefix,
+			true /* enableGC */, isAuditLog /* forceSyncWrites */, isAuditLog /* enableMsgCount */)
 
-	// If redaction is requested and we have a chance to produce some
-	// log entries on stderr, that's a configuration we cannot support
-	// safely. Reject it.
-	if logging.redactableLogsRequested && logging.stderrThreshold != severity.NONE {
-		return nil, errors.WithHintf(
-			errors.New("cannot enable redactable logging without a logging directory"),
-			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
+		secLoggers = append(secLoggers, secLogger)
+		channels[ch] = channelSink{logger: secLogger}
 	}
 
-	// Configuration valid. Assign it.
-	// (Note: This is a no-op, because either redactableLogsRequested is false,
-	// or it's true but stderrThreshold filters everything.)
-	logging.redactableLogs = logging.redactableLogsRequested
-	return nil, nil
+	if err := applyConfiguration(config); err != nil {
+		cleanupFn()
+		return nil, err
+	}
+	return cleanupFn, nil
+}
+
+func applyConfiguration(config *logconfig.Config) error {
+	return nil
 }
 
 // TestingResetActive clears the active bit. This is for use in tests

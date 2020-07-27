@@ -1,0 +1,111 @@
+# Default config
+yaml
+----
+@startuml
+left to right direction
+component sources {
+() DEV
+() OPS
+() HEALTH
+() STORAGE
+() SESSIONS
+() USER_ADMIN
+() PRIVILEGES
+() SENSITIVE_ACCESS
+() SQL_EXEC
+() SQL_PERF
+() SQL_INTERNAL_PERF
+cloud stray as "stray\nerrors"
+}
+queue stderr
+artifact files {
+ folder "/default-dir" {
+  file f1 as "cockroach.log"
+  file f2 as "cockroach-storage.log"
+  file f3 as "cockroach-sql-auth.log"
+  file f4 as "cockroach-sql-audit.log"
+  file f5 as "cockroach-sql-exec.log"
+  file f6 as "cockroach-sql-slow.log"
+  file f7 as "cockroach-sql-slow-internal-only.log"
+  file stderrfile as "cockroach-stderr.log"
+ }
+}
+DEV --> f1
+OPS --> f1
+HEALTH --> f1
+USER_ADMIN --> f1
+PRIVILEGES --> f1
+STORAGE --> f2
+SESSIONS --> f3
+SENSITIVE_ACCESS --> f4
+SQL_EXEC --> f5
+SQL_PERF --> f6
+SQL_INTERNAL_PERF --> f7
+stray --> stderrfile
+@enduml
+# http://www.plantuml.com/plantuml/uml/T9DFZzCm4CNlyob6ES4XeFr_GnkrPZTIIKjSAWv8bUKutGXlp8udWXNgTqUEQwgKSl9xytwnDD7plMT5F3nRiAPbP8VKxPuOcuwCvixreDtp3zURdj6xWRJn-1lUlCMvs8HZkPBXU1J5OlqOb5mlw-91Z598MIwh4VWYHRqjvf_AAhXLNMxAXNWGCdALBDVbHcoBsKp8EFkys8glOfRqIjGVaowhjQYhuZ3KrWqDUYRrYifZDgfllI5ov3FOmyjW1eEU6qC4YhXhbMPiEpkkWgspZI7CtZUcLOFblEae2y68O7intggT_avEwQTtrksol-7bDCmzEr8xCuMkJg4Ncwk1JwwwFair7K-ncpEO-MNqbBezGtdhVawfk_zGUTUpeLxPtFNsTV9D_8sZFDqy10Ts3tkOYmtc-GTiBs2vaad6eYHtR4MQ79kH9eT2HNi9gLJHNy5fUUBy6bA1eh-1LABeR-6V8iNW3cAJWZdk2lUcRy8Z-HC00F__
+
+# Capture everything to one file and warnings only to stderr.
+yaml
+sinks:
+  file-groups:
+    everything:
+      redact: true
+      channels: ALL
+  stderr:
+    filter: WARNING
+----
+@startuml
+left to right direction
+component sources {
+() DEV
+() OPS
+() HEALTH
+() STORAGE
+() SESSIONS
+() USER_ADMIN
+() PRIVILEGES
+() SENSITIVE_ACCESS
+() SQL_EXEC
+() SQL_PERF
+() SQL_INTERNAL_PERF
+cloud stray as "stray\nerrors"
+}
+queue stderr
+component process {
+ card p__1 as "redact"
+ card p__2 as "filter:W"
+}
+artifact files {
+ folder "/default-dir" {
+  file f1 as "cockroach-everything.log"
+  file stderrfile as "cockroach-stderr.log"
+ }
+}
+p__1 --> f1
+DEV --> p__1
+OPS --> p__1
+HEALTH --> p__1
+STORAGE --> p__1
+SESSIONS --> p__1
+USER_ADMIN --> p__1
+PRIVILEGES --> p__1
+SENSITIVE_ACCESS --> p__1
+SQL_EXEC --> p__1
+SQL_PERF --> p__1
+SQL_INTERNAL_PERF --> p__1
+stray --> stderrfile
+p__2 --> stderr
+DEV --> p__2
+OPS --> p__2
+HEALTH --> p__2
+STORAGE --> p__2
+SESSIONS --> p__2
+USER_ADMIN --> p__2
+PRIVILEGES --> p__2
+SENSITIVE_ACCESS --> p__2
+SQL_EXEC --> p__2
+SQL_PERF --> p__2
+SQL_INTERNAL_PERF --> p__2
+@enduml
+# http://www.plantuml.com/plantuml/uml/T9D1Zvim48Nl_XKZJkqXhTR77gf5YRkBb98KfxI7IiYoXmILnUbWAgsg_FVAXiYmsJtvpPjXvCzFtFTEaHkUMjPYxS1PeEPuSc0QGkqQsp5jdywsmyv1RmVIsCC_zkuzR4JfZzrU-kDHfDl3erVoi2lI1n6aa3BRvM7WknH5bMw-PhclzaLMPbln8EGubylia9MYIjTh8KVlsxOIFyNwglUY-7BLMNuGHPvEfcxjOA1tf9v1zP04zQj38ajzmYxipu03GkyC4irepcGrzfu6j283vwgw2mi8ZT8kYJOFTjsq3kdJ3xzIaMjgfHtKJHiU16hR6YH8FXgirT2wbMaeyOqm0lMuMblzcwpIfnN-HNfsfwOxVcZjCRdEZRSCSZa_DgRP2xkmSDtLwZFKTsmZoY2zntPx6OinbrXFwSoCAQFenAIY5_EQVxbCRTQPibiwFgobiyWnjiOeVHbVWuKOeZT7vdDa_WAPlqJcDyZy5MJ-2Z9_4vdV8FCRPFusCcVts1d_3_uF003__m00

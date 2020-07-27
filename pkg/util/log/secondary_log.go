@@ -16,14 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
 
-// SecondaryLogger represents a secondary / auxiliary logging channel
+// secondaryLogger represents a secondary / auxiliary logging channel
 // whose logging events go to a different file than the main logging
 // facility.
-type SecondaryLogger struct {
+type secondaryLogger struct {
 	logger loggerT
 }
 
-// NewSecondaryLogger creates a secondary logger.
+// newSecondaryLogger creates a secondary logger.
 //
 // The given directory name can be either nil or empty, in which case
 // the global logger's own dirName is used; or non-nil and non-empty,
@@ -33,14 +33,14 @@ type SecondaryLogger struct {
 //
 // The caller is responsible for ensuring the Close() method is
 // eventually called.
-func NewSecondaryLogger(
+func newSecondaryLogger(
 	ctx context.Context,
 	dirName *DirName,
 	fileNamePrefix string,
 	enableGc bool,
 	forceSyncWrites bool,
 	enableMsgCount bool,
-) *SecondaryLogger {
+) *secondaryLogger {
 	// Any consumption of configuration off the main logger
 	// makes the logging module "active" and prevents further
 	// configuration changes.
@@ -53,7 +53,7 @@ func NewSecondaryLogger(
 	if dir == "" {
 		dir = logging.logDir.String()
 	}
-	l := &SecondaryLogger{
+	l := &secondaryLogger{
 		logger: loggerT{
 			logCounter: EntryCounter{EnableMsgCount: enableMsgCount},
 			syncWrites: forceSyncWrites,
@@ -82,25 +82,13 @@ func NewSecondaryLogger(
 }
 
 // Close implements the stopper.Closer interface.
-func (l *SecondaryLogger) Close() { registry.del(&l.logger) }
+func (l *secondaryLogger) Close() { registry.del(&l.logger) }
 
-func (l *SecondaryLogger) output(
-	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
+func (l *secondaryLogger) output(
+	ctx context.Context, depth int, sev Severity, ch Channel, format string, args ...interface{},
 ) {
 	entry := MakeEntry(
-		ctx, sev, &l.logger.logCounter, depth+1, l.logger.redactableLogs.Get(), format, args...)
+		ctx, sev, ch,
+		&l.logger.logCounter, depth+1, l.logger.redactableLogs.Get(), format, args...)
 	l.logger.outputLogEntry(entry)
-}
-
-// Logf logs an event on a secondary logger.
-func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
-	l.output(ctx, 1, severity.INFO, format, args...)
-}
-
-// LogfDepth logs an event on a secondary logger, offsetting the caller's stack
-// frame by 'depth'
-func (l *SecondaryLogger) LogfDepth(
-	ctx context.Context, depth int, format string, args ...interface{},
-) {
-	l.output(ctx, depth+1, severity.INFO, format, args...)
 }
