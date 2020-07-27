@@ -339,7 +339,7 @@ statement ok
 ALTER TABLE t ADD COLUMN g INT UNIQUE
 
 statement ok
-CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX ii (i) STORING(h))
+CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX oi (i), INDEX oh (h), INDEX oih (i) STORING (h))
 
 statement error "t_g_key" is referenced by foreign key from table "o"
 ALTER TABLE t DROP COLUMN g
@@ -347,11 +347,18 @@ ALTER TABLE t DROP COLUMN g
 statement ok
 ALTER TABLE t DROP COLUMN g CASCADE
 
-statement error column "h" is referenced by existing index "ii"
+# Dropping columns that are indexed or stored in indexes drops those indexes
+# too.
+statement ok
 ALTER TABLE o DROP COLUMN h
 
-statement ok
-ALTER TABLE o DROP COLUMN h CASCADE
+query TTBITTBB colnames
+SHOW INDEXES FROM o
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+o           primary     false       1             rowid        ASC        false    false
+o           oi          true        1             i            ASC        false    false
+o           oi          true        2             rowid        ASC        false    true
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
