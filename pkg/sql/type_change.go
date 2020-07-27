@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -149,6 +151,44 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			nil, /* beforeDrainNames */
 		); err != nil {
 			return err
+		}
+	}
+
+	// If there are any read only enum members, promote them to writeable.
+	if typeDesc.Kind == sqlbase.TypeDescriptor_ENUM {
+		hasNonPublic := false
+		for _, member := range typeDesc.EnumMembers {
+			if member.Capability == sqlbase.TypeDescriptor_EnumMember_READ_ONLY {
+				hasNonPublic = true
+				break
+			}
+		}
+		if hasNonPublic {
+			// The version of the array type needs to get bumped as well so that
+			// changes to the underlying type are picked up.
+			update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+				typeDesc := descs[typeDesc.ID].(*sqlbase.MutableTypeDescriptor)
+				didModify := false
+				for i := range typeDesc.EnumMembers {
+					member := &typeDesc.EnumMembers[i]
+					if member.Capability == sqlbase.TypeDescriptor_EnumMember_READ_ONLY {
+						member.Capability = sqlbase.TypeDescriptor_EnumMember_ALL
+						didModify = true
+					}
+				}
+				if !didModify {
+					return lease.ErrDidntUpdateDescriptor
+				}
+				return nil
+			}
+			if _, err := leaseMgr.PublishMultiple(
+				ctx,
+				[]sqlbase.ID{typeDesc.ID, typeDesc.ArrayTypeID},
+				update,
+				func(*kv.Txn) error { return nil },
+			); err != nil {
+				return err
+			}
 		}
 	}
 

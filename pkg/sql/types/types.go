@@ -188,6 +188,10 @@ type UserDefinedTypeMetadata struct {
 	// Name is the resolved name of this type.
 	Name *UserDefinedTypeName
 
+	// Version is the descriptor version of the descriptor used to construct
+	// this version of the type metadata.
+	Version uint32
+
 	// enumData is non-nil iff the metadata is for an ENUM type.
 	EnumData *EnumMetadata
 }
@@ -200,6 +204,9 @@ type EnumMetadata struct {
 	// LogicalRepresentations is a slice of the string logical
 	// representations of enum members.
 	LogicalRepresentations []string
+	// IsMemberReadOnly holds whether the enum member at index i is
+	// read only or not.
+	IsMemberReadOnly []bool
 	// TODO (rohany): For small enums, having a map would be slower
 	//  than just an array. Investigate at what point the tradeoff
 	//  should occur, if at all.

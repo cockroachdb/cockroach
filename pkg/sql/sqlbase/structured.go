@@ -2908,6 +2908,22 @@ func (desc *ImmutableTableDescriptor) ContainsUserDefinedTypes() bool {
 	return len(desc.columnsWithUDTs) > 0
 }
 
+// UserDefinedTypeColsHaveSameVersion returns whether this descriptor's columns
+// with user defined type metadata have the same versions of metadata as in the
+// other descriptor. Note that this function is only valid on two descriptors
+// representing the same table at the same version.
+func (desc *ImmutableTableDescriptor) UserDefinedTypeColsHaveSameVersion(
+	otherDesc *ImmutableTableDescriptor,
+) bool {
+	for _, idx := range desc.columnsWithUDTs {
+		this, other := desc.publicAndNonPublicCols[idx].Type, otherDesc.publicAndNonPublicCols[idx].Type
+		if this.TypeMeta.Version != other.TypeMeta.Version {
+			return false
+		}
+	}
+	return true
+}
+
 // FindReadableColumnByID finds the readable column with specified ID. The
 // column may be undergoing a schema change and is marked nullable regardless
 // of its configuration. It returns true if the column is undergoing a
