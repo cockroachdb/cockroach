@@ -767,6 +767,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *controlJobsNode:
 		n.rows = v.visit(n.rows)
 
+	case *controlSchedulesNode:
+		n.rows = v.visit(n.rows)
+
 	case *setZoneConfigNode:
 		if v.observer.expr != nil {
 			v.metadataExpr(name, "yaml", -1, n.yamlConfig)
@@ -924,6 +927,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&commentOnIndexNode{}):    "comment on index",
 	reflect.TypeOf(&commentOnTableNode{}):    "comment on table",
 	reflect.TypeOf(&controlJobsNode{}):       "control jobs",
+	reflect.TypeOf(&controlSchedulesNode{}):  "control schedules",
 	reflect.TypeOf(&createDatabaseNode{}):    "create database",
 	reflect.TypeOf(&createIndexNode{}):       "create index",
 	reflect.TypeOf(&createSequenceNode{}):    "create sequence",

@@ -123,6 +123,7 @@ delete_stmt ::=
 drop_stmt ::=
 	drop_ddl_stmt
 	| drop_role_stmt
+	| drop_schedule_stmt
 
 explain_stmt ::=
 	'EXPLAIN' preparable_stmt
@@ -145,8 +146,8 @@ insert_stmt ::=
 	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
 pause_stmt ::=
-	'PAUSE' 'JOB' a_expr
-	| 'PAUSE' 'JOBS' select_stmt
+	pause_jobs_stmt
+	| pause_schedules_stmt
 
 reset_stmt ::=
 	reset_session_stmt
@@ -157,8 +158,8 @@ restore_stmt ::=
 	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 
 resume_stmt ::=
-	'RESUME' 'JOB' a_expr
-	| 'RESUME' 'JOBS' select_stmt
+	resume_jobs_stmt
+	| resume_schedules_stmt
 
 export_stmt ::=
 	'EXPORT' 'INTO' import_format string_or_placeholder opt_with_options 'FROM' select_stmt
@@ -409,6 +410,10 @@ drop_role_stmt ::=
 	'DROP' role_or_group_or_user string_or_placeholder_list
 	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder_list
 
+drop_schedule_stmt ::=
+	'DROP' 'SCHEDULE' a_expr
+	| 'DROP' 'SCHEDULES' select_stmt
+
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
@@ -441,8 +446,14 @@ on_conflict ::=
 	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
 	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
 
-a_expr ::=
-	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'SQRT' a_expr | 'CBRT' a_expr | 'NOT' a_expr | 'NOT' a_expr | 'DEFAULT' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' collation_name | 'AT' 'TIME' 'ZONE' a_expr | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'JSON_SOME_EXISTS' a_expr | 'JSON_ALL_EXISTS' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'INET_CONTAINED_BY_OR_EQUALS' a_expr | 'AND_AND' a_expr | 'INET_CONTAINS_OR_EQUALS' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'LIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'LIKE' a_expr | 'NOT' 'LIKE' a_expr 'ESCAPE' a_expr | 'ILIKE' a_expr | 'ILIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr 'ESCAPE' a_expr | 'SIMILAR' 'TO' a_expr | 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'ISNULL' | 'IS' 'NOT' 'NULL' | 'NOTNULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
+pause_jobs_stmt ::=
+	'PAUSE' 'JOB' a_expr
+	| 'PAUSE' 'JOBS' select_stmt
+
+pause_schedules_stmt ::=
+	'PAUSE' 'SCHEDULE' a_expr
+	| 'PAUSE' 'SCHEDULES' select_stmt
+	| with_clause 'PAUSE' 'SCHEDULES'
 
 reset_session_stmt ::=
 	'RESET' session_var
@@ -453,6 +464,14 @@ reset_csetting_stmt ::=
 
 partitioned_backup_list ::=
 	( partitioned_backup ) ( ( ',' partitioned_backup ) )*
+
+resume_jobs_stmt ::=
+	'RESUME' 'JOB' a_expr
+	| 'RESUME' 'JOBS' select_stmt
+
+resume_schedules_stmt ::=
+	'RESUME' 'SCHEDULE' a_expr
+	| 'RESUME' 'SCHEDULES' select_stmt
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -833,6 +852,7 @@ unreserved_keyword ::=
 	| 'ROWS'
 	| 'RULE'
 	| 'SCHEDULE'
+	| 'SCHEDULES'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -1052,6 +1072,9 @@ as_of_clause ::=
 backup_options_list ::=
 	( backup_options ) ( ( ',' backup_options ) )*
 
+a_expr ::=
+	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'SQRT' a_expr | 'CBRT' a_expr | 'NOT' a_expr | 'NOT' a_expr | 'DEFAULT' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' collation_name | 'AT' 'TIME' 'ZONE' a_expr | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'JSON_SOME_EXISTS' a_expr | 'JSON_ALL_EXISTS' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'INET_CONTAINED_BY_OR_EQUALS' a_expr | 'AND_AND' a_expr | 'INET_CONTAINS_OR_EQUALS' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'LIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'LIKE' a_expr | 'NOT' 'LIKE' a_expr 'ESCAPE' a_expr | 'ILIKE' a_expr | 'ILIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr 'ESCAPE' a_expr | 'SIMILAR' 'TO' a_expr | 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'ISNULL' | 'IS' 'NOT' 'NULL' | 'NOTNULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
+
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 
@@ -1188,45 +1211,6 @@ opt_conf_expr ::=
 	'(' name_list ')'
 	| 
 
-c_expr ::=
-	d_expr
-	| d_expr array_subscripts
-	| case_expr
-	| 'EXISTS' select_with_parens
-
-cast_target ::=
-	typename
-
-typename ::=
-	simple_typename opt_array_bounds
-	| simple_typename 'ARRAY'
-
-collation_name ::=
-	unrestricted_name
-
-opt_asymmetric ::=
-	'ASYMMETRIC'
-	| 
-
-b_expr ::=
-	( c_expr | '+' b_expr | '-' b_expr | '~' b_expr ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | '+' b_expr | '-' b_expr | '*' b_expr | '/' b_expr | 'FLOORDIV' b_expr | '%' b_expr | '^' b_expr | '#' b_expr | '&' b_expr | '|' b_expr | '<' b_expr | '>' b_expr | '=' b_expr | 'CONCAT' b_expr | 'LSHIFT' b_expr | 'RSHIFT' b_expr | 'LESS_EQUALS' b_expr | 'GREATER_EQUALS' b_expr | 'NOT_EQUALS' b_expr | 'IS' 'DISTINCT' 'FROM' b_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' b_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' ) )*
-
-in_expr ::=
-	select_with_parens
-	| expr_tuple1_ambiguous
-
-subquery_op ::=
-	math_op
-	| 'LIKE'
-	| 'NOT' 'LIKE'
-	| 'ILIKE'
-	| 'NOT' 'ILIKE'
-
-sub_type ::=
-	'ANY'
-	| 'SOME'
-	| 'ALL'
-
 session_var ::=
 	'identifier'
 	| 'ALL'
@@ -1350,6 +1334,10 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
+typename ::=
+	simple_typename opt_array_bounds
+	| simple_typename 'ARRAY'
+
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
@@ -1453,6 +1441,41 @@ backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
+
+c_expr ::=
+	d_expr
+	| d_expr array_subscripts
+	| case_expr
+	| 'EXISTS' select_with_parens
+
+cast_target ::=
+	typename
+
+collation_name ::=
+	unrestricted_name
+
+opt_asymmetric ::=
+	'ASYMMETRIC'
+	| 
+
+b_expr ::=
+	( c_expr | '+' b_expr | '-' b_expr | '~' b_expr ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | '+' b_expr | '-' b_expr | '*' b_expr | '/' b_expr | 'FLOORDIV' b_expr | '%' b_expr | '^' b_expr | '#' b_expr | '&' b_expr | '|' b_expr | '<' b_expr | '>' b_expr | '=' b_expr | 'CONCAT' b_expr | 'LSHIFT' b_expr | 'RSHIFT' b_expr | 'LESS_EQUALS' b_expr | 'GREATER_EQUALS' b_expr | 'NOT_EQUALS' b_expr | 'IS' 'DISTINCT' 'FROM' b_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' b_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' ) )*
+
+in_expr ::=
+	select_with_parens
+	| expr_tuple1_ambiguous
+
+subquery_op ::=
+	math_op
+	| 'LIKE'
+	| 'NOT' 'LIKE'
+	| 'ILIKE'
+	| 'NOT' 'ILIKE'
+
+sub_type ::=
+	'ANY'
+	| 'SOME'
+	| 'ALL'
 
 changefeed_targets ::=
 	single_table_pattern_list
@@ -1616,72 +1639,6 @@ like_table_option_list ::=
 column_name ::=
 	name
 
-d_expr ::=
-	'ICONST'
-	| 'FCONST'
-	| 'SCONST'
-	| 'BCONST'
-	| 'BITCONST'
-	| typed_literal
-	| interval_value
-	| 'TRUE'
-	| 'FALSE'
-	| 'NULL'
-	| column_path_with_star
-	| '@' iconst64
-	| 'PLACEHOLDER'
-	| '(' a_expr ')' '.' '*'
-	| '(' a_expr ')' '.' unrestricted_name
-	| '(' a_expr ')' '.' '@' 'ICONST'
-	| '(' a_expr ')'
-	| func_expr
-	| select_with_parens
-	| labeled_row
-	| 'ARRAY' select_with_parens
-	| 'ARRAY' row
-	| 'ARRAY' array_expr
-
-array_subscripts ::=
-	( array_subscript ) ( ( array_subscript ) )*
-
-case_expr ::=
-	'CASE' case_arg when_clause_list case_default 'END'
-
-simple_typename ::=
-	general_type_name
-	| '@' iconst32
-	| complex_type_name
-	| const_typename
-	| bit_with_length
-	| character_with_length
-	| interval_type
-
-opt_array_bounds ::=
-	'[' ']'
-	| 
-
-expr_tuple1_ambiguous ::=
-	'(' ')'
-	| '(' tuple1_ambiguous_values ')'
-
-math_op ::=
-	'+'
-	| '-'
-	| '*'
-	| '/'
-	| 'FLOORDIV'
-	| '%'
-	| '&'
-	| '|'
-	| '^'
-	| '#'
-	| '<'
-	| '>'
-	| '='
-	| 'LESS_EQUALS'
-	| 'GREATER_EQUALS'
-	| 'NOT_EQUALS'
-
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
 
@@ -1834,6 +1791,19 @@ reserved_keyword ::=
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
 
+simple_typename ::=
+	general_type_name
+	| '@' iconst32
+	| complex_type_name
+	| const_typename
+	| bit_with_length
+	| character_with_length
+	| interval_type
+
+opt_array_bounds ::=
+	'[' ']'
+	| 
+
 transaction_user_priority ::=
 	'PRIORITY' user_priority
 
@@ -1861,6 +1831,59 @@ role_option ::=
 	| 'NOLOGIN'
 	| password_clause
 	| valid_until_clause
+
+d_expr ::=
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| 'BCONST'
+	| 'BITCONST'
+	| typed_literal
+	| interval_value
+	| 'TRUE'
+	| 'FALSE'
+	| 'NULL'
+	| column_path_with_star
+	| '@' iconst64
+	| 'PLACEHOLDER'
+	| '(' a_expr ')' '.' '*'
+	| '(' a_expr ')' '.' unrestricted_name
+	| '(' a_expr ')' '.' '@' 'ICONST'
+	| '(' a_expr ')'
+	| func_expr
+	| select_with_parens
+	| labeled_row
+	| 'ARRAY' select_with_parens
+	| 'ARRAY' row
+	| 'ARRAY' array_expr
+
+array_subscripts ::=
+	( array_subscript ) ( ( array_subscript ) )*
+
+case_expr ::=
+	'CASE' case_arg when_clause_list case_default 'END'
+
+expr_tuple1_ambiguous ::=
+	'(' ')'
+	| '(' tuple1_ambiguous_values ')'
+
+math_op ::=
+	'+'
+	| '-'
+	| '*'
+	| '/'
+	| 'FLOORDIV'
+	| '%'
+	| '&'
+	| '|'
+	| '^'
+	| '#'
+	| '<'
+	| '>'
+	| '='
+	| 'LESS_EQUALS'
+	| 'GREATER_EQUALS'
+	| 'NOT_EQUALS'
 
 single_table_pattern_list ::=
 	( table_name ) ( ( ',' table_name ) )*
@@ -1936,85 +1959,6 @@ like_table_option ::=
 	| 'GENERATED'
 	| 'INDEXES'
 	| 'ALL'
-
-typed_literal ::=
-	func_name_no_crdb_extra 'SCONST'
-	| const_typename 'SCONST'
-
-interval_value ::=
-	'INTERVAL' 'SCONST' opt_interval_qualifier
-	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
-
-column_path_with_star ::=
-	column_path
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
-	| db_object_name_component '.' unrestricted_name '.' '*'
-	| db_object_name_component '.' '*'
-
-func_expr ::=
-	func_application within_group_clause filter_clause over_clause
-	| func_expr_common_subexpr
-
-labeled_row ::=
-	row
-	| '(' row 'AS' name_list ')'
-
-row ::=
-	'ROW' '(' opt_expr_list ')'
-	| expr_tuple_unambiguous
-
-array_expr ::=
-	'[' opt_expr_list ']'
-	| '[' array_expr_list ']'
-
-array_subscript ::=
-	'[' a_expr ']'
-	| '[' opt_slice_bound ':' opt_slice_bound ']'
-
-case_arg ::=
-	a_expr
-	| 
-
-when_clause_list ::=
-	( when_clause ) ( ( when_clause ) )*
-
-case_default ::=
-	'ELSE' a_expr
-	| 
-
-general_type_name ::=
-	type_function_name_no_crdb_extra
-
-iconst32 ::=
-	'ICONST'
-
-complex_type_name ::=
-	general_type_name '.' unrestricted_name
-	| general_type_name '.' unrestricted_name '.' unrestricted_name
-
-const_typename ::=
-	numeric
-	| bit_without_length
-	| character_without_length
-	| const_datetime
-	| const_geo
-
-bit_with_length ::=
-	'BIT' opt_varying '(' iconst32 ')'
-	| 'VARBIT' '(' iconst32 ')'
-
-character_with_length ::=
-	character_base '(' iconst32 ')'
-
-interval_type ::=
-	'INTERVAL'
-	| 'INTERVAL' interval_qualifier
-	| 'INTERVAL' '(' iconst32 ')'
-
-tuple1_ambiguous_values ::=
-	a_expr
-	| a_expr ','
-	| a_expr ',' expr_list
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -2112,6 +2056,35 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'RIGHT'
 	| 'SIMILAR'
 
+general_type_name ::=
+	type_function_name_no_crdb_extra
+
+iconst32 ::=
+	'ICONST'
+
+complex_type_name ::=
+	general_type_name '.' unrestricted_name
+	| general_type_name '.' unrestricted_name '.' unrestricted_name
+
+const_typename ::=
+	numeric
+	| bit_without_length
+	| character_without_length
+	| const_datetime
+	| const_geo
+
+bit_with_length ::=
+	'BIT' opt_varying '(' iconst32 ')'
+	| 'VARBIT' '(' iconst32 ')'
+
+character_with_length ::=
+	character_base '(' iconst32 ')'
+
+interval_type ::=
+	'INTERVAL'
+	| 'INTERVAL' interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')'
+
 user_priority ::=
 	'LOW'
 	| 'NORMAL'
@@ -2167,6 +2140,56 @@ valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
 
+typed_literal ::=
+	func_name_no_crdb_extra 'SCONST'
+	| const_typename 'SCONST'
+
+interval_value ::=
+	'INTERVAL' 'SCONST' opt_interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
+
+column_path_with_star ::=
+	column_path
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' '*'
+
+func_expr ::=
+	func_application within_group_clause filter_clause over_clause
+	| func_expr_common_subexpr
+
+labeled_row ::=
+	row
+	| '(' row 'AS' name_list ')'
+
+row ::=
+	'ROW' '(' opt_expr_list ')'
+	| expr_tuple_unambiguous
+
+array_expr ::=
+	'[' opt_expr_list ']'
+	| '[' array_expr_list ']'
+
+array_subscript ::=
+	'[' a_expr ']'
+	| '[' opt_slice_bound ':' opt_slice_bound ']'
+
+case_arg ::=
+	a_expr
+	| 
+
+when_clause_list ::=
+	( when_clause ) ( ( when_clause ) )*
+
+case_default ::=
+	'ELSE' a_expr
+	| 
+
+tuple1_ambiguous_values ::=
+	a_expr
+	| a_expr ','
+	| a_expr ',' expr_list
+
 opt_asc_desc ::=
 	'ASC'
 	| 'DESC'
@@ -2217,6 +2240,146 @@ reference_actions ::=
 	| reference_on_update reference_on_delete
 	| reference_on_delete reference_on_update
 	| 
+
+window_definition_list ::=
+	( window_definition ) ( ( ',' window_definition ) )*
+
+for_locking_strength ::=
+	'FOR' 'UPDATE'
+	| 'FOR' 'NO' 'KEY' 'UPDATE'
+	| 'FOR' 'SHARE'
+	| 'FOR' 'KEY' 'SHARE'
+
+opt_locked_rels ::=
+	'OF' table_name_list
+
+opt_nowait_or_skip ::=
+	'SKIP' 'LOCKED'
+	| 'NOWAIT'
+
+opt_join_hint ::=
+	'HASH'
+	| 'MERGE'
+	| 'LOOKUP'
+	| 
+
+join_type ::=
+	'FULL' join_outer
+	| 'LEFT' join_outer
+	| 'RIGHT' join_outer
+	| 'INNER'
+
+join_qual ::=
+	'USING' '(' name_list ')'
+	| 'ON' a_expr
+
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
+
+rowsfrom_list ::=
+	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
+
+type_function_name_no_crdb_extra ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_no_crdb_extra_keyword
+
+numeric ::=
+	'INT'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+
+bit_without_length ::=
+	'BIT'
+	| 'BIT' 'VARYING'
+	| 'VARBIT'
+
+character_without_length ::=
+	character_base
+
+const_datetime ::=
+	'DATE'
+	| 'TIME' opt_timezone
+	| 'TIME' '(' iconst32 ')' opt_timezone
+	| 'TIMETZ'
+	| 'TIMETZ' '(' iconst32 ')'
+	| 'TIMESTAMP' opt_timezone
+	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMPTZ' '(' iconst32 ')'
+
+const_geo ::=
+	'GEOGRAPHY'
+	| 'GEOMETRY'
+	| 'GEOMETRY' '(' geo_shape_type ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ')'
+	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ',' signed_iconst ')'
+
+opt_varying ::=
+	'VARYING'
+	| 
+
+character_base ::=
+	char_aliases
+	| char_aliases 'VARYING'
+	| 'VARCHAR'
+	| 'STRING'
+
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
+
+opt_column ::=
+	'COLUMN'
+	| 
+
+alter_column_default ::=
+	'SET' 'DEFAULT' a_expr
+	| 'DROP' 'DEFAULT'
+
+opt_set_data ::=
+	'SET' 'DATA'
+	| 
+
+opt_collate ::=
+	'COLLATE' collation_name
+	| 
+
+opt_alter_column_using ::=
+	'USING' a_expr
+	| 
+
+opt_validate_behavior ::=
+	'NOT' 'VALID'
+	| 
+
+audit_mode ::=
+	'READ' 'WRITE'
+	| 'OFF'
+
+signed_iconst64 ::=
+	signed_iconst
 
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
@@ -2289,146 +2452,6 @@ opt_slice_bound ::=
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
-type_function_name_no_crdb_extra ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_no_crdb_extra_keyword
-
-numeric ::=
-	'INT'
-	| 'INTEGER'
-	| 'SMALLINT'
-	| 'BIGINT'
-	| 'REAL'
-	| 'FLOAT' opt_float
-	| 'DOUBLE' 'PRECISION'
-	| 'DECIMAL' opt_numeric_modifiers
-	| 'DEC' opt_numeric_modifiers
-	| 'NUMERIC' opt_numeric_modifiers
-	| 'BOOLEAN'
-
-bit_without_length ::=
-	'BIT'
-	| 'BIT' 'VARYING'
-	| 'VARBIT'
-
-character_without_length ::=
-	character_base
-
-const_datetime ::=
-	'DATE'
-	| 'TIME' opt_timezone
-	| 'TIME' '(' iconst32 ')' opt_timezone
-	| 'TIMETZ'
-	| 'TIMETZ' '(' iconst32 ')'
-	| 'TIMESTAMP' opt_timezone
-	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
-	| 'TIMESTAMPTZ'
-	| 'TIMESTAMPTZ' '(' iconst32 ')'
-
-const_geo ::=
-	'GEOGRAPHY'
-	| 'GEOMETRY'
-	| 'GEOMETRY' '(' geo_shape_type ')'
-	| 'GEOGRAPHY' '(' geo_shape_type ')'
-	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'
-	| 'GEOGRAPHY' '(' geo_shape_type ',' signed_iconst ')'
-
-opt_varying ::=
-	'VARYING'
-	| 
-
-character_base ::=
-	char_aliases
-	| char_aliases 'VARYING'
-	| 'VARCHAR'
-	| 'STRING'
-
-interval_qualifier ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
-
-window_definition_list ::=
-	( window_definition ) ( ( ',' window_definition ) )*
-
-for_locking_strength ::=
-	'FOR' 'UPDATE'
-	| 'FOR' 'NO' 'KEY' 'UPDATE'
-	| 'FOR' 'SHARE'
-	| 'FOR' 'KEY' 'SHARE'
-
-opt_locked_rels ::=
-	'OF' table_name_list
-
-opt_nowait_or_skip ::=
-	'SKIP' 'LOCKED'
-	| 'NOWAIT'
-
-opt_join_hint ::=
-	'HASH'
-	| 'MERGE'
-	| 'LOOKUP'
-	| 
-
-join_type ::=
-	'FULL' join_outer
-	| 'LEFT' join_outer
-	| 'RIGHT' join_outer
-	| 'INNER'
-
-join_qual ::=
-	'USING' '(' name_list ')'
-	| 'ON' a_expr
-
-func_expr_windowless ::=
-	func_application
-	| func_expr_common_subexpr
-
-rowsfrom_list ::=
-	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
-
-opt_column ::=
-	'COLUMN'
-	| 
-
-alter_column_default ::=
-	'SET' 'DEFAULT' a_expr
-	| 'DROP' 'DEFAULT'
-
-opt_set_data ::=
-	'SET' 'DATA'
-	| 
-
-opt_collate ::=
-	'COLLATE' collation_name
-	| 
-
-opt_alter_column_using ::=
-	'USING' a_expr
-	| 
-
-opt_validate_behavior ::=
-	'NOT' 'VALID'
-	| 
-
-audit_mode ::=
-	'READ' 'WRITE'
-	| 'OFF'
-
-signed_iconst64 ::=
-	signed_iconst
-
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
 
@@ -2461,6 +2484,52 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
+
+window_definition ::=
+	window_name 'AS' window_specification
+
+join_outer ::=
+	'OUTER'
+	| 
+
+rowsfrom_item ::=
+	func_expr_windowless
+
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst32 ')'
+	| '(' iconst32 ',' iconst32 ')'
+	| 
+
+opt_timezone ::=
+	'WITH' 'TIME' 'ZONE'
+	| 'WITHOUT' 'TIME' 'ZONE'
+	| 
+
+geo_shape_type ::=
+	'POINT'
+	| 'LINESTRING'
+	| 'POLYGON'
+	| 'GEOMETRYCOLLECTION'
+	| 'MULTIPOLYGON'
+	| 'MULTILINESTRING'
+	| 'MULTIPOINT'
+	| 'GEOMETRY'
+
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
+
+char_aliases ::=
+	'CHAR'
+	| 'CHARACTER'
+
+interval_second ::=
+	'SECOND'
+	| 'SECOND' '(' iconst32 ')'
 
 func_name ::=
 	type_function_name
@@ -2503,52 +2572,6 @@ special_function ::=
 tuple1_unambiguous_values ::=
 	a_expr ','
 	| a_expr ',' expr_list
-
-opt_float ::=
-	'(' 'ICONST' ')'
-	| 
-
-opt_numeric_modifiers ::=
-	'(' iconst32 ')'
-	| '(' iconst32 ',' iconst32 ')'
-	| 
-
-opt_timezone ::=
-	'WITH' 'TIME' 'ZONE'
-	| 'WITHOUT' 'TIME' 'ZONE'
-	| 
-
-geo_shape_type ::=
-	'POINT'
-	| 'LINESTRING'
-	| 'POLYGON'
-	| 'GEOMETRYCOLLECTION'
-	| 'MULTIPOLYGON'
-	| 'MULTILINESTRING'
-	| 'MULTIPOINT'
-	| 'GEOMETRY'
-
-signed_iconst ::=
-	'ICONST'
-	| only_signed_iconst
-
-char_aliases ::=
-	'CHAR'
-	| 'CHARACTER'
-
-interval_second ::=
-	'SECOND'
-	| 'SECOND' '(' iconst32 ')'
-
-window_definition ::=
-	window_name 'AS' window_specification
-
-join_outer ::=
-	'OUTER'
-	| 
-
-rowsfrom_item ::=
-	func_expr_windowless
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'
