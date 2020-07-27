@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -23,6 +24,7 @@ import (
 	"github.com/golang/geo/r1"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
+	"github.com/google/hilbert"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 )
@@ -276,6 +278,52 @@ func (g *Geometry) CartesianBoundingBox() *CartesianBoundingBox {
 	return &CartesianBoundingBox{BoundingBox: *g.spatialObject.BoundingBox}
 }
 
+// SpaceCurveIndex returns an uint64 index to use representing an index into a Space Curve.
+func (g *Geometry) SpaceCurveIndex() uint64 {
+	bbox := g.CartesianBoundingBox()
+	if bbox == nil {
+		return 0
+	}
+	centerX := (bbox.BoundingBox.LoX + bbox.BoundingBox.HiX) / 2
+	centerY := (bbox.BoundingBox.LoY + bbox.BoundingBox.HiY) / 2
+	// By default, bound by MaxFloat32.
+	bounds := geoprojbase.Bounds{
+		MinX: -math.MaxInt32,
+		MaxX: math.MaxInt32,
+		MinY: -math.MaxInt32,
+		MaxY: math.MaxInt32,
+	}
+	if proj, ok := geoprojbase.Projection(g.SRID()); ok {
+		bounds = proj.Bounds
+	}
+	// If we're out of bounds, give up and return a large number.
+	if centerX > bounds.MaxX || centerY > bounds.MaxY || centerX < bounds.MinX || centerY < bounds.MinY {
+		return math.MaxUint64
+	}
+
+	// Find the longest dimension, add one to be inclusive.
+	// TODO(otan): investigate storing this calculation on the projection itself for perf.
+	biggestBoxLength := math.Max(bounds.MaxX-bounds.MinX, bounds.MaxY-bounds.MinY) + 1
+	boxSize := 1 << 40
+	// If our max length is smaller than the maximum box size, find the biggest power of two
+	// after the biggestBoxLength.
+	if biggestBoxLength < float64(boxSize) {
+		boxSize = 1 << int(math.Ceil(math.Log2(biggestBoxLength)))
+	}
+	h, err := hilbert.NewHilbert(boxSize)
+	if err != nil {
+		panic(err)
+	}
+
+	xPos := int(((centerX - bounds.MinX) / (bounds.MaxX - bounds.MinX)) * float64(boxSize))
+	yPos := int(((centerY - bounds.MinY) / (bounds.MaxY - bounds.MinY)) * float64(boxSize))
+	r, err := h.MapInverse(xPos, yPos)
+	if err != nil {
+		panic(err)
+	}
+	return uint64(r)
+}
+
 //
 // Geography
 //
@@ -487,6 +535,15 @@ func (g *Geography) BoundingRect() s2.Rect {
 // BoundingCap returns the bounding s2.Cap of the given Geography.
 func (g *Geography) BoundingCap() s2.Cap {
 	return g.BoundingRect().CapBound()
+}
+
+// SpaceCurveIndex returns an uint64 index to use representing an index into a Space Curve.
+func (g *Geography) SpaceCurveIndex() uint64 {
+	rect := g.BoundingRect()
+	if rect.IsEmpty() {
+		return 0
+	}
+	return uint64(s2.CellIDFromLatLng(rect.Center()))
 }
 
 // IsLinearRingCCW returns whether a given linear ring is counter clock wise.

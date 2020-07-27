@@ -2766,6 +2766,14 @@ func (d *DGeography) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
+	lhs := d.SpaceCurveIndex()
+	rhs := other.(*DGeography).SpaceCurveIndex()
+	if lhs > rhs {
+		return 1
+	}
+	if lhs < rhs {
+		return -1
+	}
 	return geo.CompareSpatialObject(d.Geography.SpatialObject(), other.(*DGeography).SpatialObject())
 }
 
@@ -2873,6 +2881,14 @@ func (d *DGeometry) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
+	}
+	lhs := d.SpaceCurveIndex()
+	rhs := other.(*DGeometry).SpaceCurveIndex()
+	if lhs > rhs {
+		return 1
+	}
+	if lhs < rhs {
+		return -1
 	}
 	return geo.CompareSpatialObject(d.Geometry.SpatialObject(), other.(*DGeometry).SpatialObject())
 }
