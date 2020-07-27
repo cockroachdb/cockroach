@@ -154,7 +154,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
+			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
@@ -174,7 +174,11 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	// Disable the replica gc queue to prevent direct removal of replica.
 	store.SetReplicaGCQueueActive(false)
 
+	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
+	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
+
 	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 
 	// Wait long enough for the direct replica GC to have had a chance and been
