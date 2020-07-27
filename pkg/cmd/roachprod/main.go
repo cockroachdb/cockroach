@@ -522,8 +522,14 @@ directory is removed.
 			sort.Strings(names)
 
 			for _, clusterName := range names {
-				if err := destroyCluster(cloud, clusterName); err != nil {
-					return err
+				if clusterName == config.Local {
+					if err := destroyLocalCluster(); err != nil {
+						return err
+					}
+				} else {
+					if err := destroyCluster(cloud, clusterName); err != nil {
+						return err
+					}
 				}
 			}
 		default:
@@ -782,6 +788,13 @@ func userClusterNameRegexp() (*regexp.Regexp, error) {
 			pattern += fmt.Sprintf("(^%s-)", regexp.QuoteMeta(account))
 		}
 	}
+
+	// Also include local clusters, if any.
+	if len(pattern) > 0 {
+		pattern += "|"
+	}
+	pattern += "^local$"
+
 	return regexp.Compile(pattern)
 }
 
