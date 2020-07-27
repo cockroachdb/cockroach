@@ -165,12 +165,12 @@ query_id  txn_id  node_id  session_id user_name  start  query  client_address  a
 query TITTTT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
 
 query TITTTT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0

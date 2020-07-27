@@ -2288,9 +2288,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
-			ID:             id,
-			Start:          ex.state.mu.txnStart,
-			TxnDescription: txn.String(),
+			ID:                    id,
+			Start:                 ex.state.mu.txnStart,
+			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
+			NumRetries:            int32(txn.Epoch()),
+			NumAutoRetries:        int32(ex.extraTxnState.autoRetryCounter),
+			TxnDescription:        txn.String(),
 		}
 	}
 
