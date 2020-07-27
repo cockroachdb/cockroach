@@ -581,7 +581,12 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	}
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, cancelFn context.CancelFunc) {
-		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, cancelFn)
+		// cancelFn is the cancellation function of the context of the whole
+		// flow, and we want to call it only when the last outbox exits, so we
+		// derive a separate child context for each outbox.
+		var outboxCancelFn context.CancelFunc
+		ctx, outboxCancelFn = context.WithCancel(ctx)
+		outbox.Run(ctx, s.nodeDialer, stream.TargetNodeID, s.flowID, stream.StreamID, outboxCancelFn)
 		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
@@ -642,8 +647,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts, metadataSourcesQueue, toClose)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
-		logtags.AddTag(ctx, "hashRouterID", mmName)
-		router.Run(ctx)
+		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
 	}
 	s.accumulateAsyncComponent(runRouter)
 
