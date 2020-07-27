@@ -236,7 +236,7 @@ func (b *Builder) buildStmt(
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate,
-			*tree.ControlJobs, *tree.CancelQueries, *tree.CancelSessions:
+			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
 			))
@@ -288,6 +288,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)
+
+	case *tree.ControlSchedules:
+		return b.buildControlSchedules(stmt, inScope)
 
 	case *tree.CancelQueries:
 		return b.buildCancelQueries(stmt, inScope)

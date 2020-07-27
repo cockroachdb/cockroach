@@ -883,9 +883,15 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "pause_job",
-		stmt:    "pause_stmt",
+		stmt:    "pause_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
 		unlink:  []string{"job_id"},
+	},
+	{
+		name:    "pause_schedule",
+		stmt:    "pause_schedules_stmt",
+		replace: map[string]string{"a_expr": "schedule_id"},
+		unlink:  []string{"schedule_id"},
 	},
 	{
 		name: "primary_key_column_level",
@@ -956,9 +962,15 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "resume_job",
-		stmt:    "resume_stmt",
+		stmt:    "resume_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
 		unlink:  []string{"job_id"},
+	},
+	{
+		name:    "resume_schedule",
+		stmt:    "resume_schedules_stmt",
+		replace: map[string]string{"a_expr": "schedule_id"},
+		unlink:  []string{"schedule_id"},
 	},
 	{
 		name:   "revoke_privileges",

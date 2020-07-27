@@ -230,6 +230,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"JoinMultiplicity":  {fullName: "props.JoinMultiplicity"},
 		"OpaqueMetadata":    {fullName: "opt.OpaqueMetadata", isInterface: true},
 		"JobCommand":        {fullName: "tree.JobCommand", passByVal: true},
+		"ScheduleCommand":   {fullName: "tree.ScheduleCommand", passByVal: true},
 		"IndexOrdinal":      {fullName: "cat.IndexOrdinal", passByVal: true},
 		"ViewDeps":          {fullName: "opt.ViewDeps", passByVal: true},
 		"LockingItem":       {fullName: "tree.LockingItem", isPointer: true},
