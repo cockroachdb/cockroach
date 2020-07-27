@@ -55,9 +55,7 @@ func SanitizeVarFreeExpr(
 
 	switch maxVolatility {
 	case tree.VolatilityImmutable:
-		// TODO(radu): we only check the volatility of functions; we need to check
-		// the volatility of operators and casts as well!
-		flags |= tree.RejectStableFunctions
+		flags |= tree.RejectStableOperators
 		fallthrough
 
 	case tree.VolatilityStable:

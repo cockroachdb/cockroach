@@ -24,12 +24,18 @@ CREATE TABLE error (a INT, INDEX (a) WHERE 1)
 statement error pgcode 42703 column "b" does not exist
 CREATE TABLE error (a INT, INDEX (a) WHERE b = 3)
 
-# Don't allow mutable functions.
+# Don't allow non-immutable operators.
 # TODO(mgartner): The error code for this should be 42P17, not 0A000.
-statement error pgcode 0A000 context-dependent functions are not allowed in index predicate
+statement error pgcode 0A000 now\(\): context-dependent operators are not allowed in index predicate
 CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t < now())
 
-statement error pgcode 0A000 volatile functions are not allowed in index predicate
+statement error pgcode 0A000 timestamptz::string: context-dependent operators are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t::string = 'foo')
+
+statement error pgcode 0A000 =: context-dependent operators are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, i TIMESTAMP, INDEX (t) WHERE i = t)
+
+statement error pgcode 0A000 random\(\): volatile functions are not allowed in index predicate
 CREATE TABLE error (t FLOAT, INDEX (t) WHERE t < random())
 
 # Don't allow variable subexpressions.
