@@ -476,6 +476,21 @@ message TxnInfo {
   // txn_description is a text description of the underlying kv.Txn, intended
   // for troubleshooting purposes.
   string txn_description = 3;
+
+  // num_statements_executed is the number of statements that were executed so
+  // far on this transaction.
+  int32 num_statements_executed = 4;
+
+  // num_retries is the number of times that this transaction was retried.
+  int32 num_retries = 5;
+
+  // num_retries is the number of times that this transaction was automatically
+  // retried by the SQL executor.
+  int32 num_auto_retries = 6;
+
+  // The deadline by which the transaction must be committed.
+  google.protobuf.Timestamp deadline = 7
+  [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
 }
 
 // ActiveQuery represents a query in flight on some Session.
