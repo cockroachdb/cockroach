@@ -27,7 +27,7 @@ func TestAllTypesCastableToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
-		if ok, _ := isCastDeepValid(typ, types.String); !ok {
+		if ok, _, _ := isCastDeepValid(typ, types.String); !ok {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
 		}
 	}
@@ -37,7 +37,7 @@ func TestAllTypesCastableFromString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
-		if ok, _ := isCastDeepValid(types.String, typ); !ok {
+		if ok, _, _ := isCastDeepValid(types.String, typ); !ok {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)
 		}
 	}
