@@ -16,7 +16,7 @@ import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
 
 // Category: SQL User and Role operations
-// Channel: DEV
+// Channel: USER_ADMIN
 //
 // Events in this category pertain to SQL statements that modify the
 // properties of users and roles.

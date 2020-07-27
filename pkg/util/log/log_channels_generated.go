@@ -1599,6 +1599,1294 @@ func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, a
 	shoutfDepth(ctx, 1, sev, channel.SESSIONS, format, args...)
 }
 
+// loggerSqlSchema is the logger type for the SQL_SCHEMA channel.
+type loggerSqlSchema struct{}
+
+// SqlSchema is a logger that logs to the SQL_SCHEMA channel.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+var SqlSchema loggerSqlSchema
+
+// SqlSchema and loggerSqlSchema implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlSchema
+
+// Infof logs to the SQL_SCHEMA channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlSchema) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, format, args...)
+}
+
+// VInfof logs to the SQL_SCHEMA channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlSchema) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, format, args...)
+	}
+}
+
+// Info logs to the SQL_SCHEMA channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlSchema) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, msg)
+}
+
+// InfofDepth logs to the SQL_SCHEMA channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerSqlSchema) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_SCHEMA, format, args...)
+}
+
+// Warningf logs to the SQL_SCHEMA channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlSchema) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
+}
+
+// VWarningf logs to the SQL_SCHEMA channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlSchema) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
+	}
+}
+
+// Warning logs to the SQL_SCHEMA channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlSchema) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, msg)
+}
+
+// WarningfDepth logs to the SQL_SCHEMA channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerSqlSchema) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
+}
+
+// Errorf logs to the SQL_SCHEMA channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlSchema) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
+}
+
+// VErrorf logs to the SQL_SCHEMA channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlSchema) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
+	}
+}
+
+// Error logs to the SQL_SCHEMA channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlSchema) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, msg)
+}
+
+// ErrorfDepth logs to the SQL_SCHEMA channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlSchema) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
+}
+
+// Fatalf logs to the SQL_SCHEMA channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_SCHEMA, format, args...)
+}
+
+// VFatalf logs to the SQL_SCHEMA channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_SCHEMA, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_SCHEMA channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_SCHEMA, msg)
+}
+
+// FatalfDepth logs to the SQL_SCHEMA channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlSchema) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_SCHEMA, format, args...)
+}
+
+// Shout logs to channel SQL_SCHEMA, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+func (loggerSqlSchema) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, msg)
+}
+
+// Shoutf logs to channel SQL_SCHEMA, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The SQL_SCHEMA channel is the channel used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported on the separate channel PRIVILEGES) and
+// zone config changes (which go to OPS).
+//
+// This includes:
+//
+// - database/schema/table/sequence/view/type creation
+// - adding/removing/changing table columns
+// - changing sequence parameters
+//
+// etc., more generally changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, format, args...)
+}
+
+// loggerUserAdmin is the logger type for the USER_ADMIN channel.
+type loggerUserAdmin struct{}
+
+// UserAdmin is a logger that logs to the USER_ADMIN channel.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+var UserAdmin loggerUserAdmin
+
+// UserAdmin and loggerUserAdmin implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = UserAdmin
+
+// Infof logs to the USER_ADMIN channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerUserAdmin) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, format, args...)
+}
+
+// VInfof logs to the USER_ADMIN channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerUserAdmin) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, format, args...)
+	}
+}
+
+// Info logs to the USER_ADMIN channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerUserAdmin) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, msg)
+}
+
+// InfofDepth logs to the USER_ADMIN channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerUserAdmin) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.USER_ADMIN, format, args...)
+}
+
+// Warningf logs to the USER_ADMIN channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerUserAdmin) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, format, args...)
+}
+
+// VWarningf logs to the USER_ADMIN channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerUserAdmin) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, format, args...)
+	}
+}
+
+// Warning logs to the USER_ADMIN channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerUserAdmin) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, msg)
+}
+
+// WarningfDepth logs to the USER_ADMIN channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerUserAdmin) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.USER_ADMIN, format, args...)
+}
+
+// Errorf logs to the USER_ADMIN channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerUserAdmin) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, format, args...)
+}
+
+// VErrorf logs to the USER_ADMIN channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerUserAdmin) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, format, args...)
+	}
+}
+
+// Error logs to the USER_ADMIN channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerUserAdmin) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, msg)
+}
+
+// ErrorfDepth logs to the USER_ADMIN channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerUserAdmin) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.USER_ADMIN, format, args...)
+}
+
+// Fatalf logs to the USER_ADMIN channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.USER_ADMIN, format, args...)
+}
+
+// VFatalf logs to the USER_ADMIN channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.USER_ADMIN, format, args...)
+	}
+}
+
+// Fatal logs to the USER_ADMIN channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.USER_ADMIN, msg)
+}
+
+// FatalfDepth logs to the USER_ADMIN channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerUserAdmin) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.USER_ADMIN, format, args...)
+}
+
+// Shout logs to channel USER_ADMIN, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerUserAdmin) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.USER_ADMIN, msg)
+}
+
+// Shoutf logs to channel USER_ADMIN, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The USER_ADMIN channel is the channel used to report changes
+// in users and roles, including:
+//
+// - users added/dropped.
+// - changes to authentication credentials, incl passwords, validity etc.
+// - role grants/revocations.
+// - role option grants/revocations.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerUserAdmin) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.USER_ADMIN, format, args...)
+}
+
+// loggerPrivileges is the logger type for the PRIVILEGES channel.
+type loggerPrivileges struct{}
+
+// Privileges is a logger that logs to the PRIVILEGES channel.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+var Privileges loggerPrivileges
+
+// Privileges and loggerPrivileges implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Privileges
+
+// Infof logs to the PRIVILEGES channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerPrivileges) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, format, args...)
+}
+
+// VInfof logs to the PRIVILEGES channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerPrivileges) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, format, args...)
+	}
+}
+
+// Info logs to the PRIVILEGES channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerPrivileges) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, msg)
+}
+
+// InfofDepth logs to the PRIVILEGES channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The INFO severity is used for informational messages, when no action
+// is required as a result.
+func (loggerPrivileges) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.PRIVILEGES, format, args...)
+}
+
+// Warningf logs to the PRIVILEGES channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerPrivileges) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, format, args...)
+}
+
+// VWarningf logs to the PRIVILEGES channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerPrivileges) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, format, args...)
+	}
+}
+
+// Warning logs to the PRIVILEGES channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerPrivileges) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, msg)
+}
+
+// WarningfDepth logs to the PRIVILEGES channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The WARNING severity is used for situations which may require special handling,
+// while normal operation is expected to resume automatically.
+func (loggerPrivileges) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.PRIVILEGES, format, args...)
+}
+
+// Errorf logs to the PRIVILEGES channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerPrivileges) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, format, args...)
+}
+
+// VErrorf logs to the PRIVILEGES channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerPrivileges) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, format, args...)
+	}
+}
+
+// Error logs to the PRIVILEGES channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerPrivileges) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, msg)
+}
+
+// ErrorfDepth logs to the PRIVILEGES channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The ERROR severity is used for situations that require special handling,
+// when normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerPrivileges) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.PRIVILEGES, format, args...)
+}
+
+// Fatalf logs to the PRIVILEGES channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.PRIVILEGES, format, args...)
+}
+
+// VFatalf logs to the PRIVILEGES channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.PRIVILEGES, format, args...)
+	}
+}
+
+// Fatal logs to the PRIVILEGES channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.PRIVILEGES, msg)
+}
+
+// FatalfDepth logs to the PRIVILEGES channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+//
+// The FATAL severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerPrivileges) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.PRIVILEGES, format, args...)
+}
+
+// Shout logs to channel PRIVILEGES, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerPrivileges) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.PRIVILEGES, msg)
+}
+
+// Shoutf logs to channel PRIVILEGES, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The PRIVILEGES channel is the channel used to report data
+// authorization changes, including:
+//
+// - privilege grants/revocations on database, objects etc.
+// - object ownership changes.
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerPrivileges) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.PRIVILEGES, format, args...)
+}
+
 // loggerSensitiveAccess is the logger type for the SENSITIVE_ACCESS channel.
 type loggerSensitiveAccess struct{}
 
