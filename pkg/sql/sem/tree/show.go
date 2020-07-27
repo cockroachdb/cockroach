@@ -310,6 +310,25 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowTransactions represents a SHOW TRANSACTIONS statement
+type ShowTransactions struct {
+	All     bool
+	Cluster bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTransactions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW ")
+	if node.All {
+		ctx.WriteString("ALL ")
+	}
+	if node.Cluster {
+		ctx.WriteString("CLUSTER TRANSACTIONS")
+	} else {
+		ctx.WriteString("LOCAL TRANSACTIONS")
+	}
+}
+
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
 	Table *UnresolvedObjectName

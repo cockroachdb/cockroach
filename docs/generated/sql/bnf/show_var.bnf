@@ -21,5 +21,6 @@ show_stmt ::=
 	| show_stats_stmt
 	| show_tables_stmt
 	| show_trace_stmt
+	| show_transactions_stmt
 	| show_users_stmt
 	| show_zone_stmt

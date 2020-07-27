@@ -199,6 +199,7 @@ show_stmt ::=
 	| show_stats_stmt
 	| show_tables_stmt
 	| show_trace_stmt
+	| show_transactions_stmt
 	| show_users_stmt
 	| show_zone_stmt
 
@@ -581,6 +582,10 @@ show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
 	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
 
+show_transactions_stmt ::=
+	'SHOW' opt_cluster 'TRANSACTIONS'
+	| 'SHOW' 'ALL' opt_cluster 'TRANSACTIONS'
+
 show_users_stmt ::=
 	'SHOW' 'USERS'
 
@@ -878,6 +883,7 @@ unreserved_keyword ::=
 	| 'TIES'
 	| 'TRACE'
 	| 'TRANSACTION'
+	| 'TRANSACTIONS'
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
