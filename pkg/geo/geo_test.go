@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -557,6 +558,105 @@ func TestGeographyAsS2(t *testing.T) {
 			shapes, err := g.AsS2(EmptyBehaviorOmit)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedOmit, shapes)
+		})
+	}
+}
+
+func TestGeographyHash(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+		srid        geopb.SRID
+	}{
+		{
+			[]string{
+				"POINT EMPTY",
+				"POLYGON EMPTY",
+				"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+				"POINT(-80 80)",
+				"LINESTRING(0 0, -90 -80)",
+			},
+			4326,
+		},
+		{
+			[]string{
+				"POINT EMPTY",
+				"POLYGON EMPTY",
+				"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+				"POINT(-80 80)",
+				"LINESTRING(0 0, -90 -80)",
+			},
+			4004,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			previous := uint64(0)
+			for _, wkt := range tc.orderedWKTs {
+				t.Run(wkt, func(t *testing.T) {
+					g, err := ParseGeography(wkt)
+					require.NoError(t, err)
+					g, err = g.CloneWithSRID(tc.srid)
+					require.NoError(t, err)
+
+					h := g.SpaceCurveIndex()
+					assert.GreaterOrEqual(t, h, previous)
+					previous = h
+				})
+			}
+		})
+	}
+}
+
+func TestGeometryHash(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+		srid        geopb.SRID
+	}{
+		{
+			[]string{
+				"POINT EMPTY",
+				"POLYGON EMPTY",
+				"LINESTRING(0 0, -90 -80)",
+				"POINT(-80 80)",
+				"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			},
+			4326,
+		},
+		{
+			[]string{
+				"POINT EMPTY",
+				"POLYGON EMPTY",
+				"LINESTRING(0 0, -90 -80)",
+				"POINT(-80 80)",
+				"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			},
+			3857,
+		},
+		{
+			[]string{
+				"POINT EMPTY",
+				"POLYGON EMPTY",
+				"LINESTRING(0 0, -90 -80)",
+				"POINT(-80 80)",
+				"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			},
+			0,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			previous := uint64(0)
+			for _, wkt := range tc.orderedWKTs {
+				t.Run(wkt, func(t *testing.T) {
+					g, err := ParseGeometry(wkt)
+					require.NoError(t, err)
+					g, err = g.CloneWithSRID(tc.srid)
+					require.NoError(t, err)
+					h := g.SpaceCurveIndex()
+					assert.GreaterOrEqual(t, h, previous)
+					previous = h
+				})
+			}
 		})
 	}
 }
