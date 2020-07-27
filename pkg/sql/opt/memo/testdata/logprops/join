@@ -2000,30 +2000,30 @@ inner-join (hash)
 # Case with duplicated referenced columns.
 norm
 SELECT * FROM
-fk INNER JOIN (SELECT * FROM xysd FULL JOIN (VALUES (1), (2)) ON False) ON r1 = x
+fk INNER JOIN (SELECT * FROM xysd FULL JOIN (VALUES (1), (2)) ON True) ON r1 = x
 ----
-inner-join (hash)
- ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:6(int!null) y:7(int) s:8(string) d:9(decimal) column1:11(int)
+inner-join (cross)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:6(int!null) y:7(int) s:8(string) d:9(decimal!null) column1:11(int!null)
  ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── fd: (1)-->(2-4), (6)-->(7-9), (8,9)~~>(6,7), (3)==(6), (6)==(3)
  ├── prune: (1,2,4,7-9,11)
- ├── reject-nulls: (6-9,11)
  ├── interesting orderings: (+1) (+6) (-8,+9,+6)
- ├── scan fk
- │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ ├── join-size: 2
+ ├── inner-join (hash)
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:6(int!null) y:7(int) s:8(string) d:9(decimal!null)
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
- │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1)
- │    └── unfiltered-cols: (1-5)
- ├── full-join (cross)
- │    ├── columns: x:6(int) y:7(int) s:8(string) d:9(decimal) column1:11(int)
- │    ├── cardinality: [2 - ]
- │    ├── fd: (6)-->(7-9), (8,9)~~>(6,7)
- │    ├── prune: (6-9,11)
- │    ├── reject-nulls: (6-9,11)
- │    ├── interesting orderings: (+6) (-8,+9,+6)
- │    ├── unfiltered-cols: (6-10)
+ │    ├── fd: (1)-->(2-4), (6)-->(7-9), (8,9)~~>(6,7), (3)==(6), (6)==(3)
+ │    ├── prune: (1,2,4,7-9)
+ │    ├── interesting orderings: (+1) (+6) (-8,+9,+6)
+ │    ├── unfiltered-cols: (1-5)
+ │    ├── scan fk
+ │    │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── prune: (1-4)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-5)
  │    ├── scan xysd
  │    │    ├── columns: x:6(int!null) y:7(int) s:8(string) d:9(decimal!null)
  │    │    ├── key: (6)
@@ -2031,20 +2031,19 @@ inner-join (hash)
  │    │    ├── prune: (6-9)
  │    │    ├── interesting orderings: (+6) (-8,+9,+6)
  │    │    └── unfiltered-cols: (6-10)
- │    ├── values
- │    │    ├── columns: column1:11(int!null)
- │    │    ├── cardinality: [2 - 2]
- │    │    ├── prune: (11)
- │    │    ├── tuple [type=tuple{int}]
- │    │    │    └── const: 1 [type=int]
- │    │    └── tuple [type=tuple{int}]
- │    │         └── const: 2 [type=int]
  │    └── filters
- │         └── false [type=bool]
- └── filters
-      └── eq [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
-           ├── variable: r1:3 [type=int]
-           └── variable: x:6 [type=int]
+ │         └── eq [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+ │              ├── variable: r1:3 [type=int]
+ │              └── variable: x:6 [type=int]
+ ├── values
+ │    ├── columns: column1:11(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (11)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── filters (true)
 
 # Case with a self-join in the input of an InnerJoin.
 norm

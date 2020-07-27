@@ -149,3 +149,52 @@
     )
     $filters
 )
+
+# RejectNullsUnderJoinLeft adds "col IS NOT NULL" null-rejecting filters to the
+# left input of a join for each column that is both in the NullRejectCols ColSet
+# and is null-rejected by the join's filters. Note that a left join cannot be
+# matched even if its filters reject nulls on a column because left joins add
+# back unmatched columns to the output. RejectNullsUnderJoinLeft is low priority
+# to allow filters to be pushed down entirely, if possible.
+[RejectNullsUnderJoinLeft, Normalize, LowPriority]
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
+    $left:*
+    $right:*
+    $on:* &
+        ^(ColsAreEmpty
+            $rejectCols:(IntersectionCols
+                (GetNullRejectedCols $on)
+                (RejectNullCols $left)
+            )
+        )
+    $private:*
+)
+=>
+((OpName)
+    (Select $left (MakeNullRejectFilters $rejectCols))
+    $right
+    $on
+    $private
+)
+
+# RejectNullsUnderJoinRight mirrors RejectNullsUnderJoinLeft.
+[RejectNullsUnderJoinRight, Normalize, LowPriority]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $left:*
+    $right:*
+    $on:* &
+        ^(ColsAreEmpty
+            $rejectCols:(IntersectionCols
+                (GetNullRejectedCols $on)
+                (RejectNullCols $right)
+            )
+        )
+    $private:*
+)
+=>
+((OpName)
+    $left
+    (Select $right (MakeNullRejectFilters $rejectCols))
+    $on
+    $private
+)

@@ -176,3 +176,31 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 	}
 	return rejectNullCols
 }
+
+// GetNullRejectedCols returns the set of columns which are null-rejected by the
+// given FiltersExpr.
+func (c *CustomFuncs) GetNullRejectedCols(filters memo.FiltersExpr) opt.ColSet {
+	var nullRejectedCols opt.ColSet
+	for i := range filters {
+		constraints := filters[i].ScalarProps().Constraints
+		if constraints == nil {
+			continue
+		}
+
+		nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(c.f.evalCtx))
+	}
+	return nullRejectedCols
+}
+
+// MakeNullRejectFilters returns a FiltersExpr with a "col IS NOT NULL" conjunct
+// for each column in the given ColSet.
+func (c *CustomFuncs) MakeNullRejectFilters(nullRejectCols opt.ColSet) memo.FiltersExpr {
+	filters := make(memo.FiltersExpr, 0, nullRejectCols.Len())
+	for col, ok := nullRejectCols.Next(0); ok; col, ok = nullRejectCols.Next(col + 1) {
+		filters = append(
+			filters,
+			c.f.ConstructFiltersItem(c.f.ConstructIsNot(c.f.ConstructVariable(col), memo.NullSingleton)),
+		)
+	}
+	return filters
+}

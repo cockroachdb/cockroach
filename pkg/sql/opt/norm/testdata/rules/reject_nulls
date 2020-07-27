@@ -759,3 +759,409 @@ select
  │              └── z:7
  └── filters
       └── sum:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+
+# ----------------------------------------------------------
+# RejectNullsUnderJoinLeft + RejectNullsUnderJoinRight
+# ----------------------------------------------------------
+
+# InnerJoin case.
+norm expect=RejectNullsUnderJoinLeft
+SELECT * FROM a
+LEFT JOIN xy ON k = x
+INNER JOIN uv ON u = y
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null u:9!null v:10
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1), (9)-->(10), (7)==(9), (9)==(7)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── select
+ │    │    ├── columns: x:6!null y:7!null
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── scan uv
+ │    ├── columns: u:9!null v:10
+ │    ├── key: (9)
+ │    └── fd: (9)-->(10)
+ └── filters
+      └── u:9 = y:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+
+# InnerJoin case.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM uv
+INNER JOIN
+(
+  SELECT * FROM a
+  LEFT JOIN xy ON k = x
+)
+ON u = y
+----
+inner-join (hash)
+ ├── columns: u:1!null v:2 k:4!null i:5 f:6 s:7 x:9!null y:10!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── key: (9)
+ ├── fd: (1)-->(2), (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4), (1)==(10), (10)==(1)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: k:4!null i:5 f:6 s:7 x:9!null y:10!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (9)
+ │    ├── fd: (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4)
+ │    ├── scan a
+ │    │    ├── columns: k:4!null i:5 f:6 s:7
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5-7)
+ │    ├── select
+ │    │    ├── columns: x:9!null y:10!null
+ │    │    ├── key: (9)
+ │    │    ├── fd: (9)-->(10)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:9!null y:10
+ │    │    │    ├── key: (9)
+ │    │    │    └── fd: (9)-->(10)
+ │    │    └── filters
+ │    │         └── y:10 IS NOT NULL [outer=(10), constraints=(/10: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:4 = x:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ └── filters
+      └── u:1 = y:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+
+# No-op case because null-rejection is not requested for null-rejected column.
+norm expect-not=(RejectNullsUnderJoinLeft, RejectNullsUnderJoinRight)
+SELECT * FROM a
+INNER JOIN xy ON k = x
+INNER JOIN uv ON u = y
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null u:9!null v:10
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1), (9)-->(10), (7)==(9), (9)==(7)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── scan uv
+ │    ├── columns: u:9!null v:10
+ │    ├── key: (9)
+ │    └── fd: (9)-->(10)
+ └── filters
+      └── u:9 = y:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+
+# No-op case because null-rejection is not requested for null-rejected column.
+norm expect-not=(RejectNullsUnderJoinLeft, RejectNullsUnderJoinRight)
+SELECT * FROM uv
+INNER JOIN
+(
+  SELECT * FROM a
+  INNER JOIN xy ON k = x
+)
+ON u = y
+----
+inner-join (hash)
+ ├── columns: u:1!null v:2 k:4!null i:5 f:6 s:7 x:9!null y:10!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── key: (9)
+ ├── fd: (1)-->(2), (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4), (1)==(10), (10)==(1)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: k:4!null i:5 f:6 s:7 x:9!null y:10
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (9)
+ │    ├── fd: (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4)
+ │    ├── scan a
+ │    │    ├── columns: k:4!null i:5 f:6 s:7
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5-7)
+ │    ├── scan xy
+ │    │    ├── columns: x:9!null y:10
+ │    │    ├── key: (9)
+ │    │    └── fd: (9)-->(10)
+ │    └── filters
+ │         └── k:4 = x:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ └── filters
+      └── u:1 = y:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+
+# InnerJoinApply case.
+norm expect=RejectNullsUnderJoinLeft
+SELECT * FROM a
+LEFT JOIN xy ON k = x
+INNER JOIN LATERAL (VALUES (x)) f(v) ON v = y
+----
+inner-join-apply
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null v:9
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7,9), (1)==(6), (6)==(1), (7)==(9), (9)==(7)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── select
+ │    │    ├── columns: x:6!null y:7!null
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── values
+ │    ├── columns: column1:9
+ │    ├── outer: (6)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(9)
+ │    └── (x:6,)
+ └── filters
+      └── column1:9 = y:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+
+# InnerJoinApply case.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM xy
+INNER JOIN LATERAL
+(
+  SELECT * FROM (VALUES (y)) f(v)
+  LEFT JOIN a ON k = v
+)
+ON x = i
+----
+inner-join-apply
+ ├── columns: x:1!null y:2 v:4!null k:5!null i:6!null f:7 s:8
+ ├── key: (1)
+ ├── fd: (1)-->(2,4,5,7,8), (1)==(6), (6)==(1)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: column1:4!null k:5!null i:6!null f:7 s:8
+ │    ├── outer: (2)
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(4-8)
+ │    ├── values
+ │    │    ├── columns: column1:4
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(4)
+ │    │    └── (y:2,)
+ │    ├── select
+ │    │    ├── columns: k:5!null i:6!null f:7 s:8
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6-8)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:5!null i:6 f:7 s:8
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6-8)
+ │    │    └── filters
+ │    │         └── i:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:5 = column1:4 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+ └── filters
+      └── x:1 = i:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# SemiJoin case.
+norm expect=RejectNullsUnderJoinLeft
+SELECT * FROM a
+LEFT JOIN xy ON k = x
+WHERE EXISTS (SELECT * FROM uv WHERE u = y)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── select
+ │    │    ├── columns: x:6!null y:7!null
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── scan uv
+ │    ├── columns: u:9!null
+ │    └── key: (9)
+ └── filters
+      └── u:9 = y:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+
+# SemiJoinApply case.
+norm expect=RejectNullsUnderJoinLeft
+SELECT * FROM a
+LEFT JOIN xy ON k = x
+WHERE EXISTS (SELECT * FROM (VALUES (y)) f(v) WHERE v = x)
+----
+semi-join-apply
+ ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7
+ ├── key: (6)
+ ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 f:3 s:4 x:6!null y:7
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2-4), (6)-->(7), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ ├── values
+ │    ├── columns: column1:9
+ │    ├── outer: (7)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(9)
+ │    └── (y:7,)
+ └── filters
+      └── column1:9 = x:6 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
+
+# LeftJoin case.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM uv
+LEFT JOIN
+(
+  SELECT * FROM a
+  LEFT JOIN xy ON k = x
+)
+ON u = y
+----
+left-join (hash)
+ ├── columns: u:1!null v:2 k:4 i:5 f:6 s:7 x:9 y:10
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ ├── key: (1,9)
+ ├── fd: (1)-->(2), (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: k:4!null i:5 f:6 s:7 x:9!null y:10!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (9)
+ │    ├── fd: (4)-->(5-7), (9)-->(10), (4)==(9), (9)==(4)
+ │    ├── scan a
+ │    │    ├── columns: k:4!null i:5 f:6 s:7
+ │    │    ├── key: (4)
+ │    │    └── fd: (4)-->(5-7)
+ │    ├── select
+ │    │    ├── columns: x:9!null y:10!null
+ │    │    ├── key: (9)
+ │    │    ├── fd: (9)-->(10)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:9!null y:10
+ │    │    │    ├── key: (9)
+ │    │    │    └── fd: (9)-->(10)
+ │    │    └── filters
+ │    │         └── y:10 IS NOT NULL [outer=(10), constraints=(/10: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── k:4 = x:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ └── filters
+      └── u:1 = y:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+
+# LeftJoinApply case.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM uv
+LEFT JOIN LATERAL
+(
+  SELECT * FROM (VALUES (u)) f(v)
+  LEFT JOIN xy ON v = x
+)
+ON u = y
+----
+left-join-apply
+ ├── columns: u:1!null v:2 v:4 x:5 y:6
+ ├── key: (1)
+ ├── fd: (1)-->(2,4-6)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join (hash)
+ │    ├── columns: column1:4!null x:5!null y:6!null
+ │    ├── outer: (1)
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(4-6)
+ │    ├── values
+ │    │    ├── columns: column1:4
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(4)
+ │    │    └── (u:1,)
+ │    ├── select
+ │    │    ├── columns: x:5!null y:6!null
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:5!null y:6
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6)
+ │    │    └── filters
+ │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │    └── filters
+ │         └── column1:4 = x:5 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+ └── filters
+      └── u:1 = y:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
