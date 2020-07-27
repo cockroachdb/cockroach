@@ -49,7 +49,7 @@ type ResolvedSchema struct {
 	// Marks what kind of schema this is. It is always set.
 	Kind ResolvedSchemaKind
 	// The ID of the resolved schema. This field is only set for schema kinds
-	// SchemaPublic and SchemaUserDefined.
+	// SchemaPublic, SchemaUserDefined and SchemaTemporary.
 	ID ID
 	// The descriptor backing the resolved schema. It is only set for
 	// SchemaUserDefined.

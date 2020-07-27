@@ -94,7 +94,7 @@ func MakeSimpleTableDescriptor(
 	semaCtx *tree.SemaContext,
 	st *cluster.Settings,
 	create *tree.CreateTable,
-	parentID, tableID sqlbase.ID,
+	parentID, parentSchemaID, tableID sqlbase.ID,
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.MutableTableDescriptor, error) {
@@ -159,7 +159,7 @@ func MakeSimpleTableDescriptor(
 		st,
 		create,
 		parentID,
-		keys.PublicSchemaID,
+		parentSchemaID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),

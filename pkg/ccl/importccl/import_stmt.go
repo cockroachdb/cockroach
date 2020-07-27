@@ -276,13 +276,13 @@ func importPlanHook(
 
 		table := importStmt.Table
 
-		var parentID sqlbase.ID
+		var parentID, parentSchemaID sqlbase.ID
 		if table != nil {
 			// TODO: As part of work for #34240, we should be operating on
 			//  UnresolvedObjectNames here, rather than TableNames.
 			// We have a target table, so it might specify a DB in its name.
 			un := table.ToUnresolvedObjectName()
-			found, prefix, dbDescI, err := tree.ResolveTarget(ctx,
+			found, prefix, resPrefixI, err := tree.ResolveTarget(ctx,
 				un, p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
@@ -295,7 +295,9 @@ func importPlanHook(
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
-			dbDesc := dbDescI.(*catalog.ResolvedObjectPrefix).Database
+			resPrefix := resPrefixI.(*catalog.ResolvedObjectPrefix)
+			dbDesc := resPrefix.Database
+			schema := resPrefix.Schema
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {
@@ -304,6 +306,12 @@ func importPlanHook(
 				}
 			}
 			parentID = dbDesc.GetID()
+			switch schema.Kind {
+			case sqlbase.SchemaVirtual:
+				return pgerror.Newf(pgcode.InvalidSchemaName, "cannot import into schema %q", table.SchemaName)
+			case sqlbase.SchemaUserDefined, sqlbase.SchemaPublic, sqlbase.SchemaTemporary:
+				parentSchemaID = schema.ID
+			}
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
@@ -320,6 +328,7 @@ func importPlanHook(
 				}
 			}
 			parentID = dbDesc.GetID()
+			parentSchemaID = keys.PublicSchemaID
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -675,7 +684,7 @@ func importPlanHook(
 					}
 				}
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
+					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, parentID, parentSchemaID, defaultCSVTableID, NoFKs, walltime)
 				if err != nil {
 					return err
 				}

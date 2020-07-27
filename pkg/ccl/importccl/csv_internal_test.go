@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -74,7 +75,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, defaultCSVParentID, defaultCSVTableID, NoFKs, 0)
+			_, err = MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, defaultCSVParentID, keys.PublicSchemaID, defaultCSVTableID, NoFKs, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}

@@ -1018,6 +1018,42 @@ COPY t (a, b, c) FROM stdin;
 	})
 }
 
+// TestImportUserDefinedSchemas ensures that import can resolve and create
+// tables that reside within user defined schemas.
+func TestImportUserDefinedSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	// Set up some initial state for the tests.
+	sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+CREATE SCHEMA sc;
+`)
+
+	// Write some dummy data to a file.
+	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
+	require.NoError(t, err)
+	err = ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte("hello\nhi\n"), 0666)
+	require.NoError(t, err)
+
+	// Ensure that we can import into tables that have a user defined schema prefix.
+	sqlDB.Exec(t, `IMPORT TABLE sc.t (x STRING) CSV DATA ($1)`, "nodelocal://0/test/data")
+	sqlDB.CheckQueryResults(t, `SELECT * FROM sc.t`, [][]string{{"hello"}, {"hi"}})
+
+	// Try again with IMPORT INTO.
+	sqlDB.Exec(t, `DROP TABLE sc.t`)
+	sqlDB.Exec(t, `CREATE TABLE sc.t (x STRING)`)
+	sqlDB.Exec(t, `IMPORT INTO sc.t (x) CSV DATA ($1)`, "nodelocal://0/test/data")
+	sqlDB.CheckQueryResults(t, `SELECT * FROM sc.t`, [][]string{{"hello"}, {"hi"}})
+}
+
 func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2915,7 +2951,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3298,7 +3334,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3399,7 +3435,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100),
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID,
 		sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
