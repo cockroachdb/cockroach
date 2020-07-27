@@ -719,15 +719,39 @@ VALUES (?,?,?,?,?,?,?,?);
 			return errors.Wrap(err, "Failed inserting log entry")
 		}
 
+		var tx *sql.Tx
+		var cnt int
+		var toCmt bool
 		for e := range entryChan {
 			prefixBytes, err := getPrefix(e.fileInfo)
 			if err != nil {
 				return err
 			}
-			if _, err := stmt.Exec(prefixBytes, e.Time, e.Severity, e.Goroutine, e.File, e.Line, e.Tags, e.Message); err != nil {
+			if cnt == 0 {
+				tx, err = db.Begin()
+				if err != nil {
+					return err
+				}
+				toCmt = true
+			}
+			cnt++
+			if _, err := tx.Stmt(stmt).Exec(prefixBytes, e.Time, e.Severity, e.Goroutine, e.File, e.Line, e.Tags, e.Message); err != nil {
+				return err
+			}
+			if cnt > 9999 {
+				cnt = 0
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+				toCmt = false
+			}
+		}
+		if toCmt {
+			if err := tx.Commit(); err != nil {
 				return err
 			}
 		}
+
 		return nil
 	}
 	g.Go(read)
