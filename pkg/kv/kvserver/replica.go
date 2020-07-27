@@ -192,7 +192,6 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 type Replica struct {
 	log.AmbientContext
 
-	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Only set by the constructor
 
 	store     *Store
@@ -511,6 +510,8 @@ type Replica struct {
 		// abort of a transaction which might have blocked the system config from
 		// being gossiped and attempting to gossip again.
 		failureToGossipSystemConfig bool
+
+		tenantID roachpb.TenantID // Set when first initialized, not modified after
 	}
 
 	rangefeedMu struct {
@@ -1050,6 +1051,10 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 				}
 				return true // done
 			})
+		}
+
+		if r.mu.tenantID != (roachpb.TenantID{}) {
+			ri.TenantID = r.mu.tenantID.ToUint64()
 		}
 	}
 	return ri
