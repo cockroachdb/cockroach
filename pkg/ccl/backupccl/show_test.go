@@ -191,7 +191,7 @@ func TestShowBackup(t *testing.T) {
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT "primary" PRIMARY KEY (a ASC),
-				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES fksrc(a),
+				CONSTRAINT fk_b_ref_fksrc FOREIGN KEY (b) REFERENCES public.fksrc(a),
 				FAMILY "primary" (a, b)
 			)`
 		wantDiffDB := `CREATE TABLE fkreftable (

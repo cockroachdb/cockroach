@@ -398,7 +398,7 @@ func TestDumpAsOf(t *testing.T) {
 	}
 
 	const want1 = `dump d t
-CREATE TABLE t (
+CREATE TABLE public.t (
 	i INT8 NULL,
 	FAMILY "primary" (i, rowid)
 );
@@ -420,7 +420,7 @@ INSERT INTO t (i) VALUES
 		t.Fatal(err)
 	}
 	const want2 = `dump d t
-CREATE TABLE t (
+CREATE TABLE public.t (
 	i INT8 NULL,
 	j INT8 NULL DEFAULT 2:::INT8,
 	FAMILY "primary" (i, rowid, j)
@@ -481,19 +481,19 @@ CREATE INDEX i ON d.orders (customer, total) INTERLEAVE IN PARENT d.customers (c
 	}
 
 	const want1 = `dump d orders
-CREATE TABLE orders (
+CREATE TABLE public.orders (
 	customer INT8 NOT NULL,
 	id INT8 NOT NULL,
 	total DECIMAL(20,5) NULL,
 	CONSTRAINT "primary" PRIMARY KEY (customer ASC, id ASC),
 	FAMILY "primary" (customer, id, total)
-) INTERLEAVE IN PARENT customers (customer);
+) INTERLEAVE IN PARENT public.customers (customer);
 
-ALTER TABLE orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers(id);
-CREATE INDEX i ON orders (customer ASC, total ASC) INTERLEAVE IN PARENT customers (customer);
+ALTER TABLE public.orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES public.customers(id);
+CREATE INDEX i ON public.orders (customer ASC, total ASC) INTERLEAVE IN PARENT public.customers (customer);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
+ALTER TABLE public.orders VALIDATE CONSTRAINT fk_customer;
 `
 
 	if dump1 != want1 {
@@ -516,7 +516,7 @@ CREATE DATABASE bar;
 USE bar;
 CREATE TABLE foo ();
 `,
-			expected: `CREATE TABLE foo (FAMILY "primary" (rowid)
+			expected: `CREATE TABLE public.foo (FAMILY "primary" (rowid)
 );
 `,
 		},
@@ -527,7 +527,7 @@ CREATE DATABASE bar;
 USE bar;
 CREATE TABLE foo (id int primary key, text string not null);
 `,
-			expected: `CREATE TABLE foo (
+			expected: `CREATE TABLE public.foo (
 	id INT8 NOT NULL,
 	text STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -542,7 +542,7 @@ CREATE DATABASE bar;
 USE bar;
 CREATE TABLE foo(id int);
 `,
-			expected: `CREATE TABLE foo (
+			expected: `CREATE TABLE public.foo (
 	id INT8 NULL,
 	FAMILY "primary" (id, rowid)
 );
@@ -561,7 +561,7 @@ INSERT INTO foo(id) VALUES(3);
 
 ALTER TABLE foo DROP COLUMN id; 
 `,
-			expected: `CREATE TABLE foo (FAMILY "primary" (rowid)
+			expected: `CREATE TABLE public.foo (FAMILY "primary" (rowid)
 );
 `,
 		},
@@ -649,7 +649,7 @@ INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
 CREATE DATABASE IF NOT EXISTS db1;
 USE db1;
 
-CREATE TABLE t1 (
+CREATE TABLE public.t1 (
 	id INT8 NOT NULL,
 	pkey STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
@@ -663,7 +663,7 @@ INSERT INTO t1 (id, pkey) VALUES
 CREATE DATABASE IF NOT EXISTS db2;
 USE db2;
 
-CREATE TABLE t2 (
+CREATE TABLE public.t2 (
 	id INT8 NOT NULL,
 	pkey STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
@@ -732,7 +732,7 @@ INSERT INTO account(id, person_id, accountNo) VALUES(2, 2, 2222);
 CREATE DATABASE IF NOT EXISTS dba;
 USE dba;
 
-CREATE TABLE account (
+CREATE TABLE public.account (
 	id INT8 NOT NULL,
 	person_id INT8 NULL,
 	accountno INT8 NOT NULL,
@@ -747,7 +747,7 @@ INSERT INTO account (id, person_id, accountno) VALUES
 CREATE DATABASE IF NOT EXISTS dbb;
 USE dbb;
 
-CREATE TABLE person (
+CREATE TABLE public.person (
 	id INT8 NOT NULL,
 	name STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -758,10 +758,10 @@ INSERT INTO person (id, name) VALUES
 	(1, 'John Smith'),
 	(2, 'Joe Dow');
 
-ALTER TABLE account ADD CONSTRAINT fk_person_id_ref_person FOREIGN KEY (person_id) REFERENCES dbb.public.person(id);
+ALTER TABLE public.account ADD CONSTRAINT fk_person_id_ref_person FOREIGN KEY (person_id) REFERENCES dbb.public.person(id);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE account VALIDATE CONSTRAINT fk_person_id_ref_person;
+ALTER TABLE public.account VALIDATE CONSTRAINT fk_person_id_ref_person;
 `,
 			clean: `
 DROP DATABASE dba;
@@ -795,7 +795,7 @@ INSERT INTO bar(id) VALUES(2);
 CREATE DATABASE IF NOT EXISTS dba;
 USE dba;
 
-CREATE TABLE bar (
+CREATE TABLE public.bar (
 	id INT8 NOT NULL,
 	FAMILY "primary" (id, rowid)
 );
@@ -807,7 +807,7 @@ INSERT INTO bar (id) VALUES
 CREATE DATABASE IF NOT EXISTS defaultdb;
 USE defaultdb;
 
-CREATE TABLE foo (
+CREATE TABLE public.foo (
 	id INT8 NOT NULL,
 	FAMILY "primary" (id, rowid)
 );
@@ -900,7 +900,7 @@ INSERT INTO bar VALUES (1, 'a');
 
 CREATE TEMP TABLE tmpbar (id int primary key);
 `,
-			expected: `CREATE TABLE bar (
+			expected: `CREATE TABLE public.bar (
 	id INT8 NOT NULL,
 	text STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -974,7 +974,7 @@ INSERT INTO t3(id, pkey) VALUES(1, 'db2-aaaa');
 CREATE DATABASE IF NOT EXISTS db1;
 USE db1;
 
-CREATE TABLE t1 (
+CREATE TABLE public.t1 (
 	id INT8 NOT NULL,
 	pkey STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
@@ -987,7 +987,7 @@ INSERT INTO t1 (id, pkey) VALUES
 CREATE DATABASE IF NOT EXISTS db2;
 USE db2;
 
-CREATE TABLE t3 (
+CREATE TABLE public.t3 (
 	id INT8 NOT NULL,
 	pkey STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),

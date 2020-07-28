@@ -36,7 +36,7 @@ CREATE TABLE c (
 query TT
 SHOW CREATE TABLE c
 ----
-c  CREATE TABLE c (
+c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo JSONB NULL,
    "bAr" JSONB NULL,
@@ -728,7 +728,7 @@ CREATE INDEX ON c USING GIN (bar)
 query TT
 SHOW CREATE TABLE c
 ----
-c  CREATE TABLE c (
+c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo INT8[] NULL,
    bar STRING[] NULL,

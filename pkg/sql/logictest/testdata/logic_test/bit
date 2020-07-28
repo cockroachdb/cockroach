@@ -16,7 +16,7 @@ query TT colnames
 SHOW CREATE TABLE bits
 ----
 table_name  create_statement
-bits        CREATE TABLE bits (
+bits        CREATE TABLE public.bits (
             a BIT NULL,
             b BIT(4) NULL,
             c VARBIT NULL,
@@ -265,7 +265,7 @@ CREATE TABLE obitsa(x VARBIT(20)[]);
 query T
 SELECT create_statement FROM [SHOW CREATE obitsa]
 ----
-CREATE TABLE obitsa (
+CREATE TABLE public.obitsa (
    x VARBIT(20)[] NULL,
    FAMILY "primary" (x, rowid)
 )

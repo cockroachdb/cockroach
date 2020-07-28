@@ -208,7 +208,7 @@ CREATE TABLE test.precision (x DECIMAL(2, 4))
 query TT
 SHOW CREATE TABLE test.users
 ----
-test.public.users  CREATE TABLE users (
+test.public.users  CREATE TABLE public.users (
                    id INT8 NOT NULL,
                    name VARCHAR NOT NULL,
                    title VARCHAR NULL,
@@ -264,7 +264,7 @@ CREATE TABLE test.named_constraints (
 query TT
 SHOW CREATE TABLE test.named_constraints
 ----
-test.public.named_constraints  CREATE TABLE named_constraints (
+test.public.named_constraints  CREATE TABLE public.named_constraints (
                                id INT8 NOT NULL,
                                name VARCHAR NOT NULL,
                                title VARCHAR NULL DEFAULT 'VP of Something':::STRING,
@@ -478,7 +478,7 @@ CREATE TABLE test.null_default (
 query TT
 SHOW CREATE TABLE test.null_default
 ----
-test.public.null_default  CREATE TABLE null_default (
+test.public.null_default  CREATE TABLE public.null_default (
                           ts TIMESTAMP NULL,
                           FAMILY "primary" (ts, rowid)
 )

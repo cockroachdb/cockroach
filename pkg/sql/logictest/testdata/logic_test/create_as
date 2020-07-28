@@ -154,13 +154,13 @@ CREATE TABLE foo5 (
 query TT
 SHOW CREATE TABLE foo5
 ----
-foo5  CREATE TABLE foo5 (
-    a INT8 NULL,
-    b INT8 NOT NULL,
-    c INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (b ASC),
-    FAMILY "primary" (a, b, c)
-    )
+foo5  CREATE TABLE public.foo5 (
+      a INT8 NULL,
+      b INT8 NOT NULL,
+      c INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (b ASC),
+      FAMILY "primary" (a, b, c)
+)
 
 statement ok
 CREATE TABLE foo6 (
@@ -172,13 +172,13 @@ CREATE TABLE foo6 (
 query TT
 SHOW CREATE TABLE foo6
 ----
-foo6  CREATE TABLE foo6 (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    c INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-    FAMILY "primary" (a, b, c)
-    )
+foo6  CREATE TABLE public.foo6 (
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      FAMILY "primary" (a, b, c)
+)
 
 statement error generate insert row: null value in column "x" violates not-null constraint
 CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
@@ -189,12 +189,12 @@ BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty, FAMILY "primary" (item, qty)) A
 query TT
 SHOW CREATE TABLE foo8
 ----
-foo8  CREATE TABLE foo8 (
-    item STRING NOT NULL,
-    qty INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (item ASC),
-    FAMILY "primary" (item, qty)
-    )
+foo8  CREATE TABLE public.foo8 (
+      item STRING NOT NULL,
+      qty INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (item ASC),
+      FAMILY "primary" (item, qty)
+)
 
 # Allow CREATE TABLE AS to specify composite primary keys.
 statement ok
@@ -208,13 +208,13 @@ CREATE TABLE foo9 (
 query TT
 SHOW CREATE TABLE foo9
 ----
-foo9  CREATE TABLE foo9 (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    c INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC, c ASC),
-    FAMILY "primary" (a, b, c)
-    )
+foo9  CREATE TABLE public.foo9 (
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NOT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, c ASC),
+      FAMILY "primary" (a, b, c)
+)
 
 statement ok
 CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
@@ -222,13 +222,13 @@ CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) 
 query TT
 SHOW CREATE TABLE foo10
 ----
-foo10  CREATE TABLE foo10 (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    c INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (c ASC, b ASC, a ASC),
-    FAMILY "primary" (a, b, c)
-    )
+foo10  CREATE TABLE public.foo10 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (c ASC, b ASC, a ASC),
+       FAMILY "primary" (a, b, c)
+)
 
 statement ok
 CREATE TABLE foo11 (
@@ -241,13 +241,13 @@ CREATE TABLE foo11 (
 query TT
 SHOW CREATE TABLE foo11
 ----
-foo11  CREATE TABLE foo11 (
-    x INT8 NOT NULL,
-    y INT8 NULL,
-    z INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (x ASC, z ASC),
-    FAMILY "primary" (x, y, z)
-    )
+foo11  CREATE TABLE public.foo11 (
+       x INT8 NOT NULL,
+       y INT8 NULL,
+       z INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (x ASC, z ASC),
+       FAMILY "primary" (x, y, z)
+)
 
 statement error pq: multiple primary keys for table "foo12" are not allowed
 CREATE TABLE foo12 (x PRIMARY KEY, y, PRIMARY KEY(y)) AS VALUES (1, 2), (3, 4);
@@ -268,14 +268,14 @@ CREATE TABLE foo12 (a PRIMARY KEY FAMILY f1, b, c FAMILY fam_1_c, d) AS SELECT *
 query TT
 SHOW CREATE TABLE foo12
 ----
-foo12  CREATE TABLE foo12 (
-      a INT8 NOT NULL,
-      b INT8 NULL,
-      c INT8 NULL,
-      d INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC),
-      FAMILY f1 (a, b, d),
-      FAMILY fam_1_c (c)
+foo12  CREATE TABLE public.foo12 (
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       c INT8 NULL,
+       d INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       FAMILY f1 (a, b, d),
+       FAMILY fam_1_c (c)
 )
 
 # Test constraint style definition of column families.
@@ -285,14 +285,14 @@ CREATE TABLE foo13 (a, b, c, d, PRIMARY KEY(a, b), FAMILY pk (a, b), FAMILY (c, 
 query TT
 SHOW CREATE TABLE foo13
 ----
-foo13  CREATE TABLE foo13 (
-      a INT8 NOT NULL,
-      b INT8 NOT NULL,
-      c INT8 NULL,
-      d INT8 NULL,
-      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-      FAMILY pk (a, b),
-      FAMILY fam_1_c_d (c, d)
+foo13  CREATE TABLE public.foo13 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       d INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       FAMILY pk (a, b),
+       FAMILY fam_1_c_d (c, d)
 )
 
 # Test renaming columns still preserves the column families.
@@ -305,14 +305,14 @@ ALTER TABLE foo13 RENAME c TO e
 query TT
 SHOW CREATE TABLE foo13
 ----
-foo13  CREATE TABLE foo13 (
-            a INT8 NOT NULL,
-            b INT8 NOT NULL,
-            e INT8 NULL,
-            z INT8 NULL,
-            CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-            FAMILY pk (a, b),
-            FAMILY fam_1_c_d (e, z)
+foo13  CREATE TABLE public.foo13 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       e INT8 NULL,
+       z INT8 NULL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+       FAMILY pk (a, b),
+       FAMILY fam_1_c_d (e, z)
 )
 
 # Regression test for #41004

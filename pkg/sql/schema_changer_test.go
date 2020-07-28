@@ -2224,7 +2224,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	if err := row.Scan(&scanName, &create); err != nil {
 		t.Fatal(err)
 	}
-	expected := `CREATE TABLE test (
+	expected := `CREATE TABLE public.test (
 	x INT8 NOT NULL,
 	y INT8 NOT NULL,
 	z INT8 NULL,
@@ -2245,7 +2245,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	if err := row.Scan(&scanName, &create); err != nil {
 		t.Fatal(err)
 	}
-	expected = `CREATE TABLE test (
+	expected = `CREATE TABLE public.test (
 	x INT8 NOT NULL,
 	y INT8 NOT NULL,
 	z INT8 NULL,
@@ -3308,7 +3308,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	if scanName != `t.public.test` {
 		t.Fatalf("expected table name %s, got %s", `test`, scanName)
 	}
-	expect := `CREATE TABLE test (
+	expect := `CREATE TABLE public.test (
 	k INT8 NOT NULL,
 	v INT8 NULL,
 	length INT8 NOT NULL,

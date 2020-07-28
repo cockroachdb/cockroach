@@ -198,7 +198,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 	<-swapNotification
 
 	expected := [][]string{{"t.public.test",
-		`CREATE TABLE test (
+		`CREATE TABLE public.test (
 	x INT8 NULL,
 	FAMILY "primary" (x, rowid)
 )`}}
@@ -210,7 +210,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 	wg.Wait()
 
 	expected = [][]string{{"t.public.test",
-		`CREATE TABLE test (
+		`CREATE TABLE public.test (
 	x STRING NULL,
 	FAMILY "primary" (x, rowid)
 )`}}

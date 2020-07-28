@@ -160,7 +160,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
-create_index_concurrently_tbl  CREATE TABLE create_index_concurrently_tbl (
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                INDEX create_index_concurrently_idx (a ASC),
                                FAMILY "primary" (a, rowid)
@@ -181,7 +181,7 @@ NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
-create_index_concurrently_tbl  CREATE TABLE create_index_concurrently_tbl (
+create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                FAMILY "primary" (a, rowid)
 )
