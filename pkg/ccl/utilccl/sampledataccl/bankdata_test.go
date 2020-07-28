@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -52,7 +51,7 @@ func TestToBackup(t *testing.T) {
 			t.Run(fmt.Sprintf("rows=%d/chunk=%d", rows, chunkBytes), func(t *testing.T) {
 				dir := fmt.Sprintf("%d-%d", rows, chunkBytes)
 				data := bank.FromConfig(rows, rows, payloadBytes, ranges).Tables()[0]
-				backup, err := toBackup(t, data, filepath.Join(outerDir, dir), chunkBytes)
+				backup, err := toBackup(t, data, outerDir, dir, chunkBytes)
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
