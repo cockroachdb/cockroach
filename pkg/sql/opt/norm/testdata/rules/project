@@ -104,13 +104,6 @@ project
  └── projections
       └── 1 [as="?column?":10]
 
-# SemiJoin case.
-norm expect=EliminateJoinUnderProjectLeft
-SELECT v FROM fks WHERE EXISTS (SELECT * FROM a WHERE x = r1)
-----
-scan fks
- └── columns: v:2
-
 # No-op case because the cross join may duplicate left rows.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True

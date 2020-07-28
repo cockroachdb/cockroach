@@ -331,13 +331,13 @@
 =>
 (LeftJoin $left $right $on $private)
 
-# EliminateSemiJoin discards a SemiJoin operator when it's known that the right
-# input never returns zero rows, and there is no join condition.
+# EliminateSemiJoin discards a SemiJoin when it's known that all left rows will
+# be matched by the join filters.
 [EliminateSemiJoin, Normalize]
 (SemiJoin | SemiJoinApply
     $left:*
-    $right:* & ^(CanHaveZeroRows $right)
-    []
+    $right:*
+    $on:* & (JoinFiltersMatchAllLeftRows $left $right $on)
 )
 =>
 $left
