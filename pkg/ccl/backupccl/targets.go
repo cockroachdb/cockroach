@@ -169,7 +169,9 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 			}
 		}
 		if typDesc := desc.GetType(); typDesc != nil {
-			// TODO (rohany): Add a .Dropped() check here once we can drop types.
+			if typDesc.Dropped() {
+				continue
+			}
 			if err := registerDesc(typDesc.ParentID, typDesc, "type"); err != nil {
 				return nil, err
 			}
