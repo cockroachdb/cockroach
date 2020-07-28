@@ -124,13 +124,15 @@ func (f ExplainFlag) String() string {
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
+	showMode := node.Mode != ExplainPlan
 	// ANALYZE is a special case because it is a statement implemented as an
 	// option to EXPLAIN.
 	if node.Flags[ExplainFlagAnalyze] {
 		ctx.WriteString("ANALYZE ")
+		showMode = true
 	}
 	wroteFlag := false
-	if node.Mode != ExplainPlan {
+	if showMode {
 		fmt.Fprintf(ctx, "(%s", node.Mode)
 		wroteFlag = true
 	}
@@ -207,10 +209,19 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 		opts.Flags[flag] = true
 	}
+	analyze := opts.Flags[ExplainFlagAnalyze]
 	if opts.Mode == 0 {
-		// Default mode is ExplainPlan.
-		opts.Mode = ExplainPlan
+		if analyze {
+			// ANALYZE implies DISTSQL.
+			opts.Mode = ExplainDistSQL
+		} else {
+			// Default mode is ExplainPlan.
+			opts.Mode = ExplainPlan
+		}
+	} else if analyze && opts.Mode != ExplainDistSQL {
+		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE cannot be used with %s", opts.Mode)
 	}
+
 	return &Explain{
 		ExplainOptions: opts,
 		Statement:      stmt,
