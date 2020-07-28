@@ -131,7 +131,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return err
 		}
 	}
-
 	ctx = logtags.AddTags(ctx, t.logTags())
 	leaseMgr := t.execCfg.LeaseManager
 	codec := t.execCfg.Codec
@@ -198,6 +197,17 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+
+	// If the type is being dropped, remove the descriptor here.
+	if typeDesc.Dropped() {
+		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			b := txn.NewBatch()
+			b.Del(sqlbase.MakeDescMetadataKey(codec, typeDesc.ID))
+			return txn.Run(ctx, b)
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil

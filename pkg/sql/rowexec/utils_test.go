@@ -61,9 +61,6 @@ func runProcessorTest(
 	case *joinReader:
 		// Reduce batch size to exercise batching logic.
 		pt.SetBatchSizeBytes(2 * int64(inputRows[0].Size()))
-	case *indexJoiner:
-		//	Reduce batch size to exercise batching logic.
-		pt.SetBatchSize(2 /* batchSize */)
 	}
 
 	p.Run(context.Background())
