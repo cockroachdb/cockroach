@@ -15,7 +15,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -27,7 +26,7 @@ import (
 // goroutines.
 type SystemConfigDeltaFilter struct {
 	keyPrefix roachpb.Key
-	lastCfg   *config.SystemConfig
+	lastCfg   config.SystemConfigEntries
 }
 
 // MakeSystemConfigDeltaFilter creates a new SystemConfigDeltaFilter. The filter
@@ -36,7 +35,6 @@ type SystemConfigDeltaFilter struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
-		lastCfg:   config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 	}
 }
 
@@ -47,7 +45,6 @@ func (df *SystemConfigDeltaFilter) ForModified(
 ) {
 	// Save newCfg in the filter.
 	lastCfg := df.lastCfg
-	df.lastCfg = config.NewSystemConfig(newCfg.DefaultZoneConfig)
 	df.lastCfg.Values = newCfg.Values
 
 	// SystemConfig values are always sorted by key, so scan over new and old
