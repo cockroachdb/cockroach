@@ -2771,3 +2771,8 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 1  1
 2  0
+
+query B
+select (select * from [show crdb_version]) = version()
+----
+true
