@@ -81,7 +81,7 @@ func updateStatusForGCElements(
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, timeToNextTrigger time.Time) {
 	defTTL := execCfg.DefaultZoneConfig.GC.TTLSeconds
-	cfg := execCfg.Gossip.DeprecatedSystemConfig(47150)
+	cfg := execCfg.SystemConfig.GetSystemConfig()
 	protectedtsCache := execCfg.ProtectedTimestampProvider
 
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
@@ -270,8 +270,8 @@ func isProtected(
 func setupConfigWatcher(
 	execCfg *sql.ExecutorConfig,
 ) (gossip.SystemConfigDeltaFilter, <-chan struct{}) {
-	k := execCfg.Codec.IndexPrefix(uint32(keys.ZonesTableID), uint32(keys.ZonesTablePrimaryIndexID))
+	k := execCfg.Codec.IndexPrefix(keys.ZonesTableID, keys.ZonesTablePrimaryIndexID)
 	zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
-	gossipUpdateC := execCfg.Gossip.DeprecatedRegisterSystemConfigChannel(47150)
+	gossipUpdateC := execCfg.SystemConfig.RegisterSystemConfigChannel()
 	return zoneCfgFilter, gossipUpdateC
 }
