@@ -109,9 +109,6 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, boo
 // message as input after introduction of redaction markers.  This
 // means the message may or may not contain markers already depending
 // of the configuration of --redactable-logs.
-//
-// TODO(knz): change the interface to take a log.Entry
-// as input instead.
 func eventInternal(sp opentracing.Span, el *ctxEventLog, isErr bool, entry Entry) {
 	var msg string
 	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
