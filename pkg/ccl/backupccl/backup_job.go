@@ -141,7 +141,7 @@ func splitAndFilterSpans(
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(gw gossip.DeprecatedGossip) (int, error) {
+func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	g, err := gw.OptionalErr(47970)
 	if err != nil {
 		return 0, err
