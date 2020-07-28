@@ -236,7 +236,6 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 			}
 		}
 
-		// TODO(tbg): do something else if `o.tenant`.
 		unaryInterceptor = append(unaryInterceptor, func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
