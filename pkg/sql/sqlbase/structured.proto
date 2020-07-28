@@ -1038,6 +1038,11 @@ message DatabaseDescriptor {
   repeated NameInfo draining_names = 6 [(gogoproto.nullable) = false];
 
   optional PrivilegeDescriptor privileges = 3;
+
+  // child_schemas is a mapping from child schema name to ID. It is used during
+  // name resolution to know without a KV lookup whether a database has a
+  // child schema with a target name.
+  map<string, uint32> child_schemas = 7 [(gogoproto.castvalue) = "ID"];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
