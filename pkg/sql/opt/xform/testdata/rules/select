@@ -1325,16 +1325,16 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1363,16 +1363,16 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1531,30 +1531,30 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
       │         │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
       │         │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
       │         │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
-      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
-      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
       │              │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
       │              │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
       │              │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
-      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
-      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1582,30 +1582,30 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
       │         │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
       │         │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
       │         │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
-      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
-      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
       │              │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
       │              │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
       │              │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
-      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
-      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1641,8 +1641,8 @@ project
       │         │         ├── span expression
       │         │         │    ├── tight: false
       │         │         │    └── union spans
-      │         │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
-      │         │         │         └── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         │         └── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── span expression
       │         │              ├── tight: false
       │         │              └── union spans
@@ -1653,8 +1653,8 @@ project
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1685,16 +1685,16 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1725,8 +1725,8 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    ├── union spans
-      │         │    │    ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │    │    ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    │    ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │    │    └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │    └── INTERSECTION
       │         │         ├── span expression
@@ -1756,8 +1756,8 @@ project
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1845,16 +1845,16 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog:4
       │              ├── inverted constraint: /4/1
       │              │    └── spans
-      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(4)
@@ -1885,8 +1885,8 @@ project
       │         ├── inverted expression: /4
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── select
@@ -1897,8 +1897,8 @@ project
       │              │    ├── columns: k:1!null geog:4
       │              │    ├── inverted constraint: /4/1
       │              │    │    └── spans
-      │              │    │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │    │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │    │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │    │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │    ├── key: (1)
       │              │    └── fd: (1)-->(4)

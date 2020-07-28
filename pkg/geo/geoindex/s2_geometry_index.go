@@ -219,7 +219,8 @@ func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionK
 		spans = intersects(c, covererWithBBoxFallback{s: s, geom: gt}, r)
 	}
 	if clipped {
-		// And lookup all shapes that exceed the bounds.
+		// And lookup all shapes that exceed the bounds. The exceedsBoundsCellID is the largest
+		// possible key, so appending it maintains the sorted order of spans.
 		spans = append(spans, KeySpan{Start: Key(exceedsBoundsCellID), End: Key(exceedsBoundsCellID)})
 	}
 	return spans, nil
