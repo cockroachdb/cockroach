@@ -251,7 +251,7 @@ func startConnExecutor(
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
-	gw := gossip.MakeExposedGossip(nil)
+	gw := gossip.MakeOptionalGossip(nil)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,

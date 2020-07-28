@@ -219,7 +219,7 @@ func createBenchmarkChangefeed(
 		Settings:         settings,
 		DB:               s.DB(),
 		Clock:            feedClock,
-		Gossip:           gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
 		Targets:          details.Targets,
 		Sink:             buf,
