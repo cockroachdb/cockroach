@@ -1038,6 +1038,21 @@ message DatabaseDescriptor {
   repeated NameInfo draining_names = 6 [(gogoproto.nullable) = false];
 
   optional PrivilegeDescriptor privileges = 3;
+
+  // SchemaInfo represents the state of a child user defined schema.
+  message SchemaInfo {
+    option (gogoproto.equal) = true;
+    // ID is the ID of the schema.
+    optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // dropped represents whether the schema is dropped or not. This field
+    // is used in a similar way as the draining_names.
+    optional bool dropped = 2 [(gogoproto.nullable) = false];
+  }
+
+  // schemas is a mapping from child schema name to ID. It is used during
+  // name resolution to know without a KV lookup whether a database has a
+  // child schema with a target name. Temporary schemas are not stored here.
+  map<string, SchemaInfo> schemas = 7 [(gogoproto.nullable) = false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
