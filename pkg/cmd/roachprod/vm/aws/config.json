@@ -19,7 +19,9 @@
                 "security_group": "sg-0e00c2f8f274a0fea",
                 "subnets": {
                     "ap-northeast-2a": "subnet-0d24440b29a76b724",
-                    "ap-northeast-2c": "subnet-07a4f14d08de379d8"
+                    "ap-northeast-2b": "subnet-0b049a35364cc9d28",
+                    "ap-northeast-2c": "subnet-0261535876b726680",
+                    "ap-northeast-2d": "subnet-049feccf9cc9895f1"
                 }
             },
             {
@@ -28,7 +30,8 @@
                 "security_group": "sg-03a68bb0d765c135e",
                 "subnets": {
                     "ap-south-1a": "subnet-0286d3ac1095fc6f1",
-                    "ap-south-1b": "subnet-012666900a3627088"
+                    "ap-south-1b": "subnet-012666900a3627088",
+                    "ap-south-1c": "subnet-014859824b1b1365d"
                 }
             },
             {
@@ -57,7 +60,8 @@
                 "security_group": "sg-0d97f7ec3edc8f7c1",
                 "subnets": {
                     "ca-central-1a": "subnet-02ef88f3eb706271e",
-                    "ca-central-1b": "subnet-072be60d12ab9cc6c"
+                    "ca-central-1b": "subnet-072be60d12ab9cc6c",
+                    "ca-central-1d": "subnet-0a75f397c5f90c490"
                 }
             },
             {
@@ -73,7 +77,7 @@
             {
                 "ami_id": "ami-1b791862",
                 "region": "eu-west-1",
-                "security_group": "sg-0439765c57cd091f7",
+                "security_group": "sg-033eb468bf7e3c6b5",
                 "subnets": {
                     "eu-west-1a": "subnet-092adeba3986a0218",
                     "eu-west-1b": "subnet-0d05781a8ca47b75c",
