@@ -247,3 +247,167 @@ query II
 SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100
 ----
 3  31
+
+#### Partial index entries are kept consistent throughout multiple mutations.
+
+statement ok
+CREATE TABLE d (
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    b BOOL,
+    INDEX i_0_100_idx (i) WHERE i > 0 and i < 100,
+    INDEX f_b_s_foo_idx (f) WHERE b AND s = 'foo'
+)
+
+# Inserting values populates partial indexes.
+
+statement ok
+INSERT INTO d VALUES (1, 1, 1.0, 'foo', true);
+INSERT INTO d VALUES (2, 2, 2.0, 'foo', false);
+INSERT INTO d VALUES (3, 3, 3.0, 'bar', true);
+INSERT INTO d VALUES (100, 100, 100.0, 'foo', true);
+INSERT INTO d VALUES (200, 200, 200.0, 'foo', false);
+INSERT INTO d VALUES (300, 300, 300.0, 'bar', true);
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  1  1  foo  true
+2  2  2  foo  false
+3  3  3  bar  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    1    1    foo  true
+100  100  100  foo  true
+
+# Updating rows both in an out of partial index without changing partial index
+# eligibility.
+
+statement ok
+UPDATE d SET i = i + 10
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  bar  true
+
+# Updating rows both in an out of partial index updates partial index entries
+# and changing eligibility.
+
+statement ok
+UPDATE d SET s = 'foo'
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  310  300  foo  true
+
+# Upsert a conflicting row, taking it out of the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 320, 300.0, 'bar', true);
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+
+# Upsert a conflicting row, adding it into the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 330, 300.0, 'foo', true);
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+
+# Upsert a non-conflicting row.
+
+statement ok
+UPSERT INTO d VALUES (400, 400, 400.0, 'foo', true);
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in both partial indexes.
+
+statement ok
+DELETE FROM d WHERE k = 1
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in one partial index.
+
+statement ok
+DELETE FROM d WHERE k = 2
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row not in either partial index.
+
+statement ok
+DELETE FROM d WHERE k = 200
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
