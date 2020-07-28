@@ -72,7 +72,7 @@ type Registry struct {
 	st     *cluster.Settings
 	ie     sqlutil.InternalExecutor
 	db     *kv.DB
-	gossip gossip.DeprecatedGossip
+	gossip gossip.OptionalGossip
 
 	// gossipUpdateChan is used to notify the polling loop that a diagnostics
 	// request has been added. The gossip callback will not block sending on this
@@ -82,7 +82,7 @@ type Registry struct {
 
 // NewRegistry constructs a new Registry.
 func NewRegistry(
-	ie sqlutil.InternalExecutor, db *kv.DB, gw gossip.DeprecatedGossip, st *cluster.Settings,
+	ie sqlutil.InternalExecutor, db *kv.DB, gw gossip.OptionalGossip, st *cluster.Settings,
 ) *Registry {
 	r := &Registry{
 		ie:               ie,

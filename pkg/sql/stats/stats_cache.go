@@ -94,7 +94,7 @@ type cacheEntry struct {
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
 	cacheSize int,
-	gw gossip.DeprecatedGossip,
+	gw gossip.OptionalGossip,
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,

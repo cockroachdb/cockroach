@@ -1829,7 +1829,7 @@ func (m *Manager) findDescriptorState(id sqlbase.ID, create bool) *descriptorSta
 // rangefeeds. This function must be passed a non-nil gossip if
 // VersionRangefeedLeases is not active.
 func (m *Manager) RefreshLeases(
-	ctx context.Context, s *stop.Stopper, db *kv.DB, g gossip.DeprecatedGossip,
+	ctx context.Context, s *stop.Stopper, db *kv.DB, g gossip.OptionalGossip,
 ) {
 	s.RunWorker(ctx, func(ctx context.Context) {
 		m.refreshLeases(ctx, g, db, s)
@@ -1837,7 +1837,7 @@ func (m *Manager) RefreshLeases(
 }
 
 func (m *Manager) refreshLeases(
-	ctx context.Context, g gossip.DeprecatedGossip, db *kv.DB, s *stop.Stopper,
+	ctx context.Context, g gossip.OptionalGossip, db *kv.DB, s *stop.Stopper,
 ) {
 	descUpdateCh := make(chan *sqlbase.Descriptor)
 	m.watchForUpdates(ctx, s, db, g, descUpdateCh)
@@ -1887,7 +1887,7 @@ func (m *Manager) watchForUpdates(
 	ctx context.Context,
 	s *stop.Stopper,
 	db *kv.DB,
-	g gossip.DeprecatedGossip,
+	g gossip.OptionalGossip,
 	descUpdateCh chan *sqlbase.Descriptor,
 ) {
 	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
@@ -1929,7 +1929,7 @@ func (m *Manager) watchForUpdates(
 func (m *Manager) watchForGossipUpdates(
 	ctx context.Context,
 	s *stop.Stopper,
-	g gossip.DeprecatedGossip,
+	g gossip.OptionalGossip,
 	descUpdateCh chan<- *sqlbase.Descriptor,
 ) {
 	rawG, err := g.OptionalErr(47150)
@@ -1942,9 +1942,9 @@ func (m *Manager) watchForGossipUpdates(
 
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := m.storage.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
-		// TODO(ajwerner): Add a mechanism to unregister this channel upon return.
-		// NB: this call is allowed to bypass DeprecatedGossip because we'll never
-		// get here after VersionRangefeedLeases.
+		// TODO(ajwerner): Add a mechanism to unregister this channel upon
+		// return. NB: this call is allowed to bypass OptionalGossip because
+		// we'll never get here after VersionRangefeedLeases.
 		gossipUpdateC := rawG.RegisterSystemConfigChannel()
 		filter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 

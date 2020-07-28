@@ -555,7 +555,7 @@ func makeSQLServerArgs(
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer: serverpb.MakeOptionalStatusServer(nil),
 			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
-			gossip:       gossip.MakeUnexposedGossip(nil),
+			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
