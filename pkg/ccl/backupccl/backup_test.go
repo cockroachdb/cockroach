@@ -4007,7 +4007,8 @@ func TestClientDisconnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(pbardea): Extend this test to also include restore.
+	const restoreDB = "restoredb"
+
 	testCases := []struct {
 		jobType    string
 		jobCommand string
@@ -4016,19 +4017,21 @@ func TestClientDisconnect(t *testing.T) {
 			jobType:    "BACKUP",
 			jobCommand: fmt.Sprintf("BACKUP TO '%s'", localFoo),
 		},
+		{
+			jobType:    "RESTORE",
+			jobCommand: fmt.Sprintf("RESTORE data.* FROM '%s' WITH into_db='%s'", localFoo, restoreDB),
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.jobType, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 			// When completing an export request, signal the a request has been sent and
 			// then wait to be signaled.
 			allowResponse := make(chan struct{})
 			gotRequest := make(chan struct{}, 1)
 			args := base.TestClusterArgs{}
 			args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 					for _, ru := range br.Responses {
 						switch ru.GetInner().(type) {
 						case *roachpb.ExportResponse, *roachpb.ImportResponse:
@@ -4036,10 +4039,7 @@ func TestClientDisconnect(t *testing.T) {
 							case gotRequest <- struct{}{}:
 							default:
 							}
-							select {
-							case <-allowResponse:
-							case <-ctx.Done(): // Deal with test failures.
-							}
+							<-allowResponse
 						}
 					}
 					return nil
@@ -4047,9 +4047,19 @@ func TestClientDisconnect(t *testing.T) {
 			}
 			ctx, tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 1 /* numAccounts */, initNone, args)
 			defer cleanup()
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
 			conn := tc.ServerConn(0)
 			sqlDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+
+			// If we're testing restore, we first create a backup file to restore.
+			if testCase.jobType == "RESTORE" {
+				close(allowResponse)
+				sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", restoreDB))
+				sqlDB.Exec(t, "BACKUP TO $1", localFoo)
+				allowResponse = make(chan struct{})
+			}
 
 			// Make credentials for the new connection.
 			sqlDB.Exec(t, `CREATE USER testuser`)
