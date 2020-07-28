@@ -1282,6 +1282,15 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a ALTER COLUMN b SET DATA TYPE STRING COLLATE en USING b::STRING`},
 		{`ALTER TABLE a ALTER COLUMN b SET DATA TYPE DECIMAL(10)[]`},
 
+		{`ALTER TABLE a SET SCHEMA s`},
+		{`ALTER TABLE IF EXISTS a SET SCHEMA s`},
+
+		{`ALTER VIEW v SET SCHEMA s`},
+		{`ALTER VIEW IF EXISTS a SET SCHEMA s`},
+
+		{`ALTER SEQUENCE seq SET SCHEMA s`},
+		{`ALTER SEQUENCE IF EXISTS seq SET SCHEMA s`},
+
 		{`COPY t FROM STDIN`},
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
