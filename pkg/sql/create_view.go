@@ -203,6 +203,11 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
+	// Install back references to types used by this view.
+	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, newDesc); err != nil {
+		return err
+	}
+
 	if err := newDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}

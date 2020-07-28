@@ -271,6 +271,67 @@ func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 
 func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
 
+// joinReaderIndexJoinStrategy is a joinReaderStrategy that executes an index
+// join. It does not maintain the ordering.
+type joinReaderIndexJoinStrategy struct {
+	*joinerBase
+	defaultSpanGenerator
+	inputRows []sqlbase.EncDatumRow
+
+	emitState struct {
+		// processingLookupRow is an explicit boolean that specifies whether the
+		// strategy is currently processing a match. This is set to true in
+		// processLookedUpRow and causes nextRowToEmit to process the data in
+		// emitState. If set to false, the strategy determines in nextRowToEmit
+		// that no more looked up rows need processing, so unmatched input rows need
+		// to be emitted.
+		processingLookupRow bool
+		lookedUpRow         sqlbase.EncDatumRow
+	}
+}
+
+// getLookupRowsBatchSizeHint returns the batch size for the join reader index
+// join strategy. This number was chosen by running TPCH queries 3, 4, 5, 9,
+// and 19 with varying batch sizes and choosing the smallest batch size that
+// offered a significant performance improvement. Larger batch sizes offered
+// small to no marginal improvements.
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
+	return 4 << 20 /* 4 MB */
+}
+
+func (s *joinReaderIndexJoinStrategy) processLookupRows(
+	rows []sqlbase.EncDatumRow,
+) (roachpb.Spans, error) {
+	s.inputRows = rows
+	return s.generateSpans(s.inputRows)
+}
+
+func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
+	ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key,
+) (joinReaderState, error) {
+	s.emitState.processingLookupRow = true
+	s.emitState.lookedUpRow = row
+	return jrEmittingRows, nil
+}
+
+func (s *joinReaderIndexJoinStrategy) prepareToEmit(ctx context.Context) {}
+
+func (s *joinReaderIndexJoinStrategy) nextRowToEmit(
+	ctx context.Context,
+) (sqlbase.EncDatumRow, joinReaderState, error) {
+	if !s.emitState.processingLookupRow {
+		return nil, jrReadingInput, nil
+	}
+	s.emitState.processingLookupRow = false
+	return s.emitState.lookedUpRow, jrPerformingLookup, nil
+}
+
+func (s *joinReaderIndexJoinStrategy) spilled() bool {
+	return false
+}
+
+func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {}
+
 // partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndices value for
 // semi- and anti-joins, where we only need to know about the existence of a
 // match.
