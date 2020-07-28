@@ -33,9 +33,10 @@ import (
 )
 
 type testHelper struct {
-	env   *jobstest.JobSchedulerTestEnv
-	cfg   *scheduledjobs.JobExecutionConfig
-	sqlDB *sqlutils.SQLRunner
+	env    *jobstest.JobSchedulerTestEnv
+	server serverutils.TestServerInterface
+	cfg    *scheduledjobs.JobExecutionConfig
+	sqlDB  *sqlutils.SQLRunner
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
@@ -46,6 +47,12 @@ type testHelper struct {
 // is disabled by this test helper.
 // If you want to run daemon, invoke it directly.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
+	return newTestHelperForTables(t, jobstest.UseTestTables)
+}
+
+func newTestHelperForTables(
+	t *testing.T, envTableType jobstest.EnvTablesType,
+) (*testHelper, func()) {
 	knobs := &TestingKnobs{
 		TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
 		},
@@ -57,14 +64,17 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup test scheduled jobs table.
-	env := jobstest.NewJobSchedulerTestEnv(jobstest.UseTestTables, timeutil.Now())
+	env := jobstest.NewJobSchedulerTestEnv(envTableType, timeutil.Now())
 
-	sqlDB.Exec(t, jobstest.GetScheduledJobsTableSchema(env))
-	sqlDB.Exec(t, jobstest.GetJobsTableSchema(env))
+	if envTableType == jobstest.UseTestTables {
+		sqlDB.Exec(t, jobstest.GetScheduledJobsTableSchema(env))
+		sqlDB.Exec(t, jobstest.GetJobsTableSchema(env))
+	}
 
 	restoreRegistry := settings.TestingSaveRegistry()
 	return &testHelper{
-			env: env,
+			env:    env,
+			server: s,
 			cfg: &scheduledjobs.JobExecutionConfig{
 				Settings:         s.ClusterSettings(),
 				InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -73,8 +83,10 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 			},
 			sqlDB: sqlDB,
 		}, func() {
-			sqlDB.Exec(t, "DROP TABLE "+env.SystemJobsTableName())
-			sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
+			if envTableType == jobstest.UseTestTables {
+				sqlDB.Exec(t, "DROP TABLE "+env.SystemJobsTableName())
+				sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
+			}
 			s.Stopper().Stop(context.Background())
 			restoreRegistry()
 		}
