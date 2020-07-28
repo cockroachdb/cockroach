@@ -58,7 +58,7 @@
 # matching.
 [EliminateJoinUnderGroupByLeft, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn
-    $input:(InnerJoin | LeftJoin | SemiJoin $left:*)
+    $input:(InnerJoin | LeftJoin $left:*)
     $aggs:*
     $private:(GroupingPrivate $groupingCols:* $ordering:*) &
         (OrderingCanProjectCols
