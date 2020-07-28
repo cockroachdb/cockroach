@@ -60,7 +60,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descA := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
@@ -137,7 +137,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	tableID := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
@@ -373,7 +373,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
@@ -411,7 +411,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
