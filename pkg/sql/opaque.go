@@ -51,6 +51,8 @@ func buildOpaque(
 		plan, err = p.AlterIndex(ctx, n)
 	case *tree.AlterTable:
 		plan, err = p.AlterTable(ctx, n)
+	case *tree.AlterTableSetSchema:
+		plan, err = p.AlterTableSetSchema(ctx, n)
 	case *tree.AlterType:
 		plan, err = p.AlterType(ctx, n)
 	case *tree.AlterRole:
@@ -168,6 +170,7 @@ func init() {
 	for _, stmt := range []tree.Statement{
 		&tree.AlterIndex{},
 		&tree.AlterTable{},
+		&tree.AlterTableSetSchema{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
