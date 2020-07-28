@@ -89,6 +89,29 @@ message StatementStatistics {
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
+message TransactionStatistics {
+  // StatementIds is the IDs of the statements which this transaction comprises,
+  // in order.
+  repeated string statement_ids = 1;
+
+  // Count is the total number of times this transaction was executed
+  // since the begin of the reporting period.
+  optional int64 count = 2 [(gogoproto.nullable) = false];
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  optional int64 max_retries = 3 [(gogoproto.nullable) = false];
+
+  // NumRows collects the total number of rows returned or observed across all
+  // statements.
+  optional NumericStat num_rows = 4 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time to service the transaction, from start of parse to
+  // end of execute.
+  optional NumericStat service_lat = 5 [(gogoproto.nullable) = false];
+}
+
+
 message SensitiveInfo {
   option (gogoproto.equal) = true;
   // LastErr collects the last error encountered.
@@ -123,6 +146,10 @@ message StatementStatisticsKey {
   optional bool opt = 5 [(gogoproto.nullable) = false];
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
+
+  // Id is a hash of the query fingerprint which can be used to identify the
+  // statement, for instance in transaction statistics.
+  optional string id = 8 [(gogoproto.nullable) = false];
 }
 
 // CollectedStats wraps collected timings and metadata for some query's execution.
