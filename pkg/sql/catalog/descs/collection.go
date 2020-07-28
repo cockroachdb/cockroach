@@ -14,7 +14,6 @@ package descs
 
 import (
 	"context"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 // UncommittedDatabase is a database that has been created/dropped
@@ -53,54 +53,107 @@ type uncommittedDescriptor struct {
 // leasedDescriptors holds references to all the descriptors leased in the
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
-	descs []catalog.Descriptor
+	byName *btree.BTree
+	byID   *btree.BTree
+}
+
+type nameKey struct {
+	parentID       sqlbase.ID
+	parentSchemaID sqlbase.ID
+	name           string
+}
+
+type idKey sqlbase.ID
+
+type descriptorWithName struct {
+	nameKey
+	catalog.Descriptor
+}
+
+type descriptorWithID struct {
+	idKey
+	catalog.Descriptor
+}
+
+func lessNameKey(this nameKey, other nameKey) bool {
+	if this.parentID != other.parentID {
+		return this.parentID < other.parentID
+	}
+	if this.parentSchemaID != other.parentSchemaID {
+		return this.parentSchemaID < other.parentSchemaID
+	}
+	return this.name < other.name
+}
+
+func (k nameKey) Less(than btree.Item) bool {
+	switch other := than.(type) {
+	case nameKey:
+		return lessNameKey(k, other)
+	case descriptorWithName:
+		return lessNameKey(k, other.nameKey)
+	default:
+		panic(errors.AssertionFailedf("unexpected type %T", other))
+	}
+}
+
+func (k idKey) Less(than btree.Item) bool {
+	switch other := than.(type) {
+	case idKey:
+		return k < other
+	case descriptorWithID:
+		return k < other.idKey
+	default:
+		panic(errors.AssertionFailedf("unexpected type %T", other))
+	}
+}
+
+func (ld *leasedDescriptors) assertConsistency() {
+	if l1, l2 := ld.byName.Len(), ld.byID.Len(); l1 != l2 {
+		panic(errors.AssertionFailedf("mismatched leased descriptors: %d, %d", l1, l2))
+	}
 }
 
 func (ld *leasedDescriptors) add(desc catalog.Descriptor) {
-	ld.descs = append(ld.descs, desc)
+	defer ld.assertConsistency()
+	ld.byName.ReplaceOrInsert(descriptorWithName{
+		nameKey:    nameKey{desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()},
+		Descriptor: desc,
+	})
+	ld.byID.ReplaceOrInsert(descriptorWithID{
+		idKey:      idKey(desc.GetID()),
+		Descriptor: desc,
+	})
 }
 
 func (ld *leasedDescriptors) releaseAll() (toRelease []catalog.Descriptor) {
-	toRelease = append(toRelease, ld.descs...)
-	ld.descs = ld.descs[:0]
+	defer ld.assertConsistency()
+	ld.byID.Ascend(func(i btree.Item) bool {
+		toRelease = append(toRelease, i.(descriptorWithID).Descriptor)
+		return true
+	})
+	ld.byName.Clear(true)
+	ld.byID.Clear(true)
 	return toRelease
 }
 
 func (ld *leasedDescriptors) release(ids []sqlbase.ID) (toRelease []catalog.Descriptor) {
-	// Sort the descriptors and leases to make it easy to find the leases to release.
-	leasedDescs := ld.descs
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
-	})
-	sort.Slice(leasedDescs, func(i, j int) bool {
-		return leasedDescs[i].GetID() < leasedDescs[j].GetID()
-	})
-
-	filteredLeases := leasedDescs[:0] // will store the remaining leases
-	idsToConsider := ids
-	shouldRelease := func(id sqlbase.ID) (found bool) {
-		for len(idsToConsider) > 0 && idsToConsider[0] < id {
-			idsToConsider = idsToConsider[1:]
+	defer ld.assertConsistency()
+	for _, id := range ids {
+		item := ld.byID.Delete(idKey(id))
+		if item == nil {
+			continue
 		}
-		return len(idsToConsider) > 0 && idsToConsider[0] == id
+		desc := item.(descriptorWithID).Descriptor
+		ld.byName.Delete(nameKey{desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()})
+		toRelease = append(toRelease, desc)
 	}
-	for _, l := range leasedDescs {
-		if !shouldRelease(l.GetID()) {
-			filteredLeases = append(filteredLeases, l)
-		} else {
-			toRelease = append(toRelease, l)
-		}
-	}
-	ld.descs = filteredLeases
 	return toRelease
 }
 
 func (ld *leasedDescriptors) getByID(id sqlbase.ID) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if desc.GetID() == id {
-			return desc
-		}
+	defer ld.assertConsistency()
+	if result := ld.byID.Get(idKey(id)); result != nil {
+		return result.(descriptorWithID).Descriptor
 	}
 	return nil
 }
@@ -108,17 +161,16 @@ func (ld *leasedDescriptors) getByID(id sqlbase.ID) catalog.Descriptor {
 func (ld *leasedDescriptors) getByName(
 	dbID sqlbase.ID, schemaID sqlbase.ID, name string,
 ) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if lease.NameMatchesDescriptor(desc, dbID, schemaID, name) {
-			return desc
-		}
+	defer ld.assertConsistency()
+	if result := ld.byName.Get(nameKey{dbID, schemaID, name}); result != nil {
+		return result.(descriptorWithName).Descriptor
 	}
 	return nil
 }
 
 func (ld *leasedDescriptors) numDescriptors() int {
-	return len(ld.descs)
+	defer ld.assertConsistency()
+	return ld.byName.Len()
 }
 
 // MakeCollection constructs a Collection.
@@ -129,6 +181,10 @@ func MakeCollection(
 	dbCacheSubscriber DatabaseCacheSubscriber,
 ) Collection {
 	return Collection{
+		leasedDescriptors: leasedDescriptors{
+			byName: btree.New(2),
+			byID:   btree.New(2),
+		},
 		leaseMgr:          leaseMgr,
 		settings:          settings,
 		databaseCache:     dbCache,
