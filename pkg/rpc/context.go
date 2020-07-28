@@ -764,10 +764,7 @@ func (ctx *Context) grpcDialOptions(
 	} else {
 		var err error
 		var tlsConfig *tls.Config
-		// TODO(tbg): remove this override when the KV layer can authenticate tenant
-		// client certs.
-		const override = false
-		if override || ctx.tenID == roachpb.SystemTenantID {
+		if ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
 		} else {
 			tlsConfig, err = ctx.GetTenantClientTLSConfig()
