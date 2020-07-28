@@ -15,8 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -132,15 +130,6 @@ func newCSVWriterProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-
-	if err := utilccl.CheckEnterpriseEnabled(
-		flowCtx.Cfg.Settings,
-		flowCtx.Cfg.ClusterID.Get(),
-		sql.ClusterOrganization.Get(&flowCtx.Cfg.Settings.SV),
-		"EXPORT",
-	); err != nil {
-		return nil, err
-	}
 
 	c := &csvWriter{
 		flowCtx:     flowCtx,
