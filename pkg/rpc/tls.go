@@ -82,7 +82,7 @@ func MakeSecurityContext(cfg *base.Config, tenID roachpb.TenantID) SecurityConte
 func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManager, error) {
 	ctx.lazy.certificateManager.Do(func() {
 		var opts []security.Option
-		if !roachpb.IsSystemTenantID(ctx.tenID.ToUint64()) {
+		if ctx.tenID != roachpb.SystemTenantID {
 			opts = append(opts, security.ForTenant(ctx.tenID.String()))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
