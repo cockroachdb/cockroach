@@ -104,7 +104,22 @@ type ControlSchedules struct {
 var _ Statement = &ControlSchedules{}
 
 // Format implements NodeFormatter interface
-func (c *ControlSchedules) Format(ctx *FmtCtx) {
-	fmt.Fprintf(ctx, "%s SCHEDULES ", c.Command)
-	c.Schedules.Format(ctx)
+func (n *ControlSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s SCHEDULES ", n.Command)
+	n.Schedules.Format(ctx)
 }
+
+// ControlJobsForSchedules represents PAUSE/RESUME/CANCEL clause
+// which applies job command to the jobs matching specified schedule(s).
+type ControlJobsForSchedules struct {
+	Schedules *Select
+	Command   JobCommand
+}
+
+// Format implements NodeFormatter interface
+func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s JOBS FOR SCHEDULES %s",
+		JobCommandToStatement[n.Command], AsString(n.Schedules))
+}
+
+var _ Statement = &ControlJobsForSchedules{}
