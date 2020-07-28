@@ -87,7 +87,7 @@ func StageOptionalRemoteLibrary(
 	fmt.Printf("Resolved library url for %s: %s\n", libraryName, url)
 	cmdStr := fmt.Sprintf(
 		`mkdir -p ./lib && \
-sudo curl -sfSL -o "./lib/%s" "%s" 2>/dev/null || echo 'optional library %s not found; continuing...'`,
+curl -sfSL -o "./lib/%s" "%s" 2>/dev/null || echo 'optional library %s not found; continuing...'`,
 		libraryName+ext,
 		url,
 		libraryName+ext,
@@ -121,8 +121,8 @@ func StageCockroachRelease(c *SyncedCluster, version, arch string) error {
 tmpdir="$(mktemp -d /tmp/cockroach-release.XXX)" && \
 curl -f -s -S -o- %s | tar xfz - -C "${tmpdir}" --strip-components 1 && \
 mv ${tmpdir}/cockroach ./cockroach && \
-sudo mkdir -p ./lib && \
-if [ -d ${tmpdir}/lib ]; then sudo mv ${tmpdir}/lib/* ./lib; fi && \
+mkdir -p ./lib && \
+if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ./lib; fi && \
 chmod 755 ./cockroach
 `, binURL)
 	return c.Run(
