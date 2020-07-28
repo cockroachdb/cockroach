@@ -1662,7 +1662,7 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
 func (c *cluster) FetchDmesg(ctx context.Context) error {
-	if c.spec.NodeCount == 0 || c.isLocal() {
+	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
 		return nil
@@ -1680,7 +1680,8 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 		}
 		if err := execCmd(
 			ctx, c.l, roachprod, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
+			// NB: -n is for --non-interactive.
+			"/bin/bash", "-c", "'sudo -n dmesg > "+name+"'", /* src */
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
