@@ -692,6 +692,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> alter_relocate_stmt
 %type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
+%type <tree.Statement> alter_table_set_schema_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -712,10 +713,12 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
+%type <tree.Statement> alter_view_set_schema_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
 %type <tree.Statement> alter_sequence_options_stmt
+%type <tree.Statement> alter_sequence_set_schema_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1250,6 +1253,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
 //   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER TABLE ... SET SCHEMA <newschemaname>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1273,6 +1277,7 @@ alter_table_stmt:
 | alter_scatter_stmt
 | alter_zone_table_stmt
 | alter_rename_table_stmt
+| alter_table_set_schema_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
@@ -1307,9 +1312,11 @@ alter_partition_stmt:
 // %Category: DDL
 // %Text:
 // ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
+// ALTER VIEW [IF EXISTS] <name> SET SCHEMA <newschemaname>
 // %SeeAlso: WEBDOCS/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
+| alter_view_set_schema_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -1324,9 +1331,11 @@ alter_view_stmt:
 //   [START <start>]
 //   [[NO] CYCLE]
 // ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
+// ALTER SEQUENCE [IF EXISTS] <name> SET SCHEMA <newschemaname>
 alter_sequence_stmt:
   alter_rename_sequence_stmt
 | alter_sequence_options_stmt
+| alter_sequence_set_schema_stmt
 | ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
 
 alter_sequence_options_stmt:
@@ -6175,6 +6184,48 @@ alter_rename_table_stmt:
     newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
+
+alter_table_set_schema_stmt:
+  ALTER TABLE relation_expr SET SCHEMA schema_name
+   {
+     $$.val = &tree.AlterTableSetSchema{
+       Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false,
+     }
+   }
+| ALTER TABLE IF EXISTS relation_expr SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterTableSetSchema{
+      Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true,
+    }
+  }
+
+alter_view_set_schema_stmt:
+	ALTER VIEW relation_expr SET SCHEMA schema_name
+	 {
+		 $$.val = &tree.AlterTableSetSchema{
+			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsView: true,
+		 }
+	 }
+| ALTER VIEW IF EXISTS relation_expr SET SCHEMA schema_name
+	{
+		$$.val = &tree.AlterTableSetSchema{
+			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsView: true,
+		}
+	}
+
+alter_sequence_set_schema_stmt:
+	ALTER SEQUENCE relation_expr SET SCHEMA schema_name
+	 {
+		 $$.val = &tree.AlterTableSetSchema{
+			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsSequence: true,
+		 }
+	 }
+| ALTER SEQUENCE IF EXISTS relation_expr SET SCHEMA schema_name
+	{
+		$$.val = &tree.AlterTableSetSchema{
+			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsSequence: true,
+		}
+	}
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name

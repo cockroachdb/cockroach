@@ -68,8 +68,10 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// of everything they depend on. Rather than trying to rewrite the view's
 	// query with the new name, we simply disallow such renames for now.
 	if len(tableDesc.DependedOnBy) > 0 {
-		return nil, p.dependentViewRenameError(
-			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
+		return nil, p.dependentViewError(
+			ctx, tableDesc.TypeName(), oldTn.String(),
+			tableDesc.ParentID, tableDesc.DependedOnBy[0].ID, "rename",
+		)
 	}
 
 	return &renameTableNode{n: n, oldTn: &oldTn, newTn: &newTn, tableDesc: tableDesc}, nil
@@ -159,7 +161,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		ParentID:       prevDBID,
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
-	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
+	tableDesc.AddDrainingName(renameDetails)
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -203,8 +205,8 @@ func (n *renameTableNode) Close(context.Context)        {}
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
-func (p *planner) dependentViewRenameError(
-	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
+func (p *planner) dependentViewError(
+	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID, op string,
 ) error {
 	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, viewID)
 	if err != nil {
@@ -216,13 +218,13 @@ func (p *planner) dependentViewRenameError(
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
 			return sqlbase.NewDependentObjectErrorf(
-				"cannot rename %s %q because a view depends on it",
-				typeName, objName)
+				"cannot %s %s %q because a view depends on it",
+				op, typeName, objName)
 		}
 		viewName = viewFQName.FQString()
 	}
 	return errors.WithHintf(
-		sqlbase.NewDependentObjectErrorf("cannot rename %s %q because view %q depends on it",
-			typeName, objName, viewName),
+		sqlbase.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
+			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
 }
