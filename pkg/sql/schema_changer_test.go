@@ -47,8 +47,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -6101,4 +6103,30 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		}
 		runTest(params)
 	})
+}
+
+// TestIsPermanentSchemaChangeError ensures that a
+// roachpb.BatchTimestampBeforeGCError traverses the network properly
+// as a structured error and then gets classified correctly as being
+// retriable.
+func TestIsPermanentSchemaChangeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	aLongTimeAgo := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	err := tc.Server(1).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: aLongTimeAgo.UnixNano()})
+		_, err := txn.Get(ctx, scratchKey)
+		return err
+	})
+	require.Error(t, err)
+	// This is part of the error string for roachpb.BatchTimestampBeforeGCError.
+	require.Regexp(t, "must be after", err.Error())
+	// Ensure that the above area which has traversed the network indeed is
+	// still recognized.
+	require.False(t, sql.IsPermanentSchemaChangeError(err), "%+v %T", err, err)
 }
