@@ -13,10 +13,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -81,6 +83,34 @@ func (s *statusServer) Statements(
 		},
 	); err != nil {
 		return nil, err
+	}
+
+	// Assign each statement an ID based on a hash of the query fingerprint.
+	for i := range response.Statements {
+		h := fnv.New128()
+		h.Write([]byte(response.Statements[i].Key.KeyData.Query))
+		response.Statements[i].Key.KeyData.Id = fmt.Sprintf("%x", h.Sum(nil))
+	}
+
+	// TODO(solon): For now we stub out the transaction field by randomly grouping
+	// statements into transactions. This is meant to unblock frontend development
+	// while we work on populating this with the actual transaction data.
+	maxTransactionSize := len(response.Statements) / 2
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < len(response.Statements); {
+		txnStats := roachpb.TransactionStatistics{}
+		numStatements := randutil.RandIntInRange(rng, 1, maxTransactionSize)
+		for _, stmt := range response.Statements[i : i+numStatements] {
+			txnStats.StatementIds = append(txnStats.StatementIds, stmt.Key.KeyData.Id)
+			txnStats.Count++
+			if stmt.Stats.MaxRetries > txnStats.MaxRetries {
+				txnStats.MaxRetries = stmt.Stats.MaxRetries
+			}
+			txnStats.NumRows.Mean += stmt.Stats.NumRows.Mean
+			txnStats.ServiceLat.Mean += stmt.Stats.ServiceLat.Mean
+		}
+		response.Transactions = append(response.Transactions, txnStats)
+		i += numStatements
 	}
 
 	return response, nil
