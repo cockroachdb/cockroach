@@ -1617,46 +1617,26 @@ func (g *Gossip) OnFirstRangeChanged(cb func(*roachpb.RangeDescriptor)) {
 	})
 }
 
-// MakeExposedGossip initializes a DeprecatedGossip instance which exposes a
-// wrapped Gossip instance via Optional(). This is used on SQL servers running
-// inside of a KV server (i.e. single-tenant deployments).
+// MakeOptionalGossip initializes an OptionalGossip instance wrapping a
+// (possibly nil) *Gossip.
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeExposedGossip(g *Gossip) DeprecatedGossip {
-	const exposed = true
-	return DeprecatedGossip{
-		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
+func MakeOptionalGossip(g *Gossip) OptionalGossip {
+	return OptionalGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, g != nil),
 	}
 }
 
-// MakeUnexposedGossip initializes a DeprecatedGossip instance for which
-// Optional() does not return the wrapped Gossip instance. This is used on
-// SQL servers not running as part of a KV server, i.e. with multi-tenancy.
+// OptionalGossip is a Gossip instance in a SQL tenant server.
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-//
-// TODO(tbg): once we can start a SQL tenant without gossip, remove this method
-// and rename DeprecatedGossip to OptionalGossip.
-func MakeUnexposedGossip(g *Gossip) DeprecatedGossip {
-	const exposed = false
-	return DeprecatedGossip{
-		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
-	}
-}
-
-// DeprecatedGossip is a Gossip instance in a SQL tenant server.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-//
-// See TenantSQLDeprecatedWrapper for details.
-type DeprecatedGossip struct {
+type OptionalGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
 }
 
@@ -1666,8 +1646,8 @@ type DeprecatedGossip struct {
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
-	v, err := dg.w.OptionalErr(issueNos...)
+func (og OptionalGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
+	v, err := og.w.OptionalErr(issueNos...)
 	if err != nil {
 		return nil, err
 	}
@@ -1680,8 +1660,8 @@ func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (dg DeprecatedGossip) Optional(issueNos ...int) (*Gossip, bool) {
-	v, ok := dg.w.Optional()
+func (og OptionalGossip) Optional(issueNos ...int) (*Gossip, bool) {
+	v, ok := og.w.Optional()
 	if !ok {
 		return nil, false
 	}

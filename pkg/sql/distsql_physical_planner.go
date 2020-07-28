@@ -86,7 +86,7 @@ type DistSQLPlanner struct {
 	runnerChan chan runnerRequest
 
 	// gossip handle used to check node version compatibility.
-	gossip gossip.DeprecatedGossip
+	gossip gossip.OptionalGossip
 
 	nodeDialer *nodedialer.Dialer
 
@@ -128,7 +128,7 @@ func NewDistSQLPlanner(
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
 	nodeDescs kvcoord.NodeDescStore,
-	gw gossip.DeprecatedGossip,
+	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isLive func(roachpb.NodeID) (bool, error),
 	nodeDialer *nodedialer.Dialer,
@@ -716,7 +716,7 @@ type SpanPartition struct {
 }
 
 type distSQLNodeHealth struct {
-	gossip     gossip.DeprecatedGossip
+	gossip     gossip.OptionalGossip
 	isLive     func(roachpb.NodeID) (bool, error)
 	connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
 }
