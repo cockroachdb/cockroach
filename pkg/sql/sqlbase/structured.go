@@ -4683,3 +4683,8 @@ func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
 func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
 }
+
+// SetParentSchemaID sets the SchemaID of the table.
+func (desc *MutableTableDescriptor) SetParentSchemaID(schemaID ID) {
+	desc.UnexposedParentSchemaID = schemaID
+}
