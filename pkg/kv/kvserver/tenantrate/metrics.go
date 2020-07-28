@@ -65,12 +65,13 @@ var (
 const TenantIDLabel = "tenant_id"
 
 func makeMetrics() Metrics {
+	b := aggmetric.MakeBuilder(TenantIDLabel)
 	return Metrics{
 		Tenants:            metric.NewGauge(metaTenants),
-		CurrentBlocked:     aggmetric.NewGauge(metaCurrentBlocked, TenantIDLabel),
-		RequestsAdmitted:   aggmetric.NewCounter(metaRequestsAdmitted, TenantIDLabel),
-		WriteBytesAdmitted: aggmetric.NewCounter(metaWriteBytesAdmitted, TenantIDLabel),
-		ReadBytesAdmitted:  aggmetric.NewCounter(metaReadBytesAdmitted, TenantIDLabel),
+		CurrentBlocked:     b.Gauge(metaCurrentBlocked),
+		RequestsAdmitted:   b.Counter(metaRequestsAdmitted),
+		WriteBytesAdmitted: b.Counter(metaWriteBytesAdmitted),
+		ReadBytesAdmitted:  b.Counter(metaReadBytesAdmitted),
 	}
 }
 
