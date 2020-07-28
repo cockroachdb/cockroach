@@ -16,11 +16,32 @@ package aggmetric
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+// Builder is used to ease constructing metrics with the same labels.
+type Builder struct {
+	labels []string
+}
+
+// MakeBuilder makes a new Builder.
+func MakeBuilder(labels ...string) Builder {
+	return Builder{labels: labels}
+}
+
+// Gauge constructs a new AggGauge with the Builder's labels.
+func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
+	return NewGauge(metadata, b.labels...)
+}
+
+// Counter constructs a new AggCounter with the Builder's labels.
+func (b Builder) Counter(metadata metric.Metadata) *AggCounter {
+	return NewCounter(metadata, b.labels...)
+}
 
 type childSet struct {
 	labels []string
