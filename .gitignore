@@ -13,6 +13,7 @@ artifacts
 /bin
 /bin.*
 .buildinfo
+/lib
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
