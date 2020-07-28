@@ -2007,6 +2007,12 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						PrimaryKey:    isPK,
 					}
 				}
+				if idx.IsPartial() {
+					indexDef.Predicate, err = parser.ParseExpr(idx.Predicate)
+					if err != nil {
+						return nil, err
+					}
+				}
 				defs = append(defs, def)
 			}
 		}
