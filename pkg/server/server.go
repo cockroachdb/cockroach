@@ -596,13 +596,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		sqlServerOptionalArgs: sqlServerOptionalArgs{
-			rpcContext:             rpcContext,
-			distSender:             distSender,
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
 			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
 			gossip:                 gossip.MakeExposedGossip(g),
-			nodeDialer:             nodeDialer,
 			grpcServer:             grpc.Server,
 			recorder:               recorder,
 			nodeIDContainer:        idContainer,
@@ -615,6 +612,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  runtimeSampler,
+		rpcContext:               rpcContext,
+		nodeDescs:                g,
+		nodeDialer:               nodeDialer,
+		distSender:               distSender,
 		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sessionRegistry,

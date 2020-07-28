@@ -85,8 +85,7 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
-	// gossip handle used to check node version compatibility and to construct
-	// the spanResolver.
+	// gossip handle used to check node version compatibility.
 	gossip gossip.DeprecatedGossip
 
 	nodeDialer *nodedialer.Dialer
@@ -97,6 +96,8 @@ type DistSQLPlanner struct {
 
 	// distSender is used to construct the spanResolver upon SetNodeInfo.
 	distSender *kvcoord.DistSender
+	// nodeDescs is used to construct the spanResolver upon SetNodeInfo.
+	nodeDescs kvcoord.NodeDescStore
 	// rpcCtx is used to construct the spanResolver upon SetNodeInfo.
 	rpcCtx *rpc.Context
 }
@@ -126,6 +127,7 @@ func NewDistSQLPlanner(
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
+	nodeDescs kvcoord.NodeDescStore,
 	gw gossip.DeprecatedGossip,
 	stopper *stop.Stopper,
 	isLive func(roachpb.NodeID) (bool, error),
@@ -145,6 +147,7 @@ func NewDistSQLPlanner(
 			isLive:     isLive,
 		},
 		distSender:            distSender,
+		nodeDescs:             nodeDescs,
 		rpcCtx:                rpcCtx,
 		metadataTestTolerance: execinfra.NoExplain,
 	}
@@ -162,7 +165,7 @@ func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
 func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
 	dsp.gatewayNodeID = desc.NodeID
 	if dsp.spanResolver == nil {
-		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.gossip, desc,
+		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, desc,
 			dsp.rpcCtx, ReplicaOraclePolicy)
 		dsp.SetSpanResolver(sr)
 	}

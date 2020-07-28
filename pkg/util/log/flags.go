@@ -35,6 +35,18 @@ func init() {
 		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
 }
 
+// IsActive returns true iff the main logger already has some events
+// logged, or some secondary logger was created with configuration
+// taken from the main logger.
+//
+// This is used to assert that configuration is performed
+// before logging has been used for the first time.
+func IsActive() (active bool, firstUse string) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	return logging.mu.active, logging.mu.firstUseStack
+}
+
 // SetupRedactionAndStderrRedirects should be called once after
 // command-line flags have been parsed, and before the first log entry
 // is emitted.
@@ -64,6 +76,11 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 	// interleaving, it cannot guarantee that the direct fd 2 writes
 	// won't be positioned outside of log redaction markers and
 	// mistakenly considered as "safe for reporting".
+
+	// Sanity check.
+	if active, firstUse := IsActive(); active {
+		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
+	}
 
 	if mainLog.logDir.IsSet() {
 		// We have a log directory. We can enable stderr redirection.

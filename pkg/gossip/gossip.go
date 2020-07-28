@@ -1695,25 +1695,6 @@ func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemCon
 	return g.GetSystemConfig()
 }
 
-// DeprecatedOracleGossip trims down *gossip.Gossip for use in the Oracle.
-//
-// NB: we're trying to get rid of this dep altogether, see:
-// https://github.com/cockroachdb/cockroach/issues/48432
-type DeprecatedOracleGossip interface {
-	// GetNodeDescriptor is used by oracles to order replicas by distance from the
-	// current locality.
-	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-}
-
-// DeprecatedOracleGossip returns an DeprecatedOracleGossip (a Gossip for use with the
-// replicaoracle package).
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedOracleGossip(issueNo int) DeprecatedOracleGossip {
-	return dg.deprecated(issueNo)
-}
-
 // DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
 // the wrapped Gossip instance.
 //
