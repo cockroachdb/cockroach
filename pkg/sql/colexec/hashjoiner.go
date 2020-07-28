@@ -256,11 +256,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 					hj.spec.joinType == sqlbase.RightOuterJoin ||
 					hj.spec.joinType == sqlbase.LeftSemiJoin ||
 					hj.spec.joinType == sqlbase.IntersectAllJoin {
-					// The short-circuiting behavior is temporarily disabled
-					// because it causes flakiness of some tests due to #48785
-					// (concurrent calls to DrainMeta and Next).
-					// TODO(asubiotto): remove this once the issue is resolved.
-					// hj.state = hjDone
+					hj.state = hjDone
 					continue
 				}
 			}
