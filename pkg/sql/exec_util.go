@@ -653,6 +653,7 @@ type ExecutorConfig struct {
 	AmbientCtx        log.AmbientContext
 	DB                *kv.DB
 	Gossip            gossip.DeprecatedGossip
+	SystemConfig      config.SystemConfigProvider
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
 	LeaseManager      *lease.Manager

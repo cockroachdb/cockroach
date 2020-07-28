@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -73,6 +75,18 @@ func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscri
 	}
 }
 
+func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.GossipSubscriptionEvent {
+	val, err := protoutil.Marshal(cfg)
+	if err != nil {
+		panic(err)
+	}
+	return &roachpb.GossipSubscriptionEvent{
+		Key:            gossip.KeySystemConfig,
+		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
+		PatternMatched: gossip.KeySystemConfig,
+	}
+}
+
 func waitForNodeDesc(t *testing.T, p *Proxy, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
@@ -81,7 +95,8 @@ func waitForNodeDesc(t *testing.T, p *Proxy, nodeID roachpb.NodeID) {
 	})
 }
 
-// TestProxyGossipSubscription tests Proxy's role as a kvcoord.NodeDescStore.
+// TestProxyGossipSubscription tests Proxy's roles as a kvcoord.NodeDescStore
+// and as a config.SystemConfigProvider.
 func TestProxyGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -95,8 +110,9 @@ func TestProxyGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 1)
+		assert.Len(t, req.Patterns, 2)
 		assert.Equal(t, "node:.*", req.Patterns[0])
+		assert.Equal(t, "system-db", req.Patterns[1])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -108,8 +124,13 @@ func TestProxyGossipSubscription(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
+	cfg := kvtenant.ProxyConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		RPCContext:      rpcContext,
+		RPCRetryOptions: rpcRetryOpts,
+	}
 	addrs := []string{ln.Addr().String()}
-	p := NewProxy(log.AmbientContext{Tracer: tracing.NewTracer()}, rpcContext, rpcRetryOpts, addrs)
+	p := NewProxy(cfg, addrs)
 
 	// Start should block until the first GossipSubscription response.
 	startedC := make(chan error)
@@ -158,6 +179,42 @@ func TestProxyGossipSubscription(t *testing.T) {
 	desc, err = p.GetNodeDescriptor(3)
 	require.Equal(t, node3, desc)
 	require.NoError(t, err)
+
+	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
+	sysCfg := p.GetSystemConfig()
+	require.Nil(t, sysCfg)
+	sysCfgC := p.RegisterSystemConfigChannel()
+	require.Len(t, sysCfgC, 0)
+
+	// Return first SystemConfig response.
+	sysCfgEntries := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		{Key: roachpb.Key("a")},
+		{Key: roachpb.Key("b")},
+	}}
+	gossipSubC <- gossipEventForSystemConfig(sysCfgEntries)
+
+	// Test config.SystemConfigProvider impl. Wait for update first.
+	<-sysCfgC
+	sysCfg = p.GetSystemConfig()
+	require.NotNil(t, sysCfg)
+	require.Equal(t, sysCfgEntries.Values, sysCfg.Values)
+
+	// Return updated SystemConfig response.
+	sysCfgEntriesUp := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		{Key: roachpb.Key("a")},
+		{Key: roachpb.Key("c")},
+	}}
+	gossipSubC <- gossipEventForSystemConfig(sysCfgEntriesUp)
+
+	// Test config.SystemConfigProvider impl. Wait for update first.
+	<-sysCfgC
+	sysCfg = p.GetSystemConfig()
+	require.NotNil(t, sysCfg)
+	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
+
+	// A newly registered SystemConfig channel will be immediately notified.
+	sysCfgC2 := p.RegisterSystemConfigChannel()
+	require.Len(t, sysCfgC2, 1)
 }
 
 // TestProxyGossipSubscription tests Proxy's role as a kvcoord.RangeDescriptorDB.
@@ -187,8 +244,13 @@ func TestProxyRangeLookup(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
+	cfg := kvtenant.ProxyConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		RPCContext:      rpcContext,
+		RPCRetryOptions: rpcRetryOpts,
+	}
 	addrs := []string{ln.Addr().String()}
-	p := NewProxy(log.AmbientContext{Tracer: tracing.NewTracer()}, rpcContext, rpcRetryOpts, addrs)
+	p := NewProxy(cfg, addrs)
 	// NOTE: we don't actually start the proxy worker. That's ok, as
 	// RangeDescriptorDB methods don't require it to be running.
 
@@ -256,8 +318,9 @@ func TestProxyRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 1)
+		assert.Len(t, req.Patterns, 2)
 		assert.Equal(t, "node:.*", req.Patterns[0])
+		assert.Equal(t, "system-db", req.Patterns[1])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err
@@ -278,8 +341,13 @@ func TestProxyRetriesUnreachable(t *testing.T) {
 	})
 
 	// Add listen address into list of other bogus addresses.
+	cfg := kvtenant.ProxyConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		RPCContext:      rpcContext,
+		RPCRetryOptions: rpcRetryOpts,
+	}
 	addrs := []string{"1.1.1.1:9999", ln.Addr().String(), "2.2.2.2:9999"}
-	p := NewProxy(log.AmbientContext{Tracer: tracing.NewTracer()}, rpcContext, rpcRetryOpts, addrs)
+	p := NewProxy(cfg, addrs)
 	p.rpcDialTimeout = 5 * time.Millisecond // speed up test
 
 	// Start should block until the first GossipSubscription response.
