@@ -814,11 +814,7 @@ func backupPlanHook(
 
 		collectTelemetry()
 
-		errCh, err := sj.Start(ctx)
-		if err != nil {
-			return err
-		}
-		return <-errCh
+		return sj.Run(ctx)
 	}
 
 	if backupStmt.Options.Detached {
