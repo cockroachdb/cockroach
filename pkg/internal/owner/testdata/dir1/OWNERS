@@ -1,0 +1,8 @@
+owners:
+  - team_a
+  - team_b
+overrides:
+  afile*:
+    - team_c
+  file_b:
+    - team_b
