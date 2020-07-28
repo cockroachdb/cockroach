@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -276,6 +277,61 @@ func (g *Geometry) CartesianBoundingBox() *CartesianBoundingBox {
 	return &CartesianBoundingBox{BoundingBox: *g.spatialObject.BoundingBox}
 }
 
+// SpaceCurveIndex returns an uint64 index to use representing an index into a space-filling curve.
+// This will return 0 for empty spatial objects, and math.MaxUint64 for any object outside
+// the defined bounds of the given SRID projection.
+func (g *Geometry) SpaceCurveIndex() uint64 {
+	bbox := g.CartesianBoundingBox()
+	if bbox == nil {
+		return 0
+	}
+	centerX := (bbox.BoundingBox.LoX + bbox.BoundingBox.HiX) / 2
+	centerY := (bbox.BoundingBox.LoY + bbox.BoundingBox.HiY) / 2
+	// By default, bound by MaxInt32 (we have not typically seen bounds greater than 1B).
+	bounds := geoprojbase.Bounds{
+		MinX: math.MinInt32,
+		MaxX: math.MaxInt32,
+		MinY: math.MinInt32,
+		MaxY: math.MaxInt32,
+	}
+	if proj, ok := geoprojbase.Projection(g.SRID()); ok {
+		bounds = proj.Bounds
+	}
+	// If we're out of bounds, give up and return a large number.
+	if centerX > bounds.MaxX || centerY > bounds.MaxY || centerX < bounds.MinX || centerY < bounds.MinY {
+		return math.MaxUint64
+	}
+
+	// Add 1 to each dimension as the hilbert curve goes from [0, n-1].
+	xBounds := (bounds.MaxX - bounds.MinX) + 1
+	yBounds := (bounds.MaxY - bounds.MinY) + 1
+
+	// We need two compute N such that N is a power of 2 and the x, y coordinates are in [0, N-1].
+	// The hilbert curve value will be in the interval [0, N^2-1].
+	// The x, y coordinates will be first normalized below to the interval [0, 1].
+	// TODO(#geo): consider caching this value onto the projection for speedup.
+	biggestBoxLength := uint64(1) << uint64(math.Ceil(math.Log2(math.Max(xBounds, yBounds))))
+
+	xPos := uint64(((centerX - bounds.MinX) / (bounds.MaxX - bounds.MinX)) * float64(xBounds))
+	yPos := uint64(((centerY - bounds.MinY) / (bounds.MaxY - bounds.MinY)) * float64(yBounds))
+	return hilbertInverse(biggestBoxLength, xPos, yPos)
+}
+
+// Compare compares a Geometry against another.
+// It compares using SpaceCurveIndex, followed by the byte representation of the Geometry.
+// This must produce the same ordering as the index mechanism.
+func (g *Geometry) Compare(o *Geometry) int {
+	lhs := g.SpaceCurveIndex()
+	rhs := o.SpaceCurveIndex()
+	if lhs > rhs {
+		return 1
+	}
+	if lhs < rhs {
+		return -1
+	}
+	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+}
+
 //
 // Geography
 //
@@ -489,6 +545,35 @@ func (g *Geography) BoundingCap() s2.Cap {
 	return g.BoundingRect().CapBound()
 }
 
+// SpaceCurveIndex returns an uint64 index to use representing an index into a space-filling curve.
+// This will return 0 for empty spatial objects.
+func (g *Geography) SpaceCurveIndex() uint64 {
+	rect := g.BoundingRect()
+	if rect.IsEmpty() {
+		return 0
+	}
+	return uint64(s2.CellIDFromLatLng(rect.Center()))
+}
+
+// Compare compares a Geography against another.
+// It compares using SpaceCurveIndex, followed by the byte representation of the Geography.
+// This must produce the same ordering as the index mechanism.
+func (g *Geography) Compare(o *Geography) int {
+	lhs := g.SpaceCurveIndex()
+	rhs := o.SpaceCurveIndex()
+	if lhs > rhs {
+		return 1
+	}
+	if lhs < rhs {
+		return -1
+	}
+	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+}
+
+//
+// Common
+//
+
 // IsLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
 // "Find the lowest vertex (or, if  there is more than one vertex with the same lowest coordinate,
@@ -617,10 +702,6 @@ func S2RegionsFromGeomT(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regi
 	}
 	return regions, nil
 }
-
-//
-// Common
-//
 
 // normalizeLngLat normalizes geographical coordinates into a valid range.
 func normalizeLngLat(lng float64, lat float64) (float64, float64) {
@@ -755,9 +836,10 @@ func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	}
 }
 
-// CompareSpatialObject compares the SpatialObject.
-// This must match the byte ordering that is be produced by encoding.EncodeGeoAscending.
-func CompareSpatialObject(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
+// compareSpatialObjectBytes compares the SpatialObject if they were serialized.
+// This is used for comparison operations, and must be kept consistent with the indexing
+// encoding.
+func compareSpatialObjectBytes(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
 	marshalledLHS, err := protoutil.Marshal(&lhs)
 	if err != nil {
 		panic(err)
