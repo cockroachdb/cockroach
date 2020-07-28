@@ -1202,6 +1202,10 @@ func logOutputDirectory() string {
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command,
 ) (stopper *stop.Stopper, err error) {
+	if active, firstUse := log.IsActive(); active {
+		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
+	}
+
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.

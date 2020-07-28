@@ -62,20 +62,28 @@ func Scope(t tShim) *TestLogScope {
 // ScopeWithoutShowLogs ignores the -show-logs flag and should be used for tests
 // that require the logs go to files.
 func ScopeWithoutShowLogs(t tShim) *TestLogScope {
+	restoreActive := resetActive()
 	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
+		restoreActive()
 		t.Fatal(err)
 	}
+
 	if err := dirTestOverride("", tempDir); err != nil {
+		restoreActive()
 		t.Fatal(err)
 	}
 	undo, err := enableLogFileOutput(tempDir, Severity_NONE)
-	if err != nil {
+	cleanup2 := func() {
 		undo()
+		restoreActive()
+	}
+	if err != nil {
+		cleanup2()
 		t.Fatal(err)
 	}
 	t.Logf("test logs captured to: %s", tempDir)
-	return &TestLogScope{logDir: tempDir, cleanup: undo}
+	return &TestLogScope{logDir: tempDir, cleanup: cleanup2}
 }
 
 // enableLogFileOutput turns on logging using the specified directory.

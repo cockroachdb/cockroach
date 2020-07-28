@@ -87,24 +87,13 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
-// sqlServerOptionalArgs are the arguments supplied to newSQLServer which
-// are only available if the SQL server runs as part of a KV node.
+// sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
+// only available if the SQL server runs as part of a KV node.
 //
 // TODO(tbg): give all of these fields a wrapper that can signal whether the
 // respective object is available. When it is not, return
 // UnsupportedWithMultiTenancy.
-type sqlServerOptionalArgs struct {
-	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
-	// also uses rpcContext in a number of places to learn whether the server
-	// is running insecure, and to read the cluster name.
-	// TODO(nvanbenschoten): move off this struct.
-	rpcContext *rpc.Context
-
-	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
-	// uses range descriptors and leaseholders, which DistSender maintains,
-	// for debugging and DistSQL planning purposes.
-	// TODO(nvanbenschoten): move off this struct.
-	distSender *kvcoord.DistSender
+type sqlServerOptionalKVArgs struct {
 	// statusServer gives access to the Status service.
 	statusServer serverpb.OptionalStatusServer
 	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
@@ -113,9 +102,6 @@ type sqlServerOptionalArgs struct {
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
 	gossip gossip.DeprecatedGossip
-	// Used by DistSQLConfig and DistSQLPlanner.
-	// TODO(nvanbenschoten): move off this struct.
-	nodeDialer *nodedialer.Dialer
 	// To register blob and DistSQL servers.
 	grpcServer *grpc.Server
 	// Used by executorConfig.
@@ -128,15 +114,17 @@ type sqlServerOptionalArgs struct {
 	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+}
 
-	// TODO(nvanbenschoten): Move to a second "optional" args struct. One for
-	// dependencies that are only available if the SQL server runs NOT as part
-	// of a KV node.
+// sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
+// are only available if the SQL server runs as part of a standalone SQL node.
+type sqlServerOptionalTenantArgs struct {
 	tenantProxy kvtenant.Proxy
 }
 
 type sqlServerArgs struct {
-	sqlServerOptionalArgs
+	sqlServerOptionalKVArgs
+	sqlServerOptionalTenantArgs
 
 	*SQLConfig
 	*BaseConfig
@@ -150,6 +138,22 @@ type sqlServerArgs struct {
 	// DistSQLCfg holds on to this to check for node CPU utilization in
 	// samplerProcessor.
 	runtime execinfra.RuntimeStats
+
+	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
+	// also uses rpcContext in a number of places to learn whether the server
+	// is running insecure, and to read the cluster name.
+	rpcContext *rpc.Context
+
+	// Used by DistSQLPlanner.
+	nodeDescs kvcoord.NodeDescStore
+
+	// Used by DistSQLPlanner.
+	nodeDialer *nodedialer.Dialer
+
+	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
+	// uses range descriptors and leaseholders, which DistSender maintains,
+	// for debugging and DistSQL planning purposes.
+	distSender *kvcoord.DistSender
 
 	// SQL uses KV, both for non-DistSQL and DistSQL execution.
 	db *kv.DB
@@ -416,6 +420,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
+			cfg.nodeDescs,
 			cfg.gossip,
 			cfg.stopper,
 			isLive,

@@ -252,6 +252,8 @@ func checkDemoConfiguration(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
+	defer log.ScopeWithoutFiles().Close()
+
 	if gen, err = checkDemoConfiguration(cmd, gen); err != nil {
 		return err
 	}
@@ -259,6 +261,12 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	incrementTelemetryCounters(cmd)
 
 	ctx := context.Background()
+
+	var c transientCluster
+	if err := c.checkConfigAndSetupLogging(ctx, cmd); err != nil {
+		return err
+	}
+	defer c.cleanup(ctx)
 
 	if err := checkTzDatabaseAvailability(ctx); err != nil {
 		return err
@@ -271,9 +279,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		log.Infof(ctx, "GEOS loaded from directory %s", loc)
 	}
 
-	c, err := setupTransientCluster(ctx, cmd, gen)
-	defer c.cleanup(ctx)
-	if err != nil {
+	if err := c.start(ctx, cmd, gen); err != nil {
 		return checkAndMaybeShout(err)
 	}
 	demoCtx.transientCluster = &c

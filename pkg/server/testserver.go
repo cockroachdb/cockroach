@@ -574,13 +574,10 @@ func makeSQLServerArgs(
 	dummyRPCServer := rpc.NewServer(rpcContext)
 	noStatusServer := serverpb.MakeOptionalStatusServer(nil)
 	return sqlServerArgs{
-		sqlServerOptionalArgs: sqlServerOptionalArgs{
-			rpcContext:   rpcContext,
-			distSender:   ds,
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer: noStatusServer,
 			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
 			gossip:       gossip.MakeUnexposedGossip(g),
-			nodeDialer:   nodeDialer,
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
@@ -594,6 +591,8 @@ func makeSQLServerArgs(
 				uri, user string) (cloud.ExternalStorage, error) {
 				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
+		},
+		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantProxy: tenantProxy,
 		},
 		SQLConfig:                &sqlCfg,
@@ -601,6 +600,10 @@ func makeSQLServerArgs(
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
+		rpcContext:               rpcContext,
+		nodeDescs:                tenantProxy,
+		nodeDialer:               nodeDialer,
+		distSender:               ds,
 		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sql.NewSessionRegistry(),

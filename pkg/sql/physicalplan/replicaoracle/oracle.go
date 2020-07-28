@@ -17,7 +17,6 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,10 +40,9 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDesc roachpb.NodeDescriptor
-	Settings *cluster.Settings
-	// TODO(nvanbenschoten): replace with NodeDescStore once #49997 merges.
-	Gossip     gossip.DeprecatedOracleGossip
+	NodeDescs  kvcoord.NodeDescStore
+	NodeDesc   roachpb.NodeDescriptor // current node
+	Settings   *cluster.Settings
 	RPCContext *rpc.Context
 }
 
@@ -127,7 +125,7 @@ type randomOracle struct {
 var _ OracleFactory = &randomOracle{}
 
 func newRandomOracleFactory(cfg Config) OracleFactory {
-	return &randomOracle{nodeDescs: cfg.Gossip}
+	return &randomOracle{nodeDescs: cfg.NodeDescs}
 }
 
 func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
@@ -145,18 +143,18 @@ func (o *randomOracle) ChoosePreferredReplica(
 }
 
 type closestOracle struct {
-	latencyFunc kvcoord.LatencyFunc
-	nodeDescs   kvcoord.NodeDescStore
+	nodeDescs kvcoord.NodeDescStore
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
-	nodeDesc roachpb.NodeDescriptor
+	nodeDesc    roachpb.NodeDescriptor
+	latencyFunc kvcoord.LatencyFunc
 }
 
 func newClosestOracleFactory(cfg Config) OracleFactory {
 	return &closestOracle{
-		latencyFunc: latencyFunc(cfg.RPCContext),
-		nodeDescs:   cfg.Gossip,
+		nodeDescs:   cfg.NodeDescs,
 		nodeDesc:    cfg.NodeDesc,
+		latencyFunc: latencyFunc(cfg.RPCContext),
 	}
 }
 
@@ -192,18 +190,17 @@ const maxPreferredRangesPerLeaseHolder = 10
 // Finally, it tries not to overload any node.
 type binPackingOracle struct {
 	maxPreferredRangesPerLeaseHolder int
-	// TODO(nvanbenschoten): replace with NodeDescStore once #49997 merges.
-	gossip      gossip.DeprecatedOracleGossip
-	latencyFunc kvcoord.LatencyFunc
+	nodeDescs                        kvcoord.NodeDescStore
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
-	nodeDesc roachpb.NodeDescriptor
+	nodeDesc    roachpb.NodeDescriptor
+	latencyFunc kvcoord.LatencyFunc
 }
 
 func newBinPackingOracleFactory(cfg Config) OracleFactory {
 	return &binPackingOracle{
 		maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
-		gossip:                           cfg.Gossip,
+		nodeDescs:                        cfg.NodeDescs,
 		nodeDesc:                         cfg.NodeDesc,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
 	}
@@ -223,7 +220,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		return lease.Replica, nil
 	}
 
-	replicas, err := replicaSliceOrErr(ctx, o.gossip, desc)
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
