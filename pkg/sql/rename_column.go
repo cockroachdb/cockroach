@@ -105,8 +105,9 @@ func (p *planner) renameColumn(
 			}
 		}
 		if found {
-			return false, p.dependentViewRenameError(
-				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID)
+			return false, p.dependentViewError(
+				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
+			)
 		}
 	}
 	if *oldName == *newName {

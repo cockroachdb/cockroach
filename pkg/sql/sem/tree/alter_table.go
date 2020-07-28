@@ -544,3 +544,18 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INJECT STATISTICS ")
 	ctx.FormatNode(node.Stats)
 }
+
+// AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
+type AlterTableSetSchema struct {
+	Name       *UnresolvedObjectName
+	Schema     string
+	IfExists   bool
+	IsView     bool
+	IsSequence bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET SCHEMA ")
+	ctx.WriteString(node.Schema)
+}
