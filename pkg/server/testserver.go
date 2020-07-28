@@ -631,7 +631,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
-	sqlCfg.TenantKVAddrs = []string{ts.TenantAddr()}
+	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
 	return StartTenant(
 		ctx,
 		ts.Stopper(),
