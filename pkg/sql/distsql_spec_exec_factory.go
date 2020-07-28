@@ -954,8 +954,12 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	resultColumns := getJoinResultColumns(joinType, leftPhysPlan.ResultColumns, rightPhysPlan.ResultColumns)
 	leftMap, rightMap := leftPhysPlan.PlanToStreamColMap, rightPhysPlan.PlanToStreamColMap
 	helper := &joinPlanningHelper{
-		numLeftCols:             len(leftPhysPlan.ResultColumns),
-		numRightCols:            len(rightPhysPlan.ResultColumns),
+		// TODO(yuzefovich): numLeftOutCols and numRightOutCols might include
+		// columns that are only needed for merging the streams. This might
+		// need an adjustment.
+		numLeftOutCols:          len(leftPhysPlan.ResultTypes),
+		numRightOutCols:         len(rightPhysPlan.ResultTypes),
+		numAllLeftCols:          len(leftPhysPlan.ResultTypes),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
