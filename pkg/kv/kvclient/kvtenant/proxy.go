@@ -16,6 +16,8 @@ import (
 	"context"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -47,12 +49,26 @@ type Proxy interface {
 	// nodes while being subject to additional validation (e.g. is the Range being
 	// requested owned by the requesting tenant?).
 	kvcoord.RangeDescriptorDB
+
+	// Proxy is capable of providing a filtered view of the SystemConfig
+	// containing only information applicable to secondary tenants. This
+	// obviates the need for SQL-only tenant processes to join the cluster-wide
+	// gossip network.
+	config.SystemConfigProvider
+}
+
+// ProxyConfig encompasses the configuration required to create a Proxy.
+type ProxyConfig struct {
+	AmbientCtx        log.AmbientContext
+	RPCContext        *rpc.Context
+	RPCRetryOptions   retry.Options
+	DefaultZoneConfig *zonepb.ZoneConfig
 }
 
 // ProxyFactory constructs a new tenant proxy from the provide network addresses
 // pointing to KV nodes.
 type ProxyFactory interface {
-	NewProxy(_ log.AmbientContext, _ *rpc.Context, _ retry.Options, addrs []string) (Proxy, error)
+	NewProxy(cfg ProxyConfig, addrs []string) (Proxy, error)
 }
 
 // Factory is a hook for binaries that include CCL code to inject a ProxyFactory.
@@ -60,9 +76,7 @@ var Factory ProxyFactory = requiresCCLBinaryFactory{}
 
 type requiresCCLBinaryFactory struct{}
 
-func (requiresCCLBinaryFactory) NewProxy(
-	_ log.AmbientContext, _ *rpc.Context, _ retry.Options, _ []string,
-) (Proxy, error) {
+func (requiresCCLBinaryFactory) NewProxy(_ ProxyConfig, _ []string) (Proxy, error) {
 	return nil, errors.Errorf(`tenant proxy requires a CCL binary`)
 }
 

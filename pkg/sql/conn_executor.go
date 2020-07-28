@@ -325,12 +325,12 @@ func makeMetrics(internal bool) Metrics {
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	if s.cfg.Codec.ForSystemTenant() {
-		gossipUpdateC := s.cfg.Gossip.DeprecatedRegisterSystemConfigChannel(47150)
+		gossipUpdateC := s.cfg.SystemConfig.RegisterSystemConfigChannel()
 		stopper.RunWorker(ctx, func(ctx context.Context) {
 			for {
 				select {
 				case <-gossipUpdateC:
-					sysCfg := s.cfg.Gossip.DeprecatedSystemConfig(47150)
+					sysCfg := s.cfg.SystemConfig.GetSystemConfig()
 					s.dbCache.updateSystemConfig(sysCfg)
 				case <-stopper.ShouldStop():
 					return

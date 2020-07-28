@@ -1026,6 +1026,14 @@ func (n *Node) GossipSubscription(
 		// and filter system config updates. Luckily, SystemConfigDeltaFilter
 		// supports a "keyPrefix" that should help here. We'll also want to use
 		// RegisterSystemConfigChannel for any SystemConfig patterns.
+		//
+		// UPDATE: the SystemConfig pattern story is even more complicated
+		// because of ZoneConfig inheritance/recursion. We'll also need to
+		// return the default zone config. In that case, it probably makes sense
+		// to perform the filtering here (based on whether a tenant marker is
+		// present in the ctx) without baking it into the protocol itself. So
+		// the request will simply specify "system-db" but we'll only return the
+		// subset of key/values that the tenant is allowed to / needs to see.
 
 		callback := func(key string, content roachpb.Value) {
 			callbackMu.Lock()

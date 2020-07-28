@@ -1120,15 +1120,6 @@ var Redundant redundantCallbacks
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
 func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...CallbackOption) func() {
-	if pattern == KeySystemConfig {
-		ctx := g.AnnotateCtx(context.TODO())
-		log.Warningf(
-			ctx,
-			"raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
-			KeySystemConfig,
-		)
-	}
-
 	g.mu.Lock()
 	unregister := g.mu.is.registerCallback(pattern, method, opts...)
 	g.mu.Unlock()
@@ -1152,7 +1143,7 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 // already set), and whenever a new system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	// Create channel that receives new system config notifications.
-	// The channel has a size of 1 to prevent gossip from blocking on it.
+	// The channel has a size of 1 to prevent gossip from having to block on it.
 	c := make(chan struct{}, 1)
 
 	g.systemConfigMu.Lock()
@@ -1667,42 +1658,6 @@ func MakeUnexposedGossip(g *Gossip) DeprecatedGossip {
 // See TenantSQLDeprecatedWrapper for details.
 type DeprecatedGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
-}
-
-// Start calls .Start() on the underlying Gossip instance, which is assumed to
-// be non-nil.
-func (dg DeprecatedGossip) Start(advertAddr net.Addr, resolvers []resolver.Resolver) {
-	dg.w.Deprecated(0).(*Gossip).Start(advertAddr, resolvers)
-}
-
-// deprecated trades a Github issue tracking the removal of the call for the
-// wrapped Gossip instance.
-func (dg DeprecatedGossip) deprecated(issueNo int) *Gossip {
-	// NB: some tests use a nil Gossip.
-	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
-	return g
-}
-
-// DeprecatedSystemConfig calls GetSystemConfig on the wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemConfig {
-	g := dg.deprecated(issueNo)
-	if g == nil {
-		return nil // a few unit tests
-	}
-	return g.GetSystemConfig()
-}
-
-// DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
-// the wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-chan struct{} {
-	g := dg.deprecated(issueNo)
-	return g.RegisterSystemConfigChannel()
 }
 
 // OptionalErr returns the Gossip instance if the wrapper was set up to allow
