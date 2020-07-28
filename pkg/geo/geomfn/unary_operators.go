@@ -12,7 +12,6 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
@@ -27,32 +26,36 @@ func Length(g *geo.Geometry) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Fast path.
+	switch geomRepr.(type) {
+	case *geom.LineString, *geom.MultiLineString:
+		return geos.Length(g.EWKB())
+	}
+	return lengthFromGeomT(geomRepr)
+}
+
+// lengthFromGeomT returns the length from a geom.T, recursing down
+// GeometryCollections if required.
+func lengthFromGeomT(geomRepr geom.T) (float64, error) {
 	// Length in GEOS will also include polygon "perimeters".
 	// As such, gate based on on shape underneath.
 	switch geomRepr := geomRepr.(type) {
 	case *geom.Point, *geom.MultiPoint, *geom.Polygon, *geom.MultiPolygon:
 		return 0, nil
 	case *geom.LineString, *geom.MultiLineString:
-		return geos.Length(g.EWKB())
+		ewkb, err := ewkb.Marshal(geomRepr, geo.DefaultEWKBEncodingFormat)
+		if err != nil {
+			return 0, err
+		}
+		return geos.Length(ewkb)
 	case *geom.GeometryCollection:
 		total := float64(0)
 		for _, subG := range geomRepr.Geoms() {
-			switch subG := subG.(type) {
-			case *geom.Point, *geom.MultiPoint, *geom.Polygon, *geom.MultiPolygon:
-				continue
-			case *geom.LineString, *geom.MultiLineString:
-				subGEWKB, err := ewkb.Marshal(subG, geo.DefaultEWKBEncodingFormat)
-				if err != nil {
-					return 0, err
-				}
-				length, err := geos.Length(geopb.EWKB(subGEWKB))
-				if err != nil {
-					return 0, err
-				}
-				total += length
-			default:
-				return 0, errors.AssertionFailedf("unknown geometry type in GeometryCollection: %T", subG)
+			subLength, err := lengthFromGeomT(subG)
+			if err != nil {
+				return 0, err
 			}
+			total += subLength
 		}
 		return total, nil
 	default:
@@ -68,30 +71,36 @@ func Perimeter(g *geo.Geometry) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Fast path.
+	switch geomRepr.(type) {
+	case *geom.Polygon, *geom.MultiPolygon:
+		return geos.Length(g.EWKB())
+	}
+	return perimeterFromGeomT(geomRepr)
+}
+
+// perimeterFromGeomT returns the perimeter from a geom.T, recursing down
+// GeometryCollections if required.
+func perimeterFromGeomT(geomRepr geom.T) (float64, error) {
+	// Length in GEOS will also include polygon "perimeters".
+	// As such, gate based on on shape underneath.
 	switch geomRepr := geomRepr.(type) {
 	case *geom.Point, *geom.MultiPoint, *geom.LineString, *geom.MultiLineString:
 		return 0, nil
 	case *geom.Polygon, *geom.MultiPolygon:
-		return geos.Length(g.EWKB())
+		ewkb, err := ewkb.Marshal(geomRepr, geo.DefaultEWKBEncodingFormat)
+		if err != nil {
+			return 0, err
+		}
+		return geos.Length(ewkb)
 	case *geom.GeometryCollection:
 		total := float64(0)
 		for _, subG := range geomRepr.Geoms() {
-			switch subG := subG.(type) {
-			case *geom.Point, *geom.MultiPoint, *geom.LineString, *geom.MultiLineString:
-				continue
-			case *geom.Polygon, *geom.MultiPolygon:
-				subGEWKB, err := ewkb.Marshal(subG, geo.DefaultEWKBEncodingFormat)
-				if err != nil {
-					return 0, err
-				}
-				perimeter, err := geos.Length(geopb.EWKB(subGEWKB))
-				if err != nil {
-					return 0, err
-				}
-				total += perimeter
-			default:
-				return 0, errors.AssertionFailedf("unknown geometry type in GeometryCollection: %T", subG)
+			subLength, err := perimeterFromGeomT(subG)
+			if err != nil {
+				return 0, err
 			}
+			total += subLength
 		}
 		return total, nil
 	default:
