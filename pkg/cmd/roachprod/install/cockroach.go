@@ -326,7 +326,6 @@ func (h *crdbStartHelper) startNode(
 func (h *crdbStartHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
-	var cmd string
 	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
 	if err != nil {
 		return "", err
@@ -349,27 +348,25 @@ func (h *crdbStartHelper) generateStartCmd(
 	// NB: this is awkward as when the process fails, the test runner will show an
 	// unhelpful empty error (since everything has been redirected away). This is
 	// unfortunately equally awkward to address.
-	cmd = "ulimit -c unlimited; mkdir -p " + logDir + "; "
-
-	// TODO(peter): The ps and lslocks stuff is intended to debug why killing
-	// of a cockroach process sometimes doesn't release file locks immediately.
-	cmd += `echo ">>> roachprod start: $(date)" >> ` + logDir + "/roachprod.log; " +
-		`ps axeww -o pid -o command >> ` + logDir + "/roachprod.log; " +
-		`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
-
-	cmd += keyCmd +
-		fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[nodeIdx], h.c.Tag) +
-		"GOTRACEBACK=crash " +
-		"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
-		// Turn stats mismatch into panic, see:
-		// https://github.com/cockroachdb/cockroach/issues/38720#issuecomment-539136246
-		// Disabled because we have a local repro in
-		// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
-		//
-		// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
-		h.getEnvVars() + " " + binary + " " + startCmd + " " + strings.Join(args, " ") +
-		" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
-		" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
+	cmd := fmt.Sprintf(`
+		ulimit -c unlimited; mkdir -p %[1]s;
+		echo ">>> roachprod start: $(date)" >> %[1]s/roachprod.log;
+		ps axeww -o pid -o command >> %[1]s/roachprod.log;
+		[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> %[1]s/roachprod.log; %[2]s
+		export ROACHPROD=%[3]d%[4]s;
+		GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 %[5]s \
+		%[6]s %[7]s %[8]s >> %[1]s/cockroach.stdout.log \
+		                 2>> %[1]s/cockroach.stderr.log \
+			|| (x=$?; cat %[1]s/cockroach.stderr.log; exit $x)`,
+		logDir,                  // [1]
+		keyCmd,                  // [2]
+		nodes[nodeIdx],          // [3]
+		h.c.Tag,                 // [4]
+		h.getEnvVars(),          // [5]
+		binary,                  // [6]
+		startCmd,                // [7]
+		strings.Join(args, " "), // [8]
+	)
 	return cmd, nil
 }
 
@@ -549,9 +546,9 @@ func (h *crdbStartHelper) generateInitCmd(nodeIdx int) string {
 	binary := cockroachNodeBinary(h.c, nodeIdx)
 
 	initCmd += fmt.Sprintf(`
-		if ! test -e %s ; then
-			COCKROACH_CONNECT_TIMEOUT=0 %s init --url %s && touch %s
-		fi`, path, binary, url, path)
+		if ! test -e %[1]s ; then
+			COCKROACH_CONNECT_TIMEOUT=0 %[2]s init --url %[3]s && touch %[1]s
+		fi`, path, binary, url)
 	return initCmd
 }
 
@@ -570,9 +567,9 @@ func (h *crdbStartHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string
 
 	// Command to create the store key.
 	keyCmd := fmt.Sprintf(`
-		mkdir -p %[1]s; 
-		if [ ! -e %[1]s/aes-128.key ]; then 
-			openssl rand -out %[1]s/aes-128.key 48; 
+		mkdir -p %[1]s;
+		if [ ! -e %[1]s/aes-128.key ]; then
+			openssl rand -out %[1]s/aes-128.key 48;
 		fi;`, storeDir)
 	return keyCmd
 }
