@@ -21,7 +21,7 @@ some guidelines on adding new syntax that you can read about on [#17569](https:/
 
 ## Adding a SQL Statement
 
-CockroachDB supports for many different types of [SQL statements][statements].
+CockroachDB supports many different types of [SQL statements][statements].
 This Codelab describes the process of adding a novel statement type to the SQL
 parser, its implementation, and the requisite tests.  We'll see how to work with
 the `goyacc` tool to update the parser and see how the executor and the query
@@ -48,7 +48,7 @@ CLUSTER`, which operates on cluster settings, `FROBNICATE SESSION`, working on
 session settings, and `FROBNICATE ALL`, which handles both.
 
 Let's start by checking to make sure all our keywords are defined.  Open
-`pkg/sql/parser/sql.y` and search for "keyword".  You'll find a series of token
+`pkg/sql/parser/sql.y` and search for "Ordinary key words".  You'll find a series of token
 definitions in alphabetical order.  Since the grammar already uses `SESSION`,
 `CLUSTER`, and `ALL` keywords, we don't need to add those, but we do need to
 make a keyword for `FROBNICATE`.  It should look like this:
@@ -140,7 +140,7 @@ github.com/cockroachdb/cockroach
 Now, let’s run a single-node Cockroach instance:
 
 ```text
-$ rm -fr cockroach-data/ && ./cockroach start --insecure
+$ rm -fr cockroach-data/ && ./cockroach start-single-node --insecure
 ...
 status:     initialized new cluster
 ...
@@ -151,10 +151,22 @@ statement:
 
 ```text
 $ ./cockroach sql --insecure -e "frobnicate cluster"
-Error: pq: unimplemented at or near "cluster"
+ERROR: at or near "cluster": syntax error: unimplemented: this syntax
+SQLSTATE: 0A000
+DETAIL: source SQL:
 frobnicate cluster
            ^
 
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
 Failed running "sql"
 ```
 
@@ -164,10 +176,11 @@ something invalid we'll see a different error:
 
 ```go
 $ ./cockroach sql --insecure -e 'hodgepodge bananas'
-Error: pq: syntax error at or near "hodgepodge"
+ERROR: at or near "hodgepodge": syntax error
+SQLSTATE: 42601
+DETAIL: source SQL:
 hodgepodge bananas
 ^
-
 Failed running "sql"
 ```
 
@@ -186,9 +199,7 @@ Make a new file for our statement type: `pkg/sql/sem/tree/frobnicate.go`.  In
 it, put the implementation of our AST node.
 
 ```go
-package parser
-
-import "bytes"
+package tree 
 
 type Frobnicate struct {
     Mode FrobnicateMode
@@ -207,18 +218,15 @@ const (
 func (node *Frobnicate) StatementType() StatementType { return Ack }
 func (node *Frobnicate) StatementTag() string { return "FROBNICATE" }
 
-func (node *Frobnicate) Format(buf *bytes.Buffer, f FmtFlags) {
-    buf.WriteString("FROBNICATE ")
+func (node *Frobnicate) Format(ctx *FmtCtx) {
+    ctx.WriteString("FROBNICATE ")
     switch node.Mode {
     case FrobnicateModeAll:
-        buf.WriteString("ALL")
+        ctx.WriteString("ALL")
     case FrobnicateModeCluster:
-        buf.WriteString("CLUSTER")
+        ctx.WriteString("CLUSTER")
     case FrobnicateModeSession:
-        buf.WriteString("SESSION")
-    default:
-        panic(fmt.Errorf("Unknown FROBNICATE mode %v!", node.Mode))
-    }
+        ctx.WriteString("SESSION")
 }
 
 func (node *Frobnicate) String() string {
@@ -295,11 +303,17 @@ a method to the planner.  That's where the centralized statement dispatch takes
 place, so that's the place to add semantics.
 
 Look for the source of the error we're seeing.  You'll find that it's at the end
-of a long type switch statement in `/pkg/sql/plan.go`.  Let's add a case to that:
+of a long type switch statement in `/pkg/sql/opaque.go`.  Let's add a case to that:
 
 ```go
 case *tree.Frobnicate:
-    return p.Frobnicate(ctx, n)
+    plan, err = p.Frobnicate(ctx, n)
+```
+
+Also add the following under the `init()` function in the same file, `/pkg/sql/opaque.go`.
+
+```go
+&tree.Frobnicate{},
 ```
 
 This calls a method (yet to be written) on the planner itself.  Let's implement
@@ -310,13 +324,13 @@ package sql
 
 import (
     "context"
-    "fmt"
 
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+    "github.com/cockroachdb/errors"
 )
 
 func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
-    return nil, fmt.Errorf("We're not quite frobnicating yet...")
+    return nil, AssertionFailedf("We're not quite frobnicating yet...")
 }
 ```
 
@@ -339,39 +353,29 @@ he's just [turning a knob] because turning a knob is fun, he's frobbing it."  To
 that end, whereas the `SET` statement should generally be used to tweak session
 and cluster settings, `FROB` should randomize them, right?
 
-Let's take a look at `pkg/sql/set.go` to see how settings are updated.  Take a
-look at the implementation of the `SET` statement in `func (*planner) Set(...`.
-There are two code paths to consider here: cluster settings and session settings.
-if the statement is for a cluster setting, we make a call to `setClusterSetting`
+There are two kinds of settings to consider here: cluster settings and session settings.
+If the statement is for a cluster setting, we make a call to `setClusterSetting`
 to update the value.  If it's a session setting, we grab the variable from the
 `varGen` map and call its `Set` method.
 
 Let's start with the session settings, since they're a bit simpler.  Look at the
-implementation of the `varGen` map in `pkg/sql/vars.go`.  Each of the session
-settings defines a `sessionVar` struct that may or may not have a `Set` method.
-Most of these settings take a string parameter, but it's usually pretty tightly
-constrained.  The `application_name` setting can be any arbitrary string, but
-`database` needs to be an actual database name, and otherwise it has to be one
-of a specific set of options.
+implementation of the `varGen` map in `pkg/sql/vars.go`.  
+Most of these settings have a `Set` method. Some of them take a parameter, but 
+it's usually pretty tightly constrained.  The `application_name` setting can be 
+any arbitrary string, but `distsql` needs to be one of a specific set of options.
 
 #### Frobnicating the session
 
 First we'll work on the latter case.  For instance, the setting for
-`default_transaction_isolation` must be either `"SNAPSHOT"` or `"SERIALIZABLE"`
-(or one of a few others that are mapped to these options).  There's not really
-a great way to generalize this, so let's just start making a map of such options.
+`distsql` must be one of `"OFF"`, `"ON"`, `"AUTO", or `"ALWAYS"`.
 
 In `pkg/sql/frobnicate.go`:
 
 ```go
-var varOptions = map[string][]string{
-    `default_transaction_isolation`: []string{"SNAPSHOT", "SERIALIZABLE"},
-    `distsql`: []string{"off", "on", "auto", "always"},
-    `tracing`: []string{"off", "on", "kv", "local", "cluster"},
-}
+var distSQLOptions = []string{"off", "on", "auto", "always"}
 ```
 
-Now we need to write a method to pick a valid option for a given setting.
+Now we need to write a method to pick a valid option.
 
 ```go
 import (
@@ -380,14 +384,10 @@ import (
     // ...
 )
 
-func randomOption(name string) (string, error) {
-    options, ok := varOptions[name]
-    if !ok {
-        return "", fmt.Errorf("Unknown option %s!", name)
-    }
-
-    i := rand.Int() % len(options)
-    return options[i], nil
+func randomMode() sessiondata.DistSQLExecMode {
+    i := rand.Int() % len(distSQLOptions)
+    mode, _ := sessiondata.DistSQLExecModeFromString(distSQLOptions[i])
+    return mode;
 }
 ```
 
@@ -413,80 +413,29 @@ func randomName() string {
 }
 ```
 
-Finally, for the `database` setting we need to pick an actual database at random.
-
-```go
-import (
-    // ...
-    "github.com/cockroachdb/cockroach/pkg/internal/client"
-    // ...
-)
-
-func randomDatabase(ctx context.Context, txn *client.Txn) (string, error) {
-    dbs, err := getAllDatabaseDescs(ctx, txn)
-    if err != nil {
-        return "", err
-    }
-
-    i := rand.Int() % len(dbs)
-    return dbs[i].GetName(), nil
-}
-```
-
 Now we just need to iterate through the various settings that we can frobnicate.
 
 ```go
-func (p *planner) setSessionSettingString(ctx context.Context, name, value string) error {
-    typedValues := make([]tree.TypedExpr, 1)
-    typedValues[0] = tree.NewDString(value)
+func (p *planner) randomizeSessionSettings() {
+    mutator := p.sessionDataMutator
 
-    setting, ok := varGen[name]
-    if !ok {
-        return fmt.Errorf("Unknown session setting %s!", name)
-    }
-
-    setting.Set(ctx, p.session, typedValues)
-
-    return nil
-}
-
-func (p *planner) randomizeSessionSettings(ctx context.Context) error {
-    db, err := randomDatabase(ctx, p.txn)
-    if err != nil {
-        return err
-    }
-    err = p.setSessionSettingString(ctx, "database", db)
-    if err != nil {
-        return err
-    }
-
-    for option := range varOptions {
-        value, err := randomOption(option)
-        if err != nil {
-            return err
-        }
-        err = p.setSessionSettingString(ctx, option, value)
-        if err != nil {
-            return err
-        }
-    }
-
-    return p.setSessionSettingString(ctx, "application_name", randomName())
+    mutator.SetDistSQLMode(randomMode())
+    mutator.SetApplicationName(randomName())
 }
 ```
 
-Now let's wire it up with into our statement.
+Now let's wire it up into our statement.
 
 ```go
 func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
     switch stmt.Mode {
     case tree.FrobnicateModeSession:
-        p.randomizeSessionSettings(ctx)
+        p.randomizeSessionSettings()
     default:
-        return nil, fmt.Errorf("Unhandled FROBNICATE mode %v!", stmt.Mode)
+        return nil, errors.AssertionFailedf("Unhandled FROBNICATE mode %v!", stmt.Mode)
     }
 
-    return &zeroNode{}, nil
+    return newZeroNode(nil /* columns */), nil
 }
 ```
 
@@ -494,11 +443,9 @@ Okay, let's give it a try:
 
 ```text
 $ ./cockroach sql --insecure -e "frobnicate session; show application_name"
-+------------------+
-| application_name |
-+------------------+
-| fhqwhgads        |
-+------------------+
+  application_name
+--------------------
+  somdizkjyjqhr
 (1 row)
 ```
 
@@ -506,29 +453,11 @@ Success!  Let's just try again, for good measure.
 
 ```text
 $ ./cockroach sql --insecure -e "frobnicate session; show application_name"
-Error: pq: unsupported node *sql.valuesNode without SQL VALUES clause
-Failed running "sql"
+  application_name
+--------------------
+  kgqhgelkgiige
+(1 row)
 ```
-
-What happened?  Don't spend too much time debugging this (we're shooting
-ourselves in the foot).  Take a look again at the settings we're randomizing,
-and if you don't see it right away just click below to find out what's
-happening here.
-
-<details>
-  <summary>See what the bug is.</summary>
-  <p>
-
-    The setting to consider is `distsql`: one of the options is `"always"`, which
-    forces all queries to run through distributed SQL.  Since DistSQL doesn't
-    support the `SHOW` query, we fail if our `FROBNICATE` set it to `"always"`.
-
-    If running into the error bothers you, feel free to remove `"always"` from
-    the list of options.  (I quite like it, since it demonstrates the risk/value
-    of frobnicating).
-
-  </p>
-</details>
 
 <span></span> <!-- Force space after collapsible section. -->
 
