@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func TestDatabaseAccessors(t *testing.T) {
@@ -44,6 +45,43 @@ func TestDatabaseAccessors(t *testing.T) {
 		databaseCache := database.NewCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
 		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID)
 		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDatabaseHasChildSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a database and schema.
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_user_defined_schemas = true;
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now get the database descriptor from disk.
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
+		if err != nil {
+			return err
+		}
+		db, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, dbID)
+		if err != nil {
+			return err
+		}
+		if _, ok := db.Schemas["sc"]; !ok {
+			return errors.New("expected to find child schema sc in db")
+		}
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}

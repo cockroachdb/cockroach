@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -71,5 +72,28 @@ func (p *planner) renameDatabase(
 	p.Descriptors().AddUncommittedDatabase(oldName, descID, descs.DBDropped)
 	p.Descriptors().AddUncommittedDatabase(newName, descID, descs.DBCreated)
 
+	return p.txn.Run(ctx, b)
+}
+
+func (p *planner) writeDatabaseChange(
+	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor,
+) error {
+	desc.MaybeIncrementVersion()
+	// TODO (rohany, lucy): This usage of descs.DBCreated is awkward, but since
+	//  we are getting rid of this anyway, I'll just leave it for now to be
+	//  cleaned up as part of the database cache removal process.
+	p.Descriptors().AddUncommittedDatabase(desc.Name, desc.ID, descs.DBCreated)
+	b := p.txn.NewBatch()
+	if err := catalogkv.WriteDescToBatch(
+		ctx,
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		p.ExecCfg().Settings,
+		b,
+		p.ExecCfg().Codec,
+		desc.ID,
+		desc,
+	); err != nil {
+		return err
+	}
 	return p.txn.Run(ctx, b)
 }
