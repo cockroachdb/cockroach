@@ -914,7 +914,9 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`crdb_version`: makeReadOnlyVar(build.GetInfo().Short()),
+	`crdb_version`: makeReadOnlyVarWithFn(func() string {
+		return build.GetInfo().Short()
+	}),
 
 	// CockroachDB extension
 	`session_id`: {
@@ -1177,6 +1179,13 @@ func makeReadOnlyVar(value string) sessionVar {
 	return sessionVar{
 		Get:           func(_ *extendedEvalContext) string { return value },
 		GlobalDefault: func(_ *settings.Values) string { return value },
+	}
+}
+
+func makeReadOnlyVarWithFn(fn func() string) sessionVar {
+	return sessionVar{
+		Get:           func(_ *extendedEvalContext) string { return fn() },
+		GlobalDefault: func(_ *settings.Values) string { return fn() },
 	}
 }
 
