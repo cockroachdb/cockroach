@@ -106,7 +106,7 @@ func TestGSS(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run("libpq", func(t *testing.T) {
-				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require spn=postgres/gss_cockroach_1.gss_default", tc.user))
+				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require krbspn=postgres/gss_cockroach_1.gss_default", tc.user))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -130,7 +130,7 @@ func TestGSS(t *testing.T) {
 					"--certs-dir", "/certs",
 					// TODO(mjibson): Teach the CLI to not ask for passwords during kerberos.
 					// See #51588.
-					"--url", fmt.Sprintf("postgresql://%s:nopassword@cockroach:26257/?sslmode=require&spn=postgres/gss_cockroach_1.gss_default", tc.user),
+					"--url", fmt.Sprintf("postgresql://%s:nopassword@cockroach:26257/?sslmode=require&krbspn=postgres/gss_cockroach_1.gss_default", tc.user),
 				).CombinedOutput()
 				err = errors.Wrap(err, strings.TrimSpace(string(out)))
 				if !IsError(err, tc.gssErr) {
