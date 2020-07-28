@@ -71,7 +71,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	}
 	sqlDB.Exec(t, "ALTER TABLE t.kv RENAME to t.kv2")
 	sqlDB.Exec(t, "ALTER TABLE t.kv2 RENAME to t.kv")
-	exp := `CREATE TABLE kv (
+	exp := `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
@@ -133,7 +133,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE t.kv PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
 
-	exp = `CREATE TABLE kv (
+	exp = `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),

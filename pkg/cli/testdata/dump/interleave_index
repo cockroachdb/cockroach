@@ -10,14 +10,14 @@ CREATE INDEX
 dump d t1
 ----
 ----
-CREATE TABLE t1 (
+CREATE TABLE public.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 );
 
-CREATE INDEX b_idx ON t1 (a ASC, b ASC) INTERLEAVE IN PARENT t1 (a);
+CREATE INDEX b_idx ON public.t1 (a ASC, b ASC) INTERLEAVE IN PARENT public.t1 (a);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ----
@@ -36,14 +36,14 @@ INSERT 1
 dump e
 ----
 ----
-CREATE TABLE t3 (
+CREATE TABLE public.t3 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 );
 
-CREATE TABLE t2 (
+CREATE TABLE public.t2 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -56,7 +56,7 @@ INSERT INTO t3 (a, b) VALUES
 INSERT INTO t2 (a, b) VALUES
 	(1, 2);
 
-CREATE INDEX b_idx ON t2 (a ASC, b ASC) INTERLEAVE IN PARENT t3 (a);
+CREATE INDEX b_idx ON public.t2 (a ASC, b ASC) INTERLEAVE IN PARENT public.t3 (a);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ----
@@ -72,14 +72,14 @@ CREATE INDEX
 dump dd unique
 ----
 ----
-CREATE TABLE "unique" (
+CREATE TABLE public."unique" (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 );
 
-CREATE INDEX b_idx ON "unique" (a ASC, b ASC) INTERLEAVE IN PARENT "unique" (a);
+CREATE INDEX b_idx ON public."unique" (a ASC, b ASC) INTERLEAVE IN PARENT public."unique" (a);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ----
@@ -95,19 +95,19 @@ CREATE TABLE
 dump ee a d
 ----
 ----
-CREATE TABLE a (
+CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	j INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC, j DESC),
 	FAMILY "primary" (i, j)
 );
 
-CREATE TABLE d (
+CREATE TABLE public.d (
 	x INT8 NOT NULL,
 	y INT8 NOT NULL,
 	z INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC, y DESC, z DESC),
 	FAMILY "primary" (x, y, z)
-) INTERLEAVE IN PARENT a (x, y);
+) INTERLEAVE IN PARENT public.a (x, y);
 ----
 ----

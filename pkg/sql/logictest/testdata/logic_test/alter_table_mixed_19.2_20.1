@@ -64,7 +64,7 @@ ALTER TABLE t ADD COLUMN b INT
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    a INT8 NOT NULL,
    b INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -95,7 +95,7 @@ CREATE INDEX t_b_idx ON t (b)
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    a INT8 NOT NULL,
    b INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -118,7 +118,7 @@ ALTER TABLE t ADD FOREIGN KEY (a) REFERENCES t2
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    a INT8 NOT NULL,
    b INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (a ASC),

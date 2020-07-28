@@ -8,4 +8,4 @@ CREATE VIEW
 
 dump d
 ----
-CREATE VIEW bar (x) AS SELECT 1 AS x;
+CREATE VIEW public.bar (x) AS SELECT 1 AS x;

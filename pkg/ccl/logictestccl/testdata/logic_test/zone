@@ -600,13 +600,13 @@ ALTER PARTITION p2 OF TABLE show_test CONFIGURE ZONE USING CONSTRAINTS='[+dc=dc2
 query TT
 SHOW CREATE TABLE show_test
 ----
-show_test  CREATE TABLE show_test (
-          x INT8 NOT NULL,
-          CONSTRAINT "primary" PRIMARY KEY (x ASC),
-          FAMILY "primary" (x)
+show_test  CREATE TABLE public.show_test (
+           x INT8 NOT NULL,
+           CONSTRAINT "primary" PRIMARY KEY (x ASC),
+           FAMILY "primary" (x)
 ) PARTITION BY LIST (x) (
-   PARTITION p1 VALUES IN ((1)),
-   PARTITION p2 VALUES IN ((2))
+  PARTITION p1 VALUES IN ((1)),
+  PARTITION p2 VALUES IN ((2))
 );
 ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
   constraints = '[+dc=dc1]';
@@ -623,7 +623,7 @@ ALTER TABLE warning PARTITION BY LIST (x) (PARTITION p1 VALUES IN (1))
 query TT
 SHOW CREATE warning
 ----
-warning  CREATE TABLE warning (
+warning  CREATE TABLE public.warning (
          x INT8 NOT NULL,
          CONSTRAINT "primary" PRIMARY KEY (x ASC),
          FAMILY "primary" (x)
@@ -702,7 +702,7 @@ ALTER PARTITION p1 OF TABLE t40417 CONFIGURE ZONE USING num_replicas = 1
 query TT
 SHOW CREATE TABLE t40417
 ----
-t40417  CREATE TABLE t40417 (
+t40417  CREATE TABLE public.t40417 (
         x INT8 NOT NULL,
         CONSTRAINT "primary" PRIMARY KEY (x ASC),
         FAMILY "primary" (x)
@@ -1065,7 +1065,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,

@@ -14,7 +14,7 @@ CREATE TABLE abcd(
 query TT
 SHOW CREATE TABLE abcd
 ----
-abcd  CREATE TABLE abcd (
+abcd  CREATE TABLE public.abcd (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NULL,
@@ -148,7 +148,7 @@ ALTER TABLE abcd ADD COLUMN j INT CREATE IF NOT EXISTS FAMILY f_j
 query TT
 SHOW CREATE TABLE abcd
 ----
-abcd  CREATE TABLE abcd (
+abcd  CREATE TABLE public.abcd (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NULL,
@@ -174,7 +174,7 @@ ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
 query TT
 SHOW CREATE TABLE abcd
 ----
-abcd  CREATE TABLE abcd (
+abcd  CREATE TABLE public.abcd (
       a INT8 NOT NULL,
       b INT8 NULL,
       f DECIMAL NULL,
@@ -193,7 +193,7 @@ CREATE TABLE f1 (
 query TT
 SHOW CREATE TABLE f1
 ----
-f1  CREATE TABLE f1 (
+f1  CREATE TABLE public.f1 (
     a INT8 NOT NULL,
     b STRING NULL,
     c STRING NULL,
@@ -207,7 +207,7 @@ CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c
 query TT
 SHOW CREATE TABLE assign_at_create
 ----
-assign_at_create  CREATE TABLE assign_at_create (
+assign_at_create  CREATE TABLE public.assign_at_create (
                   a INT8 NOT NULL,
                   b INT8 NULL,
                   c INT8 NULL,
@@ -245,7 +245,7 @@ ALTER TABLE rename_col RENAME c TO e
 query TT
 SHOW CREATE TABLE rename_col
 ----
-rename_col  CREATE TABLE rename_col (
+rename_col  CREATE TABLE public.rename_col (
             a INT8 NOT NULL,
             d INT8 NULL,
             e STRING NULL,

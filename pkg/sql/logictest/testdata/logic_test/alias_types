@@ -10,7 +10,7 @@ query TT colnames
 SHOW CREATE TABLE aliases
 ----
 table_name  create_statement
-aliases     CREATE TABLE aliases (
+aliases     CREATE TABLE public.aliases (
             a OID NULL,
             b NAME NULL,
             FAMILY "primary" (a, rowid),

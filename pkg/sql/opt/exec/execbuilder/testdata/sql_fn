@@ -31,7 +31,7 @@ root                        ·              ·                                  
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
@@ -46,7 +46,7 @@ public.my_spatial_table.geom2 SRID:4326 TYPE:POLYGON DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -62,7 +62,7 @@ my_spatial_table.geom3 SRID:4326 TYPE:MULTIPOLYGON DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -79,7 +79,7 @@ test.public.my_spatial_table.geom4 SRID:4326 TYPE:LINESTRING DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -97,7 +97,7 @@ public.my_spatial_table.geom5 SRID:4326 TYPE:MULTIPOINT DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -116,7 +116,7 @@ my_spatial_table.geom6 SRID:4326 TYPE:MULTILINESTRING DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -198,7 +198,7 @@ root                        ·             ·                                   
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,
@@ -227,7 +227,7 @@ my_spatial_table.geom10 SRID:0 TYPE:GEOMETRYCOLLECTION DIMS:2
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
-CREATE TABLE my_spatial_table (
+CREATE TABLE public.my_spatial_table (
    k INT8 NOT NULL,
    geom1 GEOMETRY(POINT,4326) NULL,
    geom2 GEOMETRY(POLYGON,4326) NULL,

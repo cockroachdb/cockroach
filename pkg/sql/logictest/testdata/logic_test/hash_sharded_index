@@ -8,7 +8,7 @@ CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 1
 query TT
 SHOW CREATE TABLE sharded_primary
 ----
-sharded_primary  CREATE TABLE sharded_primary (
+sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                  FAMILY "primary" (crdb_internal_a_shard_10, a)
@@ -40,7 +40,7 @@ CREATE TABLE sharded_primary (
 query TT
 SHOW CREATE TABLE sharded_primary
 ----
-sharded_primary  CREATE TABLE sharded_primary (
+sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                  FAMILY "primary" (crdb_internal_a_shard_10, a)
@@ -66,12 +66,12 @@ CREATE TABLE specific_family (
 query TT
 SHOW CREATE TABLE specific_family 
 ----
-specific_family  CREATE TABLE specific_family (
-                    a INT8 NULL,
-                    b INT8 NULL,
-                    INDEX specific_family_crdb_internal_b_shard_10_b_idx (b ASC) USING HASH WITH BUCKET_COUNT = 10,
-                    FAMILY a_family (a, rowid),
-                    FAMILY b_family (b, crdb_internal_b_shard_10)
+specific_family  CREATE TABLE public.specific_family (
+                 a INT8 NULL,
+                 b INT8 NULL,
+                 INDEX specific_family_crdb_internal_b_shard_10_b_idx (b ASC) USING HASH WITH BUCKET_COUNT = 10,
+                 FAMILY a_family (a, rowid),
+                 FAMILY b_family (b, crdb_internal_b_shard_10)
 )
 
 # Tests for secondary sharded indexes
@@ -81,7 +81,7 @@ CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
                    FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
@@ -100,7 +100,7 @@ CREATE TABLE sharded_secondary (
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
                    FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
@@ -126,7 +126,7 @@ INSERT INTO sharded_secondary values (1), (2), (1)
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                    FAMILY "primary" (a, rowid, crdb_internal_a_shard_10)
@@ -142,7 +142,7 @@ CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 4
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                    INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
@@ -156,7 +156,7 @@ DROP INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                    FAMILY "primary" (a, rowid, crdb_internal_a_shard_10)
@@ -169,7 +169,7 @@ DROP INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
+sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    FAMILY "primary" (a, rowid)
 )
@@ -210,12 +210,12 @@ CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
 query TT
 SHOW CREATE TABLE sharded_secondary
 ----
-sharded_secondary  CREATE TABLE sharded_secondary (
-                    a INT8 NULL,
-                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                    INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx2 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                    FAMILY "primary" (a, rowid, crdb_internal_a_shard_10)
+sharded_secondary  CREATE TABLE public.sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
+                   INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
+                   INDEX sharded_secondary_crdb_internal_a_shard_10_a_idx2 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
+                   FAMILY "primary" (a, rowid, crdb_internal_a_shard_10)
 )
 
 
@@ -231,7 +231,7 @@ CREATE INDEX ON sharded_primary (a) USING HASH WITH BUCKET_COUNT = 4;
 query TT
 SHOW CREATE TABLE sharded_primary
 ----
-sharded_primary  CREATE TABLE sharded_primary (
+sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                  INDEX sharded_primary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
@@ -247,7 +247,7 @@ SELECT count(*) FROM sharded_primary
 query TT
 SHOW CREATE TABLE sharded_primary
 ----
-sharded_primary  CREATE TABLE sharded_primary (
+sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                  FAMILY "primary" (crdb_internal_a_shard_10, a)
@@ -259,7 +259,7 @@ CREATE INDEX on sharded_primary (a) USING HASH WITH BUCKET_COUNT=10;
 query TT
 SHOW CREATE TABLE sharded_primary
 ----
-sharded_primary  CREATE TABLE sharded_primary (
+sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
                  INDEX sharded_primary_crdb_internal_a_shard_10_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
@@ -337,10 +337,10 @@ DROP INDEX column_used_on_unsharded@foo
 query TT
 SHOW CREATE TABLE column_used_on_unsharded
 ----
-column_used_on_unsharded  CREATE TABLE column_used_on_unsharded (
-                            a INT8 NULL,
-                            INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
-                            FAMILY "primary" (a, crdb_internal_a_shard_10, rowid)
+column_used_on_unsharded  CREATE TABLE public.column_used_on_unsharded (
+                          a INT8 NULL,
+                          INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
+                          FAMILY "primary" (a, crdb_internal_a_shard_10, rowid)
 )
 
 statement ok
@@ -359,10 +359,10 @@ DROP INDEX column_used_on_unsharded_create_table@foo
 query TT
 SHOW CREATE TABLE column_used_on_unsharded_create_table
 ----
-column_used_on_unsharded_create_table  CREATE TABLE column_used_on_unsharded_create_table (
-                                        a INT8 NULL,
-                                        INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
-                                        FAMILY "primary" (a, crdb_internal_a_shard_10, rowid)
+column_used_on_unsharded_create_table  CREATE TABLE public.column_used_on_unsharded_create_table (
+                                       a INT8 NULL,
+                                       INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
+                                       FAMILY "primary" (a, crdb_internal_a_shard_10, rowid)
 )
 
 statement ok
@@ -411,12 +411,12 @@ SELECT count(*) from weird_names WHERE "'quotes' in the column's name" = 2
 query TT
 SHOW CREATE TABLE weird_names
 ----
-weird_names  CREATE TABLE weird_names (
-                "I am a column with spaces" INT8 NOT NULL,
-                "'quotes' in the column's name" INT8 NULL,
-                CONSTRAINT "primary" PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH BUCKET_COUNT = 12,
-                INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH BUCKET_COUNT = 4,
-                FAMILY "primary" ("I am a column with spaces", "'quotes' in the column's name", "crdb_internal_I am a column with spaces_shard_12", "crdb_internal_'quotes' in the column's name_shard_4")
+weird_names  CREATE TABLE public.weird_names (
+             "I am a column with spaces" INT8 NOT NULL,
+             "'quotes' in the column's name" INT8 NULL,
+             CONSTRAINT "primary" PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH BUCKET_COUNT = 12,
+             INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH BUCKET_COUNT = 4,
+             FAMILY "primary" ("I am a column with spaces", "'quotes' in the column's name", "crdb_internal_I am a column with spaces_shard_12", "crdb_internal_'quotes' in the column's name_shard_4")
 )
 
 subtest interleave_disabled
@@ -503,7 +503,7 @@ INSERT INTO rename_column VALUES (1, 2, 3);
 query TT
 SHOW CREATE TABLE rename_column
 ----
-rename_column  CREATE TABLE rename_column (
+rename_column  CREATE TABLE public.rename_column (
                c0 INT8 NOT NULL,
                c1 INT8 NOT NULL,
                c2 INT8 NULL,
@@ -525,7 +525,7 @@ ALTER TABLE rename_column RENAME c0 TO c1;
 query TT
 SHOW CREATE TABLE rename_column
 ----
-rename_column  CREATE TABLE rename_column (
+rename_column  CREATE TABLE public.rename_column (
                c1 INT8 NOT NULL,
                c2 INT8 NOT NULL,
                c3 INT8 NULL,
@@ -546,7 +546,7 @@ ALTER TABLE rename_column RENAME c1 TO c0, RENAME c2 TO c1, RENAME c3 TO c2;
 query TT
 SHOW CREATE TABLE rename_column
 ----
-rename_column  CREATE TABLE rename_column (
+rename_column  CREATE TABLE public.rename_column (
                c0 INT8 NOT NULL,
                c1 INT8 NOT NULL,
                c2 INT8 NULL,
