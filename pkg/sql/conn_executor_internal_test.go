@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -256,6 +257,7 @@ func startConnExecutor(
 		Settings:        st,
 		Clock:           clock,
 		DB:              db,
+		SystemConfig:    config.EmptySystemConfigProvider{},
 		SessionRegistry: NewSessionRegistry(),
 		NodeInfo: NodeInfo{
 			NodeID:    nodeID,

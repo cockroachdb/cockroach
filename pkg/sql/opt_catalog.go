@@ -76,7 +76,7 @@ func (oc *optCatalog) reset() {
 		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
 	}
 
-	oc.cfg = oc.planner.execCfg.Gossip.DeprecatedSystemConfig(47150)
+	oc.cfg = oc.planner.execCfg.SystemConfig.GetSystemConfig()
 }
 
 // optSchema represents the parent database and schema for an object. It
