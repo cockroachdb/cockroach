@@ -95,6 +95,21 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
 	if maxY-minY < 1 {
 		maxY++
 	}
+	// We are covering shapes using cells that are square. If we have shapes
+	// that start off as well-behaved wrt square cells, we do not wish to
+	// distort them significantly. Hence, we equalize MaxX-MinX and MaxY-MinY
+	// in the index bounds.
+	diffX := maxX - minX
+	diffY := maxY - minY
+	if diffX > diffY {
+		adjustment := (diffX - diffY) / 2
+		minY -= adjustment
+		maxY += adjustment
+	} else {
+		adjustment := (diffY - diffX) / 2
+		minX -= adjustment
+		maxX += adjustment
+	}
 	// Expand the bounds by 2x the clippingBoundsDelta, to
 	// ensure that shapes touching the bounds don't get
 	// clipped.
