@@ -470,6 +470,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
+		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 	}
 
 	cfg.stopper.AddCloser(execCfg.ExecLogger)

@@ -33,6 +33,7 @@ import (
 type s3Storage struct {
 	bucket   *string
 	conf     *roachpb.ExternalStorage_S3
+	ioConf   base.ExternalIODirConfig
 	prefix   string
 	s3       *s3.S3
 	settings *cluster.Settings
@@ -140,6 +141,7 @@ func MakeS3Storage(
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
+		ioConf:   ioConf,
 		prefix:   conf.Prefix,
 		s3:       s3.New(sess),
 		settings: settings,
@@ -151,6 +153,14 @@ func (s *s3Storage) Conf() roachpb.ExternalStorage {
 		Provider: roachpb.ExternalStorageProvider_S3,
 		S3Config: s.conf,
 	}
+}
+
+func (s *s3Storage) ExternalIOConf() base.ExternalIODirConfig {
+	return s.ioConf
+}
+
+func (s *s3Storage) Settings() *cluster.Settings {
+	return s.settings
 }
 
 func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {

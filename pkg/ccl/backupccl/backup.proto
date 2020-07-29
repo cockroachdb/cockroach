@@ -151,6 +151,11 @@ message EncryptionInfo {
 
   Scheme scheme = 1;
   bytes salt = 2;
+
+  // EncryptedDataKeyByKMSMasterKeyID is a mapping from the hashed master key
+  // identifier of a KMS to the encrypted version of the DataKey obtained from
+  // that KMS.
+  map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
 }
 
 // In 20.2 and later, the Statistics object is stored separately from the backup manifest.

@@ -10,10 +10,13 @@ package backupccl
 
 import (
 	"context"
+	"crypto"
+	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -25,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -32,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,9 +52,18 @@ import (
 const (
 	backupOptRevisionHistory = "revision_history"
 	backupOptEncPassphrase   = "encryption_passphrase"
+	backupOptEncKMS          = "kms"
 	backupOptWithPrivileges  = "privileges"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
+)
+
+type encryptionMode int
+
+const (
+	noEncryption encryptionMode = iota
+	passphrase
+	kms
 )
 
 // TODO(pbardea): We should move to a model of having the system tables opt-
@@ -77,6 +91,72 @@ var useTBI = settings.RegisterBoolSetting(
 type tableAndIndex struct {
 	tableID sqlbase.ID
 	indexID sqlbase.IndexID
+}
+
+type backupKMSEnv struct {
+	settings *cluster.Settings
+	conf     *base.ExternalIODirConfig
+}
+
+var _ cloud.KMSEnv = &backupKMSEnv{}
+
+func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
+	return p.settings
+}
+
+func (p *backupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
+	return p.conf
+}
+
+type plaintextMasterKeyID string
+type hashedMasterKeyID string
+type encryptedDataKeyMap struct {
+	m map[hashedMasterKeyID][]byte
+}
+
+func newEncryptedDataKeyMap() *encryptedDataKeyMap {
+	return &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
+}
+
+func newEncryptedDataKeyMapFromProtoMap(protoDataKeyMap map[string][]byte) *encryptedDataKeyMap {
+	encMap := &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
+	for k, v := range protoDataKeyMap {
+		encMap.m[hashedMasterKeyID(k)] = v
+	}
+
+	return encMap
+}
+
+func (e *encryptedDataKeyMap) addEncryptedDataKey(
+	masterKeyID plaintextMasterKeyID, encryptedDataKey []byte,
+) {
+	// Hash the master key ID before writing to the map.
+	hasher := crypto.SHA256.New()
+	hasher.Write([]byte(masterKeyID))
+	hash := hasher.Sum(nil)
+	e.m[hashedMasterKeyID(hash)] = encryptedDataKey
+}
+
+func (e *encryptedDataKeyMap) getEncryptedDataKey(
+	masterKeyID plaintextMasterKeyID,
+) ([]byte, error) {
+	// Hash the master key ID before reading from the map.
+	hasher := crypto.SHA256.New()
+	hasher.Write([]byte(masterKeyID))
+	hash := hasher.Sum(nil)
+	var encDataKey []byte
+	var ok bool
+	if encDataKey, ok = e.m[hashedMasterKeyID(hash)]; !ok {
+		return nil, errors.New("could not find an entry in the encryptedDataKeyMap")
+	}
+
+	return encDataKey, nil
+}
+
+func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID, dataKey []byte)) {
+	for k, v := range e.m {
+		fn(k, v)
+	}
 }
 
 // spansForAllTableIndexes returns non-overlapping spans for every index and
@@ -155,32 +235,32 @@ func optsToKVOptions(opts map[string]string) tree.KVOptions {
 	return kvopts
 }
 
+func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return "", "", err
+	}
+	q := parsedURI.Query()
+	localityKV := q.Get(localityURLParam)
+	// Remove the backup locality parameter.
+	q.Del(localityURLParam)
+	parsedURI.RawQuery = q.Encode()
+	if appendPath != "" {
+		parsedURI.Path = parsedURI.Path + appendPath
+	}
+	baseURI := parsedURI.String()
+	return localityKV, baseURI, nil
+}
+
 // getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
 // backup, and returns the default backup destination URI and a map of all other
-// URIs by locality KV, apppending appendPath to the path component of both the
+// URIs by locality KV, appending appendPath to the path component of both the
 // default URI and all the locality URIs. The URIs in the result do not include
 // the COCKROACH_LOCALITY parameter.
 func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]string, error) {
-	localityAndBaseURI := func(uri string) (string, string, error) {
-		parsedURI, err := url.Parse(uri)
-		if err != nil {
-			return "", "", err
-		}
-		q := parsedURI.Query()
-		localityKV := q.Get(localityURLParam)
-		// Remove the backup locality parameter.
-		q.Del(localityURLParam)
-		parsedURI.RawQuery = q.Encode()
-		if appendPath != "" {
-			parsedURI.Path = parsedURI.Path + appendPath
-		}
-		baseURI := parsedURI.String()
-		return localityKV, baseURI, nil
-	}
-
 	urisByLocalityKV := make(map[string]string)
 	if len(to) == 1 {
-		localityKV, baseURI, err := localityAndBaseURI(to[0])
+		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
 		if err != nil {
 			return "", nil, err
 		}
@@ -193,7 +273,7 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 
 	var defaultURI string
 	for _, uri := range to {
-		localityKV, baseURI, err := localityAndBaseURI(uri)
+		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
 		if err != nil {
 			return "", nil, err
 		}
@@ -255,6 +335,54 @@ func backupJobDescription(
 	return tree.AsStringWithFQNames(b, ann), nil
 }
 
+// validateKMSURIsAgainstFullBackup ensures that the KMS URIs provided to an
+// incremental BACKUP are a subset of those used during the full BACKUP. It does
+// this by ensuring that the KMS master key ID of each KMS URI specified during
+// the incremental BACKUP can be found in the map written to `encryption-info`
+// during a base BACKUP.
+//
+// The method also returns the KMSInfo to be used for all subsequent
+// encryption/decryption operations during this BACKUP. By default it is the
+// first KMS URI passed during the incremental BACKUP.
+func validateKMSURIsAgainstFullBackup(
+	kmsURIs []string, kmsMasterKeyIDToDataKey *encryptedDataKeyMap, kmsEnv cloud.KMSEnv,
+) (*jobspb.BackupEncryptionOptions_KMSInfo, error) {
+	var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+	for _, kmsURI := range kmsURIs {
+		kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+		if err != nil {
+			return nil, err
+		}
+
+		defer func() {
+			_ = kms.Close()
+		}()
+
+		// Depending on the KMS specific implementation, this may or may not contact
+		// the remote KMS.
+		id, err := kms.MasterKeyID()
+		if err != nil {
+			return nil, err
+		}
+
+		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(plaintextMasterKeyID(id))
+		if err != nil {
+			return nil,
+				errors.Wrap(err,
+					"one of the provided URIs was not used when encrypting the base BACKUP")
+		}
+
+		if defaultKMSInfo == nil {
+			defaultKMSInfo = &jobspb.BackupEncryptionOptions_KMSInfo{
+				Uri:              kmsURI,
+				EncryptedDataKey: encryptedDataKey,
+			}
+		}
+	}
+
+	return defaultKMSInfo, nil
+}
+
 // annotatedBackupStatement is a tree.Backup, optionally
 // annotated with the scheduling information.
 type annotatedBackupStatement struct {
@@ -292,12 +420,38 @@ func backupPlanHook(
 	}
 
 	var pwFn func() (string, error)
+	encryptMode := noEncryption
 	if backupStmt.Options.EncryptionPassphrase != nil {
 		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 		pwFn = fn
+		encryptMode = passphrase
+	}
+
+	var kmsFn func() ([]string, *backupKMSEnv, error)
+	if backupStmt.Options.EncryptionKMSURI != nil {
+		if encryptMode != noEncryption {
+			return nil, nil, nil, false,
+				errors.New("cannot have both encryption_passphrase and kms option set")
+		}
+		fn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
+			"BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		kmsFn = func() ([]string, *backupKMSEnv, error) {
+			res, err := fn()
+			if err == nil {
+				return res, &backupKMSEnv{
+					settings: p.ExecCfg().Settings,
+					conf:     &p.ExecCfg().ExternalIODirConfig,
+				}, nil
+			}
+			return nil, nil, err
+		}
+		encryptMode = kms
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -359,7 +513,8 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets, backupStmt.DescriptorCoverage)
+		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime,
+			backupStmt.Targets, backupStmt.DescriptorCoverage)
 		if err != nil {
 			return err
 		}
@@ -395,7 +550,10 @@ func backupPlanHook(
 		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		var encryptionPassphrase []byte
-		if pwFn != nil {
+		var kmsURIs []string
+		var kmsEnv cloud.KMSEnv
+		switch encryptMode {
+		case passphrase:
 			pw, err := pwFn()
 			if err != nil {
 				return err
@@ -404,6 +562,14 @@ func backupPlanHook(
 				return err
 			}
 			encryptionPassphrase = []byte(pw)
+		case kms:
+			kmsURIs, kmsEnv, err = kmsFn()
+			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
+				return err
+			}
 		}
 
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
@@ -425,7 +591,7 @@ func backupPlanHook(
 		var prevBackups []BackupManifest
 		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
-			if encryptionPassphrase != nil {
+			if encryptMode != noEncryption {
 				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0], p.User())
 				if err != nil {
 					return err
@@ -435,8 +601,22 @@ func backupPlanHook(
 				if err != nil {
 					return err
 				}
-				encryption = &jobspb.BackupEncryptionOptions{
-					Key: storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
+
+				switch encryptMode {
+				case passphrase:
+					encryption = &jobspb.BackupEncryptionOptions{
+						Mode: jobspb.EncryptionMode_Passphrase,
+						Key:  storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
+					}
+				case kms:
+					defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kmsURIs,
+						newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+					if err != nil {
+						return err
+					}
+					encryption = &jobspb.BackupEncryptionOptions{
+						Mode:    jobspb.EncryptionMode_KMS,
+						KMSInfo: defaultKMSInfo}
 				}
 			}
 			prevBackups = make([]BackupManifest, len(incrementalFrom))
@@ -469,13 +649,27 @@ func backupPlanHook(
 				return err
 			}
 			if exists {
-				if encryptionPassphrase != nil {
+				if encryptMode != noEncryption {
 					encOpts, err := readEncryptionOptions(ctx, defaultStore)
 					if err != nil {
 						return err
 					}
-					encryption = &jobspb.BackupEncryptionOptions{
-						Key: storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
+
+					switch encryptMode {
+					case passphrase:
+						encryption = &jobspb.BackupEncryptionOptions{
+							Mode: jobspb.EncryptionMode_Passphrase,
+							Key:  storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
+						}
+					case kms:
+						defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kmsURIs,
+							newEncryptedDataKeyMapFromProtoMap(encOpts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+						if err != nil {
+							return err
+						}
+						encryption = &jobspb.BackupEncryptionOptions{
+							Mode:    jobspb.EncryptionMode_KMS,
+							KMSInfo: defaultKMSInfo}
 					}
 				}
 
@@ -690,22 +884,58 @@ func backupPlanHook(
 		}
 
 		// If we didn't load any prior backups from which get encryption info, we
-		// need to pick a new salt and record it.
-		if encryptionPassphrase != nil && encryption == nil {
-			salt, err := storageccl.GenerateSalt()
-			if err != nil {
-				return err
-			}
+		// need to generate encryption specific data.
+		if encryption == nil {
 			exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
 			if err != nil {
 				return err
 			}
 			defer exportStore.Close()
-			if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt}, exportStore); err != nil {
-				return err
+
+			switch encryptMode {
+			case passphrase:
+				salt, err := storageccl.GenerateSalt()
+				if err != nil {
+					return err
+				}
+
+				if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt},
+					exportStore); err != nil {
+					return err
+				}
+				encryption = &jobspb.BackupEncryptionOptions{
+					Mode: jobspb.EncryptionMode_Passphrase,
+					Key:  storageccl.GenerateKey(encryptionPassphrase, salt)}
+			case kms:
+				// Generate a 32 byte/256-bit crypto-random number which will serve as
+				// the data key for encrypting the BACKUP data and manifest files.
+				plaintextDataKey := make([]byte, 32)
+				_, err := cryptorand.Read(plaintextDataKey)
+				if err != nil {
+					return errors.Wrap(err, "failed to generate DataKey")
+				}
+
+				encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
+					getEncryptedDataKeyByKMSMasterKeyID(ctx, kmsURIs, plaintextDataKey, kmsEnv)
+				if err != nil {
+					return err
+				}
+
+				encryptedDataKeyMapForProto := make(map[string][]byte)
+				encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
+					func(masterKeyID hashedMasterKeyID, dataKey []byte) {
+						encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
+					})
+				if err := writeEncryptionOptions(ctx, &EncryptionInfo{
+					EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto,
+				}, exportStore); err != nil {
+					return err
+				}
+
+				encryption = &jobspb.BackupEncryptionOptions{
+					Mode:    jobspb.EncryptionMode_KMS,
+					KMSInfo: defaultKMSInfo}
 			}
-			encryption = &jobspb.BackupEncryptionOptions{Key: storageccl.GenerateKey(
-				encryptionPassphrase, salt)}
 		}
 
 		// TODO (lucy): For partitioned backups, also add verification for other
@@ -822,6 +1052,74 @@ func backupPlanHook(
 		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func getEncryptedDataKeyFromURI(
+	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
+) (string, []byte, error) {
+	kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+	if err != nil {
+		return "", nil, err
+	}
+
+	defer func() {
+		_ = kms.Close()
+	}()
+
+	kmsURL, err := url.ParseRequestURI(kmsURI)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "cannot parse KMSURI")
+	}
+	encryptedDataKey, err := kms.Encrypt(ctx, plaintextDataKey)
+	if err != nil {
+		return "", nil, errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
+			kmsURL.Scheme)
+	}
+
+	masterKeyID, err := kms.MasterKeyID()
+	if err != nil {
+		return "", nil, errors.Wrapf(err, "failed to get master key ID for KMS scheme %s",
+			kmsURL.Scheme)
+	}
+
+	return masterKeyID, encryptedDataKey, nil
+}
+
+// getEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :
+// EncryptedDataKey} for each KMS URI provided during a full BACKUP. The
+// MasterKeyID is hashed before writing it to the map.
+//
+// The method also returns the KMSInfo to be used for all subsequent
+// encryption/decryption operations during this BACKUP. By default it is the
+// first KMS URI.
+func getEncryptedDataKeyByKMSMasterKeyID(
+	ctx context.Context, kmsURIs []string, plaintextDataKey []byte, kmsEnv cloud.KMSEnv,
+) (*encryptedDataKeyMap, *jobspb.BackupEncryptionOptions_KMSInfo, error) {
+	encryptedDataKeyByKMSMasterKeyID := newEncryptedDataKeyMap()
+	// The coordinator node contacts every KMS and records the encrypted data
+	// key for each one.
+	var kmsInfo *jobspb.BackupEncryptionOptions_KMSInfo
+	for _, kmsURI := range kmsURIs {
+		masterKeyID, encryptedDataKey, err := getEncryptedDataKeyFromURI(ctx,
+			plaintextDataKey, kmsURI, kmsEnv)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// By default we use the first KMS URI and encrypted data key for subsequent
+		// encryption/decryption operation during a BACKUP.
+		if kmsInfo == nil {
+			kmsInfo = &jobspb.BackupEncryptionOptions_KMSInfo{
+				Uri:              kmsURI,
+				EncryptedDataKey: encryptedDataKey,
+			}
+		}
+
+		encryptedDataKeyByKMSMasterKeyID.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID),
+			encryptedDataKey)
+	}
+
+	return encryptedDataKeyByKMSMasterKeyID, kmsInfo, nil
 }
 
 // checkForNewTables returns an error if any new tables were introduced with the

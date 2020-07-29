@@ -440,6 +440,8 @@ func TestLint(t *testing.T) {
 					":!acceptance",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/backupccl/backup_cloud_test.go",
+					// KMS requires AWS credentials from environment variables.
+					":!ccl/backupccl/backup_test.go",
 					":!storage/cloudimpl",
 					":!ccl/workloadccl/fixture_test.go",
 					":!cmd",

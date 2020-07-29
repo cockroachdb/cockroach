@@ -246,7 +246,7 @@ func TestHttpGet(t *testing.T) {
 				return nil
 			})
 
-			store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings)
+			store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -281,7 +281,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer s.Close()
 
-	store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings)
+	store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())

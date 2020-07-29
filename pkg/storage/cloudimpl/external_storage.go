@@ -280,13 +280,13 @@ func MakeExternalStorage(
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
-		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
+		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory, conf)
 	case roachpb.ExternalStorageProvider_Http:
 		if conf.DisableHTTP {
 			return nil, errors.New("external http access disabled")
 		}
 		telemetry.Count("external-io.http")
-		return MakeHTTPStorage(dest.HttpPath.BaseUri, settings)
+		return MakeHTTPStorage(dest.HttpPath.BaseUri, settings, conf)
 	case roachpb.ExternalStorageProvider_S3:
 		telemetry.Count("external-io.s3")
 		return MakeS3Storage(ctx, conf, dest.S3Config, settings)
@@ -295,13 +295,13 @@ func MakeExternalStorage(
 		return makeGCSStorage(ctx, conf, dest.GoogleCloudConfig, settings)
 	case roachpb.ExternalStorageProvider_Azure:
 		telemetry.Count("external-io.azure")
-		return makeAzureStorage(dest.AzureConfig, settings)
+		return makeAzureStorage(dest.AzureConfig, settings, conf)
 	case roachpb.ExternalStorageProvider_Workload:
 		telemetry.Count("external-io.workload")
-		return makeWorkloadStorage(dest.WorkloadConfig)
+		return makeWorkloadStorage(dest.WorkloadConfig, settings, conf)
 	case roachpb.ExternalStorageProvider_FileTable:
 		telemetry.Count("external-io.filetable")
-		return makeFileTableStorage(ctx, dest.FileTableConfig, ie, kvDB)
+		return makeFileTableStorage(ctx, dest.FileTableConfig, ie, kvDB, settings, conf)
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
