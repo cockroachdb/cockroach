@@ -48,7 +48,14 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
-	return distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, 0)
+	return distanceGeographyRegions(
+		spheroid,
+		useSphereOrSpheroid,
+		aRegions,
+		bRegions,
+		a.BoundingRect().Intersects(b.BoundingRect()),
+		0,
+	)
 }
 
 //
@@ -189,6 +196,7 @@ func distanceGeographyRegions(
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	aRegions []s2.Region,
 	bRegions []s2.Region,
+	boundingBoxIntersects bool,
 	stopAfterLE float64,
 ) (float64, error) {
 	minDistance := math.MaxFloat64
@@ -204,7 +212,10 @@ func distanceGeographyRegions(
 				return 0, err
 			}
 			earlyExit, err := geodist.ShapeDistance(
-				&geographyDistanceCalculator{updater: minDistanceUpdater},
+				&geographyDistanceCalculator{
+					updater:               minDistanceUpdater,
+					boundingBoxIntersects: boundingBoxIntersects,
+				},
 				aGeodist,
 				bGeodist,
 			)
@@ -303,7 +314,8 @@ func (u *geographyMinDistanceUpdater) FlipGeometries() {
 
 // geographyDistanceCalculator implements geodist.DistanceCalculator
 type geographyDistanceCalculator struct {
-	updater *geographyMinDistanceUpdater
+	updater               *geographyMinDistanceUpdater
+	boundingBoxIntersects bool
 }
 
 var _ geodist.DistanceCalculator = (*geographyDistanceCalculator)(nil)
@@ -315,9 +327,7 @@ func (c *geographyDistanceCalculator) DistanceUpdater() geodist.DistanceUpdater 
 
 // BoundingBoxIntersects implements geodist.DistanceCalculator.
 func (c *geographyDistanceCalculator) BoundingBoxIntersects() bool {
-	// Return true, as it does the safer thing beneath.
-	// TODO(otan): update bounding box intersects.
-	return true
+	return c.boundingBoxIntersects
 }
 
 // NewEdgeCrosser implements geodist.DistanceCalculator.
