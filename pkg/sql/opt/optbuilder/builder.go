@@ -169,6 +169,16 @@ func (b *Builder) Build() (err error) {
 		}
 	}()
 
+	// Hijack the input TypeResolver in the semaCtx to record all of the user
+	// defined types that we resolve while building this query.
+	existingResolver := b.semaCtx.TypeResolver
+	typeTracker := &optTrackingTypeResolver{
+		res:           existingResolver,
+		resolvedTypes: make(map[uint32]*types.T),
+	}
+	b.semaCtx.TypeResolver = typeTracker
+	defer func() { b.semaCtx.TypeResolver = existingResolver }()
+
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
@@ -185,6 +195,11 @@ func (b *Builder) Build() (err error) {
 	b.popWithFrame(outScope)
 	if len(b.cteStack) > 0 {
 		panic(errors.AssertionFailedf("dangling CTE stack frames"))
+	}
+
+	// Add all of the user defined types to the metadata.
+	for _, typ := range typeTracker.resolvedTypes {
+		b.factory.Metadata().AddUserDefinedType(typ)
 	}
 
 	physical := outScope.makePhysicalProps()
@@ -378,4 +393,37 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 			}
 		}
 	}
+}
+
+type optTrackingTypeResolver struct {
+	res           tree.TypeReferenceResolver
+	resolvedTypes map[uint32]*types.T
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (o *optTrackingTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	typ, err := o.res.ResolveType(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if typ.UserDefined() {
+		o.resolvedTypes[typ.StableTypeID()] = typ
+	}
+	return typ, nil
+}
+
+// ResolveTypeByID implements the tree.TypeResolver interface.
+func (o *optTrackingTypeResolver) ResolveTypeByID(
+	ctx context.Context, id uint32,
+) (*types.T, error) {
+	typ, err := o.res.ResolveTypeByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if typ.UserDefined() {
+		o.resolvedTypes[typ.StableTypeID()] = typ
+	}
+	return typ, nil
 }
