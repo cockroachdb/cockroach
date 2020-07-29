@@ -106,7 +106,7 @@ func TestRegistryCancelation(t *testing.T) {
 	register := func() {
 		didRegister = true
 		jobID++
-		if err := registry.register(jobID, func() { cancelCount++ }); err != nil {
+		if err := registry.deprecatedRegister(jobID, func() { cancelCount++ }); err != nil {
 			t.Fatal(err)
 		}
 	}
