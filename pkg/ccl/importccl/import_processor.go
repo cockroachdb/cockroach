@@ -319,6 +319,7 @@ func ingestKvs(
 			} else {
 				prog.ResumePos[file] = idx
 			}
+			prog.ResumePos[file] = adjustedResumePos(prog.ResumePos[file])
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 		}
 		progCh <- prog

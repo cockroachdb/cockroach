@@ -88,6 +88,16 @@ const (
 	avroSchemaURI = "schema_uri"
 )
 
+// resumeRowMultiple is so that each resume row index must be a multiple of
+// resumeRowMultiple, and that every row is re-seeded at those places.
+const resumeRowMultiple = 20
+
+// For the purpose of recording the resume position, we want to resume at
+// the last position we reseeded so we round down to the lowest resumeRowMultiple.
+func adjustedResumePos(resumePos int64) int64 {
+	return (resumePos / resumeRowMultiple) * resumeRowMultiple
+}
+
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	csvDelimiter:    sql.KVStringOptRequireValue,
 	csvComment:      sql.KVStringOptRequireValue,

@@ -12,10 +12,12 @@ package row
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,6 +110,17 @@ func importUniqueRowID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 	return tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | returnIndex)), nil
 }
 
+func importRandom(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	return tree.NewDFloat(tree.DFloat(rand.Float64())), nil
+}
+
+func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	gen := rand.Int63()
+	id := uuid.MakeV4()
+	id.DeterministicV4(uint64(gen), uint64(1<<63))
+	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
+}
+
 // Besides overriding, there are also counters that we want to keep track
 // of as we walk through the expressions in a row (at datumRowConverter creation
 // time). This will be handled by the visitorSideEffect field: it will be
@@ -147,6 +160,33 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Fn:         importUniqueRowID,
 				Info:       "Returns a unique rowid based on row position and time",
+				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"random": {
+		visitorSideEffect: func(annot *tree.Annotations) {},
+		override: makeBuiltinOverride(
+			tree.FunDefs["random"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.Float),
+				Fn:         importRandom,
+				Info:       "Returns a random number between 0 and 1 based on row position and time.",
+				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"gen_random_uuid": {
+		visitorSideEffect: func(annot *tree.Annotations) {},
+		override: makeBuiltinOverride(
+			tree.FunDefs["gen_random_uuid"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.Uuid),
+				Fn:         importGenUUID,
+				Info: "Generates a random UUID based on row position and time, " +
+					"and returns it as a value of UUID type.",
 				Volatility: tree.VolatilityVolatile,
 			},
 		),

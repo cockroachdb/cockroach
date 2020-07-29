@@ -408,7 +408,8 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					// (BulkAdderFlushesEveryBatch), then the progress resport must be emitted every
 					// batchSize rows (possibly out of order), starting from our initial resumePos
 					for prog := range progCh {
-						if !t.Failed() && prog.ResumePos[0] < (rp+int64(batchSize)) {
+						adjustedPos := adjustedResumePos(rp + int64(batchSize))
+						if !t.Failed() && prog.ResumePos[0] < adjustedPos {
 							t.Logf("unexpected progress resume pos: %d", prog.ResumePos[0])
 							t.Fail()
 						}

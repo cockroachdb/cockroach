@@ -619,6 +619,10 @@ func (p *parallelImporter) importWorker(
 		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
+			rowIndex := int64(timestamp) + rowNum
+			if batchIdx%resumeRowMultiple == 0 {
+				row.ReseedForImport(conv.KvBatch.Source, rowIndex)
+			}
 			if err := consumer.FillDatums(record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err
@@ -626,7 +630,6 @@ func (p *parallelImporter) importWorker(
 				continue
 			}
 
-			rowIndex := int64(timestamp) + rowNum
 			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex); err != nil {
 				return newImportRowError(err, fmt.Sprintf("%v", record), rowNum)
 			}

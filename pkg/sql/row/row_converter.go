@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -176,6 +177,12 @@ type KVBatch struct {
 	Progress float32
 	// KVs is the actual converted KV data.
 	KVs []roachpb.KeyValue
+}
+
+// ReseedForImport is a method to reset the state of the rand library whenever
+// being called.
+func ReseedForImport(sourceID int32, rowIndex int64) {
+	rand.Seed((int64(sourceID) << rowIDBits) + rowIndex)
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
