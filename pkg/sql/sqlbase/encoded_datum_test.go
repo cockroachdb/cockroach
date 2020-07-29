@@ -208,7 +208,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for _, typ := range types.OidToType {
 		switch typ.Family() {
-		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily, types.GeometryFamily, types.GeographyFamily:
+		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily:
 			continue
 		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *RandCollationLocale(rng))
