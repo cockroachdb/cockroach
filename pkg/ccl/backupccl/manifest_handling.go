@@ -18,6 +18,7 @@ import (
 	"path"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -93,9 +94,11 @@ func readBackupManifestFromStore(
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
 
-	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName, encryption)
+	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName,
+		encryption)
 	if err != nil {
-		newManifest, newErr := readBackupManifest(ctx, exportStore, BackupNewManifestName, encryption)
+		newManifest, newErr := readBackupManifest(ctx, exportStore, BackupNewManifestName,
+			encryption)
 		if newErr != nil {
 			return BackupManifest{}, err
 		}
@@ -162,11 +165,17 @@ func readBackupManifest(
 		return BackupManifest{}, err
 	}
 	if encryption != nil {
-		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
+		if err != nil {
+			return BackupManifest{}, err
+		}
+		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
 		if err != nil {
 			return BackupManifest{}, err
 		}
 	}
+
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressData(descBytes)
@@ -179,7 +188,8 @@ func readBackupManifest(
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
 			return BackupManifest{}, errors.Wrapf(
-				err, "file appears encrypted -- try specifying %q", backupOptEncPassphrase)
+				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
+				backupOptEncPassphrase, backupOptEncKMS)
 		}
 		return BackupManifest{}, err
 	}
@@ -219,11 +229,17 @@ func readBackupPartitionDescriptor(
 		return BackupPartitionDescriptor{}, err
 	}
 	if encryption != nil {
-		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
+		if err != nil {
+			return BackupPartitionDescriptor{}, err
+		}
+		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
 		if err != nil {
 			return BackupPartitionDescriptor{}, err
 		}
 	}
+
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressData(descBytes)
@@ -257,7 +273,12 @@ func readTableStatistics(
 		return nil, err
 	}
 	if encryption != nil {
-		statsBytes, err = storageccl.DecryptFile(statsBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
+		if err != nil {
+			return nil, err
+		}
+		statsBytes, err = storageccl.DecryptFile(statsBytes, encryptionKey)
 		if err != nil {
 			return nil, err
 		}
@@ -289,13 +310,54 @@ func writeBackupManifest(
 	}
 
 	if encryption != nil {
-		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
 	}
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+}
+
+func getEncryptionKey(
+	ctx context.Context,
+	encryption *jobspb.BackupEncryptionOptions,
+	settings *cluster.Settings,
+	ioConf base.ExternalIODirConfig,
+) ([]byte, error) {
+	if encryption == nil {
+		return nil, errors.New("FileEncryptionOptions is nil when retrieving encryption key")
+	}
+	switch encryption.Mode {
+	case jobspb.EncryptionMode_Passphrase:
+		return encryption.Key, nil
+	case jobspb.EncryptionMode_KMS:
+		// Contact the selected KMS to derive the decrypted data key.
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+			settings: settings,
+			conf:     &ioConf,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		defer func() {
+			_ = kms.Close()
+		}()
+
+		plaintextDataKey, err := kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to decrypt data key")
+		}
+
+		return plaintextDataKey, nil
+	}
+
+	return nil, errors.New("invalid encryption mode")
 }
 
 // writeBackupPartitionDescriptor writes metadata (containing a locality KV and
@@ -317,7 +379,12 @@ func writeBackupPartitionDescriptor(
 		return errors.Wrap(err, "compressing backup partition descriptor")
 	}
 	if encryption != nil {
-		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -341,7 +408,12 @@ func writeTableStatistics(
 		return err
 	}
 	if encryption != nil {
-		statsBuf, err = storageccl.EncryptFile(statsBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		statsBuf, err = storageccl.EncryptFile(statsBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -359,7 +431,8 @@ func loadBackupManifests(
 	backupManifests := make([]BackupManifest, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupManifestFromURI(ctx, uri, user, makeExternalStorageFromURI, encryption)
+		desc, err := ReadBackupManifestFromURI(ctx, uri, user, makeExternalStorageFromURI,
+			encryption)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}

@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -62,6 +64,7 @@ func distBackup(
 		encryption,
 		startTime, endTime,
 		phs.User(),
+		phs.ExecCfg(),
 	)
 	if err != nil {
 		return err
@@ -134,6 +137,7 @@ func makeBackupDataProcessorSpecs(
 	encryption *jobspb.BackupEncryptionOptions,
 	startTime, endTime hlc.Timestamp,
 	user string,
+	execCfg *sql.ExecutorConfig,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
 	var spanPartitions []sql.SpanPartition
 	var introducedSpanPartitions []sql.SpanPartition
@@ -151,6 +155,22 @@ func makeBackupDataProcessorSpecs(
 		}
 	}
 
+	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+			settings: execCfg.Settings,
+			conf:     &execCfg.ExternalIODirConfig,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
+			encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return nil, errors.Wrap(err,
+				"failed to decrypt data key before starting BackupDataProcessor")
+		}
+	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Backup
 	// processor and KV ExportRequest.
 	var fileEncryption *roachpb.FileEncryptionOptions

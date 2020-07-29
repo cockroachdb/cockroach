@@ -18,21 +18,29 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 )
 
 type workloadStorage struct {
-	conf  *roachpb.ExternalStorage_Workload
-	gen   workload.Generator
-	table workload.Table
+	conf     *roachpb.ExternalStorage_Workload
+	ioConf   base.ExternalIODirConfig
+	gen      workload.Generator
+	table    workload.Table
+	settings *cluster.Settings
 }
 
 var _ cloud.ExternalStorage = &workloadStorage{}
 
-func makeWorkloadStorage(conf *roachpb.ExternalStorage_Workload) (cloud.ExternalStorage, error) {
+func makeWorkloadStorage(
+	conf *roachpb.ExternalStorage_Workload,
+	settings *cluster.Settings,
+	ioConf base.ExternalIODirConfig,
+) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("workload upload requested but info missing")
 	}
@@ -56,8 +64,10 @@ func makeWorkloadStorage(conf *roachpb.ExternalStorage_Workload) (cloud.External
 		}
 	}
 	s := &workloadStorage{
-		conf: conf,
-		gen:  gen,
+		conf:     conf,
+		ioConf:   ioConf,
+		gen:      gen,
+		settings: settings,
 	}
 	for _, t := range gen.Tables() {
 		if t.Name == conf.Table {
@@ -76,6 +86,14 @@ func (s *workloadStorage) Conf() roachpb.ExternalStorage {
 		Provider:       roachpb.ExternalStorageProvider_Workload,
 		WorkloadConfig: s.conf,
 	}
+}
+
+func (s *workloadStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return s.ioConf
+}
+
+func (s *workloadStorage) Settings() *cluster.Settings {
+	return s.settings
 }
 
 func (s *workloadStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {

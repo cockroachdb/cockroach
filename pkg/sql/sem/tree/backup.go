@@ -12,6 +12,7 @@ package tree
 
 import (
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 // DescriptorCoverage specifies whether or not a subset of descriptors were
@@ -51,10 +52,10 @@ type Backup struct {
 	// BACKUP. A single URI corresponds to the special case of a regular backup,
 	// and multiple URIs correspond to a partitioned backup whose locality
 	// configuration is specified by LOCALITY url params.
-	To                 StringOrPlaceholderOptList
-	IncrementalFrom    Exprs
-	AsOf               AsOfClause
-	Options            BackupOptions
+	To              StringOrPlaceholderOptList
+	IncrementalFrom Exprs
+	AsOf            AsOfClause
+	Options         BackupOptions
 }
 
 var _ Statement = &Backup{}
@@ -225,6 +226,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 // IsDefault returns true if this backup options struct has default value.
 func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
-	return o.CaptureRevisionHistory == options.CaptureRevisionHistory && o.Detached == options.
-		Detached && o.EncryptionKMSURI == nil && o.EncryptionPassphrase == options.EncryptionPassphrase
+	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
+		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
+		o.EncryptionPassphrase == options.EncryptionPassphrase
 }

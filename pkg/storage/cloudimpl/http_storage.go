@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -39,6 +40,7 @@ type httpStorage struct {
 	client   *http.Client
 	hosts    []string
 	settings *cluster.Settings
+	ioConf   base.ExternalIODirConfig
 }
 
 var _ cloud.ExternalStorage = &httpStorage{}
@@ -91,7 +93,9 @@ func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 }
 
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
-func MakeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalStorage, error) {
+func MakeHTTPStorage(
+	base string, settings *cluster.Settings, ioConf base.ExternalIODirConfig,
+) (cloud.ExternalStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
@@ -109,6 +113,7 @@ func MakeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalSto
 		client:   client,
 		hosts:    strings.Split(uri.Host, ","),
 		settings: settings,
+		ioConf:   ioConf,
 	}, nil
 }
 
@@ -119,6 +124,14 @@ func (h *httpStorage) Conf() roachpb.ExternalStorage {
 			BaseUri: h.base.String(),
 		},
 	}
+}
+
+func (h *httpStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return h.ioConf
+}
+
+func (h *httpStorage) Settings() *cluster.Settings {
+	return h.settings
 }
 
 type resumingHTTPReader struct {

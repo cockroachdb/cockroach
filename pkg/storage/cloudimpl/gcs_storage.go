@@ -50,6 +50,7 @@ type gcsStorage struct {
 	bucket   *gcs.BucketHandle
 	client   *gcs.Client
 	conf     *roachpb.ExternalStorage_GCS
+	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
 }
@@ -61,6 +62,14 @@ func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 		Provider:          roachpb.ExternalStorageProvider_GoogleCloud,
 		GoogleCloudConfig: g.conf,
 	}
+}
+
+func (g *gcsStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return g.ioConf
+}
+
+func (g *gcsStorage) Settings() *cluster.Settings {
+	return g.settings
 }
 
 func makeGCSStorage(
@@ -136,6 +145,7 @@ func makeGCSStorage(
 		bucket:   bucket,
 		client:   g,
 		conf:     conf,
+		ioConf:   ioConf,
 		prefix:   conf.Prefix,
 		settings: settings,
 	}, nil
