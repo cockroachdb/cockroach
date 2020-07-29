@@ -1484,17 +1484,21 @@ Flags shown square brackets after the geometry type have the following meaning:
 				if err != nil {
 					return nil, err
 				}
-				switch t := t.(type) {
-				case *geom.GeometryCollection:
-					// FlatCoords() does not work on GeometryCollection.
-					numPoints := 0
-					for _, g := range t.Geoms() {
-						numPoints += len(g.FlatCoords()) / g.Stride()
+				var nPoints func(t geom.T) int
+				nPoints = func(t geom.T) int {
+					switch t := t.(type) {
+					case *geom.GeometryCollection:
+						// FlatCoords() does not work on GeometryCollection.
+						numPoints := 0
+						for _, g := range t.Geoms() {
+							numPoints += nPoints(g)
+						}
+						return numPoints
+					default:
+						return len(t.FlatCoords()) / t.Stride()
 					}
-					return tree.NewDInt(tree.DInt(numPoints)), nil
-				default:
-					return tree.NewDInt(tree.DInt(len(t.FlatCoords()) / t.Stride())), nil
 				}
+				return tree.NewDInt(tree.DInt(nPoints(t))), nil
 			},
 			types.Int,
 			infoBuilder{
