@@ -645,10 +645,12 @@ func (b *Builder) buildAggArg(
 // buildAggregateFunction returns a pointer to the aggregateInfo containing
 // the function definition, fully built arguments, and the aggregate output
 // column.
+//
+// tempScope is a temporary scope which is used for building the aggregate
+// function arguments before the correct scope is determined.
 func (b *Builder) buildAggregateFunction(
-	f *tree.FuncExpr, def *memo.FunctionPrivate, fromScope *scope,
+	f *tree.FuncExpr, def *memo.FunctionPrivate, tempScope, fromScope *scope,
 ) *aggregateInfo {
-	tempScope := fromScope.startAggFunc()
 	tempScopeColsBefore := len(tempScope.cols)
 
 	info := aggregateInfo{
