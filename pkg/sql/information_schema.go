@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -983,12 +984,13 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				return forEachSchemaName(ctx, p, db, func(sc string) error {
+				return forEachSchemaName(ctx, p, db, func(sc string, userDefined bool) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
 						tree.NewDString(sc),           // schema_name
 						tree.DNull,                    // default_character_set_name
 						tree.DNull,                    // sql_path
+						yesOrNoDatum(userDefined),     // crdb_is_user_defined
 					)
 				})
 			})
@@ -1010,7 +1012,7 @@ CREATE TABLE information_schema.schema_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				return forEachSchemaName(ctx, p, db, func(scName string) error {
+				return forEachSchemaName(ctx, p, db, func(scName string, _ bool) error {
 					privs := db.Privileges.Show()
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(scName)
@@ -1487,11 +1489,20 @@ CREATE TABLE information_schema.views (
 
 // forEachSchemaName iterates over the physical and virtual schemas.
 func forEachSchemaName(
-	ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, fn func(string) error,
+	ctx context.Context,
+	p *planner,
+	db *sqlbase.ImmutableDatabaseDescriptor,
+	fn func(scName string, userDefined bool) error,
 ) error {
+	userDefinedSchemas := make(map[string]struct{})
 	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
+	}
+	for _, name := range schemaNames {
+		if !strings.HasPrefix(name, sessiondata.PgTempSchemaName) && name != tree.PublicSchema {
+			userDefinedSchemas[name] = struct{}{}
+		}
 	}
 	vtableEntries := p.getVirtualTabler().getEntries()
 	scNames := make([]string, 0, len(schemaNames)+len(vtableEntries))
@@ -1503,7 +1514,8 @@ func forEachSchemaName(
 	}
 	sort.Strings(scNames)
 	for _, sc := range scNames {
-		if err := fn(sc); err != nil {
+		_, userDefined := userDefinedSchemas[sc]
+		if err := fn(sc, userDefined); err != nil {
 			return err
 		}
 	}

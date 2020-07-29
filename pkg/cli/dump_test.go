@@ -907,7 +907,7 @@ CREATE TEMP TABLE tmpbar (id int primary key);
 	FAMILY "primary" (id, text)
 );
 
-INSERT INTO bar (id, text) VALUES
+INSERT INTO public.bar (id, text) VALUES
 	(1, 'a');
 `,
 			args: []string{"foo"},
@@ -924,7 +924,7 @@ CREATE TABLE bar (id INT PRIMARY KEY);
 CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
 INSERT INTO tmpbar VALUES (1);
 `,
-			expected: "ERROR: cannot dump temp table tmpbar\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpbar does not exist\n",
 			args:     []string{"foo", "bar", "tmpbar"},
 		},
 		{
@@ -938,7 +938,7 @@ CREATE TABLE bar (id INT PRIMARY KEY);
 		
 CREATE TEMP VIEW tmpview (id) AS SELECT id FROM bar;
 `,
-			expected: "ERROR: cannot dump temp table tmpview\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpview does not exist\n",
 			args:     []string{"foo", "tmpview"},
 		},
 		{
@@ -950,7 +950,7 @@ USE foo;
 
 CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
 `,
-			expected: "ERROR: cannot dump temp table tmpseq\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpseq does not exist\n",
 			args:     []string{"foo", "tmpseq"},
 		},
 		{
@@ -981,7 +981,7 @@ CREATE TABLE public.t1 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t1 (id, pkey) VALUES
+INSERT INTO public.t1 (id, pkey) VALUES
 	(1, 'db1-aaaa');
 
 CREATE DATABASE IF NOT EXISTS db2;
@@ -994,7 +994,7 @@ CREATE TABLE public.t3 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t3 (id, pkey) VALUES
+INSERT INTO public.t3 (id, pkey) VALUES
 	(1, 'db2-aaaa');
 `,
 			args: []string{"--dump-all"},

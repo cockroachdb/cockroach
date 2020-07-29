@@ -1906,7 +1906,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				return forEachSchemaName(ctx, p, db, func(s string) error {
+				return forEachSchemaName(ctx, p, db, func(s string, _ bool) error {
 					return addRow(
 						h.NamespaceOid(db, s), // oid
 						tree.NewDString(s),    // nspname

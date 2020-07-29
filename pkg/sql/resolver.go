@@ -502,6 +502,7 @@ type internalLookupCtx struct {
 	dbIDs       []sqlbase.ID
 	dbDescs     map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor
 	schemaDescs map[sqlbase.ID]*sqlbase.ImmutableSchemaDescriptor
+	schemaIDs   []sqlbase.ID
 	tbDescs     map[sqlbase.ID]*ImmutableTableDescriptor
 	tbIDs       []sqlbase.ID
 	typDescs    map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor
@@ -543,7 +544,7 @@ func newInternalLookupCtx(
 	schemaDescs := make(map[sqlbase.ID]*sqlbase.ImmutableSchemaDescriptor)
 	tbDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
-	var tbIDs, typIDs, dbIDs []sqlbase.ID
+	var tbIDs, typIDs, dbIDs, schemaIDs []sqlbase.ID
 	// Record database descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -569,7 +570,7 @@ func newInternalLookupCtx(
 			schemaDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the schema visible for iteration if the prefix was included.
-				typIDs = append(typIDs, desc.GetID())
+				schemaIDs = append(schemaIDs, desc.GetID())
 			}
 		}
 	}
