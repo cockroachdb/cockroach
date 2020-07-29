@@ -84,21 +84,22 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	// Disable leniency for instant expiration
 	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
+	const cancelInterval = time.Duration(math.MaxInt64)
+	const adoptInterval = time.Nanosecond
+	slinstance.DefaultTTL.Override(&s.ClusterSettings().SV, 2*adoptInterval)
+	slinstance.DefaultHeartBeat.Override(&s.ClusterSettings().SV, adoptInterval)
 
 	db := s.DB()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
-		const cancelInterval = time.Duration(math.MaxInt64)
-		const adoptInterval = time.Nanosecond
-
 		var c base.NodeIDContainer
 		c.Set(ctx, id)
 		idContainer := base.NewSQLIDContainer(0, &c, true /* exposed */)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 		sqlInstance := slinstance.NewSqlInstance(
 			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
-			&slinstance.Options{Deadline: 2 * adoptInterval, Heartbeat: adoptInterval},
+			s.ClusterSettings(),
 		)
 		r := jobs.MakeRegistry(
 			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db,
