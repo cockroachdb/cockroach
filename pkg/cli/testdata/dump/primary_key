@@ -19,7 +19,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (i)
 );
 
-INSERT INTO t (i) VALUES
+INSERT INTO public.t (i) VALUES
 	(1);
 ----
 ----

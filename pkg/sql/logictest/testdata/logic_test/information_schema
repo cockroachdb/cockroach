@@ -189,25 +189,25 @@ test           information_schema  tables      public   SELECT
 
 ## information_schema.schemata
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM information_schema.schemata
 ----
-catalog_name  schema_name         default_character_set_name  sql_path
-test          crdb_internal       NULL                        NULL
-test          information_schema  NULL                        NULL
-test          pg_catalog          NULL                        NULL
-test          pg_extension        NULL                        NULL
-test          public              NULL                        NULL
+catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
+test          crdb_internal       NULL                        NULL      NO
+test          information_schema  NULL                        NULL      NO
+test          pg_catalog          NULL                        NULL      NO
+test          pg_extension        NULL                        NULL      NO
+test          public              NULL                        NULL      NO
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM INFormaTION_SCHEMa.schemata
 ----
-catalog_name  schema_name         default_character_set_name  sql_path
-test          crdb_internal       NULL                        NULL
-test          information_schema  NULL                        NULL
-test          pg_catalog          NULL                        NULL
-test          pg_extension        NULL                        NULL
-test          public              NULL                        NULL
+catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
+test          crdb_internal       NULL                        NULL      NO
+test          information_schema  NULL                        NULL      NO
+test          pg_catalog          NULL                        NULL      NO
+test          pg_extension        NULL                        NULL      NO
+test          public              NULL                        NULL      NO
 
 ## information_schema.tables
 
