@@ -26,7 +26,6 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -49,7 +48,6 @@ import (
 	"google.golang.org/grpc/encoding"
 	encodingproto "google.golang.org/grpc/encoding/proto"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 )
 
 func init() {
@@ -114,34 +112,6 @@ func spanInclusionFuncForClient(
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
 }
 
-func requireSuperUser(ctx context.Context) error {
-	// TODO(marc): grpc's authentication model (which gives credential access in
-	// the request handler) doesn't really fit with the current design of the
-	// security package (which assumes that TLS state is only given at connection
-	// time) - that should be fixed.
-	if grpcutil.IsLocalRequestContext(ctx) {
-		// This is an in-process request. Bypass authentication check.
-	} else if peer, ok := peer.FromContext(ctx); ok {
-		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
-			certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
-			if err != nil {
-				return err
-			}
-			// TODO(benesch): the vast majority of RPCs should be limited to just
-			// NodeUser. This is not a security concern, as RootUser has access to
-			// read and write all data, merely good hygiene. For example, there is
-			// no reason to permit the root user to send raw Raft RPCs.
-			if !security.ContainsUser(security.NodeUser, certUsers) &&
-				!security.ContainsUser(security.RootUser, certUsers) {
-				return errors.Errorf("user %s is not allowed to perform this RPC", certUsers)
-			}
-		}
-	} else {
-		return errors.New("internal authentication error: TLSInfo is not available in request context")
-	}
-	return nil
-}
-
 type serverOpts struct {
 	interceptor func(fullMethod string) error
 	tenant      bool
@@ -157,8 +127,6 @@ type ServerOption func(*serverOpts)
 func ForTenant(opts *serverOpts) {
 	opts.tenant = true
 }
-
-var _ ServerOption = ForTenant
 
 // WithInterceptor adds an additional interceptor. The interceptor is called before
 // streaming and unary RPCs and may inject an error.
@@ -224,34 +192,14 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		var authHook func(ctx context.Context) error
+		var a auth
 		if !o.tenant {
-			authHook = requireSuperUser
+			a = kvAuth{}
 		} else {
-			authHook = func(ctx context.Context) error {
-				// TODO(tbg): pull the tenant ID from the incoming
-				// certificate and validate that the request is
-				// admissible.
-				return nil
-			}
+			a = tenantAuth{}
 		}
-
-		unaryInterceptor = append(unaryInterceptor, func(
-			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-		) (interface{}, error) {
-			if err := authHook(ctx); err != nil {
-				return nil, err
-			}
-			return handler(ctx, req)
-		})
-		streamInterceptor = append(streamInterceptor, func(
-			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-		) error {
-			if err := authHook(stream.Context()); err != nil {
-				return err
-			}
-			return handler(srv, stream)
-		})
+		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
+		streamInterceptor = append(streamInterceptor, a.AuthStream())
 	}
 
 	if o.interceptor != nil {

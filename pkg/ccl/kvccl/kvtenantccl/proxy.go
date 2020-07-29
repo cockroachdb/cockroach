@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -294,13 +296,17 @@ func (p *Proxy) RangeLookup(
 			PrefetchReverse: useReverseScan,
 		})
 		if err != nil {
-			// Soft RPC error. Drop client and retry.
 			log.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
+			if status.Code(err) == codes.Unauthenticated {
+				// Authentication error. Propagate.
+				return nil, nil, err
+			}
+			// Soft RPC error. Drop client and retry.
 			p.tryForgetClient(ctx, client)
 			continue
 		}
 		if resp.Error != nil {
-			// Hard logical error.
+			// Hard logical error. Propagate.
 			return nil, nil, resp.Error.GoError()
 		}
 		return resp.Descriptors, resp.PrefetchedDescriptors, nil
