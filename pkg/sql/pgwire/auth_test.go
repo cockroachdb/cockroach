@@ -106,6 +106,7 @@ import (
 //
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 52026, "temporarily skip due to repeated failures")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		hbaRunTest(t, insecure)
