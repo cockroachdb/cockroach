@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -213,6 +214,18 @@ func (r *Replica) IsInitialized() bool {
 	return r.isInitializedRLocked()
 }
 
+// TenantID returns the associated tenant ID and a boolean to indicate that it
+// is valid. It will be invalid only if the replica is not initialized.
+func (r *Replica) TenantID() (roachpb.TenantID, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.getTenantIDRLocked()
+}
+
+func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
+	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
+}
+
 // isInitializedRLocked is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
@@ -293,6 +306,19 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	if found && replDesc.ReplicaID != r.mu.replicaID {
 		log.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
 			r.mu.replicaID, replDesc.ReplicaID)
+	}
+
+	// Initialize the tenant. The must be the first time that the descriptor has
+	// been initialized. Note that the desc.StartKey never changes throughout the
+	// life of a range.
+	if desc.IsInitialized() && r.mu.tenantID == (roachpb.TenantID{}) {
+		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
+		if err != nil {
+			log.Fatalf(ctx, "failed to decode tenant prefix from key for "+
+				"replica %v: %v", r, err)
+		}
+		r.mu.tenantID = tenantID
+		r.store.metrics.acquireTenant(tenantID)
 	}
 
 	// Determine if a new replica was added. This is true if the new max replica

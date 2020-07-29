@@ -122,6 +122,12 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 		return r.raftMu.sideloaded.Clear(ctx)
 	}
 
+	// Release the reference to this tenant in metrics, we know the tenant ID is
+	// valid if the replica is initialized.
+	if tenantID, ok := r.TenantID(); ok {
+		r.store.metrics.releaseTenant(ctx, tenantID)
+	}
+
 	return nil
 }
 

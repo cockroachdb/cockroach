@@ -120,6 +120,8 @@ message RangeInfo {
   util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
   // The number of Rangefeed registrations attached to the Replica.
   int64 rangefeed_registrations = 13;
+  // TenantID is the ID of the tenant for which this range contains data.
+  uint64 tenant_id = 16 [(gogoproto.customname) = "TenantID"];
 }
 
 // LatchManagerInfo is used for reporting status information about a spanlatch
