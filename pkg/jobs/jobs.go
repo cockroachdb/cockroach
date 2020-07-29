@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/opentracing/opentracing-go"
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -83,6 +84,7 @@ type StartableJob struct {
 	resumerCtx context.Context
 	cancel     context.CancelFunc
 	resultsCh  chan<- tree.Datums
+	span       opentracing.Span
 	starts     int64 // used to detect multiple calls to Start()
 }
 
@@ -872,7 +874,7 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 	if err := sj.started(ctx); err != nil {
 		return nil, err
 	}
-	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job)
+	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job, sj.cleanup)
 	if err != nil {
 		return nil, err
 	}
@@ -967,4 +969,11 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(*sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, *sj.ID())
+}
+
+// cleanup is passed to registry.resume
+func (sj *StartableJob) cleanup() {
+	if sj.span != nil {
+		sj.span.Finish()
+	}
 }
