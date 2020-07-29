@@ -104,7 +104,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 	joinType := n.joinType
 
-	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
+	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap, len(plans[0].ResultTypes))
 	onExpr, err := remapOnExpr(planCtx, n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
 	if err != nil {
 		return PhysicalPlan{}, false, err
@@ -235,7 +235,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 }
 
 func joinOutColumns(
-	n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
+	n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int, numAllLeftCols int,
 ) (post execinfrapb.PostProcessSpec, joinToStreamColMap []int) {
 	joinToStreamColMap = makePlanToStreamColMap(len(n.columns))
 	post.Projection = true
@@ -252,13 +252,9 @@ func joinOutColumns(
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
-	leftCols := 0
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[i].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlanToStreamColMap[i]))
-		}
-		if leftPlanToStreamColMap[i] != -1 {
-			leftCols++
 		}
 		joinCol++
 	}
@@ -267,7 +263,7 @@ func joinOutColumns(
 		for i := 0; i < n.pred.numRightCols; i++ {
 			if !n.columns[joinCol].Omitted {
 				joinToStreamColMap[joinCol] = addOutCol(
-					uint32(leftCols + rightPlanToStreamColMap[i]),
+					uint32(numAllLeftCols + rightPlanToStreamColMap[i]),
 				)
 			}
 			joinCol++
