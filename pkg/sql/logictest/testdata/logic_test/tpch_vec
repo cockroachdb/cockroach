@@ -961,18 +961,16 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashJoiner
-      ├ *colexec.hashJoiner
-      │ ├ *colfetcher.ColBatchScan
-      │ └ *colexec.hashJoiner
-      │   ├ *colexec.selGTInt64Float64Op
-      │   │ └ *colexec.projMultFloat64Float64ConstOp
-      │   │   └ *colexec.hashAggregator
-      │   │     └ *colexec.hashJoiner
-      │   │       ├ *rowexec.joinReader
-      │   │       │ └ *colfetcher.ColBatchScan
-      │   │       └ *colfetcher.ColBatchScan
-      │   └ *colexec.selPrefixBytesBytesConstOp
-      │     └ *colfetcher.ColBatchScan
+      ├ *rowexec.joinReader
+      │ └ *colexec.unorderedDistinct
+      │   └ *rowexec.joinReader
+      │     └ *colexec.selGTInt64Float64Op
+      │       └ *colexec.projMultFloat64Float64ConstOp
+      │         └ *colexec.hashAggregator
+      │           └ *colexec.hashJoiner
+      │             ├ *rowexec.joinReader
+      │             │ └ *colfetcher.ColBatchScan
+      │             └ *colfetcher.ColBatchScan
       └ *colexec.selEQBytesBytesConstOp
         └ *colfetcher.ColBatchScan
 

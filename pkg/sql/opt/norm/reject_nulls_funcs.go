@@ -60,6 +60,33 @@ func (c *CustomFuncs) NullRejectAggVar(
 	panic(errors.AssertionFailedf("expected aggregation not found"))
 }
 
+// NullRejectProjections returns a null-rejecting filter for input columns of
+// first projection that is referenced by nullRejectCols. Columns are only
+// null-rejected if they are in the RejectNullCols ColSet of the input
+// expression. Panics if no such projection is found.
+func (c *CustomFuncs) NullRejectProjections(
+	projections memo.ProjectionsExpr, nullRejectCols, inputNullRejectCols opt.ColSet,
+) memo.FiltersExpr {
+	for i := range projections {
+		if nullRejectCols.Contains(projections[i].Col) {
+			rejectCols := (projections[i].ScalarProps().OuterCols).Intersection(inputNullRejectCols)
+			filters := make(memo.FiltersExpr, 0, rejectCols.Len())
+			for col, ok := rejectCols.Next(0); ok; col, ok = rejectCols.Next(col + 1) {
+				filters = append(
+					filters,
+					c.f.ConstructFiltersItem(
+						c.f.ConstructIsNot(
+							c.f.ConstructVariable(col),
+							memo.NullSingleton),
+					),
+				)
+			}
+			return filters
+		}
+	}
+	panic(errors.AssertionFailedf("expected projection not found"))
+}
+
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
@@ -106,11 +133,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(in))
 
 	case opt.ProjectOp:
-		// Pass through all null-rejection columns that the Project passes through.
-		// The PushSelectIntoProject rule is able to push the IS NOT NULL filter
-		// below the Project for these columns.
-		rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
-		relProps.Rule.RejectNullCols = relProps.OutputCols.Intersection(rejectNullCols)
+		relProps.Rule.RejectNullCols.UnionWith(deriveProjectRejectNullCols(in))
 	}
 
 	return relProps.Rule.RejectNullCols
@@ -203,4 +226,31 @@ func (c *CustomFuncs) MakeNullRejectFilters(nullRejectCols opt.ColSet) memo.Filt
 		)
 	}
 	return filters
+}
+
+// deriveProjectRejectNullCols returns the set of Project output columns which
+// are eligible for null rejection. All passthrough columns which are in the
+// RejectNullCols set of the input can be null-rejected. In addition, projected
+// columns can also be null-rejected when:
+//
+//   1. The projection "transmits" nulls - it returns NULL when one or more of
+//      its inputs is NULL.
+//
+//   2. One or more of the projection's input columns are in the RejectNullCols
+//      ColSet of the input expression.
+//
+func deriveProjectRejectNullCols(in memo.RelExpr) opt.ColSet {
+	rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+
+	projections := *in.Child(1).(*memo.ProjectionsExpr)
+	var projectionsRejectCols opt.ColSet
+	for i := range projections {
+		if !opt.OperatorTransmitsNulls(projections[i].Element.Op()) {
+			continue
+		}
+		if projections[i].ScalarProps().OuterCols.Intersects(rejectNullCols) {
+			projectionsRejectCols.Add(projections[i].Col)
+		}
+	}
+	return (rejectNullCols.Union(projectionsRejectCols)).Intersection(in.Relational().OutputCols)
 }

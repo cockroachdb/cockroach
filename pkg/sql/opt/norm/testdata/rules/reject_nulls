@@ -1165,3 +1165,165 @@ left-join-apply
  │         └── column1:4 = x:5 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
  └── filters
       └── u:1 = y:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# ----------------------------------------------------------
+# RejectNullsProject
+# ----------------------------------------------------------
+
+# Multiplication case.
+opt expect=RejectNullsProject
+SELECT * FROM
+(
+  SELECT k*x FROM a
+  LEFT JOIN xy ON i = y
+) f(p)
+WHERE p > 5
+----
+project
+ ├── columns: p:9!null
+ ├── immutable
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null x:6!null y:7!null
+ │    ├── immutable
+ │    ├── key: (1,6)
+ │    ├── fd: (1)-->(2), (6)-->(7), (2)==(7), (7)==(2)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         ├── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │         └── (k:1 * x:6) > 5 [outer=(1,6), immutable]
+ └── projections
+      └── k:1 * x:6 [as="?column?":9, outer=(1,6), immutable]
+
+# Addition case.
+opt expect=RejectNullsProject
+SELECT * FROM
+(
+  SELECT k+x FROM a
+  LEFT JOIN xy ON i = y
+) f(p)
+WHERE p < 5
+----
+project
+ ├── columns: p:9!null
+ ├── immutable
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null x:6!null y:7!null
+ │    ├── immutable
+ │    ├── key: (1,6)
+ │    ├── fd: (1)-->(2), (6)-->(7), (2)==(7), (7)==(2)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         ├── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │         └── (k:1 + x:6) < 5 [outer=(1,6), immutable]
+ └── projections
+      └── k:1 + x:6 [as="?column?":9, outer=(1,6), immutable]
+
+# Equality case.
+opt expect=RejectNullsProject
+SELECT * FROM
+(
+  SELECT k=x FROM a
+  LEFT JOIN xy ON i = y
+) f(p)
+WHERE p
+----
+project
+ ├── columns: p:9!null
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null x:6!null y:7!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (6)
+ │    ├── fd: (1)-->(2), (6)-->(7), (2)==(7), (7)==(2), (1)==(6), (6)==(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:6!null y:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         ├── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │         └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── projections
+      └── k:1 = x:6 [as="?column?":9, outer=(1,6)]
+
+# LIKE case.
+opt expect=RejectNullsProject
+SELECT * FROM
+(
+  SELECT s LIKE 'blah' FROM xy
+  LEFT JOIN a ON i = y
+) f(p)
+WHERE p
+----
+select
+ ├── columns: p:9!null
+ ├── fd: ()-->(9)
+ ├── project
+ │    ├── columns: "?column?":9!null
+ │    ├── inner-join (hash)
+ │    │    ├── columns: y:2!null i:5!null s:7!null
+ │    │    ├── fd: (2)==(5), (5)==(2)
+ │    │    ├── scan xy
+ │    │    │    └── columns: y:2
+ │    │    ├── select
+ │    │    │    ├── columns: i:5 s:7!null
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: i:5 s:7
+ │    │    │    └── filters
+ │    │    │         └── s:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │    └── filters
+ │    │         └── i:5 = y:2 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ │    └── projections
+ │         └── s:7 LIKE 'blah' [as="?column?":9, outer=(7)]
+ └── filters
+      └── "?column?":9 [outer=(9), constraints=(/9: [/true - /true]; tight), fd=()-->(9)]
+
+# Bit AND case.
+opt expect=RejectNullsProject
+SELECT * FROM
+(
+  SELECT k&x FROM a
+  LEFT JOIN xy ON i = y
+) f(p)
+WHERE p > 5
+----
+select
+ ├── columns: p:9!null
+ ├── immutable
+ ├── project
+ │    ├── columns: "?column?":9!null
+ │    ├── immutable
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null i:2!null x:6!null y:7!null
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (1)-->(2), (6)-->(7), (2)==(7), (7)==(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── i:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │    └── projections
+ │         └── k:1 & x:6 [as="?column?":9, outer=(1,6), immutable]
+ └── filters
+      └── "?column?":9 > 5 [outer=(9), constraints=(/9: [/6 - ]; tight)]

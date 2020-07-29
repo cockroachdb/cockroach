@@ -199,3 +199,48 @@
     $on
     $private
 )
+
+# RejectNullsProject adds a "col IS NOT NULL" null-rejecting filter to the input
+# of a project if the following conditions hold:
+#   1. The parent Select operator rejects nulls on a synthesized (projection)
+#      column.
+#   2. At least one of the input columns of the projection is in the
+#      RejectNullCols ColSet of the input of the Project.
+#   3. The projection 'transmits' NULLS; if any of the projection's inputs is
+#      NULL, the output of the projection is NULL.
+[RejectNullsProject, Normalize]
+(Select
+    $input:(Project
+            $innerInput:*
+            $projections:* &
+                ^(ColsAreEmpty
+                    $projectionCols:(ProjectionCols $projections)
+                )
+            $passthrough:*
+        ) &
+        ^(ColsAreEmpty $rejectNullCols:(RejectNullCols $input))
+    $filters:* &
+        (HasNullRejectingFilter
+            $filters
+            $nullRejectedCols:(IntersectionCols
+                $projectionCols
+                $rejectNullCols
+            )
+        )
+)
+=>
+(Select
+    (Project
+        (Select
+            $innerInput
+            (NullRejectProjections
+                $projections
+                $nullRejectedCols
+                (RejectNullCols $innerInput)
+            )
+        )
+        $projections
+        $passthrough
+    )
+    $filters
+)
