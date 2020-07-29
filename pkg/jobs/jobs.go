@@ -783,7 +783,7 @@ func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 			return errors.Errorf("current lease %v did not match expected lease %v",
 				md.Payload.Lease, oldLease)
 		}
-		md.Payload.Lease = j.registry.newLease()
+		md.Payload.Lease = j.registry.deprecatedNewLease()
 		if md.Payload.StartedMicros == 0 {
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		}
