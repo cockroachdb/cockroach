@@ -543,14 +543,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				ExtraOptions:    spec.ExtraOptions,
 			}
 			if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeDefault {
-				// TODO(itsbilal): Tune these options, and allow them to be overridden
-				// in the spec (similar to the existing spec.RocksDBOptions and others).
 				pebbleConfig := storage.PebbleConfig{
 					StorageConfig: storageConfig,
 					Opts:          storage.DefaultPebbleOptions(),
 				}
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+				// If the spec contains Pebble options, set those too.
+				if len(spec.PebbleOptions) > 0 {
+					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
+					if err != nil {
+						return nil, err
+					}
+				}
 				eng, err = storage.NewPebble(ctx, pebbleConfig)
 			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
 				rocksDBConfig := storage.RocksDBConfig{
@@ -570,6 +575,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+				// If the spec contains Pebble options, set those too.
+				if len(spec.PebbleOptions) > 0 {
+					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
+					if err != nil {
+						return nil, err
+					}
+				}
 				pebbleEng, err := storage.NewPebble(ctx, pebbleConfig)
 				if err != nil {
 					return nil, err
