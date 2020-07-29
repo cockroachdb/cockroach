@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -426,7 +427,14 @@ func (r *Registry) CreateStartableJobWithTxn(
 	if err != nil {
 		return nil, err
 	}
+	// Construct a context which contains a tracing span that follows from the
+	// span in the parent context. We don't directly use the parent span because
+	// we want independent lifetimes and cancellation.
 	resumerCtx, cancel := r.makeCtx()
+	_, span := tracing.ForkCtxSpan(ctx, "job")
+	if span != nil {
+		resumerCtx = opentracing.ContextWithSpan(resumerCtx, span)
+	}
 	if err := r.register(*j.ID(), cancel); err != nil {
 		return nil, err
 	}
@@ -437,6 +445,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		resumerCtx: resumerCtx,
 		cancel:     cancel,
 		resultsCh:  resultsCh,
+		span:       span,
 	}, nil
 }
 
@@ -924,7 +933,8 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
+		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed,
+			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
@@ -946,13 +956,17 @@ func (r *Registry) stepThroughStateMachine(
 // asynchronously executed. The job is executed with the ctx, so ctx must
 // only by canceled if the job should also be canceled. resultsCh is passed
 // to the resumable func and should be closed by the caller after errCh sends
-// a value.
+// a value. The onDone function is called when the async task completes or if
+// an error is returned.
 func (r *Registry) resume(
-	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
+	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job, onDone func(),
 ) (<-chan error, error) {
 	errCh := make(chan error, 1)
 	taskName := fmt.Sprintf(`job-%d`, *job.ID())
 	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
+		if onDone != nil {
+			defer onDone()
+		}
 		// Bookkeeping.
 		payload := job.Payload()
 		phs, cleanup := r.planFn("resume-"+taskName, payload.Username)
@@ -992,6 +1006,9 @@ func (r *Registry) resume(
 		r.unregister(*job.ID())
 		errCh <- err
 	}); err != nil {
+		if onDone != nil {
+			onDone()
+		}
 		return nil, err
 	}
 	return errCh, nil
@@ -1221,7 +1238,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			return err
 		}
 		log.Infof(ctx, "job %d: resuming execution", *id)
-		errCh, err := r.resume(resumeCtx, resumer, resultsCh, job)
+		errCh, err := r.resume(resumeCtx, resumer, resultsCh, job, nil)
 		if err != nil {
 			r.unregister(*id)
 			return err

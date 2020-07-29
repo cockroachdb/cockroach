@@ -667,10 +667,30 @@ INSERT INTO users (user_profile) VALUES
   ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
 )
 
+statement ok
+SET tracing=on
+
 # Ensure that trying to create statistics with default columns does not fail
 # when there is an inverted index.
 statement ok
 CREATE STATISTICS s FROM users
+
+# Ensure that the trace includes the job by observing the job move through
+# the 'succeeded' state in the trace.
+
+query I
+SELECT count(*)
+  FROM [SHOW TRACE FOR SESSION]
+ WHERE message
+       LIKE '%job%: stepping through state succeeded with error: <nil>%'
+   AND message
+       NOT LIKE '%SELECT message%'
+----
+1
+
+statement ok
+SET tracing=off
+
 
 query TTIIIB colnames
 SELECT
