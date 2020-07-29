@@ -360,7 +360,8 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		_, ok := c.IsTargetCol[i]
 		return ok
 	}
-	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
+	annot := getCellInfoAnnotation(c.EvalCtx.Annotations)
+	annot.Reset(sourceID, rowIndex)
 	for i := range c.cols {
 		col := &c.cols[i]
 		if !isTargetCol(i) && col.DefaultExpr != nil {
