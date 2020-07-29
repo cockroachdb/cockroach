@@ -14,6 +14,7 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -1127,7 +1128,7 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
-	if join.Op() == opt.InvertedJoinOp {
+	if join.Op() == opt.InvertedJoinOp || hasGeoIndexJoinCond(h.filters) {
 		s.ApplySelectivity(sb.selectivityFromInvertedJoinCondition(join, s))
 	}
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
@@ -2829,6 +2830,13 @@ func (sb *statisticsBuilder) applyFilter(
 			return
 		}
 
+		// Special case: The current conjunct is an index-accelerated geospatial
+		// join condition.
+		if isGeoIndexJoinCond(conjunct.Condition) {
+			// We'll handle this case later.
+			return
+		}
+
 		// Special case: The current conjunct is a JSON Contains operator.
 		// If so, count every path to a leaf node in the RHS as a separate
 		// conjunct. If for whatever reason we can't get to the JSON datum
@@ -3763,6 +3771,26 @@ func (sb *statisticsBuilder) tryReduceJoinCols(
 func isEqualityWithTwoVars(cond opt.ScalarExpr) bool {
 	if eq, ok := cond.(*EqExpr); ok {
 		return eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.VariableOp
+	}
+	return false
+}
+
+// isGeoIndexJoinCond returns true if the given condition is an index-
+// accelerated geospatial function with two variable arguments.
+func isGeoIndexJoinCond(cond opt.ScalarExpr) bool {
+	if fn, ok := cond.(*FunctionExpr); ok {
+		if _, ok := geoindex.RelationshipMap[fn.Name]; ok && len(fn.Args) >= 2 {
+			return fn.Args[0].Op() == opt.VariableOp && fn.Args[1].Op() == opt.VariableOp
+		}
+	}
+	return false
+}
+
+func hasGeoIndexJoinCond(filters FiltersExpr) bool {
+	for i := range filters {
+		if isGeoIndexJoinCond(filters[i].Condition) {
+			return true
+		}
 	}
 	return false
 }

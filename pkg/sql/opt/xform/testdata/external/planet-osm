@@ -1,0 +1,1791 @@
+# This schema and data is from the Planet.osm Iceland dataset.
+# See https://wiki.openstreetmap.org/wiki/Planet.osm.
+
+exec-ddl
+CREATE TABLE planet_osm_point (
+	osm_id INT8 NULL,
+	access STRING NULL,
+	"addr:housename" STRING NULL,
+	"addr:housenumber" STRING NULL,
+	"addr:interpolation" STRING NULL,
+	admin_level STRING NULL,
+	aerialway STRING NULL,
+	aeroway STRING NULL,
+	amenity STRING NULL,
+	area STRING NULL,
+	barrier STRING NULL,
+	bicycle STRING NULL,
+	brand STRING NULL,
+	bridge STRING NULL,
+	boundary STRING NULL,
+	building STRING NULL,
+	capital STRING NULL,
+	construction STRING NULL,
+	covered STRING NULL,
+	culvert STRING NULL,
+	cutting STRING NULL,
+	denomination STRING NULL,
+	disused STRING NULL,
+	ele STRING NULL,
+	embankment STRING NULL,
+	foot STRING NULL,
+	"generator:source" STRING NULL,
+	harbor STRING NULL,
+	highway STRING NULL,
+	historic STRING NULL,
+	horse STRING NULL,
+	intermittent STRING NULL,
+	junction STRING NULL,
+	landuse STRING NULL,
+	layer STRING NULL,
+	leisure STRING NULL,
+	lock STRING NULL,
+	man_made STRING NULL,
+	military STRING NULL,
+	motorcar STRING NULL,
+	name STRING NULL,
+	"natural" STRING NULL,
+	office STRING NULL,
+	oneway STRING NULL,
+	operator STRING NULL,
+	place STRING NULL,
+	population STRING NULL,
+	power STRING NULL,
+	power_source STRING NULL,
+	public_transport STRING NULL,
+	railway STRING NULL,
+	ref STRING NULL,
+	religion STRING NULL,
+	route STRING NULL,
+	service STRING NULL,
+	shop STRING NULL,
+	sport STRING NULL,
+	surface STRING NULL,
+	toll STRING NULL,
+	tourism STRING NULL,
+	"tower:type" STRING NULL,
+	tunnel STRING NULL,
+	water STRING NULL,
+	waterway STRING NULL,
+	wetland STRING NULL,
+	width STRING NULL,
+	wood STRING NULL,
+	z_order INT8 NULL,
+	way GEOMETRY(POINT,3857) NULL,
+	INVERTED INDEX planet_osm_point_way_idx (way),
+	FAMILY "primary" (osm_id, access, "addr:housename", "addr:housenumber", "addr:interpolation", admin_level, aerialway, aeroway, amenity, area, barrier, bicycle, brand, bridge, boundary, building, capital, construction, covered, culvert, cutting, denomination, disused, ele, embankment, foot, "generator:source", harbor, highway, historic, horse, intermittent, junction, landuse, layer, leisure, lock, man_made, military, motorcar, name, "natural", office, oneway, operator, place, population, power, power_source, public_transport, railway, ref, religion, route, service, shop, sport, surface, toll, tourism, "tower:type", tunnel, water, waterway, wetland, width, wood, z_order, way, rowid)
+)
+----
+
+exec-ddl
+ALTER TABLE planet_osm_point INJECT STATISTICS '[
+    {
+        "columns": [
+            "rowid"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 145656,
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "way"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 148350,
+        "histo_col_type": "BYTES",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "osm_id"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 146885,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "access"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 12,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145539,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "addr:housename"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 652,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145478,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "addr:housenumber"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 917,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 129534,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "addr:interpolation"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "admin_level"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146189,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "aerialway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146188,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "aeroway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 15,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146097,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "amenity"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 104,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 139643,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "area"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "barrier"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 27,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145081,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "bicycle"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145530,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "brand"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 69,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146018,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "bridge"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146186,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "boundary"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "building"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 12,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146130,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "capital"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146191,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "construction"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146191,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "covered"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145928,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "culvert"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "cutting"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "denomination"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 10,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146178,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "disused"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146191,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "ele"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1147,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 143669,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "embankment"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "foot"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145929,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "generator:source"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146184,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "harbor"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146181,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "highway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 19,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 98815,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "historic"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 14,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145892,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "horse"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146138,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "intermittent"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146171,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "junction"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "landuse"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146187,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "layer"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146180,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "leisure"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 35,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145740,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "lock"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "man_made"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 30,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145564,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "military"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146190,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "motorcar"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146136,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "name"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 9220,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 133125,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "natural"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 40,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 139308,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "office"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 37,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145867,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "oneway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "operator"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 332,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145186,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "place"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 14,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 144402,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "population"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 107,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146080,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "power"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 89587,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "power_source"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "public_transport"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 5,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 143868,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "railway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "ref"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 998,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145151,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "religion"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146173,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "route"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "service"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 5,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146187,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "shop"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 119,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 144752,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "sport"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 34,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146126,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "surface"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 14,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146059,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "toll"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "tourism"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 25,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 143256,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "tower:type"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 9,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145963,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "tunnel"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "water"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 5,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146188,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "waterway"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145627,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "wetland"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146191,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "width"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 11,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146179,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "wood"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    },
+    {
+        "columns": [
+            "z_order"
+        ],
+        "created_at": "2020-07-27 20:58:43.848527",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146192,
+        "row_count": 146192
+    }
+]'
+----
+
+exec-ddl
+CREATE TABLE planet_osm_line (
+	osm_id INT8 NULL,
+	access STRING NULL,
+	"addr:housename" STRING NULL,
+	"addr:housenumber" STRING NULL,
+	"addr:interpolation" STRING NULL,
+	admin_level STRING NULL,
+	aerialway STRING NULL,
+	aeroway STRING NULL,
+	amenity STRING NULL,
+	area STRING NULL,
+	barrier STRING NULL,
+	bicycle STRING NULL,
+	brand STRING NULL,
+	bridge STRING NULL,
+	boundary STRING NULL,
+	building STRING NULL,
+	construction STRING NULL,
+	covered STRING NULL,
+	culvert STRING NULL,
+	cutting STRING NULL,
+	denomination STRING NULL,
+	disused STRING NULL,
+	embankment STRING NULL,
+	foot STRING NULL,
+	"generator:source" STRING NULL,
+	harbor STRING NULL,
+	highway STRING NULL,
+	historic STRING NULL,
+	horse STRING NULL,
+	intermittent STRING NULL,
+	junction STRING NULL,
+	landuse STRING NULL,
+	layer STRING NULL,
+	leisure STRING NULL,
+	lock STRING NULL,
+	man_made STRING NULL,
+	military STRING NULL,
+	motorcar STRING NULL,
+	name STRING NULL,
+	"natural" STRING NULL,
+	office STRING NULL,
+	oneway STRING NULL,
+	operator STRING NULL,
+	place STRING NULL,
+	population STRING NULL,
+	power STRING NULL,
+	power_source STRING NULL,
+	public_transport STRING NULL,
+	railway STRING NULL,
+	ref STRING NULL,
+	religion STRING NULL,
+	route STRING NULL,
+	service STRING NULL,
+	shop STRING NULL,
+	sport STRING NULL,
+	surface STRING NULL,
+	toll STRING NULL,
+	tourism STRING NULL,
+	"tower:type" STRING NULL,
+	tracktype STRING NULL,
+	tunnel STRING NULL,
+	water STRING NULL,
+	waterway STRING NULL,
+	wetland STRING NULL,
+	width STRING NULL,
+	wood STRING NULL,
+	z_order INT8 NULL,
+	way_area FLOAT4 NULL,
+	way GEOMETRY(LINESTRING,3857) NULL,
+	INVERTED INDEX planet_osm_line_way_idx (way),
+	FAMILY "primary" (osm_id, access, "addr:housename", "addr:housenumber", "addr:interpolation", admin_level, aerialway, aeroway, amenity, area, barrier, bicycle, brand, bridge, boundary, building, construction, covered, culvert, cutting, denomination, disused, embankment, foot, "generator:source", harbor, highway, historic, horse, intermittent, junction, landuse, layer, leisure, lock, man_made, military, motorcar, name, "natural", office, oneway, operator, place, population, power, power_source, public_transport, railway, ref, religion, route, service, shop, sport, surface, toll, tourism, "tower:type", tracktype, tunnel, water, waterway, wetland, width, wood, z_order, way_area, way, rowid)
+)
+----
+
+exec-ddl
+ALTER TABLE planet_osm_line INJECT STATISTICS '[
+    {
+        "columns": [
+            "rowid"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 148586,
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "way"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 146376,
+        "histo_col_type": "BYTES",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "osm_id"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 146229,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "access"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 11,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148084,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "addr:housename"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149182,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "addr:housenumber"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 18,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149169,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "addr:interpolation"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "admin_level"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 147440,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "aerialway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149143,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "aeroway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148863,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "amenity"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149187,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "area"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149031,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "barrier"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 16,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 144384,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "bicycle"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 141345,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "brand"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "bridge"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 6,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146741,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "boundary"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 8,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 147131,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "building"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "construction"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 14,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149125,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "covered"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149111,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "culvert"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "cutting"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149162,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "denomination"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "disused"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "embankment"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149063,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "foot"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 141033,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "generator:source"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "harbor"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "highway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 31,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 58113,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "historic"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149187,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "horse"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148966,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "intermittent"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146525,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "junction"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148839,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "landuse"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "layer"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 141841,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "leisure"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 4,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149040,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "lock"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "man_made"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 10,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148277,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "military"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "motorcar"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 7,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149077,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "name"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 11561,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 105948,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "natural"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 10,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146085,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "office"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "oneway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 126362,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "operator"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 21,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 147675,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "place"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 6,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149058,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "population"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149134,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "power"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 5,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 147729,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "power_source"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "public_transport"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 148902,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "railway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149188,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "ref"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 2786,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 136745,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "religion"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "route"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 9,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 146611,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "service"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 13,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 136843,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "shop"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "sport"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 5,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149163,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "surface"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 39,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 104501,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "toll"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149145,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "tourism"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149185,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "tower:type"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "tracktype"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 6,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 145375,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "tunnel"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 6,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 144417,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "water"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "waterway"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 11,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 106753,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "wetland"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149187,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "width"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 102,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 142522,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "wood"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 2,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149186,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "z_order"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 73,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 149189
+    },
+    {
+        "columns": [
+            "way_area"
+        ],
+        "created_at": "2020-07-27 20:58:39.815621",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 149189,
+        "row_count": 149189
+    }
+]'
+----
+
+# Regression test for #51924.
+opt format=show-stats
+SELECT
+    DISTINCT ON (p.way) p.way AS way, l.highway AS int_tc_type
+FROM
+    planet_osm_point AS p
+    JOIN planet_osm_line AS l ON st_dwithin(p.way, l.way, 100)
+    JOIN (
+            VALUES
+                ('tertiary', 1),
+                ('unclassified', 2),
+                ('residential', 3),
+                ('living_street', 4),
+                ('service', 5)
+        )
+            AS v (highway, prio) ON v.highway = l.highway
+WHERE
+    p.highway = 'turning_circle'
+ORDER BY
+    p.way, v.prio;
+----
+sort
+ ├── columns: way:69 int_tc_type:98!null
+ ├── immutable
+ ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
+ ├── key: (69)
+ ├── fd: (69)-->(98)
+ ├── ordering: +69
+ └── distinct-on
+      ├── columns: p.way:69 l.highway:98!null
+      ├── grouping columns: p.way:69
+      ├── internal-ordering: +144 opt(29,69)
+      ├── immutable
+      ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
+      ├── key: (69)
+      ├── fd: (69)-->(98)
+      ├── sort
+      │    ├── columns: p.highway:29!null p.way:69 l.highway:98!null l.way:140 column1:143!null column2:144!null
+      │    ├── immutable
+      │    ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(98)=5, null(98)=0, distinct(143)=5, null(143)=0]
+      │    ├── fd: ()-->(29), (98)==(143), (143)==(98)
+      │    ├── ordering: +144 opt(29,69) [actual: +144]
+      │    └── inner-join (hash)
+      │         ├── columns: p.highway:29!null p.way:69 l.highway:98!null l.way:140 column1:143!null column2:144!null
+      │         ├── immutable
+      │         ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(98)=5, null(98)=0, distinct(143)=5, null(143)=0]
+      │         ├── fd: ()-->(29), (98)==(143), (143)==(98)
+      │         ├── inner-join (lookup planet_osm_line)
+      │         │    ├── columns: p.highway:29!null p.way:69 l.highway:98 l.way:140
+      │         │    ├── key columns: [141] = [141]
+      │         │    ├── lookup columns are key
+      │         │    ├── immutable
+      │         │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0, distinct(98)=31, null(98)=1529566.44]
+      │         │    ├── fd: ()-->(29)
+      │         │    ├── inner-join (inverted-lookup planet_osm_line@planet_osm_line_way_idx)
+      │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:141!null
+      │         │    │    ├── inverted-expr
+      │         │    │    │    └── st_dwithin(p.way:69, l.way:140, 100.0)
+      │         │    │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0]
+      │         │    │    ├── fd: ()-->(29)
+      │         │    │    ├── select
+      │         │    │    │    ├── columns: p.highway:29!null p.way:69
+      │         │    │    │    ├── stats: [rows=2632.05556, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0]
+      │         │    │    │    ├── fd: ()-->(29)
+      │         │    │    │    ├── scan p
+      │         │    │    │    │    ├── columns: p.highway:29 p.way:69
+      │         │    │    │    │    └── stats: [rows=146192, distinct(29)=19, null(29)=98815, distinct(69)=146192, null(69)=0]
+      │         │    │    │    └── filters
+      │         │    │    │         └── p.highway:29 = 'turning_circle' [outer=(29), constraints=(/29: [/'turning_circle' - /'turning_circle']; tight), fd=()-->(29)]
+      │         │    │    └── filters (true)
+      │         │    └── filters
+      │         │         └── st_dwithin(p.way:69, l.way:140, 100.0) [outer=(69,140), immutable]
+      │         ├── values
+      │         │    ├── columns: column1:143!null column2:144!null
+      │         │    ├── cardinality: [5 - 5]
+      │         │    ├── stats: [rows=5, distinct(143)=5, null(143)=0, distinct(144)=5, null(144)=0]
+      │         │    ├── ('tertiary', 1)
+      │         │    ├── ('unclassified', 2)
+      │         │    ├── ('residential', 3)
+      │         │    ├── ('living_street', 4)
+      │         │    └── ('service', 5)
+      │         └── filters
+      │              └── column1:143 = l.highway:98 [outer=(98,143), constraints=(/98: (/NULL - ]; /143: (/NULL - ]), fd=(98)==(143), (143)==(98)]
+      └── aggregations
+           └── first-agg [as=l.highway:98, outer=(98)]
+                └── l.highway:98
