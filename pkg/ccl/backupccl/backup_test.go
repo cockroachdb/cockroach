@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -60,8 +61,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
+	"github.com/jackc/pgx"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -3996,4 +3999,122 @@ func getFirstStoreReplica(
 		return nil
 	})
 	return store, repl
+}
+
+// TestClientDisconnect ensures that an backup job can complete even if
+// the client connection which started it closes.
+func TestClientDisconnect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const restoreDB = "restoredb"
+
+	testCases := []struct {
+		jobType    string
+		jobCommand string
+	}{
+		{
+			jobType:    "BACKUP",
+			jobCommand: fmt.Sprintf("BACKUP TO '%s'", localFoo),
+		},
+		{
+			jobType:    "RESTORE",
+			jobCommand: fmt.Sprintf("RESTORE data.* FROM '%s' WITH into_db='%s'", localFoo, restoreDB),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.jobType, func(t *testing.T) {
+			// When completing an export request, signal the a request has been sent and
+			// then wait to be signaled.
+			allowResponse := make(chan struct{})
+			gotRequest := make(chan struct{}, 1)
+			args := base.TestClusterArgs{}
+			args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+					for _, ru := range br.Responses {
+						switch ru.GetInner().(type) {
+						case *roachpb.ExportResponse, *roachpb.ImportResponse:
+							select {
+							case gotRequest <- struct{}{}:
+							default:
+							}
+							<-allowResponse
+						}
+					}
+					return nil
+				},
+			}
+			ctx, tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 1 /* numAccounts */, initNone, args)
+			defer cleanup()
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			conn := tc.ServerConn(0)
+			sqlDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+
+			// If we're testing restore, we first create a backup file to restore.
+			if testCase.jobType == "RESTORE" {
+				close(allowResponse)
+				sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", restoreDB))
+				sqlDB.Exec(t, "BACKUP TO $1", localFoo)
+				allowResponse = make(chan struct{})
+			}
+
+			// Make credentials for the new connection.
+			sqlDB.Exec(t, `CREATE USER testuser`)
+			sqlDB.Exec(t, `GRANT admin TO testuser`)
+			pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+				"TestClientDisconnect-testuser", url.User("testuser"))
+			defer cleanup()
+
+			// Kick off the job on a new connection which we're going to close.
+			done := make(chan struct{})
+			ctxToCancel, cancel := context.WithCancel(ctx)
+			defer cancel()
+			go func() {
+				defer close(done)
+				connCfg, err := pgx.ParseConnectionString(pgURL.String())
+				assert.NoError(t, err)
+				db, err := pgx.Connect(connCfg)
+				assert.NoError(t, err)
+				defer func() { _ = db.Close() }()
+				_, err = db.ExecEx(ctxToCancel, testCase.jobCommand, nil /* options */)
+				assert.Equal(t, context.Canceled, err)
+			}()
+
+			// Wait for the job to start.
+			var jobID string
+			testutils.SucceedsSoon(t, func() error {
+				row := conn.QueryRow(
+					"SELECT job_id FROM [SHOW JOBS] WHERE job_type = $1 ORDER BY created DESC LIMIT 1",
+					testCase.jobType,
+				)
+				return row.Scan(&jobID)
+			})
+
+			// Wait for it to actually start.
+			<-gotRequest
+
+			// Cancel the job's context and wait for the goroutine to exit.
+			cancel()
+			<-done
+
+			// Allow the job to proceed.
+			close(allowResponse)
+
+			// Wait for the job to get marked as succeeded.
+			testutils.SucceedsSoon(t, func() error {
+				var status string
+				if err := conn.QueryRow("SELECT status FROM [SHOW JOB " + jobID + "]").Scan(&status); err != nil {
+					return err
+				}
+				const succeeded = "succeeded"
+				if status != succeeded {
+					return errors.Errorf("expected %s, got %v", succeeded, status)
+				}
+				return nil
+			})
+		})
+	}
 }

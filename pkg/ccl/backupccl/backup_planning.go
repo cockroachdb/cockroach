@@ -723,11 +723,7 @@ func backupPlanHook(
 			}
 		}
 
-		errCh, err := sj.Start(ctx)
-		if err != nil {
-			return err
-		}
-		return <-errCh
+		return sj.Run(ctx)
 	}
 	return fn, header, nil, false, nil
 }

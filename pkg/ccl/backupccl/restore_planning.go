@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -843,7 +844,7 @@ func doRestorePlan(
 		}
 	}
 
-	_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
+	jr := jobs.Record{
 		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -863,11 +864,23 @@ func doRestorePlan(
 			Encryption:         encryption,
 		},
 		Progress: jobspb.RestoreProgress{},
-	})
-	if err != nil {
-		return err
 	}
-	return <-errCh
+	var sj *jobs.StartableJob
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		if sj != nil {
+			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+			}
+		}
+	}
+
+	return sj.Run(ctx)
 }
 
 func init() {
