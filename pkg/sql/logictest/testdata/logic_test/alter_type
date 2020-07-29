@@ -224,3 +224,47 @@ f
 
 statement error pq: enum label \"g\" is not yet public
 INSERT INTO new_enum_values VALUES ('g')
+
+statement ok
+ROLLBACK
+
+# Ensure that optimizer plan caching takes into account changes in types.
+statement ok
+CREATE TYPE cache AS ENUM ('lru', 'clock')
+
+# Run the statement once to put it into the cache.
+query T
+SELECT 'clock'::cache
+----
+clock
+
+# Now alter the type.
+statement ok
+ALTER TYPE cache RENAME VALUE 'clock' TO 'clock-pro'
+
+statement error pq: invalid input value for enum cache: "clock"
+SELECT 'clock'::cache
+
+# Put another query into the cache.
+query T
+SELECT 'lru'::cache
+----
+lru
+
+statement ok
+ALTER TYPE cache RENAME TO store
+
+statement error pq: type "cache" does not exist
+SELECT 'lru'::cache
+
+# Lastly, ensure that we error out in planning when trying to use a dropped type.
+query T
+SELECT 'lru'::store
+----
+lru
+
+statement ok
+DROP TYPE store
+
+statement error pq: type "store" does not exist
+SELECT 'lru'::store
