@@ -24,7 +24,6 @@ func TestDecodeCopy(t *testing.T) {
 	tests := []struct {
 		in     string
 		expect string
-		err    bool
 	}{
 		{
 			in:     `new\nline`,
@@ -46,43 +45,42 @@ func TestDecodeCopy(t *testing.T) {
 			in:     `T\n\07\xEV\x0fA\xb2C\1`,
 			expect: "T\n\007\x0eV\x0fA\xb2C\001",
 		},
-
-		// Error cases.
-
 		{
-			in:  `\x`,
-			err: true,
+			in:     `\\\"`,
+			expect: "\\\"",
 		},
 		{
-			in:  `\xg`,
-			err: true,
+			in:     `\x`,
+			expect: "x",
 		},
 		{
-			in:  `\`,
-			err: true,
+			in:     `\xg`,
+			expect: "xg",
 		},
 		{
-			in:  `\8`,
-			err: true,
+			in:     `\`,
+			expect: "\\",
 		},
 		{
-			in:  `\a`,
-			err: true,
+			in:     `\8`,
+			expect: "8",
+		},
+		{
+			in:     `\a`,
+			expect: "a",
+		},
+		{
+			in:     `\x\xg\8\xH\x32\s\`,
+			expect: "xxg8xH2s\\",
 		},
 	}
 
 	for _, test := range tests {
-		out, err := decodeCopy(test.in)
-		if gotErr := err != nil; gotErr != test.err {
-			if gotErr {
-				t.Errorf("%q: unexpected error: %v", test.in, err)
-				continue
+		t.Run(test.in, func(t *testing.T) {
+			out := decodeCopy(test.in)
+			if out != test.expect {
+				t.Errorf("%q: got %q, expected %q", test.in, out, test.expect)
 			}
-			t.Errorf("%q: expected error", test.in)
-			continue
-		}
-		if out != test.expect {
-			t.Errorf("%q: got %q, expected %q", test.in, out, test.expect)
-		}
+		})
 	}
 }

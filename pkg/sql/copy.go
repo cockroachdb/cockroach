@@ -371,7 +371,6 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 }
 
 func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
-	var err error
 	parts := bytes.Split(line, fieldDelim)
 	if len(parts) != len(c.resultColumns) {
 		return pgerror.Newf(pgcode.ProtocolViolation,
@@ -393,10 +392,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			types.TimestampFamily,
 			types.TimestampTZFamily,
 			types.UuidFamily:
-			s, err = decodeCopy(s)
-			if err != nil {
-				return err
-			}
+			s = decodeCopy(s)
 		}
 		d, err := sqlbase.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
@@ -421,7 +417,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 // decodeCopy unescapes a single COPY field.
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html#AEN74432
-func decodeCopy(in string) (string, error) {
+func decodeCopy(in string) string {
 	var buf bytes.Buffer
 	start := 0
 	for i, n := 0, len(in); i < n; i++ {
@@ -430,61 +426,67 @@ func decodeCopy(in string) (string, error) {
 		}
 		buf.WriteString(in[start:i])
 		i++
-		if i >= n {
-			return "", pgerror.Newf(pgcode.Syntax,
-				"unknown escape sequence: %q", in[i-1:])
-		}
 
-		ch := in[i]
-		if decodedChar := decodeMap[ch]; decodedChar != 0 {
-			buf.WriteByte(decodedChar)
-		} else if ch == 'x' {
-			// \x can be followed by 1 or 2 hex digits.
-			i++
-			if i >= n {
-				return "", pgerror.Newf(pgcode.Syntax,
-					"unknown escape sequence: %q", in[i-2:])
-			}
-			ch = in[i]
-			digit, ok := decodeHexDigit(ch)
-			if !ok {
-				return "", pgerror.Newf(pgcode.Syntax,
-					"unknown escape sequence: %q", in[i-2:i])
-			}
-			if i+1 < n {
-				if v, ok := decodeHexDigit(in[i+1]); ok {
-					i++
-					digit <<= 4
-					digit += v
-				}
-			}
-			buf.WriteByte(digit)
-		} else if ch >= '0' && ch <= '7' {
-			digit, _ := decodeOctDigit(ch)
-			// 1 to 2 more octal digits follow.
-			if i+1 < n {
-				if v, ok := decodeOctDigit(in[i+1]); ok {
-					i++
-					digit <<= 3
-					digit += v
-				}
-			}
-			if i+1 < n {
-				if v, ok := decodeOctDigit(in[i+1]); ok {
-					i++
-					digit <<= 3
-					digit += v
-				}
-			}
-			buf.WriteByte(digit)
+		if i >= n {
+			// If the last character is \, then write it as-is.
+			buf.WriteByte('\\')
 		} else {
-			return "", pgerror.Newf(pgcode.Syntax,
-				"unknown escape sequence: %q", in[i-1:i+1])
+			ch := in[i]
+			if decodedChar := decodeMap[ch]; decodedChar != 0 {
+				buf.WriteByte(decodedChar)
+			} else if ch == 'x' {
+				// \x can be followed by 1 or 2 hex digits.
+				if i+1 >= n {
+					// Interpret as 'x' if nothing follows.
+					buf.WriteByte('x')
+				} else {
+					ch = in[i+1]
+					digit, ok := decodeHexDigit(ch)
+					if !ok {
+						// If the following character after 'x' is not a digit,
+						// write the current character as 'x'.
+						buf.WriteByte('x')
+					} else {
+						i++
+						if i+1 < n {
+							if v, ok := decodeHexDigit(in[i+1]); ok {
+								i++
+								digit <<= 4
+								digit += v
+							}
+						}
+						buf.WriteByte(digit)
+					}
+				}
+			} else if ch >= '0' && ch <= '7' {
+				digit, _ := decodeOctDigit(ch)
+				// 1 to 2 more octal digits follow.
+				if i+1 < n {
+					if v, ok := decodeOctDigit(in[i+1]); ok {
+						i++
+						digit <<= 3
+						digit += v
+					}
+				}
+				if i+1 < n {
+					if v, ok := decodeOctDigit(in[i+1]); ok {
+						i++
+						digit <<= 3
+						digit += v
+					}
+				}
+				buf.WriteByte(digit)
+			} else {
+				// Any other backslashed character will be taken to represent itself.
+				buf.WriteByte(ch)
+			}
 		}
 		start = i + 1
 	}
-	buf.WriteString(in[start:])
-	return buf.String(), nil
+	if start < len(in) {
+		buf.WriteString(in[start:])
+	}
+	return buf.String()
 }
 
 func decodeDigit(c byte, onlyOctal bool) (byte, bool) {
