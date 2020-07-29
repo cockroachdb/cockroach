@@ -27,7 +27,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (id, next_id)
 );
 
-INSERT INTO t (id, next_id) VALUES
+INSERT INTO public.t (id, next_id) VALUES
 	(1, NULL);
 
 ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
@@ -54,7 +54,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (id, next_id)
 );
 
-INSERT INTO t (id, next_id) VALUES
+INSERT INTO public.t (id, next_id) VALUES
 	(1, 1);
 
 ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
@@ -82,7 +82,7 @@ CREATE TABLE public."table" (
 	FAMILY "primary" (id, "'")
 );
 
-INSERT INTO "table" (id, "'") VALUES
+INSERT INTO public."table" (id, "'") VALUES
 	(1, 1);
 
 ALTER TABLE public."table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES public."table"(id);
@@ -118,7 +118,7 @@ noroundtrip
 ----
 ----
 
-INSERT INTO "table" (id, "'") VALUES
+INSERT INTO public."table" (id, "'") VALUES
 	(1, 1);
 ----
 ----

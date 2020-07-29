@@ -8,8 +8,8 @@ sort
  └── project
       ├── columns: schema_name:3!null
       └── select
-           ├── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
+           ├── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5 crdb_is_user_defined:6
            ├── scan t.information_schema.schemata
-           │    └── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
+           │    └── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5 crdb_is_user_defined:6
            └── filters
                 └── catalog_name:2 = 't'

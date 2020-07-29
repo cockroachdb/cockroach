@@ -14,7 +14,7 @@ CREATE TABLE public.f (
 	FAMILY "primary" (x, y, rowid)
 );
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 ----
 ----
@@ -32,7 +32,7 @@ noroundtrip
 ----
 ----
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 ----
 ----

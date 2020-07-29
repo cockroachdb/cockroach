@@ -386,6 +386,9 @@ func GetDatabaseDescriptorsFromIDs(
 		if err := result.Rows[0].ValueProto(desc); err != nil {
 			return nil, err
 		}
+		if desc.GetUnion() == nil {
+			return nil, sqlbase.ErrDescriptorNotFound
+		}
 		db := desc.GetDatabase()
 		if db == nil {
 			return nil, errors.AssertionFailedf(
