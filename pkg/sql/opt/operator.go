@@ -249,6 +249,21 @@ var NegateOpMap = map[Operator]Operator{
 	IsNotOp:        IsOp,
 }
 
+// ScalarOperatorTransmitsNulls returns true if the given scalar operator always
+// returns NULL when at least one of its inputs is NULL.
+func ScalarOperatorTransmitsNulls(op Operator) bool {
+	switch op {
+	case BitandOp, BitorOp, BitxorOp, PlusOp, MinusOp, MultOp, DivOp, FloorDivOp,
+		ModOp, PowOp, EqOp, NeOp, LtOp, GtOp, LeOp, GeOp, LikeOp, NotLikeOp, ILikeOp,
+		NotILikeOp, SimilarToOp, NotSimilarToOp, RegMatchOp, NotRegMatchOp, RegIMatchOp,
+		NotRegIMatchOp, ConstOp:
+		return true
+
+	default:
+		return false
+	}
+}
+
 // BoolOperatorRequiresNotNullArgs returns true if the operator can never
 // evaluate to true if one of its children is NULL.
 func BoolOperatorRequiresNotNullArgs(op Operator) bool {
