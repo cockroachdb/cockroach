@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -24,9 +26,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultGCInterval is the duration between attempts to delete extant sessions
-// that have expired.
-const DefaultGCInterval = 1 * time.Second
+var defaultGCInterval = settings.RegisterNonNegativeDurationSetting(
+	"server.sqlliveness.gc_interval",
+	"duration between attempts to delete extant sessions that have expired",
+	time.Second,
+)
 
 // Storage implements sqlliveness.Storage.
 type Storage struct {
@@ -34,7 +38,8 @@ type Storage struct {
 	clock      *hlc.Clock
 	db         *kv.DB
 	ex         tree.InternalExecutor
-	gcInterval time.Duration
+	gcInterval func() time.Duration
+	settings   *cluster.Settings
 }
 
 // Options are used to configure a new Storage.
@@ -49,12 +54,14 @@ func NewStorage(
 	clock *hlc.Clock,
 	db *kv.DB,
 	ie tree.InternalExecutor,
-	options *Options,
+	settings *cluster.Settings,
 ) sqlliveness.Storage {
-	if options.gcInterval <= 0 {
-		options.gcInterval = DefaultGCInterval
+	s := &Storage{
+		stopper: stopper, clock: clock, db: db, ex: ie,
+		gcInterval: func() time.Duration {
+			return defaultGCInterval.Get(&settings.SV)
+		},
 	}
-	s := &Storage{stopper: stopper, clock: clock, db: db, ex: ie, gcInterval: options.gcInterval}
 	s.stopper.RunWorker(ctx, s.deleteSessions)
 	return s
 }
@@ -74,7 +81,6 @@ SELECT session_id FROM system.sqlliveness WHERE session_id = $1`, sid,
 	}
 	return row != nil, nil
 }
-<<<<<<< HEAD
 
 func (s *Storage) deleteSessions(ctx context.Context) {
 	for {
@@ -87,7 +93,7 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			t.Reset(s.gcInterval)
+			t.Reset(s.gcInterval())
 			now := s.clock.Now()
 			var n int
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -108,4 +114,3 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 		}
 	}
 }
-

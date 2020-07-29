@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -32,6 +34,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+)
+
+var (
+	DefaultTTL = settings.RegisterNonNegativeDurationSetting(
+		"server.sqlliveness.ttl",
+		"default sqlliveness session ttl",
+		40*time.Second,
+	)
+	DefaultHeartBeat = settings.RegisterNonNegativeDurationSetting(
+		"server.sqlliveness.heartbeat",
+		"duration heart beats to push session expiration further out in time",
+		time.Second,
+	)
 )
 
 type session struct {
@@ -53,9 +68,9 @@ type SQLInstance struct {
 	clock   *hlc.Clock
 	db      *kv.DB
 	ex      sqlutil.InternalExecutor
-	ttl     time.Duration
-	hb      time.Duration
 	stopper *stop.Stopper
+	ttl     func() time.Duration
+	hb      func() time.Duration
 	mu      struct {
 		syncutil.Mutex
 		blockCh chan struct{}
@@ -89,7 +104,7 @@ func (l *SQLInstance) clearSession() {
 
 func (l *SQLInstance) createSession(ctx context.Context) (*session, error) {
 	id := uuid.MakeV4().GetBytes()
-	exp := l.clock.Now().Add(l.ttl.Nanoseconds(), 0)
+	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := l.ex.QueryRowEx(
 			ctx, "create-session", txn,
@@ -106,7 +121,7 @@ func (l *SQLInstance) createSession(ctx context.Context) (*session, error) {
 
 func (l *SQLInstance) extendSession(ctx context.Context) error {
 	s, _ := l.getSessionOrBlockCh()
-	exp := l.clock.Now().Add(l.ttl.Nanoseconds(), 1)
+	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 1)
 	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		data, err := l.ex.QueryRowEx(
 			ctx, "extend-session", txn,
@@ -144,7 +159,7 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			t.Reset(l.hb)
+			t.Reset(l.hb())
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
 				MaxBackoff:     2 * time.Second,
@@ -194,17 +209,24 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-type Options struct {
-	Deadline  time.Duration
-	Heartbeat time.Duration
-}
-
 // NewSqlInstance returns a new SQLInstance struct and starts its heartbeating
 // loop.
 func NewSqlInstance(
-	stopper *stop.Stopper, clock *hlc.Clock, db *kv.DB, ex sqlutil.InternalExecutor, opts *Options,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	db *kv.DB,
+	ex sqlutil.InternalExecutor,
+	settings *cluster.Settings,
 ) sqlliveness.SQLInstance {
-	l := &SQLInstance{clock: clock, db: db, ex: ex, ttl: opts.Deadline, hb: opts.Heartbeat, stopper: stopper}
+	l := &SQLInstance{
+		clock: clock, db: db, ex: ex, stopper: stopper,
+		ttl: func() time.Duration {
+			return DefaultTTL.Get(&settings.SV)
+		},
+		hb: func() time.Duration {
+			return DefaultHeartBeat.Get(&settings.SV)
+		},
+	}
 	l.mu.blockCh = make(chan struct{})
 	return l
 }
