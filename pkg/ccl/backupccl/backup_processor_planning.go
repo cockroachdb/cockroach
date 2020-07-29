@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -151,6 +153,28 @@ func makeBackupDataProcessorSpecs(
 		}
 	}
 
+	// We do not want the KV layer to be interacting with external KMS services,
+	// and so we must provide the ExportRequest with plaintext DataKey which can
+	// directly be used to encrypt the data. This is the only place we send a
+	// plaintext DataKey over the wire.
+	// TODO(adityamaru): Do we need to wipe the key from the spec below?
+	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
+		env, err := getBackupKMSEnv()
+		if err != nil {
+			return nil, err
+		}
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, env)
+		if err != nil {
+			return nil, err
+		}
+
+		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
+			encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return nil, errors.Wrap(err,
+				"failed to decrypt data key before starting BackupDataProcessor")
+		}
+	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Backup
 	// processor and KV ExportRequest.
 	var fileEncryption *roachpb.FileEncryptionOptions
