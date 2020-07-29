@@ -496,6 +496,24 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	return rk, nil
 }
 
+// SpanAddr is like Addr, but it takes a Span instead of a single key and
+// applies the key transformation to the start and end keys in the span,
+// returning an RSpan.
+func SpanAddr(span roachpb.Span) (roachpb.RSpan, error) {
+	rk, err := Addr(span.Key)
+	if err != nil {
+		return roachpb.RSpan{}, err
+	}
+	var rek roachpb.RKey
+	if len(span.EndKey) > 0 {
+		rek, err = Addr(span.EndKey)
+		if err != nil {
+			return roachpb.RSpan{}, err
+		}
+	}
+	return roachpb.RSpan{Key: rk, EndKey: rek}, nil
+}
+
 // RangeMetaKey returns a range metadata (meta1, meta2) indexing key for the
 // given key.
 //
