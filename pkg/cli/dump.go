@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -330,7 +331,7 @@ SELECT
 FROM
 	"".crdb_internal.create_type_statements
 AS OF SYSTEM TIME %s
-WHERE 
+WHERE
 	database_name = $1
 `
 	rows, err := conn.Query(fmt.Sprintf(query, lex.EscapeSQLString(ts)), []driver.Value{dbName})
@@ -770,9 +771,9 @@ func dumpCreateTable(w io.Writer, md basicMetadata) error {
 	return nil
 }
 
-const (
+var (
 	// insertRows is the number of rows per INSERT statement.
-	insertRows = 100
+	insertRows = envutil.EnvOrDefaultInt("COCKROACH_DUMP_ROWS_PER_INSERT", 100)
 )
 
 func dumpSequenceData(w io.Writer, conn *sqlConn, bmd basicMetadata) error {
