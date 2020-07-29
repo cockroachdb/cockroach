@@ -35,7 +35,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
+type gaugeValuer interface {
+	GetName() string
+	Value() int64
+}
+
+func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 	t.Helper()
 	if a := g.Value(); a != e {
 		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))

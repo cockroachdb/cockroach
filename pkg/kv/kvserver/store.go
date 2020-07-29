@@ -1483,7 +1483,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rep.GetMVCCStats())
+			if tenantID, ok := rep.TenantID(); ok {
+				s.metrics.addMVCCStats(ctx, tenantID, rep.GetMVCCStats())
+			} else {
+				return false, errors.AssertionFailedf("found newly constructed replica"+
+					" for range %d at generation %d with an invalid tenant ID in store %d",
+					log.Safe(desc.RangeID),
+					log.Safe(desc.Generation),
+					log.Safe(s.StoreID()))
+			}
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica

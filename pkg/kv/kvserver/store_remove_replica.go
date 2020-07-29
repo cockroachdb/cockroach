@@ -74,6 +74,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// destroy status.
 	var desc *roachpb.RangeDescriptor
 	var replicaID roachpb.ReplicaID
+	var tenantID roachpb.TenantID
 	{
 		rep.mu.Lock()
 
@@ -103,6 +104,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 		replicaID = rep.mu.replicaID
+		tenantID = rep.mu.tenantID
 		rep.mu.Unlock()
 	}
 
@@ -132,7 +134,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
-	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
+
+	s.metrics.subtractMVCCStats(ctx, tenantID, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 
