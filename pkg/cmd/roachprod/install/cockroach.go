@@ -168,6 +168,26 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			}
 		}
 
+		if !vers.AtLeast(version.MustParse("v20.1.0")) {
+			// Given #51897 remains unresolved, master-built roachprod is used
+			// to run roachtests against the 20.1 branch. Some of those
+			// roachtests test mixed-version clusters that start off at 19.2.
+			// Consequently, we manually add this `cluster-bootstrapped` file
+			// where roachprod expects to find it for already-initialized
+			// clusters. This is a pretty gross hack, that we should address by
+			// addressing #51897.
+			//
+			// TODO(irfansharif): Remove this once #51897 is resolved.
+			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "cluster-bootstrapped")
+			cmdOut, err := h.run(nodeIdx, markBootstrap)
+			if err != nil {
+				log.Fatalf("unable to run cmd: %v", err)
+			}
+			if cmdOut != "" {
+				fmt.Println(cmdOut)
+			}
+		}
+
 		fmt.Printf("%s: setting cluster settings", h.c.Name)
 		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
 		if err != nil {
@@ -618,4 +638,20 @@ func (h *crdbStartHelper) getEnvVars() string {
 		buf.WriteString(h.c.Env)
 	}
 	return buf.String()
+}
+
+func (h *crdbStartHelper) run(nodeIdx int, cmd string) (string, error) {
+	nodes := h.c.ServerNodes()
+
+	sess, err := h.c.newSession(nodes[nodeIdx])
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(cmd)
+	if err != nil {
+		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
