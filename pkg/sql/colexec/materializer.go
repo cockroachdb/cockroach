@@ -43,7 +43,7 @@ type Materializer struct {
 	// converter contains the converted vectors of the current batch. Note that
 	// if the batch had a selection vector on top of it, the converted vectors
 	// will be "dense" and contain only tuples that were selected.
-	converter *vecToDatumConverter
+	converter *colexecbase.VecToDatumConverter
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
@@ -150,7 +150,7 @@ func NewMaterializer(
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
 		// nil vecIdxsToConvert indicates that we want to convert all vectors.
-		converter: newVecToDatumConverter(len(typs), nil /* vecIdxsToConvert */),
+		converter: colexecbase.NewVecToDatumConverter(len(typs), nil /* vecIdxsToConvert */),
 		row:       make(sqlbase.EncDatumRow, len(typs)),
 		closers:   toClose,
 	}
@@ -223,14 +223,14 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
-			m.converter.convertBatch(m.batch)
+			m.converter.ConvertBatch(m.batch)
 		}
 
 		for colIdx := range m.typs {
 			// Note that we don't need to apply the selection vector of the
-			// batch to index m.curIdx because vecToDatumConverter returns a
+			// batch to index m.curIdx because VecToDatumConverter returns a
 			// "dense" datum column.
-			m.row[colIdx].Datum = m.converter.getDatumColumn(colIdx)[m.curIdx]
+			m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
 		}
 		m.curIdx++
 		// Note that there is no post-processing to be done in the

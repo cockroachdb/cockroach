@@ -195,7 +195,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		outputIdx:           outputIdx,
 		columnTypes:         typs,
 		outputType:          types.String,
-		toDatumConverter:    newVecToDatumConverter(len(typs), inputCols),
+		toDatumConverter:    colexecbase.NewVecToDatumConverter(len(typs), inputCols),
 		datumToVecConverter: GetDatumToPhysicalFn(types.String),
 		row:                 make(tree.Datums, outputIdx),
 		argumentCols:        inputCols,

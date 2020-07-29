@@ -7,7 +7,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecbase
 
 import (
 	"math/big"
@@ -24,7 +24,7 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// vecToDatumConverter is a helper struct that converts vectors from batches to
+// VecToDatumConverter is a helper struct that converts vectors from batches to
 // their datum representations.
 // TODO(yuzefovich): the result of converting the vectors to datums is usually
 // put into sqlbase.EncDatumRow, so it might make sense to look into creating
@@ -33,38 +33,38 @@ import (
 // some of the TPCH queries. I think the main reason for the slowdown is that
 // the amount of memory allocated increases just because EncDatums take more
 // space than Datums. Another thing is that allocating whole W vectors, one
-// vector at a time, in vecToDatumConverter is noticeably faster that
+// vector at a time, in VecToDatumConverter is noticeably faster that
 // allocating N rows of W length, one row at a time (meaning that
 // O(batch width) vs O(batch length) comparison). We could probably play around
 // with allocating a big flat []EncDatum slice in which datums from the same
 // column are contiguous and then populate the output row in the materializer
 // by choosing appropriate elements, but I'm not sure whether it would be more
 // performant.
-type vecToDatumConverter struct {
+type VecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
 	da               sqlbase.DatumAlloc
 }
 
-// newVecToDatumConverter creates a new vecToDatumConverter.
+// NewVecToDatumConverter creates a new VecToDatumConverter.
 // - batchWidth determines the width of the batches that it will be converting.
 // - vecIdxsToConvert determines which vectors need to be converted. It can be
 // nil indicating that all vectors need to be converted.
-func newVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *vecToDatumConverter {
+func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumConverter {
 	if vecIdxsToConvert == nil {
 		vecIdxsToConvert = make([]int, batchWidth)
 		for i := range vecIdxsToConvert {
 			vecIdxsToConvert[i] = i
 		}
 	}
-	return &vecToDatumConverter{
+	return &VecToDatumConverter{
 		convertedVecs:    make([]tree.Datums, batchWidth),
 		vecIdxsToConvert: vecIdxsToConvert,
 	}
 }
 
-// convertBatch converts the selected vectors from the batch.
-func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
+// ConvertBatch converts the selected vectors from the batch.
+func (c *VecToDatumConverter) ConvertBatch(batch coldata.Batch) {
 	if len(c.vecIdxsToConvert) == 0 {
 		// No vectors were selected for conversion, so there is nothing to do.
 		return
@@ -92,14 +92,14 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 	}
 }
 
-// getDatumColumn returns the converted column of tree.Datum of the vector on
+// GetDatumColumn returns the converted column of tree.Datum of the vector on
 // position colIdx from the last converted batch.
 // NOTE: this column is "dense" in regards to the selection vector - if there
 // was a selection vector on the batch, only elements that were selected are
 // converted, so in order to access the tuple at position tupleIdx, use
-// getDatumColumn(colIdx)[tupleIdx] and *NOT*
-// getDatumColumn(colIdx)[sel[tupleIdx]].
-func (c *vecToDatumConverter) getDatumColumn(colIdx int) tree.Datums {
+// GetDatumColumn(colIdx)[tupleIdx] and *NOT*
+// GetDatumColumn(colIdx)[sel[tupleIdx]].
+func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 	return c.convertedVecs[colIdx]
 }
 
