@@ -37,7 +37,7 @@ const (
 	// A Replica is suspected to have been removed if either it is in the
 	// candidate Raft state (which is a typical sign of having been removed
 	// from the group) or it is not in the VOTER_FULL state. Replicas which are
-	// in the LEARNER state will never become candidates. It seems possible that
+	// in the LEARNER_EPHEMERAL state will never become candidates. It seems possible that
 	// a range will quiesce and never tell a VOTER_OUTGOING that is was removed.
 	// Cases where a replica gets stuck in VOTER_INCOMING seem farfetched and
 	// would require the replica to be removed from the range before it ever

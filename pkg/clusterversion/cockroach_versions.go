@@ -323,8 +323,8 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// during replication changes that remove (one or more) voters.
 		// When this version is active, voters that are being removed transition
 		// first into VOTER_DEMOTING (a joint configuration) and from there to
-		// LEARNER, before they are actually removed. This added intermediate
-		// step avoids losing quorum when the leaseholder crashes at an
+		// LEARNER_EPHEMERAL, before they are actually removed. This added
+		// intermediate step avoids losing quorum when the leaseholder crashes at an
 		// inopportune moment.
 		//
 		// For example, without this version active, with nodes n1-n4 and a
@@ -344,8 +344,8 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// At this point, the remaining replicas n4 and n2 form a quorum of the
 		// latest committed configuration, but both still have the joint
 		// configuration active, which cannot reach quorum any more.
-		// The intermediate learner step added by this version makes sure that
-		// n1 is still available at this point to help n2 win an election, and
+		// The intermediate ephemeral learner step added by this version makes sure
+		// that n1 is still available at this point to help n2 win an election, and
 		// due to the invariant that replicas never have more than one unappliable
 		// configuration change in their logs, the group won't lose availability
 		// when the leader instead crashes while removing the learner.

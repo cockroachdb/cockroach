@@ -110,23 +110,23 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	}
 	snapType := SnapshotRequest_RAFT
 
-	// A learner replica is either getting a snapshot of type LEARNER by the node
-	// that's adding it or it's been orphaned and it's about to be cleaned up by
-	// the replicate queue. Either way, no point in also sending it a snapshot of
-	// type RAFT.
-	if repDesc.GetType() == roachpb.LEARNER {
+	// An ephemeral learner replica is either getting a snapshot of type
+	// SnapshotRequest_LEARNER by the node that's adding it or it's been orphaned
+	// and it's about to be cleaned up by the replicate queue. Either way, no
+	// point in also sending it a snapshot of type RAFT.
+	if repDesc.GetType() == roachpb.LEARNER_EPHEMERAL {
 		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			return nil
 		}
 		snapType = SnapshotRequest_LEARNER
 		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), repDesc.StoreID); index > 0 {
-			// There is a snapshot being transferred. It's probably a LEARNER snap, so
+			// There is a snapshot being transferred. It's probably a LEARNER_EPHEMERAL snap, so
 			// bail for now and try again later.
 			err := errors.Errorf(
-				"skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
+				"skipping snapshot; replica is likely an ephemeral learner in the process of being added: %s", repDesc)
 			// TODO(knz): print the error instead when the error package
 			// knows how to expose redactable strings.
-			log.Infof(ctx, "skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
+			log.Infof(ctx, "skipping snapshot; replica is likely an ephemeral learner in the process of being added: %s", repDesc)
 			// TODO(dan): This is super brittle and non-obvious. In the common case,
 			// this check avoids duplicate work, but in rare cases, we send the
 			// learner snap at an index before the one raft wanted here. The raft

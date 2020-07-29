@@ -50,7 +50,7 @@ const (
 
 	// Priorities for various repair operations.
 	finalizeAtomicReplicationChangePriority float64 = 12002
-	removeLearnerReplicaPriority            float64 = 12001
+	removeEphemeralLearnerPriority          float64 = 12001
 	addDeadReplacementPriority              float64 = 12000
 	addMissingReplicaPriority               float64 = 10000
 	addDecommissioningReplacementPriority   float64 = 5000
@@ -104,7 +104,7 @@ const (
 	AllocatorRemoveDead
 	AllocatorReplaceDecommissioning
 	AllocatorRemoveDecommissioning
-	AllocatorRemoveLearner
+	AllocatorRemoveEphemeralLearner
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
 	AllocatorFinalizeAtomicReplicationChange
@@ -118,7 +118,7 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorRemoveDead:                      "remove dead",
 	AllocatorReplaceDecommissioning:          "replace decommissioning",
 	AllocatorRemoveDecommissioning:           "remove decommissioning",
-	AllocatorRemoveLearner:                   "remove learner",
+	AllocatorRemoveEphemeralLearner:          "remove ephemeral learner",
 	AllocatorConsiderRebalance:               "consider rebalance",
 	AllocatorRangeUnavailable:                "range unavailable",
 	AllocatorFinalizeAtomicReplicationChange: "finalize conf change",
@@ -308,51 +308,51 @@ func (a *Allocator) ComputeAction(
 	}
 
 	if desc.Replicas().InAtomicReplicationChange() {
-		// With a similar reasoning to the learner branch below, if we're in a
-		// joint configuration the top priority is to leave it before we can
+		// With a similar reasoning to the ephemeral learner branch below, if we're
+		// in a joint configuration the top priority is to leave it before we can
 		// even think about doing anything else.
 		return AllocatorFinalizeAtomicReplicationChange, finalizeAtomicReplicationChangePriority
 	}
 
-	// Seeing a learner replica at this point is unexpected because learners are a
-	// short-lived (ish) transient state in a learner+snapshot+voter cycle, which
-	// is always done atomically. Only two places could have added a learner: the
-	// replicate queue or AdminChangeReplicas request.
+	// Seeing an ephemeral learner replica at this point is unexpected because
+	// they are a short-lived (ish) transient state in a learner+snapshot+voter
+	// cycle, which is always done atomically. Only two places could have added an
+	// ephemeral learner: the replicate queue or AdminChangeReplicas request.
 	//
 	// The replicate queue only operates on leaseholders, which means that only
 	// one node at a time is operating on a given range except in rare cases (old
 	// leaseholder could start the operation, and a new leaseholder steps up and
 	// also starts an overlapping operation). Combined with the above atomicity,
-	// this means that if the replicate queue sees a learner, either the node that
-	// was adding it crashed somewhere in the learner+snapshot+voter cycle and
-	// we're the new leaseholder or we caught a race.
+	// this means that if the replicate queue sees an ephemeral learner, either
+	// the node that was adding it crashed somewhere in the learner+snapshot+voter
+	// cycle and we're the new leaseholder or we caught a race.
 	//
 	// In the first case, we could assume the node that was adding it knew what it
 	// was doing and finish the addition. Or we could leave it and do higher
 	// priority operations first if there are any. However, this comes with code
 	// complexity and concept complexity (computing old vs new quorum sizes
-	// becomes ambiguous, the learner isn't in the quorum but it likely will be
-	// soon, so do you count it?). Instead, we do the simplest thing and remove it
-	// before doing any other operations to the range. We'll revisit this decision
-	// if and when the complexity becomes necessary.
+	// becomes ambiguous, the ephemeral learner isn't in the quorum but it likely
+	// will be soon, so do you count it?). Instead, we do the simplest thing and
+	// remove it before doing any other operations to the range. We'll revisit
+	// this decision if and when the complexity becomes necessary.
 	//
 	// If we get the race where AdminChangeReplicas is adding a replica and the
-	// queue happens to run during the snapshot, this will remove the learner and
-	// AdminChangeReplicas will notice either during the snapshot transfer or when
-	// it tries to promote the learner to a voter. AdminChangeReplicas should
-	// retry.
+	// queue happens to run during the snapshot, this will remove the ephemeral
+	// learner and AdminChangeReplicas will notice either during the snapshot
+	// transfer or when it tries to promote the learner to a voter.
+	// AdminChangeReplicas should retry.
 	//
 	// On the other hand if we get the race where a leaseholder starts adding a
 	// replica in the replicate queue and during this loses its lease, it should
 	// probably not retry.
-	if learners := desc.Replicas().Learners(); len(learners) > 0 {
+	if learners := desc.Replicas().EphemeralLearners(); len(learners) > 0 {
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
 		// from happening (like addDeadReplacementPriority) by queueing this at a
 		// low priority so until this TODO is done, keep
-		// removeLearnerReplicaPriority as the highest priority.
-		return AllocatorRemoveLearner, removeLearnerReplicaPriority
+		// removeEphemeralLearnerPriority as the highest priority.
+		return AllocatorRemoveEphemeralLearner, removeEphemeralLearnerPriority
 	}
 	// computeAction expects to operate only on voters.
 	return a.computeAction(ctx, zone, desc.Replicas().Voters())

@@ -118,7 +118,7 @@ enum ReplicaType {
   VOTER_INCOMING = 2,
   VOTER_OUTGOING = 3,
   VOTER_DEMOTING = 4,
-  LEARNER = 1
+  LEARNER_EPHEMERAL = 1
 };
 bool ReplicaType_IsValid(int value);
 const ReplicaType ReplicaType_MIN = VOTER_FULL;

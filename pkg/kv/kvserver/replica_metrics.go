@@ -160,9 +160,9 @@ func calcRangeCounter(
 	numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	// It seems unlikely that a learner replica would be the first live one, but
-	// there's no particular reason to exclude them. Note that `All` returns the
-	// voters first.
+	// It seems unlikely that an ephemeral learner replica would be the first live
+	// one, but there's no particular reason to exclude them. Note that `All`
+	// returns the voters first.
 	for _, rd := range desc.Replicas().All() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID

@@ -2248,6 +2248,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
 		{Name: "replica_localities", Typ: types.StringArray},
+		// TODO(aayush): this will need to be migrated.
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
@@ -2340,7 +2341,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			voterReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().Voters()...)
 			var learnerReplicaStoreIDs []int
-			for _, rd := range desc.Replicas().Learners() {
+			for _, rd := range desc.Replicas().EphemeralLearners() {
 				learnerReplicaStoreIDs = append(learnerReplicaStoreIDs, int(rd.StoreID))
 			}
 			sort.Slice(voterReplicas, func(i, j int) bool {

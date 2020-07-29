@@ -42,7 +42,7 @@ var v = ReplicaTypeVoterFull()
 var vi = ReplicaTypeVoterIncoming()
 var vo = ReplicaTypeVoterOutgoing()
 var vd = ReplicaTypeVoterDemoting()
-var l = ReplicaTypeLearner()
+var l = ReplicaTypeEphemeralLearner()
 
 func TestVotersLearnersAll(t *testing.T) {
 
@@ -72,14 +72,14 @@ func TestVotersLearnersAll(t *testing.T) {
 					assert.FailNow(t, "unexpectedly got a %s as Voter()", typ)
 				}
 			}
-			for _, learner := range r.Learners() {
+			for _, learner := range r.EphemeralLearners() {
 				seen[learner] = struct{}{}
-				assert.Equal(t, LEARNER, learner.GetType())
+				assert.Equal(t, LEARNER_EPHEMERAL, learner.GetType())
 			}
 
 			all := r.All()
 			// Make sure that VOTER_OUTGOING is the only type that is skipped both
-			// by Learners() and Voters()
+			// by EphemeralLearners() and Voters()
 			for _, rd := range all {
 				typ := rd.GetType()
 				if _, seen := seen[rd]; !seen {
@@ -119,7 +119,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 				{NodeID: 1, StoreID: 1},
 				{NodeID: 2, StoreID: 2},
 				{NodeID: 3, StoreID: 3},
-				{NodeID: 4, StoreID: 4, Type: ReplicaTypeLearner()},
+				{NodeID: 4, StoreID: 4, Type: ReplicaTypeEphemeralLearner()},
 			},
 			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
 			expected: true,
@@ -140,8 +140,8 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		for _, voter := range r.Voters() {
 			assert.Equal(t, VOTER_FULL, voter.GetType(), "testcase %d", i)
 		}
-		for _, learner := range r.Learners() {
-			assert.Equal(t, LEARNER, learner.GetType(), "testcase %d", i)
+		for _, learner := range r.EphemeralLearners() {
+			assert.Equal(t, LEARNER_EPHEMERAL, learner.GetType(), "testcase %d", i)
 		}
 	}
 }
@@ -173,7 +173,7 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 			"Voters:[2 3] VotersOutgoing:[2] Learners:[1] LearnersNext:[] AutoLeave:false",
 		},
 		// More complex joint change: a replica swap, switching out n4 for n3 from the initial
-		// set of voters n2, n4 (plus learner n1 before and after).
+		// set of voters n2, n4 (plus ephemeral learner n1 before and after).
 		{
 			[]ReplicaDescriptor{rd(l, 1), rd(v, 2), rd(vi, 3), rd(vo, 4)},
 			"Voters:[2 3] VotersOutgoing:[2 4] Learners:[1] LearnersNext:[] AutoLeave:false",
@@ -188,7 +188,8 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 			[]ReplicaDescriptor{rd(v, 1), rd(v, 2), rd(vo, 3), rd(vo, 4)},
 			"Voters:[1 2] VotersOutgoing:[1 2 3 4] Learners:[] LearnersNext:[] AutoLeave:false",
 		},
-		// Completely switching to a new set of replicas: n1,n2 to n4,n5. Throw a learner in for fun.
+		// Completely switching to a new set of replicas: n1,n2 to n4,n5. Throw an
+		// ephemeral learner in for fun.
 		{
 			[]ReplicaDescriptor{rd(vo, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4), rd(l, 5)},
 			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[] AutoLeave:false",
@@ -283,7 +284,7 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 			{true, rd(vo, 2)},
 			{true, rd(v, 3)},
 		}, true},
-		// Same, but there are a few learners that should not matter.
+		// Same, but there are a few ephemeral learners that should not matter.
 		{[]descWithLiveness{
 			{true, rd(vi, 1)},
 			{true, rd(vo, 2)},
@@ -293,8 +294,8 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 			{false, rd(l, 6)},
 			{false, rd(l, 7)},
 		}, true},
-		// Non-joint case that should be live unless the learner is somehow taken
-		// into account.
+		// Non-joint case that should be live unless the ephemeral learner is
+		// somehow taken into account.
 		{[]descWithLiveness{
 			{true, rd(v, 1)},
 			{true, rd(v, 2)},

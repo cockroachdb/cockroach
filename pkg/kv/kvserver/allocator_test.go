@@ -4791,14 +4791,14 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	}
 }
 
-func TestAllocatorRemoveLearner(t *testing.T) {
+func TestAllocatorRemoveEphemeralLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	zone := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(3),
 	}
-	learnerType := roachpb.LEARNER
+	learnerType := roachpb.LEARNER_EPHEMERAL
 	rangeWithLearnerDesc := roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
@@ -4823,7 +4823,7 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 	live, dead := []roachpb.StoreID{1, 2}, []roachpb.StoreID{3}
 	mockStorePool(sp, live, nil, dead, nil, nil)
 	action, _ := a.ComputeAction(ctx, &zone, &rangeWithLearnerDesc)
-	require.Equal(t, AllocatorRemoveLearner, action)
+	require.Equal(t, AllocatorRemoveEphemeralLearner, action)
 }
 
 func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {

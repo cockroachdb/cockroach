@@ -34,16 +34,16 @@ message ReplicationTarget {
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
-
 // ReplicaType identifies which raft activities a replica participates in. In
-// normal operation, VOTER_FULL and LEARNER are the only used states. However,
-// atomic replication changes require a transition through a "joint config"; in
-// this joint config, the VOTER_DEMOTING and VOTER_INCOMING types are used as
-// well to denote voters which are being downgraded to learners and newly added
-// by the change, respectively. A demoting voter is turning into a learner,
-// which we prefer over a direct removal, which was used prior to v20.1 and
-// uses the VOTER_OUTGOING type instead (see VersionChangeReplicasDemotion for
-// details on why we're not doing that any more).
+// normal operation, VOTER_FULL and LEARNER_EPHEMERAL are the only used states.
+// However, atomic replication changes require a transition through a "joint
+// config"; in this joint config, the VOTER_DEMOTING and VOTER_INCOMING types
+// are used as well to denote voters which are being downgraded to ephemeral
+// learners and newly added by the change, respectively. A demoting voter is
+// turning into an ephemeral learner, which we prefer over a direct removal,
+// which was used prior to v20.1 and uses the VOTER_OUTGOING type instead (see
+// VersionChangeReplicasDemotion for details on why we're not doing that any
+// more).
 //
 // All voter types indicate a replica that participates in all raft activities,
 // including voting for leadership and committing entries. Typically, this
@@ -73,20 +73,20 @@ enum ReplicaType {
   // this type should be treated accordingly and no work should be assigned to
   // it.
   VOTER_OUTGOING = 3;
-  // VOTER_DEMOTING indicates a voting replica that will become a learner once
-  // the ongoing atomic replication change is finalized; that is, it is in the
-  // process of being demoted. Since learners are currently short-lived, this
-  // replica is really being removed, with an intermediate step, and no work
-  // should be assigned to it.
+  // VOTER_DEMOTING indicates a voting replica that will become an ephemeral
+  // learner once the ongoing atomic replication change is finalized; that is,
+  // it is in the process of being demoted. Since these learners are
+  // short-lived, this replica is really being removed, with an intermediate
+  // step, and no work should be assigned to it.
   VOTER_DEMOTING = 4;
-  // LEARNER indicates a replica that applies committed entries, but does not
-  // count towards the quorum(s). Candidates will not ask for (or take into
-  // account) votes of (peers they consider) LEARNERs for leadership nor do
-  // their acknowledged log entries get taken into account for determining the
-  // committed index. At the time of writing, learners in CockroachDB are a
+  // LEARNER_EPHEMERAL indicates a replica that applies committed entries, but
+  // does not count towards the quorum(s). Candidates will not ask for (or take
+  // into account) votes of (peers they consider) LEARNER_EPHEMERALs for
+  // leadership nor do their acknowledged log entries get taken into account for
+  // determining the committed index. Ephemeral learners in CockroachDB are a
   // short-term transient state: a replica being added and on its way to being a
   // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
-  LEARNER = 1;
+  LEARNER_EPHEMERAL = 1;
 }
 
 // ReplicaDescriptor describes a replica location by node ID
