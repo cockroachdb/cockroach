@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ResumeRowMultiple is so that each resume row index must be a multiple of
+// ResumeRowMultiple, and that every row is re-seeded at those places.
+const reseedRowMultiple = 1000
+
 // KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
 
@@ -360,7 +364,11 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		_, ok := c.IsTargetCol[i]
 		return ok
 	}
-	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
+	annot := getCellInfoAnnotation(c.EvalCtx.Annotations)
+	annot.Reset(sourceID, rowIndex)
+	if annot.randSource == nil || rowIndex%reseedRowMultiple == 0 {
+		annot.reseedForImport(sourceID, rowIndex)
+	}
 	for i := range c.cols {
 		col := &c.cols[i]
 		if !isTargetCol(i) && col.DefaultExpr != nil {
