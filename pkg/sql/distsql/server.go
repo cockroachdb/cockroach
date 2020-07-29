@@ -324,7 +324,7 @@ func (ds *ServerImpl) setupFlow(
 			Tenant:             &sqlbase.DummyTenantOperator{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
-			SQLLivenessStorage: slstorage.NewStorage(ds.DB, ie),
+			SQLLivenessStorage: slstorage.NewStorage(ctx, ds.Stopper, ds.DB.Clock(), ds.DB, ie, slstorage.Options{}),
 		}
 		// Since we are constructing an EvalContext on a remote node, outfit it
 		// with a DistSQLTypeResolver.

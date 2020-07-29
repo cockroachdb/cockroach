@@ -2002,7 +2002,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 			TypeResolver:       p,
-			SQLLivenessStorage: slstorage.NewStorage(ex.server.cfg.DB, &ie),
+			SQLLivenessStorage: slstorage.NewStorage(ctx, nil, ex.server.cfg.Clock, ex.server.cfg.DB, &ie, slstorage.Options{}),
 		},
 		SessionMutator:       ex.dataMutator,
 		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
