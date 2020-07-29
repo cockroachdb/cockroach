@@ -290,21 +290,6 @@ scan fks
  ├── key: (1)
  └── fd: (1)-->(2)
 
-# SemiJoin case.
-norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
-SELECT max(v) FROM fks WHERE EXISTS (SELECT * FROM xy WHERE x = r1)
-----
-scalar-group-by
- ├── columns: max:9
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(9)
- ├── scan fks
- │    └── columns: v:2
- └── aggregations
-      └── max [as=max:9, outer=(2)]
-           └── v:2
-
 # No-op case because the InnerJoin will return no rows if fks is empty.
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT DISTINCT ON (x) x, y FROM xy INNER JOIN fks ON True

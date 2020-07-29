@@ -54,7 +54,14 @@ func DWithin(
 		}
 		return false, err
 	}
-	maybeClosestDistance, err := distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, distance)
+	maybeClosestDistance, err := distanceGeographyRegions(
+		spheroid,
+		useSphereOrSpheroid,
+		aRegions,
+		bRegions,
+		a.BoundingRect().Intersects(b.BoundingRect()),
+		distance,
+	)
 	if err != nil {
 		return false, err
 	}

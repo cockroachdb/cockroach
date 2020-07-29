@@ -2275,6 +2275,42 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
+# Foreign key case.
+norm expect=EliminateSemiJoin
+SELECT * FROM c WHERE EXISTS (SELECT * FROM a WHERE k = y)
+----
+scan c
+ ├── columns: x:1!null y:2!null z:3!null
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Self-join case.
+norm expect=EliminateSemiJoin
+SELECT * FROM a a1 WHERE EXISTS (SELECT * FROM a a2 WHERE a1.k = a2.k)
+----
+scan a1
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+# No-op case because rows from a are not guaranteed to be matched on the join
+# filters.
+norm expect-not=EliminateSemiJoin
+SELECT * FROM a WHERE EXISTS (SELECT * FROM c WHERE k = y)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan c
+ │    └── columns: y:8!null
+ └── filters
+      └── k:1 = y:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
 # --------------------------------------------------
 # SimplifyZeroCardinalitySemiJoin
 # --------------------------------------------------
