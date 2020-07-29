@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -177,8 +178,12 @@ type sqlServerArgs struct {
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 
-	// Creates sessions
+	// Stores and deletes expired liveness sessions.
+	sqlLivenessStorage sqlliveness.Storage
+
+	// Manages liveness sessions.
 	sqlInstance sqlliveness.SQLInstance
+
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
@@ -207,9 +212,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
 			regLiveness = sqlbase.MakeOptionalNodeLiveness(testingLiveness.(*jobs.FakeNodeLiveness))
 		}
+
+		cfg.sqlLivenessStorage = slstorage.NewStorage(
+			ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slstorage.Options{})
+
 		cfg.sqlInstance = slinstance.NewSqlInstance(
-			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slinstance.Options{Deadline: 30 * time.Second, Heartbeat: 40 * time.Second},
+			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor,
+			&slinstance.Options{Deadline: 30 * time.Second, Heartbeat: 40 * time.Second},
 		)
+
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
 			cfg.stopper,
@@ -347,10 +358,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		Metrics: &distSQLMetrics,
 
-		JobRegistry:  jobRegistry,
-		Gossip:       cfg.gossip,
-		NodeDialer:   cfg.nodeDialer,
-		LeaseManager: leaseMgr,
+		SQLLivenessStorage: cfg.sqlLivenessStorage,
+		JobRegistry:        jobRegistry,
+		Gossip:             cfg.gossip,
+		NodeDialer:         cfg.nodeDialer,
+		LeaseManager:       leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
@@ -419,6 +431,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		DistSQLSrv:              distSQLServer,
 		StatusServer:            cfg.statusServer,
 		SessionRegistry:         cfg.sessionRegistry,
+		SQLLivenessStorage:      slstorage.NewStorage(ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slstorage.Options{}),
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
