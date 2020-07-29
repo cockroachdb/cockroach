@@ -214,8 +214,8 @@ func (ef *execFactory) ConstructRender(
 	return rb.res, nil
 }
 
-// RenameColumns is part of the exec.Factory interface.
-func (ef *execFactory) RenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
+// ConstructRenameColumns is part of the exec.Factory interface.
+func (ef *execFactory) ConstructRenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
 	inputCols := planMutableColumns(n.(planNode))
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
@@ -830,7 +830,7 @@ func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec
 }
 
 // ConstructBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.BufferNode, error) {
+func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
 	return &bufferNode{
 		plan:  input.(planNode),
 		label: label,
@@ -838,7 +838,7 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Buff
 }
 
 // ConstructScanBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructScanBuffer(ref exec.BufferNode, label string) (exec.Node, error) {
+func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
 	return &scanBufferNode{
 		buffer: ref.(*bufferNode),
 		label:  label,
@@ -1678,7 +1678,7 @@ func (ef *execFactory) ConstructSaveTable(
 
 // ConstructErrorIfRows is part of the exec.Factory interface.
 func (ef *execFactory) ConstructErrorIfRows(
-	input exec.Node, mkErr func(tree.Datums) error,
+	input exec.Node, mkErr exec.MkErrFn,
 ) (exec.Node, error) {
 	return &errorIfRowsNode{
 		plan:  input.(planNode),

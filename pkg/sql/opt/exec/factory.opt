@@ -1,0 +1,623 @@
+# Scan runs a scan of a specified index of a table, possibly with an index
+# constraint and/or a hard limit.
+define Scan {
+    Table cat.Table
+    Index cat.Index
+    Params exec.ScanParams
+    ReqOrdering exec.OutputOrdering
+}
+
+define Values {
+    Rows [][]tree.TypedExpr
+    Columns sqlbase.ResultColumns
+}
+
+# Filter applies a filter on the results of the given input node.
+define Filter {
+    Input exec.Node
+    Filter tree.TypedExpr
+    ReqOrdering exec.OutputOrdering
+}
+
+# InvertedFilter applies a span expression on the results of the given input
+# node.
+define InvertedFilter {
+    Input exec.Node
+    InvFilter *invertedexpr.SpanExpression
+    InvColumn exec.NodeColumnOrdinal
+}
+
+# SimpleProject applies a "simple" projection on the results of the given input
+# node. A simple projection is one that does not involve new expressions; it's
+# just a reshuffling of columns. This is a more efficient version of
+# ConstructRender.  The colNames argument is optional; if it is nil, the names
+# of the corresponding input columns are kept.
+define SimpleProject {
+    Input exec.Node
+    Cols []exec.NodeColumnOrdinal
+    ColNames []string
+    ReqOrdering exec.OutputOrdering
+}
+
+# Render applies a projection on the results of the given input node. The
+# projection can contain new expressions. The input expression slice will be
+# modified.
+define Render {
+    Input exec.Node
+    Columns sqlbase.ResultColumns
+    Exprs tree.TypedExprs
+    ReqOrdering exec.OutputOrdering
+}
+
+# ApplyJoin runs an apply join between an input node (the left side of the join)
+# and a RelExpr that has outer columns (the right side of the join) by replacing
+# the outer columns of the right side RelExpr with data from each row of the
+# left side of the join according to the data in leftBoundColMap. The apply join
+# can be any kind of join except for right outer and full outer.
+#
+# To plan the right-hand side, planRightSideFn must be called for each left
+# row. This function generates a plan (using the same factory) that produces
+# the rightColumns (in order).
+#
+# onCond is the join condition.
+define ApplyJoin {
+    JoinType sqlbase.JoinType
+    Left exec.Node
+    RightColumns sqlbase.ResultColumns
+    OnCond tree.TypedExpr
+    PlanRightSideFn exec.ApplyJoinPlanRightSideFn
+}
+
+# HashJoin runs a hash-join between the results of two input nodes.
+#
+# The leftEqColsAreKey/rightEqColsAreKey flags, if set, indicate that the
+# equality columns form a key in the left/right input.
+#
+# The extraOnCond expression can refer to columns from both inputs using
+# IndexedVars (first the left columns, then the right columns).
+define HashJoin {
+    JoinType sqlbase.JoinType
+    Left exec.Node
+    Right exec.Node
+    LeftEqCols []exec.NodeColumnOrdinal
+    RightEqCols []exec.NodeColumnOrdinal
+    LeftEqColsAreKey bool
+    RightEqColsAreKey bool
+    ExtraOnCond tree.TypedExpr
+}
+
+# MergeJoin runs a merge join.
+
+# The ON expression can refer to columns from both inputs using IndexedVars
+# (first the left columns, then the right columns). In addition, the i-th
+# column in leftOrdering is constrained to equal the i-th column in
+# rightOrdering. The directions must match between the two orderings.
+define MergeJoin {
+    JoinType sqlbase.JoinType
+    Left exec.Node
+    Right exec.Node
+    OnCond tree.TypedExpr
+    LeftOrdering sqlbase.ColumnOrdering
+    RightOrdering sqlbase.ColumnOrdering
+    ReqOrdering exec.OutputOrdering
+    LeftEqColsAreKey bool
+    RightEqColsAreKey bool
+}
+
+# InterleavedJoin runs a join between two interleaved tables. One table is the
+# ancestor of the other in the interleaving hierarchy (as per leftIsAncestor).
+#
+# Semantically, the join is identical to a merge-join between these two
+# tables, where the equality columns are all the index column of the ancestor
+# index.
+#
+# The two scans are guaranteed to have the same direction, and to not have
+# any hard limits.
+#
+# Since the interleaved joiner does a single scan for both tables, only the
+# Locking clause for the ancestor is used.
+#
+define InterleavedJoin {
+    JoinType sqlbase.JoinType
+    LeftTable cat.Table
+    LeftIndex cat.Index
+    LeftParams exec.ScanParams
+    LeftFilter tree.TypedExpr
+    RightTable cat.Table
+    RightIndex cat.Index
+    RightParams exec.ScanParams
+    RightFilter tree.TypedExpr
+    LeftIsAncestor bool
+    OnCond tree.TypedExpr
+    ReqOrdering exec.OutputOrdering
+}
+
+# GroupBy runs an aggregation. A set of aggregations is performed for each group
+# of values on the groupCols.
+#
+# If the input is guaranteed to have an ordering on grouping columns, a
+# "streaming" aggregation is performed (i.e. aggregation happens separately
+# for each distinct set of values on the set of columns in the ordering).
+define GroupBy {
+    Input exec.Node
+    GroupCols []exec.NodeColumnOrdinal
+    GroupColOrdering sqlbase.ColumnOrdering
+    Aggregations []exec.AggInfo
+    ReqOrdering exec.OutputOrdering
+}
+
+# ScalarGroupBy runs a scalar aggregation, i.e.  one which performs a set of
+# aggregations on all the input rows (as a single group) and has exactly one
+# result row (even when there are no input rows).
+define ScalarGroupBy {
+    Input exec.Node
+    Aggregations []exec.AggInfo
+}
+
+# Distinct filters out rows such that only the first row is kept for each set of
+# values along the distinct columns.  The orderedCols are a subset of
+# distinctCols; the input is required to be ordered along these columns (i.e.
+# all rows with the same values on these columns are a contiguous part of the
+# input).
+define Distinct {
+    Input exec.Node
+    DistinctCols exec.NodeColumnOrdinalSet
+    OrderedCols exec.NodeColumnOrdinalSet
+    ReqOrdering exec.OutputOrdering
+    NullsAreDistinct bool
+    ErrorOnDup string
+}
+
+# SetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL or the
+# DISTINCT version). The left and right nodes must have the same number of
+# columns.
+define SetOp {
+    Typ tree.UnionType
+    All bool
+    Left exec.Node
+    Right exec.Node
+}
+
+# Sort performs a resorting of the rows produced by the input node.
+#
+# When the input is partially sorted we can execute a "segmented" sort. In
+# this case alreadyOrderedPrefix is non-zero and the input is ordered by
+# ordering[:alreadyOrderedPrefix].
+define Sort {
+    Input exec.Node
+    Ordering sqlbase.ColumnOrdering
+    AlreadyOrderedPrefix int
+}
+
+# Ordinality appends an ordinality column to each row in the input node.
+define Ordinality {
+    Input exec.Node
+    ColName string
+}
+
+# IndexJoin performs an index join. The input contains the primary key (on the
+# columns identified as keyCols).
+#
+# The index join produces the given table columns (in ordinal order).
+define IndexJoin {
+    Input exec.Node
+    Table cat.Table
+    KeyCols []exec.NodeColumnOrdinal
+    TableCols exec.TableColumnOrdinalSet
+    ReqOrdering exec.OutputOrdering
+}
+
+# LookupJoin performs a lookup join.
+#
+# The eqCols are columns from the input used
+# as keys for the columns of the index (or a prefix of them); lookupCols are
+# ordinals for the table columns we are retrieving.
+#
+# The node produces the columns in the input and (unless join type is
+# LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
+# condition can refer to these using IndexedVars.
+define LookupJoin {
+    JoinType sqlbase.JoinType
+    Input exec.Node
+    Table cat.Table
+    Index cat.Index
+    EqCols []exec.NodeColumnOrdinal
+    EqColsAreKey bool
+    LookupCols exec.TableColumnOrdinalSet
+    OnCond tree.TypedExpr
+    ReqOrdering exec.OutputOrdering
+}
+
+# InvertedJoin performs a lookup join into an inverted index.
+#
+# invertedExpr is used along with inputCol (a column from the input) to
+# find the keys to look up in the index; lookupCols are ordinals for the
+# table columns we are retrieving.
+#
+# The node produces the columns in the input and (unless join type is
+# LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
+# condition can refer to these using IndexedVars. Note that lookupCols
+# includes the inverted column.
+define InvertedJoin {
+    JoinType sqlbase.JoinType
+    InvertedExpr tree.TypedExpr
+    Input exec.Node
+    Table cat.Table
+    Index cat.Index
+    InputCol exec.NodeColumnOrdinal
+    LookupCols exec.TableColumnOrdinalSet
+    OnCond tree.TypedExpr
+    ReqOrdering exec.OutputOrdering
+}
+
+# ZigzagJoin performs a zigzag join.
+#
+# Each side of the join has two kinds of columns that form a prefix
+# of the specified index: fixed columns (with values specified in
+# fixedVals), and equal columns (with column ordinals specified in
+# {left,right}EqCols). The lengths of leftEqCols and rightEqCols
+# must match.
+define ZigzagJoin {
+    LeftTable cat.Table
+    LeftIndex cat.Index
+    RightTable cat.Table
+    RightIndex cat.Index
+    LeftEqCols []exec.NodeColumnOrdinal
+    RightEqCols []exec.NodeColumnOrdinal
+    LeftCols exec.NodeColumnOrdinalSet
+    RightCols exec.NodeColumnOrdinalSet
+    OnCond tree.TypedExpr
+    FixedVals []exec.Node
+    ReqOrdering exec.OutputOrdering
+}
+
+# Limit implements LIMIT and/or OFFSET on the results of the given node. If one
+# or the other is not needed, then it is set to nil.
+define Limit {
+    Input exec.Node
+    Limit tree.TypedExpr
+    Offset tree.TypedExpr
+}
+
+# Max1Row permits at most one row from the given input node, causing an error
+# with the given text at runtime if the node tries to return more than one row.
+define Max1Row {
+    Input exec.Node
+    ErrorText string
+}
+
+# ProjectSet performs a lateral cross join between the output of the given node
+# and the functional zip of the given expressions.
+define ProjectSet {
+    Input exec.Node
+    Exprs tree.TypedExprs
+    ZipCols sqlbase.ResultColumns
+    NumColsPerGen []int
+}
+
+# Window executes a window function over the given node.
+define Window {
+    Input exec.Node
+    Window exec.WindowInfo
+}
+
+# RenameColumns modifies the column names of a node.
+define RenameColumns {
+    Input exec.Node
+    ColNames []string
+}
+
+# Explain implements EXPLAIN (OPT), showing information about the given plan.
+define ExplainOpt {
+    Plan string
+    EnvOpts exec.ExplainEnvData
+}
+
+# Explain implements EXPLAIN, showing information about the given plan.
+define Explain {
+    Options *tree.ExplainOptions
+    StmtType tree.StatementType
+    Plan exec.Plan
+}
+
+# ShowTrace implements a SHOW TRACE FOR SESSION statement.
+define ShowTrace {
+    Typ tree.ShowTraceType
+    Compact bool
+}
+
+# Insert implements an INSERT statement (including ON CONFLICT DO NOTHING, but
+# not other ON CONFLICT clauses).
+#
+# The input columns are inserted into a subset of columns in the table, in the
+# same order they're defined. The insertCols set contains the ordinal positions
+# of columns in the table into which values are inserted. All columns are
+# expected to be present except delete-only mutation columns, since those do not
+# need to participate in an insert operation.
+#
+# If allowAutoCommit is set, the operator is allowed to commit the
+# transaction (if appropriate, i.e. if it is in an implicit transaction).
+# This is false if there are multiple mutations in a statement, or the output
+# of the mutation is processed through side-effecting expressions.
+define Insert {
+    Input exec.Node
+    Table cat.Table
+    InsertCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    CheckCols exec.CheckOrdinalSet
+    AllowAutoCommit bool
+}
+
+# InsertFastPath implements a special (but very common) case of insert,
+# satisfying the following conditions:
+#  - the input is Values with at most InsertFastPathMaxRows, and there are no
+#    subqueries;
+#  - there are no other mutations in the statement, and the output of the
+#    insert is not processed through side-effecting expressions (see
+#    allowAutoCommit flag for ConstructInsert);
+#  - there are no self-referencing foreign keys;
+#  - all FK checks can be performed using direct lookups into unique indexes.
+#
+# In this case, the foreign-key checks can run before (or even concurrently
+# with) the insert. If they are run before, the insert is allowed to
+# auto-commit.
+define InsertFastPath {
+    Rows [][]tree.TypedExpr
+    Table cat.Table
+    InsertCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    CheckCols exec.CheckOrdinalSet
+    FkChecks []exec.InsertFastPathFKCheck
+}
+
+# Update implements an UPDATE statement. The input contains columns that were
+# fetched from the target table, and that provide existing values that can be
+# used to formulate the new encoded value that will be written back to the table
+# (updating any column in a family requires having the values of all other
+# columns). The input also contains computed columns that provide new values for
+# any updated columns.
+#
+# The fetchCols and updateCols sets contain the ordinal positions of the
+# fetch and update columns in the target table. The input must contain those
+# columns in the same order as they appear in the table schema, with the
+# fetch columns first and the update columns second.
+#
+# The passthrough parameter contains all the result columns that are part of
+# the input node that the update node needs to return (passing through from
+# the input). The pass through columns are used to return any column from the
+# FROM tables that are referenced in the RETURNING clause.
+#
+# If allowAutoCommit is set, the operator is allowed to commit the
+# transaction (if appropriate, i.e. if it is in an implicit transaction).
+# This is false if there are multiple mutations in a statement, or the output
+# of the mutation is processed through side-effecting expressions.
+define Update {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    UpdateCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Checks exec.CheckOrdinalSet
+    Passthrough sqlbase.ResultColumns
+    AllowAutoCommit bool
+}
+
+# Upsert implements an INSERT..ON CONFLICT DO UPDATE or UPSERT statement.
+#
+# For each input row, Upsert will test the canaryCol. If it is null, then it
+# will insert a new row. If not-null, then Upsert will update an existing row.
+# The input is expected to contain the columns to be inserted, followed by the
+# columns containing existing values, and finally the columns containing new
+# values.
+#
+# The length of each group of input columns can be up to the number of
+# columns in the given table. The insertCols, fetchCols, and updateCols sets
+# contain the ordinal positions of the table columns that are involved in
+# the Upsert. For example:
+#
+#   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+#   INSERT INTO abc VALUES (10, 20, 30) ON CONFLICT (a) DO UPDATE SET b=25
+#
+#   insertCols = {0, 1, 2}
+#   fetchCols  = {0, 1, 2}
+#   updateCols = {1}
+#
+# The input is expected to first have 3 columns that will be inserted into
+# columns {0, 1, 2} of the table. The next 3 columns contain the existing
+# values of columns {0, 1, 2} of the table. The last column contains the
+# new value for column {1} of the table.
+#
+# If allowAutoCommit is set, the operator is allowed to commit the
+# transaction (if appropriate, i.e. if it is in an implicit transaction).
+# This is false if there are multiple mutations in a statement, or the output
+# of the mutation is processed through side-effecting expressions.
+define Upsert {
+    Input exec.Node
+    Table cat.Table
+    CanaryCol exec.NodeColumnOrdinal
+    InsertCols exec.TableColumnOrdinalSet
+    FetchCols exec.TableColumnOrdinalSet
+    UpdateCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    Checks exec.CheckOrdinalSet
+    AllowAutoCommit bool
+}
+
+# Delete implements a DELETE statement. The input contains columns that were
+# fetched from the target table, and that will be deleted.
+#
+# The fetchCols set contains the ordinal positions of the fetch columns in
+# the target table. The input must contain those columns in the same order
+# as they appear in the table schema.
+#
+# If allowAutoCommit is set, the operator is allowed to commit the
+# transaction (if appropriate, i.e. if it is in an implicit transaction).
+# This is false if there are multiple mutations in a statement, or the output
+# of the mutation is processed through side-effecting expressions.
+define Delete {
+    Input exec.Node
+    Table cat.Table
+    FetchCols exec.TableColumnOrdinalSet
+    ReturnCols exec.TableColumnOrdinalSet
+    AllowAutoCommit bool
+}
+
+# DeleteRange efficiently deletes contiguous rows stored in the given table's
+# primary index. This fast path is only possible when certain conditions hold
+# true:
+#  - there are no secondary indexes;
+#  - the input to the delete is a scan (without limits);
+#  - the table is not involved in interleaving, or it is at the root of an
+#    interleaving hierarchy with cascading FKs such that a delete of a row
+#    cascades and deletes all interleaved rows corresponding to that row;
+#  - there are no inbound FKs to the table (other than within the
+#    interleaving as described above).
+#
+# See the comment for ConstructScan for descriptions of the needed and
+# indexConstraint parameters, since DeleteRange combines Delete + Scan into a
+# single operator.
+#
+# If any interleavedTables are passed, they are all the descendant tables in
+# an interleaving hierarchy we are deleting from.
+define DeleteRange {
+    Table cat.Table
+    Needed exec.TableColumnOrdinalSet
+    IndexConstraint *constraint.Constraint
+    InterleavedTables []cat.Table
+    MaxReturnedKeys int
+    AllowAutoCommit bool
+}
+
+# CreateTable implements a CREATE TABLE statement.
+define CreateTable {
+    Input exec.Node
+    Schema cat.Schema
+    Ct *tree.CreateTable
+}
+
+# CreateView implements a CREATE VIEW statement.
+define CreateView {
+    Schema cat.Schema
+    ViewName *cat.DataSourceName
+    IfNotExists bool
+    Replace bool
+    Temporary bool
+    ViewQuery string
+    Columns sqlbase.ResultColumns
+    deps opt.ViewDeps
+}
+
+# SequenceSelect implements a scan of a sequence as a data source.
+define SequenceSelect {
+    Sequence cat.Sequence
+}
+
+# SaveTable passes through all the input rows unchanged, but also creates a
+# table and inserts all the rows into it.
+define SaveTable {
+    Input exec.Node
+    Table *cat.DataSourceName
+    ColNames []string
+}
+
+# ErrorIfRows returns no results, but causes an execution error if the input
+# returns any rows.
+define ErrorIfRows {
+    Input exec.Node
+
+    # MkErr is used to create the error; it is passed an input row.
+    MkErr exec.MkErrFn
+}
+
+# Opaque implements operators that have no relational inputs and which require
+# no specific treatment by the optimizer.
+define Opaque {
+    Metadata opt.OpaqueMetadata
+}
+
+# AlterTableSplit implements ALTER TABLE/INDEX SPLIT AT.
+define AlterTableSplit {
+    Index cat.Index
+    Input exec.Node
+    Expiration tree.TypedExpr
+}
+
+# AlterTableUnsplit implements ALTER TABLE/INDEX UNSPLIT AT.
+define AlterTableUnsplit {
+    Index cat.Index
+    Input exec.Node
+}
+
+# AlterTableUnsplitAll implements ALTER TABLE/INDEX UNSPLIT ALL.
+define AlterTableUnsplitAll {
+    Index cat.Index
+}
+
+# AlterTableRelocate implements ALTER TABLE/INDEX UNSPLIT AT.
+define AlterTableRelocate {
+    Index cat.Index
+    input exec.Node
+    relocateLease bool
+}
+
+# Buffer passes through the input rows but also saves them in a buffer, which
+# can be referenced from elsewhere in the query (using ScanBuffer).
+define Buffer {
+    Input exec.Node
+    Label string
+}
+
+# ScanBuffer refers to a node constructed by Buffer or passed to
+# RecursiveCTEIterationFn.
+define ScanBuffer {
+    Ref exec.Node
+    Label string
+}
+
+# RecursiveCTE executes a recursive CTE:
+#   * the initial plan is run first; the results are emitted and also saved
+#     in a buffer.
+#   * so long as the last buffer is not empty:
+#     - the RecursiveCTEIterationFn is used to create a plan for the
+#       recursive side; a reference to the last buffer is passed to this
+#       function. The returned plan uses this reference with a
+#       ConstructScanBuffer call.
+#     - the plan is executed; the results are emitted and also saved in a new
+#       buffer for the next iteration.
+define RecursiveCTE {
+    Initial exec.Node
+    Fn exec.RecursiveCTEIterationFn
+    Label string
+}
+
+# ControlJobs implements PAUSE/CANCEL/RESUME JOBS.
+define ControlJobs {
+    Command tree.JobCommand
+    input exec.Node
+}
+
+# ControlSchedules implements PAUSE/CANCEL/DROP SCHEDULES.
+define ControlSchedules {
+    Command tree.ScheduleCommand
+    input exec.Node
+}
+
+# CancelQueries implements CANCEL QUERIES.
+define CancelQueries {
+    Input exec.Node
+    IfExists bool
+}
+
+# CancelSessions implements CANCEL SESSIONS.
+define CancelSessions {
+    Input exec.Node
+    IfExists bool
+}
+
+# Export implements EXPORT.
+define Export {
+    Input exec.Node
+    FileName tree.TypedExpr
+    FileFormat string
+    Options []exec.KVOption
+}
