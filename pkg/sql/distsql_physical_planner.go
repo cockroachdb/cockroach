@@ -2257,9 +2257,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
+	leftMap := leftPlan.PlanToStreamColMap
 	rightMap := rightPlan.PlanToStreamColMap
-	post, joinToStreamColMap := joinOutColumns(n, leftPlan.PlanToStreamColMap, rightMap)
-	onExpr, err := remapOnExpr(planCtx, n, leftPlan.PlanToStreamColMap, rightMap)
+	post, joinToStreamColMap := joinOutColumns(n, leftMap, rightMap, len(leftPlan.ResultTypes))
+	onExpr, err := remapOnExpr(planCtx, n, leftMap, rightMap)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
