@@ -10,9 +10,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/errors"
 
 // DescriptorCoverage specifies whether or not a subset of descriptors were
 // requested or if all the descriptors were requested, so all the descriptors

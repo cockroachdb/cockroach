@@ -32,6 +32,11 @@ message Lease {
 }
 
 
+enum EncryptionMode {
+  Passphrase = 0;
+  KMS = 1;
+}
+
 // BackupEncryptionOptions stores information resolved during the BACKUP/RESTORE
 // planning stage, and by the BACKUP/RESTORE job to encrypt or decrypt BACKUP
 // data and manifest files.
@@ -39,6 +44,19 @@ message BackupEncryptionOptions {
   option (gogoproto.equal) = true;
   // Key specifies the key to use for encryption or decryption.
   bytes key = 1;
+
+  EncryptionMode mode = 2;
+
+  message KMSInfo {
+    option (gogoproto.equal) = true;
+
+    string uri = 1;
+    bytes encrypted_data_key = 2;
+  }
+
+  // KMSInfo specifies the KMS and encrypted DataKey pair to use for
+  // encryption or decryption when mode == KMS.
+  KMSInfo kms_info  = 3 [(gogoproto.customname) = "KMSInfo"];
 }
 
 
