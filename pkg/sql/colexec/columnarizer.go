@@ -29,7 +29,7 @@ import (
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
@@ -145,7 +145,7 @@ func (c *Columnarizer) Run(context.Context) {
 var (
 	_ colexecbase.Operator       = &Columnarizer{}
 	_ execinfrapb.MetadataSource = &Columnarizer{}
-	_ Closer                     = &Columnarizer{}
+	_ colexecbase.Closer         = &Columnarizer{}
 )
 
 // DrainMeta is part of the MetadataSource interface.

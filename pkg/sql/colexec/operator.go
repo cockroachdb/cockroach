@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // OperatorInitStatus indicates whether Init method has already been called on
@@ -33,14 +32,6 @@ const (
 	// OperatorInitialized indicates that Init has already been called.
 	OperatorInitialized
 )
-
-// NonExplainable is a marker interface which identifies an Operator that
-// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
-// explain option will override the omitting behavior.
-type NonExplainable interface {
-	// nonExplainableMarker is just a marker method. It should never be called.
-	nonExplainableMarker()
-}
 
 // NewOneInputNode returns an execinfra.OpNode with a single Operator input.
 func NewOneInputNode(input colexecbase.Operator) OneInputNode {
@@ -124,30 +115,6 @@ type ResettableOperator interface {
 	resetter
 }
 
-// Closer is an object that releases resources when Close is called. Note that
-// this interface must be implemented by all operators that could be planned on
-// top of other operators that do actually need to release the resources (e.g.
-// if we have a simple project on top of a disk-backed operator, that simple
-// project needs to implement this interface so that Close() call could be
-// propagated correctly).
-type Closer interface {
-	Close(ctx context.Context) error
-}
-
-// Closers is a slice of Closers.
-type Closers []Closer
-
-// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
-// is 1 or higher. The given prefix is prepended to the log message.
-func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
-	prefix += ":"
-	for _, closer := range c {
-		if err := closer.Close(ctx); err != nil && log.V(1) {
-			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
-		}
-	}
-}
-
 // CallbackCloser is a utility struct that implements the Closer interface by
 // calling a provided callback.
 type CallbackCloser struct {
@@ -179,7 +146,7 @@ func (c *closerHelper) close() bool {
 
 type closableOperator interface {
 	colexecbase.Operator
-	Closer
+	colexecbase.Closer
 }
 
 func makeOneInputCloserHelper(input colexecbase.Operator) oneInputCloserHelper {
@@ -193,13 +160,13 @@ type oneInputCloserHelper struct {
 	closerHelper
 }
 
-var _ Closer = &oneInputCloserHelper{}
+var _ colexecbase.Closer = &oneInputCloserHelper{}
 
 func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 	if !c.close() {
 		return nil
 	}
-	if closer, ok := c.input.(Closer); ok {
+	if closer, ok := c.input.(colexecbase.Closer); ok {
 		return closer.Close(ctx)
 	}
 	return nil
@@ -207,7 +174,7 @@ func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 
 type noopOperator struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 }
 
 var _ colexecbase.Operator = &noopOperator{}
@@ -233,7 +200,7 @@ func (n *noopOperator) reset(ctx context.Context) {
 
 type zeroOperator struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 }
 
 var _ colexecbase.Operator = &zeroOperator{}
@@ -253,7 +220,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 
 type zeroOperatorNoInput struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 }
 
 var _ colexecbase.Operator = &zeroOperatorNoInput{}
@@ -272,7 +239,7 @@ func (s *zeroOperatorNoInput) Next(ctx context.Context) coldata.Batch {
 
 type singleTupleNoInputOperator struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	batch  coldata.Batch
 	nexted bool
 }
@@ -305,7 +272,7 @@ func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
 // setting the next batch.
 type FeedOperator struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	batch coldata.Batch
 }
 
@@ -350,7 +317,7 @@ var _ colexecbase.Operator = &FeedOperator{}
 //
 type vectorTypeEnforcer struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator *colmem.Allocator
 	typ       *types.T
@@ -404,7 +371,7 @@ func (e *vectorTypeEnforcer) reset(ctx context.Context) {
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
 	oneInputCloserHelper
-	NonExplainable
+	colexecbase.NonExplainable
 
 	allocator                    *colmem.Allocator
 	typs                         []*types.T

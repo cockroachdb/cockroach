@@ -110,7 +110,7 @@ const externalSorterMinPartitions = 3
 // maxNumberPartitions variable.
 type externalSorter struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	closerHelper
 
 	unlimitedAllocator *colmem.Allocator
@@ -430,7 +430,7 @@ func newInputPartitioningOperator(
 // point, the operator returns a zero-length batch (until it is reset).
 type inputPartitioningOperator struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	standaloneMemAccount *mon.BoundAccount
 	memoryLimit          int64

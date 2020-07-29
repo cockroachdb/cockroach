@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -247,7 +248,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
-						[]colexec.Closer{callbackCloser{closeCb: func() error {
+						[]colexecbase.Closer{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
 							idToClosed.Unlock()
@@ -340,14 +341,14 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
 				materializerCalledClose := false
-				materializer, err := colexec.NewMaterializer(
+				materializer, err := colfetcher.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
 					materializerInput,
 					typs,
 					nil, /* output */
 					[]execinfrapb.MetadataSource{materializerMetadataSource},
-					[]colexec.Closer{callbackCloser{closeCb: func() error {
+					[]colexecbase.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */

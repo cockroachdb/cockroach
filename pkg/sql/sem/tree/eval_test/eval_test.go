@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -184,7 +185,7 @@ func TestEval(t *testing.T) {
 			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 			require.NoError(t, err)
 
-			mat, err := colexec.NewMaterializer(
+			mat, err := colfetcher.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
 				result.Op,

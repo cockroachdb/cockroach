@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colfetcher
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 // Materializer converts an Operator input into a execinfra.RowSource.
 type Materializer struct {
 	execinfra.ProcessorBase
-	NonExplainable
+	colexecbase.NonExplainable
 
 	input colexecbase.Operator
 	typs  []*types.T
@@ -61,7 +61,7 @@ type Materializer struct {
 	cancelFlow func() context.CancelFunc
 
 	// closers is a slice of Closers that should be Closed on termination.
-	closers Closers
+	closers colexecbase.Closers
 }
 
 // drainHelper is a utility struct that wraps MetadataSources in a RowSource
@@ -141,7 +141,7 @@ func NewMaterializer(
 	typs []*types.T,
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []Closer,
+	toClose []colexecbase.Closer,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -84,4 +85,36 @@ type BufferingInMemoryOperator interface {
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
 	ExportBuffered(input Operator) coldata.Batch
+}
+
+// NonExplainable is a marker interface which identifies an Operator that
+// should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
+// explain option will override the omitting behavior.
+type NonExplainable interface {
+	// nonExplainableMarker is just a marker method. It should never be called.
+	nonExplainableMarker()
+}
+
+// Closer is an object that releases resources when Close is called. Note that
+// this interface must be implemented by all operators that could be planned on
+// top of other operators that do actually need to release the resources (e.g.
+// if we have a simple project on top of a disk-backed operator, that simple
+// project needs to implement this interface so that Close() call could be
+// propagated correctly).
+type Closer interface {
+	Close(ctx context.Context) error
+}
+
+// Closers is a slice of Closers.
+type Closers []Closer
+
+// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
+// is 1 or higher. The given prefix is prepended to the log message.
+func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
+	prefix += ":"
+	for _, closer := range c {
+		if err := closer.Close(ctx); err != nil && log.V(1) {
+			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+		}
+	}
 }

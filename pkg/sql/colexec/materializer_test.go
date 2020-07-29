@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -55,7 +56,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := NewMaterializer(
+	m, err := colfetcher.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -139,7 +140,7 @@ func BenchmarkMaterializer(b *testing.B) {
 
 					b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 					for i := 0; i < b.N; i++ {
-						m, err := NewMaterializer(
+						m, err := colfetcher.NewMaterializer(
 							flowCtx,
 							0, /* processorID */
 							input,
@@ -199,7 +200,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := NewMaterializer(
+		m, err := colfetcher.NewMaterializer(
 			flowCtx,
 			1, /* processorID */
 			c,

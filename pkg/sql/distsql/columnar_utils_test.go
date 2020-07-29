@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -165,7 +166,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		}
 	}()
 
-	outColOp, err := colexec.NewMaterializer(
+	outColOp, err := colfetcher.NewMaterializer(
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.Op,

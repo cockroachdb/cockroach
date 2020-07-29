@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -86,7 +87,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
 			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
-			materializer, err := NewMaterializer(
+			materializer, err := colfetcher.NewMaterializer(
 				flowCtx,
 				1, /* processorID */
 				arrowOp,

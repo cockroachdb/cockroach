@@ -65,7 +65,7 @@ func wrapRowSources(
 			// to this operator (e.g. streamIDToOp).
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			toWrapInput, err := colexec.NewMaterializer(
+			toWrapInput, err := colfetcher.NewMaterializer(
 				flowCtx,
 				processorID,
 				input,
@@ -387,7 +387,7 @@ func (r opResult) createDiskBackedSort(
 				args.FDSemaphore,
 				diskAccount,
 			)
-			r.ToClose = append(r.ToClose, es.(colexec.Closer))
+			r.ToClose = append(r.ToClose, es.(colexecbase.Closer))
 			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
@@ -839,7 +839,7 @@ func NewColOperator(
 							args.TestingKnobs.DelegateFDAcquisitions,
 							diskAccount,
 						)
-						result.ToClose = append(result.ToClose, ehj.(colexec.Closer))
+						result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))
 						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -908,7 +908,7 @@ func NewColOperator(
 			}
 
 			result.Op = mj
-			result.ToClose = append(result.ToClose, mj.(colexec.Closer))
+			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
 			result.ColumnTypes = make([]*types.T, len(leftTypes)+len(rightTypes))
 			copy(result.ColumnTypes, leftTypes)
 			if !core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
@@ -1026,7 +1026,7 @@ func NewColOperator(
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
 					// is an Closer.
-					if c, ok := result.Op.(colexec.Closer); ok {
+					if c, ok := result.Op.(colexecbase.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
 				default:

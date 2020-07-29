@@ -22,7 +22,7 @@ import (
 // first-Next initialization that has to happen in an operator.
 type oneShotOp struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	outputSourceRef *colexecbase.Operator
 

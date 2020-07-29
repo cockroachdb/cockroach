@@ -23,7 +23,7 @@ import (
 // occurred. The check happens on every batch.
 type CancelChecker struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	// Number of times check() has been called since last context cancellation
 	// check.

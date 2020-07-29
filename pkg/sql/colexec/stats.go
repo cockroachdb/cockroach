@@ -31,7 +31,7 @@ import (
 // StopWatch.
 type VectorizedStatsCollector struct {
 	colexecbase.Operator
-	NonExplainable
+	colexecbase.NonExplainable
 	execpb.VectorizedStats
 	idTagKey string
 

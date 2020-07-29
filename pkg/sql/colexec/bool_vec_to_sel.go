@@ -41,7 +41,7 @@ func BoolOrUnknownToSelOp(
 // an index to the selection for each true value in the boolean column.
 type boolVecToSelOp struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	// outputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
@@ -137,7 +137,7 @@ func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Opera
 // an operator that can see the inside of its input batch for newBoolVecToSelOp.
 type selBoolOp struct {
 	OneInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 	boolVecToSelOp *boolVecToSelOp
 	colIdx         int
 }

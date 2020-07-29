@@ -79,7 +79,7 @@ type NewColOperatorResult struct {
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed.
-	ToClose     []Closer
+	ToClose     []colexecbase.Closer
 	IsStreaming bool
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount

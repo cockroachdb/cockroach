@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,7 +54,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	vee := newTestVectorizedInternalPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat, err := colfetcher.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -100,7 +101,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nvee := newTestNonVectorizedPanicEmitter(col)
-	mat, err := colexec.NewMaterializer(
+	mat, err := colfetcher.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,

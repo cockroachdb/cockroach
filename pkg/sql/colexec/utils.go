@@ -100,7 +100,7 @@ func newPartitionerToOperator(
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
 	colexecbase.ZeroInputNode
-	NonExplainable
+	colexecbase.NonExplainable
 
 	partitioner  colcontainer.PartitionedQueue
 	partitionIdx int
