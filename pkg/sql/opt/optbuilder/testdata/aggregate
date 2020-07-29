@@ -3995,3 +3995,9 @@ project
            └── ne [type=bool]
                 ├── variable: min:5 [type=float]
                 └── const: NaN [type=float]
+
+# Regression test for #51877.
+build
+SELECT max((SELECT jsonb_agg(v))) FROM kv
+----
+error (42803): aggregate function calls cannot be nested
