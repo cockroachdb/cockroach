@@ -134,10 +134,7 @@ func isPermanentSchemaChangeError(err error) bool {
 	// Ignore error thrown because of a read at a very old timestamp.
 	// The Backfill will grab a new timestamp to read at for the rest
 	// of the backfill.
-	// TODO(knz): this should really use errors.Is(). However until/unless
-	// we are not receiving errors from 19.1 any more, a string
-	// comparison must remain.
-	if strings.Contains(err.Error(), "must be after replica GC threshold") {
+	if errors.HasType(err, (*roachpb.BatchTimestampBeforeGCError)(nil)) {
 		return false
 	}
 

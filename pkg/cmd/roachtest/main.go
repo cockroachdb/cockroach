@@ -161,6 +161,10 @@ the test tags.
 		},
 	}
 
+	// TODO(irfansharif): We could remove this by directly running `cockroach
+	// version` against the binary being tested, instead of what we do today
+	// which is defaulting to checking the last git release tag present in the
+	// local checkout.
 	runCmd.Flags().StringVar(
 		&buildTag, "build-tag", "", "build tag (auto-detect if empty)")
 	runCmd.Flags().StringVar(
