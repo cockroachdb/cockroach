@@ -819,7 +819,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize
 	for _, l := range m.Levels {
 		stats.TotalFiles += uint64(l.NumFiles)
-		stats.TotalBytes += l.Size
+		stats.TotalBytes += uint64(l.Size)
 	}
 
 	sstSizes := make(map[pebble.FileNum]uint64)
