@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/petermattis/goid"
 	"google.golang.org/grpc/grpclog"
 )
 
@@ -73,7 +72,9 @@ func (severity *logger) Warning(args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	log.WarningfDepth(context.TODO(), 2, "", args...)
+	if shouldPrint(connectivitySpamRe, 30*time.Second, args...) {
+		log.WarningfDepth(context.TODO(), 2, "", args...)
+	}
 }
 
 func (severity *logger) Warningln(args ...interface{}) {
@@ -87,9 +88,7 @@ func (severity *logger) Warningf(format string, args ...interface{}) {
 	if log.Severity(*severity) > log.Severity_WARNING {
 		return
 	}
-	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
-		log.WarningfDepth(context.TODO(), 2, format, args...)
-	}
+	log.WarningfDepth(context.TODO(), 2, format, args...)
 }
 
 func (severity *logger) Error(args ...interface{}) {
@@ -144,9 +143,9 @@ func (severity *logger) V(i int) bool {
 	return log.VDepth(log.Level(i) /* level */, 1 /* depth */)
 }
 
-// https://github.com/grpc/grpc-go/blob/v1.7.0/clientconn.go#L937
+// https://github.com/grpc/grpc-go/blob/v1.29.1/clientconn.go#L1275
 var (
-	transportFailedRe   = regexp.MustCompile("^" + regexp.QuoteMeta("grpc: addrConn.resetTransport failed to create client transport:"))
+	transportFailedRe   = regexp.MustCompile(`^` + regexp.QuoteMeta(`grpc: addrConn.createTransport failed to connect to`))
 	connectionRefusedRe = regexp.MustCompile(
 		strings.Join([]string{
 			// *nix
@@ -158,33 +157,32 @@ var (
 			regexp.QuoteMeta("no such host"),
 		}, "|"),
 	)
+	clientConnReuseRe = regexp.MustCompile("cannot reuse client connection")
+
+	connectivitySpamRe = regexp.MustCompile(transportFailedRe.String() + `.*` +
+		"(" + connectionRefusedRe.String() + "|" + clientConnReuseRe.String() + ")")
 )
 
 var spamMu = struct {
 	syncutil.Mutex
-	gids map[int64]time.Time
+	strs map[string]time.Time
 }{
-	gids: make(map[int64]time.Time),
+	strs: make(map[string]time.Time),
 }
 
-func shouldPrint(
-	formatRe, argsRe *regexp.Regexp, freq time.Duration, format string, args ...interface{},
-) bool {
-	if formatRe.MatchString(format) {
-		for _, arg := range args {
-			if err, ok := arg.(error); ok {
-				if argsRe.MatchString(err.Error()) {
-					gid := goid.Get()
-					now := timeutil.Now()
-					spamMu.Lock()
-					t, ok := spamMu.gids[gid]
-					doPrint := !(ok && now.Sub(t) < freq)
-					if doPrint {
-						spamMu.gids[gid] = now
-					}
-					spamMu.Unlock()
-					return doPrint
+func shouldPrint(argsRe *regexp.Regexp, freq time.Duration, args ...interface{}) bool {
+	for _, arg := range args {
+		if argStr, ok := arg.(string); ok {
+			if argsRe.MatchString(argStr) {
+				now := timeutil.Now()
+				spamMu.Lock()
+				t, ok := spamMu.strs[argStr]
+				doPrint := !(ok && now.Sub(t) < freq)
+				if doPrint {
+					spamMu.strs[argStr] = now
 				}
+				spamMu.Unlock()
+				return doPrint
 			}
 		}
 	}
