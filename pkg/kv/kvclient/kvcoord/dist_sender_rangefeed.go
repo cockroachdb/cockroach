@@ -50,15 +50,10 @@ func (ds *DistSender) RangeFeed(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	startRKey, err := keys.Addr(span.Key)
+	rs, err := keys.SpanAddr(span)
 	if err != nil {
 		return err
 	}
-	endRKey, err := keys.Addr(span.EndKey)
-	if err != nil {
-		return err
-	}
-	rs := roachpb.RSpan{Key: startRKey, EndKey: endRKey}
 
 	g := ctxgroup.WithContext(ctx)
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
