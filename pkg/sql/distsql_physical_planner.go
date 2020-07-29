@@ -2901,25 +2901,29 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	if err != nil {
 		return nil, err
 	}
-	currentResultRouters := plan.ResultRouters
 
 	distinctSpec := execinfrapb.ProcessorCoreUnion{
 		Distinct: createDistinctSpec(n, plan.PlanToStreamColMap),
 	}
+	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap)
+	defer func() {
+		plan.SetMergeOrdering(newMergeOrdering)
+	}()
 
-	if len(currentResultRouters) == 1 {
-		plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+	// Add distinct processors local to each existing current result processor.
+	// TODO(arjun): This is potentially memory inefficient if we don't have any
+	// sorted columns.
+	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+	if !plan.IsLastStageDistributed() {
 		return plan, nil
 	}
 
-	// TODO(arjun): This is potentially memory inefficient if we don't have any sorted columns.
-
-	// Add distinct processors local to each existing current result processor.
-	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
-
-	// TODO(arjun): We could distribute this final stage by hash.
-	plan.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes)
-
+	nodes := getNodesOfRouters(plan.ResultRouters, plan.Processors)
+	plan.AddStageOnNodes(
+		nodes, distinctSpec, execinfrapb.PostProcessSpec{},
+		distinctSpec.Distinct.DistinctColumns, plan.ResultTypes,
+		plan.MergeOrdering, plan.ResultRouters,
+	)
 	return plan, nil
 }
 
