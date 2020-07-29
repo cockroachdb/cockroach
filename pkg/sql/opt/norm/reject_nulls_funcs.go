@@ -60,6 +60,61 @@ func (c *CustomFuncs) NullRejectAggVar(
 	panic(errors.AssertionFailedf("expected aggregation not found"))
 }
 
+// NullRejectProjections returns a Variable for the first eligible input column
+// of the first projection that is referenced by nullRejectCols. A column is
+// only null-rejected if:
+//
+//   1. It is in the RejectNullCols ColSet of the input expression (null
+//      rejection has been requested)
+//
+//   2. A NULL in the column implies that the projection will also be NULL.
+//
+// NullRejectProjections panics if no such projection is found.
+func (c *CustomFuncs) NullRejectProjections(
+	projections memo.ProjectionsExpr, nullRejectCols, inputNullRejectCols opt.ColSet,
+) opt.ScalarExpr {
+
+	// getFirstEligibleCol recursively traverses the given expression and returns
+	// the first column that is eligible for null-rejection. Returns 0 if no such
+	// column is found.
+	var getFirstEligibleCol func(opt.Expr) opt.ColumnID
+	getFirstEligibleCol = func(expr opt.Expr) opt.ColumnID {
+		if variable, ok := expr.(*memo.VariableExpr); ok {
+			if inputNullRejectCols.Contains(variable.Col) {
+				// Null-rejection has been requested for this column, and the projection
+				// returns NULL when this column is NULL.
+				return variable.Col
+			}
+			// Null-rejection has not been requested for this column.
+			return opt.ColumnID(0)
+		}
+		if !opt.ScalarOperatorTransmitsNulls(expr.Op()) {
+			// This operator does not return NULL when one of its inputs is NULL, so
+			// we cannot null-reject through it.
+			return opt.ColumnID(0)
+		}
+		for i, cnt := 0, expr.ChildCount(); i < cnt; i++ {
+			if col := getFirstEligibleCol(expr.Child(i)); col != 0 {
+				return col
+			}
+		}
+		return opt.ColumnID(0)
+	}
+
+	for i := range projections {
+		if nullRejectCols.Contains(projections[i].Col) {
+			col := getFirstEligibleCol(projections[i].Element)
+			if col == 0 {
+				// If the ColumnID of the projection was in nullRejectCols, an input
+				// column must exist that can be null-rejected.
+				panic(errors.AssertionFailedf("expected column not found"))
+			}
+			return c.f.ConstructVariable(col)
+		}
+	}
+	panic(errors.AssertionFailedf("expected projection not found"))
+}
+
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
@@ -106,11 +161,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(in))
 
 	case opt.ProjectOp:
-		// Pass through all null-rejection columns that the Project passes through.
-		// The PushSelectIntoProject rule is able to push the IS NOT NULL filter
-		// below the Project for these columns.
-		rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
-		relProps.Rule.RejectNullCols = relProps.OutputCols.Intersection(rejectNullCols)
+		relProps.Rule.RejectNullCols.UnionWith(deriveProjectRejectNullCols(in))
 	}
 
 	return relProps.Rule.RejectNullCols
@@ -203,4 +254,66 @@ func (c *CustomFuncs) MakeNullRejectFilters(nullRejectCols opt.ColSet) memo.Filt
 		)
 	}
 	return filters
+}
+
+// deriveProjectRejectNullCols returns the set of Project output columns which
+// are eligible for null rejection. All passthrough columns which are in the
+// RejectNullCols set of the input can be null-rejected. In addition, projected
+// columns can also be null-rejected when:
+//
+//   1. The projection "transmits" nulls - it returns NULL when one or more of
+//      its inputs is NULL.
+//
+//   2. One or more of the projection's input columns are in the RejectNullCols
+//      ColSet of the input expression. Note that this condition is not strictly
+//      necessary in order for a null-rejecting filter to be pushed down, but it
+//      ensures that filters are only pushed down when they are requested by a
+//      child operator (for example, an outer join that may be simplified). This
+//      prevents filters from getting in the way of other rules.
+//
+func deriveProjectRejectNullCols(in memo.RelExpr) opt.ColSet {
+	rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+	projections := *in.Child(1).(*memo.ProjectionsExpr)
+	var projectionsRejectCols opt.ColSet
+
+	// canRejectNulls recursively traverses the given projection expression and
+	// returns true if the projection satisfies the above conditions.
+	var canRejectNulls func(opt.Expr) bool
+	canRejectNulls = func(expr opt.Expr) bool {
+		switch t := expr.(type) {
+		case *memo.VariableExpr:
+			// Condition #2: if the column contained by this Variable is in the input
+			// RejectNullCols set, the projection output column can be null-rejected.
+			return rejectNullCols.Contains(t.Col)
+
+		case *memo.ConstExpr:
+			// Fall through to the child traversal.
+
+		default:
+			if !opt.ScalarOperatorTransmitsNulls(expr.Op()) {
+				// In order for condition #1 to be satisfied, we require an unbroken chain
+				// of null-transmitting operators from the input null-rejection column to
+				// the output of the projection.
+				return false
+			}
+			// Fall through to the child traversal.
+		}
+		for i, cnt := 0, expr.ChildCount(); i < cnt; i++ {
+			if canRejectNulls(expr.Child(i)) {
+				return true
+			}
+		}
+
+		// No child expressions were found that make the projection eligible for
+		// null-rejection.
+		return false
+	}
+
+	// Add any projections which satisfy the conditions.
+	for i := range projections {
+		if canRejectNulls(projections[i].Element) {
+			projectionsRejectCols.Add(projections[i].Col)
+		}
+	}
+	return (rejectNullCols.Union(projectionsRejectCols)).Intersection(in.Relational().OutputCols)
 }
