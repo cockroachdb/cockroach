@@ -364,13 +364,19 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
 	for i := range c.cols {
 		col := &c.cols[i]
-		if !isTargetCol(i) && col.DefaultExpr != nil {
+		if col.DefaultExpr != nil {
+			// If this column is targeted, then the evaluation is a no-op except to
+			// make one evaluation just in case we have random() default expression
+			// to ensure that the positions we advance in a row is the same as the
+			// number of instances the function random() appears in a row.
 			datum, err := c.defaultCache[i].Eval(c.EvalCtx)
-			if err != nil {
-				return errors.Wrapf(
-					err, "error evaluating default expression %q", col.DefaultExprStr())
+			if !isTargetCol(i) {
+				if err != nil {
+					return errors.Wrapf(
+						err, "error evaluating default expression %q", col.DefaultExprStr())
+				}
+				c.Datums[i] = datum
 			}
-			c.Datums[i] = datum
 		}
 	}
 
