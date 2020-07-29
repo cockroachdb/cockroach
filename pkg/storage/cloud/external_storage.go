@@ -14,7 +14,9 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // This file is for interfaces only and should not contain any implementation
@@ -37,6 +39,14 @@ type ExternalStorage interface {
 	// Conf should return the serializable configuration required to reconstruct
 	// this ExternalStorage implementation.
 	Conf() roachpb.ExternalStorage
+
+	// ExternalIOConf should return the configuration containing several server
+	// configured options pertaining to an ExternalStorage implementation.
+	ExternalIOConf() base.ExternalIODirConfig
+
+	// Settings should return the cluster settings used to configure the
+	// ExternalStorage implementation.
+	Settings() *cluster.Settings
 
 	// ReadFile should return a Reader for requested name.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.

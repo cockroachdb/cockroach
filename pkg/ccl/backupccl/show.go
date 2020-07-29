@@ -56,6 +56,7 @@ func showBackupPlanHook(
 
 	expected := map[string]sql.KVStringOptValidate{
 		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
+		backupOptEncKMS:         sql.KVStringOptRequireValue,
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
@@ -100,7 +101,23 @@ func showBackupPlanHook(
 				return err
 			}
 			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-			encryption = &jobspb.BackupEncryptionOptions{Key: encryptionKey}
+			encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
+				Key: encryptionKey}
+		} else if kms, ok := opts[backupOptEncKMS]; ok {
+			opts, err := readEncryptionOptions(ctx, store)
+			if err != nil {
+				return err
+			}
+
+			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
+			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup([]string{kms},
+				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), env)
+			if err != nil {
+				return err
+			}
+			encryption = &jobspb.BackupEncryptionOptions{
+				Mode:    jobspb.EncryptionMode_KMS,
+				KMSInfo: defaultKMSInfo}
 		}
 
 		incPaths, err := findPriorBackups(ctx, store)
