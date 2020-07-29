@@ -50,6 +50,77 @@ type uncommittedDescriptor struct {
 	immutable catalog.Descriptor
 }
 
+// leasedDescriptors holds references to all the descriptors leased in the
+// transaction, and supports access by name and by ID.
+type leasedDescriptors struct {
+	descs []catalog.Descriptor
+}
+
+func (ld *leasedDescriptors) add(desc catalog.Descriptor) {
+	ld.descs = append(ld.descs, desc)
+}
+
+func (ld *leasedDescriptors) releaseAll() (toRelease []catalog.Descriptor) {
+	toRelease = append(toRelease, ld.descs...)
+	ld.descs = ld.descs[:0]
+	return toRelease
+}
+
+func (ld *leasedDescriptors) release(ids []sqlbase.ID) (toRelease []catalog.Descriptor) {
+	// Sort the descriptors and leases to make it easy to find the leases to release.
+	leasedDescs := ld.descs
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i] < ids[j]
+	})
+	sort.Slice(leasedDescs, func(i, j int) bool {
+		return leasedDescs[i].GetID() < leasedDescs[j].GetID()
+	})
+
+	filteredLeases := leasedDescs[:0] // will store the remaining leases
+	idsToConsider := ids
+	shouldRelease := func(id sqlbase.ID) (found bool) {
+		for len(idsToConsider) > 0 && idsToConsider[0] < id {
+			idsToConsider = idsToConsider[1:]
+		}
+		return len(idsToConsider) > 0 && idsToConsider[0] == id
+	}
+	for _, l := range leasedDescs {
+		if !shouldRelease(l.GetID()) {
+			filteredLeases = append(filteredLeases, l)
+		} else {
+			toRelease = append(toRelease, l)
+		}
+	}
+	ld.descs = filteredLeases
+	return toRelease
+}
+
+func (ld *leasedDescriptors) getByID(id sqlbase.ID) catalog.Descriptor {
+	for i := range ld.descs {
+		desc := ld.descs[i]
+		if desc.GetID() == id {
+			return desc
+		}
+	}
+	return nil
+}
+
+func (ld *leasedDescriptors) getByName(
+	dbID sqlbase.ID, schemaID sqlbase.ID, name string,
+) catalog.Descriptor {
+	for i := range ld.descs {
+		desc := ld.descs[i]
+		if lease.NameMatchesDescriptor(desc, dbID, schemaID, name) {
+			return desc
+		}
+	}
+	return nil
+}
+
+func (ld *leasedDescriptors) numDescriptors() int {
+	return len(ld.descs)
+}
+
 // MakeCollection constructs a Collection.
 func MakeCollection(
 	leaseMgr *lease.Manager,
@@ -83,7 +154,7 @@ type Collection struct {
 	// the transaction using them is complete. If the transaction gets pushed and
 	// the timestamp changes, the descriptors are released.
 	// TODO (lucy): Use something other than an unsorted slice for faster lookups.
-	leasedDescriptors []catalog.Descriptor
+	leasedDescriptors leasedDescriptors
 	// Descriptors modified by the uncommitted transaction affiliated with this
 	// Collection. This allows a transaction to see its own modifications while
 	// bypassing the descriptor lease mechanism. The lease mechanism will have its
@@ -376,11 +447,9 @@ func (tc *Collection) getObjectVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for _, table := range tc.leasedDescriptors {
-		if lease.NameMatchesDescriptor(table, dbID, schemaID, name.Object()) {
-			log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-			return table, nil
-		}
+	if desc := tc.leasedDescriptors.getByName(dbID, schemaID, name.Object()); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		return desc, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
@@ -402,7 +471,7 @@ func (tc *Collection) getObjectVersion(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedDescriptors = append(tc.leasedDescriptors, desc)
+	tc.leasedDescriptors.add(desc)
 	log.VEventf(ctx, 2, "added descriptor '%s' to collection", name)
 
 	// If the descriptor we just acquired expires before the txn's deadline,
@@ -469,11 +538,9 @@ func (tc *Collection) getDescriptorVersionByID(
 	}
 
 	// First, look to see if we already have the table in the shared cache.
-	for _, desc := range tc.leasedDescriptors {
-		if desc.GetID() == id {
-			log.VEventf(ctx, 2, "found descriptor %d in cache", id)
-			return desc, nil
-		}
+	if desc := tc.leasedDescriptors.getByID(id); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
+		return desc, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
@@ -486,7 +553,7 @@ func (tc *Collection) getDescriptorVersionByID(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedDescriptors = append(tc.leasedDescriptors, desc)
+	tc.leasedDescriptors.add(desc)
 	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
 
 	// If the descriptor we just acquired expires before the txn's deadline,
@@ -601,43 +668,26 @@ func (tc *Collection) hydrateTypesInTableDesc(
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.IDVersion) {
-	// Sort the descriptors and leases to make it easy to find the leases to release.
-	leasedDescs := tc.leasedDescriptors
-	sort.Slice(descs, func(i, j int) bool {
-		return descs[i].ID < descs[j].ID
-	})
-	sort.Slice(leasedDescs, func(i, j int) bool {
-		return leasedDescs[i].GetID() < leasedDescs[j].GetID()
-	})
-
-	filteredLeases := leasedDescs[:0] // will store the remaining leases
-	descsToConsider := descs
-	shouldRelease := func(id sqlbase.ID) (found bool) {
-		for len(descsToConsider) > 0 && descsToConsider[0].ID < id {
-			descsToConsider = descsToConsider[1:]
-		}
-		return len(descsToConsider) > 0 && descsToConsider[0].ID == id
+	ids := make([]sqlbase.ID, len(descs))
+	for i := range descs {
+		ids[i] = descs[i].ID
 	}
-	for _, l := range leasedDescs {
-		if !shouldRelease(l.GetID()) {
-			filteredLeases = append(filteredLeases, l)
-		} else if err := tc.leaseMgr.Release(l); err != nil {
+	toRelease := tc.leasedDescriptors.release(ids)
+	for _, desc := range toRelease {
+		if err := tc.leaseMgr.Release(desc); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
-	tc.leasedDescriptors = filteredLeases
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
-	if len(tc.leasedDescriptors) > 0 {
-		log.VEventf(ctx, 2, "releasing %d descriptors", len(tc.leasedDescriptors))
-		for _, desc := range tc.leasedDescriptors {
-			if err := tc.leaseMgr.Release(desc); err != nil {
-				log.Warningf(ctx, "%v", err)
-			}
+	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
+	toRelease := tc.leasedDescriptors.releaseAll()
+	for _, desc := range toRelease {
+		if err := tc.leaseMgr.Release(desc); err != nil {
+			log.Warningf(ctx, "%v", err)
 		}
-		tc.leasedDescriptors = tc.leasedDescriptors[:0]
 	}
 }
 
