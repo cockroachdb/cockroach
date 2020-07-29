@@ -236,7 +236,9 @@ type cFetcher struct {
 		prettyValueBuf *bytes.Buffer
 
 		// batch is the output batch the fetcher writes to.
-		batch coldata.Batch
+		batch                       coldata.Batch
+		typs                        []*types.T
+		curBatchSize, nextBatchSize int
 
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
@@ -256,6 +258,9 @@ type cFetcher struct {
 		err       error
 	}
 }
+
+// TODO(yuzefovich): tune.
+const cFetcherInitialBatchSize = 1
 
 // Init sets up a Fetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
@@ -301,9 +306,9 @@ func (rf *cFetcher) Init(
 		timestampOutputIdx: noTimestampColumn,
 	}
 
-	typs := make([]*types.T, len(colDescriptors))
-	for i := range typs {
-		typs[i] = colDescriptors[i].Type
+	rf.machine.typs = make([]*types.T, len(colDescriptors))
+	for i := range rf.machine.typs {
+		rf.machine.typs[i] = colDescriptors[i].Type
 	}
 
 	var err error
@@ -327,8 +332,13 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.machine.batch = allocator.NewMemBatch(typs)
+	rf.machine.curBatchSize = cFetcherInitialBatchSize
+	if rf.machine.curBatchSize > coldata.BatchSize() {
+		rf.machine.curBatchSize = coldata.BatchSize()
+	}
+	rf.machine.batch = allocator.NewMemBatchWithSize(rf.machine.typs, rf.machine.curBatchSize)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	rf.machine.nextBatchSize = rf.machine.curBatchSize
 	// If the fetcher is requested to produce a timestamp column, pull out the
 	// column as a decimal and save it.
 	if table.timestampOutputIdx != noTimestampColumn {
@@ -478,7 +488,7 @@ func (rf *cFetcher) Init(
 	rf.table = table
 	// Change the allocation size to be the same as the capacity of the batch
 	// we allocated above.
-	rf.table.da.AllocSize = coldata.BatchSize()
+	rf.table.da.AllocSize = rf.machine.curBatchSize
 
 	return nil
 }
@@ -610,10 +620,20 @@ const debugState = false
 // NextBatch is nextBatch with the addition of memory accounting.
 func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	rf.adapter.ctx = ctx
+	if rf.machine.curBatchSize < rf.machine.nextBatchSize {
+		rf.adapter.allocator.ReleaseBatch(rf.machine.batch)
+		rf.machine.batch = rf.adapter.allocator.NewMemBatchWithSize(rf.machine.typs, rf.machine.nextBatchSize)
+		rf.machine.colvecs = rf.machine.batch.ColVecs()
+		rf.machine.curBatchSize = rf.machine.nextBatchSize
+		rf.table.da.AllocSize = rf.machine.curBatchSize
+	}
 	rf.adapter.allocator.PerformOperation(
 		rf.machine.colvecs,
 		rf.nextAdapter,
 	)
+	if 2*rf.machine.nextBatchSize < coldata.BatchSize() {
+		rf.machine.nextBatchSize *= 2
+	}
 	return rf.adapter.batch, rf.adapter.err
 }
 
@@ -622,7 +642,7 @@ func (rf *cFetcher) nextAdapter() {
 }
 
 // nextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize() in length, which are returned in columnar format as a
+// rf.machine.curBatchSize in length, which are returned in columnar format as a
 // coldata.Batch. The batch contains one Vec per table column, regardless of
 // the index used; columns that are not needed (as per neededCols) are empty.
 // The Batch should not be modified and is only valid until the next call.
@@ -903,7 +923,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= coldata.BatchSize() {
+			if rf.machine.rowIdx >= rf.machine.curBatchSize {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0

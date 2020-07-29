@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -231,4 +232,44 @@ func initCRowFetcher(
 	}
 
 	return index, isSecondaryIndex, nil
+}
+
+func NewTableReader(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec *execinfrapb.TableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
+	acc := flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+	ctx := context.Background()
+	scanOp, err := NewColBatchScan(colmem.NewAllocator(ctx, &acc, factory), flowCtx, spec, post)
+	if err != nil {
+		acc.Close(ctx)
+		return nil, err
+	}
+
+	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	m, err := NewMaterializerWithPost(
+		flowCtx,
+		processorID,
+		scanOp,
+		post,
+		types,
+		output,
+		[]execinfrapb.MetadataSource{scanOp},
+		nil, /* toClose */
+		nil, /* outputStatsToTrace */
+		func() context.CancelFunc {
+			return func() {
+				acc.Close(ctx)
+			}
+		},
+	)
+	if err != nil {
+		acc.Close(ctx)
+	}
+	return m, err
 }

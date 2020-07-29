@@ -145,6 +145,24 @@ func NewMaterializer(
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
+	return NewMaterializerWithPost(
+		flowCtx, processorID, input, &execinfrapb.PostProcessSpec{},
+		typs, output, metadataSourcesQueue, toClose, outputStatsToTrace, cancelFlow,
+	)
+}
+
+func NewMaterializerWithPost(
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	input colexecbase.Operator,
+	post *execinfrapb.PostProcessSpec,
+	typs []*types.T,
+	output execinfra.RowReceiver,
+	metadataSourcesQueue []execinfrapb.MetadataSource,
+	toClose []colexecbase.Closer,
+	outputStatsToTrace func(),
+	cancelFlow func() context.CancelFunc,
+) (*Materializer, error) {
 	m := &Materializer{
 		input:       input,
 		typs:        typs,
@@ -157,9 +175,7 @@ func NewMaterializer(
 
 	if err := m.ProcessorBase.Init(
 		m,
-		// input must have handled any post-processing itself, so we pass in
-		// an empty post-processing spec.
-		&execinfrapb.PostProcessSpec{},
+		post,
 		typs,
 		flowCtx,
 		processorID,
@@ -214,13 +230,13 @@ func (m *Materializer) nextAdapter() {
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
 func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.State == execinfra.StateRunning {
+	for m.State == execinfra.StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
 			m.batch = m.input.Next(m.Ctx)
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
-				return nil, m.DrainHelper()
+				break
 			}
 			m.curIdx = 0
 			m.converter.ConvertBatch(m.batch)
@@ -233,10 +249,9 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 			m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
 		}
 		m.curIdx++
-		// Note that there is no post-processing to be done in the
-		// materializer, so we do not use ProcessRowHelper and emit the row
-		// directly.
-		return m.row, nil
+		if outRow := m.ProcessRowHelper(m.row); outRow != nil {
+			return outRow, nil
+		}
 	}
 	return nil, m.DrainHelper()
 }

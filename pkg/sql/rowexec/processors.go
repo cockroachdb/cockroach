@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -134,6 +135,11 @@ func NewProcessor(
 		}
 		if core.TableReader.IsCheck {
 			return newScrubTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
+		}
+		if proc, err := colfetcher.NewTableReader(
+			flowCtx, processorID, core.TableReader, post, outputs[0],
+		); err == nil {
+			return proc, nil
 		}
 		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
