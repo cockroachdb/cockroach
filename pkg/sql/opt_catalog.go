@@ -232,6 +232,11 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return ds, false, err
 }
 
+// ResolveTypeByID is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
+	return oc.planner.ResolveTypeByID(ctx, id)
+}
+
 func getDescFromCatalogObjectForPermissions(o cat.Object) (sqlbase.DescriptorInterface, error) {
 	switch t := o.(type) {
 	case *optSchema:

@@ -169,6 +169,21 @@ func (b *Builder) Build() (err error) {
 		}
 	}()
 
+	// TODO (rohany): We shouldn't be modifying the semaCtx passed to the builder
+	//  but we unfortunately rely on mutation to the semaCtx. We modify the input
+	//  semaCtx during building of opaque statements, and then expect that those
+	//  mutations are visible on the planner's semaCtx.
+
+	// Hijack the input TypeResolver in the semaCtx to record all of the user
+	// defined types that we resolve while building this query.
+	existingResolver := b.semaCtx.TypeResolver
+	// Ensure that the original TypeResolver is reset after.
+	defer func() { b.semaCtx.TypeResolver = existingResolver }()
+	typeTracker := &optTrackingTypeResolver{
+		res: b.semaCtx.TypeResolver,
+	}
+	b.semaCtx.TypeResolver = typeTracker
+
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
@@ -185,6 +200,11 @@ func (b *Builder) Build() (err error) {
 	b.popWithFrame(outScope)
 	if len(b.cteStack) > 0 {
 		panic(errors.AssertionFailedf("dangling CTE stack frames"))
+	}
+
+	// Add all of the user defined types to the metadata.
+	for i := range typeTracker.resolvedTypesSlice {
+		b.factory.Metadata().AddUserDefinedType(typeTracker.resolvedTypesSlice[i])
 	}
 
 	physical := outScope.makePhysicalProps()
@@ -378,4 +398,50 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 			}
 		}
 	}
+}
+
+// optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
+// remembers all of the resolved types.
+type optTrackingTypeResolver struct {
+	res tree.TypeReferenceResolver
+	// The fields below store all of the resolved types. We store the types in a
+	// map for deduplication and a slice to have deterministic iteration order.
+	resolvedTypes      map[uint32]*types.T
+	resolvedTypesSlice []*types.T
+}
+
+func (o *optTrackingTypeResolver) addType(typ *types.T) {
+	if typ.UserDefined() {
+		if o.resolvedTypes == nil {
+			o.resolvedTypes = make(map[uint32]*types.T)
+		}
+		if _, ok := o.resolvedTypes[typ.StableTypeID()]; !ok {
+			o.resolvedTypes[typ.StableTypeID()] = typ
+			o.resolvedTypesSlice = append(o.resolvedTypesSlice, typ)
+		}
+	}
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (o *optTrackingTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	typ, err := o.res.ResolveType(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	o.addType(typ)
+	return typ, nil
+}
+
+// ResolveTypeByID implements the tree.TypeResolver interface.
+func (o *optTrackingTypeResolver) ResolveTypeByID(
+	ctx context.Context, id uint32,
+) (*types.T, error) {
+	typ, err := o.res.ResolveTypeByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	o.addType(typ)
+	return typ, nil
 }

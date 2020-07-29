@@ -30,6 +30,7 @@ func TestMetadata(t *testing.T) {
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
+	md.AddUserDefinedType(types.MakeEnum(15210, 15418))
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -53,6 +54,11 @@ func TestMetadata(t *testing.T) {
 	md.AddView(&testcat.View{ViewID: 101})
 	if len(md.AllViews()) != 1 {
 		t.Fatalf("unexpected views")
+	}
+
+	md.AddUserDefinedType(types.MakeEnum(15150, 15251))
+	if len(md.AllUserDefinedTypes()) != 1 {
+		t.Fatalf("unexpected types")
 	}
 
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
@@ -83,6 +89,10 @@ func TestMetadata(t *testing.T) {
 
 	if v := mdNew.AllViews(); len(v) != 1 && v[0].(*testcat.View).ViewID != 101 {
 		t.Fatalf("unexpected view")
+	}
+
+	if ts := mdNew.AllUserDefinedTypes(); len(ts) != 1 && ts[15150].Equal(types.MakeEnum(15150, 15251)) {
+		t.Fatalf("unexpected type")
 	}
 
 	depsUpToDate, err = md.CheckDependencies(context.Background(), testCat)
