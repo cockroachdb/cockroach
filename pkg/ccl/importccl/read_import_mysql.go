@@ -50,6 +50,7 @@ type mysqldumpReader struct {
 	tables   map[string]*row.DatumRowConverter
 	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
+	walltime int64
 }
 
 var _ inputConverter = &mysqldumpReader{}
@@ -57,10 +58,11 @@ var _ inputConverter = &mysqldumpReader{}
 func newMysqldumpReader(
 	ctx context.Context,
 	kvCh chan row.KVBatch,
+	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
-	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
+	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime}
 
 	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
@@ -132,6 +134,7 @@ func (m *mysqldumpReader) readFile(
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
 			inserts++
+			timestamp := timestampAfterEpoch(m.walltime)
 			rows, ok := i.Rows.(mysql.Values)
 			if !ok {
 				return errors.Errorf(
@@ -156,7 +159,7 @@ func (m *mysqldumpReader) readFile(
 					}
 					conv.Datums[i] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count); err != nil {
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
 					return err
 				}
 				if m.debugRow != nil {
