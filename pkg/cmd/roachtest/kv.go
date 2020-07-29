@@ -598,7 +598,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			}
 			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			duration := " --duration=" + ifLocal("10s", "10m")
+			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (removing replica)` errors.
