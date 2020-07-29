@@ -10,7 +10,10 @@
 
 package ts
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // QueryTimespan describes the time range information for a query - the start
 // and end bounds of the query, along with the requested duration of individual
@@ -96,9 +99,12 @@ func (qt *QueryTimespan) adjustForCurrentTime(diskResolution Resolution) error {
 	// Do not allow queries in the future.
 	if qt.StartNanos > cutoff {
 		return fmt.Errorf(
-			"cannot query time series in the future (start time %d was greater than current clock %d",
-			qt.StartNanos,
-			qt.NowNanos,
+			"cannot query time series in the future (start time %s was greater than "+
+				"cutoff for current sample period %s); current time: %s; sample duration: %s",
+			time.Unix(0, qt.StartNanos),
+			time.Unix(0, cutoff),
+			time.Unix(0, qt.NowNanos),
+			time.Duration(qt.SampleDurationNanos),
 		)
 	}
 	if qt.EndNanos > cutoff {
