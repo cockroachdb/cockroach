@@ -603,13 +603,7 @@ func (s *adminServer) TableDetails(
 	// data. Then, we count the number of ranges that make up that key span.
 	{
 		tableSpan := generateTableSpan(tableID)
-		tableRSpan := roachpb.RSpan{}
-		var err error
-		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+		tableRSpan, err := keys.SpanAddr(tableSpan)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
