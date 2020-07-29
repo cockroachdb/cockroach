@@ -51,7 +51,7 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
 	semaCtx := tree.MakeSemaContext()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, &semaCtx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
