@@ -607,6 +607,12 @@ func (p *parallelImporter) flush(ctx context.Context) error {
 	}
 }
 
+func timestampAfterEpoch(walltime int64) uint64 {
+	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+	const precision = uint64(10 * time.Microsecond)
+	return uint64(walltime-epoch) / precision
+}
+
 func (p *parallelImporter) importWorker(
 	ctx context.Context,
 	workerID int,
@@ -624,9 +630,7 @@ func (p *parallelImporter) importWorker(
 	}
 
 	var rowNum int64
-	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
-	const precision = uint64(10 * time.Microsecond)
-	timestamp := uint64(importCtx.walltime-epoch) / precision
+	timestamp := timestampAfterEpoch(importCtx.walltime)
 
 	conv.CompletedRowFn = func() int64 {
 		m := emittedRowLowWatermark(workerID, rowNum, minEmitted)
