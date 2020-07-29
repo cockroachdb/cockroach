@@ -506,11 +506,12 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tables map[string]*row.DatumRowConverter
-	descs  map[string]*execinfrapb.ReadImportDataSpec_ImportTable
-	kvCh   chan row.KVBatch
-	opts   roachpb.PgDumpOptions
-	colMap map[*row.DatumRowConverter](map[string]int)
+	tables   map[string]*row.DatumRowConverter
+	descs    map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	kvCh     chan row.KVBatch
+	opts     roachpb.PgDumpOptions
+	walltime int64
+	colMap   map[*row.DatumRowConverter](map[string]int)
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -520,6 +521,7 @@ func newPgDumpReader(
 	ctx context.Context,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
+	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
@@ -545,11 +547,12 @@ func newPgDumpReader(
 		}
 	}
 	return &pgDumpReader{
-		kvCh:   kvCh,
-		tables: converters,
-		descs:  descs,
-		opts:   opts,
-		colMap: colMap,
+		kvCh:     kvCh,
+		tables:   converters,
+		descs:    descs,
+		opts:     opts,
+		walltime: walltime,
+		colMap:   colMap,
 	}, nil
 }
 
@@ -613,6 +616,7 @@ func (m *pgDumpReader) readFile(
 				// the command "IMPORT INTO table (targetCols) PGDUMP DATA (filename)"
 				expectedColLen = len(conv.VisibleCols)
 			}
+			timestamp := timestampAfterEpoch(m.walltime)
 			values, ok := i.Rows.Select.(*tree.ValuesClause)
 			if !ok {
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
@@ -658,7 +662,7 @@ func (m *pgDumpReader) readFile(
 					}
 					conv.Datums[idx] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count); err != nil {
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
 					return err
 				}
 			}
