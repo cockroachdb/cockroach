@@ -226,6 +226,11 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				ctxCanceled := errors.Is(err, context.Canceled)
 				grpcCtxCanceled := grpcutil.IsContextCanceled(err)
 				queryCanceled := errors.Is(err, sqlbase.QueryCanceledError)
+				// TODO(yuzefovich): should we be swallowing flow and stream
+				// context cancellation errors regardless whether the
+				// cancellation is internal? The reasoning is that if another
+				// operator encounters an error, the context is likely to get
+				// canceled with this synchronizer seeing the "fallout".
 				if atomic.LoadInt32(&internalCancellation) == 1 && (ctxCanceled || grpcCtxCanceled || queryCanceled) {
 					// If the synchronizer performed the internal cancellation,
 					// we need to swallow context cancellation and "query
