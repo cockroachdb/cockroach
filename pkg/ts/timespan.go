@@ -96,9 +96,12 @@ func (qt *QueryTimespan) adjustForCurrentTime(diskResolution Resolution) error {
 	// Do not allow queries in the future.
 	if qt.StartNanos > cutoff {
 		return fmt.Errorf(
-			"cannot query time series in the future (start time %d was greater than current clock %d",
+			"cannot query time series in the future (start time %d was greater than "+
+				"cutoff for current sample period %d); current time: %s; sample duration: %s",
 			qt.StartNanos,
+			cutoff,
 			qt.NowNanos,
+			qt.SampleDurationNanos,
 		)
 	}
 	if qt.EndNanos > cutoff {
