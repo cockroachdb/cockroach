@@ -43,4 +43,4 @@ ordinality  ·             ·            (x, y, z, "ordinality")  ·
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE9Lw0AQxe9-imVOCiNtqqc9pdiKC7GpSUClzWHNDiWQZuPuBpKWfHdJIv4DpR7nzfzee7tHsK8FcIiXwfImYbUp2G0U3rPN8mkdzMWKnS9EnMQPwQV7P2mQtcgOyLagjcpLWeSu3cKINe2BPYrkjoXRQqzmgUieU0AotaKV3JMFvgEPUoTK6Iys1aaXjsOBUA3wKUJeVrXr5RQh04aAH8HlriDgkMiXgiKSisxkCgiKnMyLwbYy-V6a1m_aAyDElSwtZ5eAENaOM3-G_hX615B2CLp2nxHWyR0B9zo8vUb48fCJ963Fb-6z_7hHZCtdWjrJedqlCKR2NH6k1bXJaG10NsSMYzhwg6DIunHrjYMox1Vf8Cvs_QnPfsBpd_YWAAD__zocvUQ=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE9Lw0AQxe9-imVOCiNtqqc9pdiKC7GpSUClzWHNDiWQZuPuBpKWfHdJIv4DpR7nzfzee7tHsK8FcIiXwfImYbUp2G0U3rPN8mkdzMWKnS9EnMQPwQV7P2mQtcgOyLagjcpLWeSu3cKINe2BPYrkjoXRQqzmgUieU0AotaKV3JMFvgEPUoTK6Iys1aaXjsOBUA3wKUJeVrXr5RQh04aAH8HlriDgkMiXgiKSisxkCgiKnMyLwbZpD35l8r00LSDElSwtZ5eAENaOM3-G_hX615B2CLp2nxHWyR0B9zo8vUb48fCJ963Fb-6z_7hHZCtdWjrJedqlCKR2NH6k1bXJaG10NsSMYzhwg6DIunHrjYMox1Vf8Cvs_QnPfsBpd_YWAAD__zpkvUQ=

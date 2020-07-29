@@ -116,17 +116,17 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
+func indexDetail(desc *sqlbase.TableDescriptor, indexIdx uint32) string {
 	index := "primary"
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name
 	}
-	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
+	return fmt.Sprintf("%s@%s", desc.Name, index)
 }
 
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	details := indexDetails(tr.IndexIdx, &tr.Table)
+	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
 
 	if len(tr.Spans) > 0 {
 		// only show the first span
@@ -153,16 +153,11 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
-	index := "primary"
-	if jr.IndexIdx > 0 {
-		index = jr.Table.Indexes[jr.IndexIdx-1].Name
-	}
 	details := make([]string, 0, 4)
 	if jr.Type != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
-	// TODO(yuzefovich): swap to make it table@index.
-	details = append(details, fmt.Sprintf("%s@%s", index, jr.Table.Name))
+	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
 	if jr.LookupColumns != nil {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
 	}
@@ -269,7 +264,7 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 		}
 		details = append(details, tableLabel)
 		// table@index name
-		details = append(details, indexDetails(table.IndexIdx, &table.Desc)...)
+		details = append(details, indexDetail(&table.Desc, table.IndexIdx))
 		// Post process (filters, projections, renderExprs, limits/offsets)
 		details = append(details, table.Post.summaryWithPrefix(fmt.Sprintf("%s ", tableLabel))...)
 	}
@@ -287,7 +282,7 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 	details := make([]string, 0, len(tables)+1)
 	for i, table := range tables {
 		details = append(details, fmt.Sprintf(
-			"Side %d: %s", i, indexDetails(zj.IndexOrdinals[i], &table)[0],
+			"Side %d: %s", i, indexDetail(&table, zj.IndexOrdinals[i]),
 		))
 	}
 	if !zj.OnExpr.Empty() {
@@ -298,13 +293,11 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (ij *InvertedJoinerSpec) summary() (string, []string) {
-	index := ij.Table.Indexes[ij.IndexIdx-1].Name
 	details := make([]string, 0, 4)
 	if ij.Type != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
-	// TODO(yuzefovich): swap to make it table@index.
-	details = append(details, fmt.Sprintf("%s@%s", index, ij.Table.Name))
+	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))
 	details = append(details, fmt.Sprintf("Inverted join on: @%d", ij.LookupColumn+1))
 	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
 	if !ij.OnExpr.Empty() {
