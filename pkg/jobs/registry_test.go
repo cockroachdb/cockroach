@@ -58,10 +58,11 @@ func TestRegistryCancelation(t *testing.T) {
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
-	sqlInstance := slinstance.NewSqlInstance(
-		stopper, clock, db, nil,
-		&slinstance.Options{Deadline: DefaultAdoptInterval + 10*time.Second, Heartbeat: time.Second},
-	)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 19, Minor: 2},
+		roachpb.Version{Major: 19, Minor: 2},
+		true)
+	sqlInstance := slinstance.NewSqlInstance(stopper, clock, db, nil, settings)
 	registry := MakeRegistry(
 		log.AmbientContext{},
 		stopper,
@@ -71,10 +72,7 @@ func TestRegistryCancelation(t *testing.T) {
 		nil, /* ex */
 		base.TestingIDContainer,
 		sqlInstance,
-		cluster.MakeTestingClusterSettingsWithVersions(
-			roachpb.Version{Major: 19, Minor: 2},
-			roachpb.Version{Major: 19, Minor: 2},
-			true),
+		settings,
 		histogramWindowInterval,
 		FakePHS,
 		"",
