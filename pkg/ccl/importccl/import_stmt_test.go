@@ -3068,34 +3068,10 @@ func TestImportDefault(t *testing.T) {
 			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
 		},
 		{
-			name:          "random",
-			data:          "1\n2",
-			create:        `a INT, b FLOAT DEFAULT random()`,
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
 			name:          "nextval",
 			sequence:      "testseq",
 			data:          "1\n2",
 			create:        "a INT, b INT DEFAULT nextval('testseq')",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
-			name:          "random_plus_timestamp",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT (100*random())::int + current_timestamp()::int",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
-			name:          "deep_nesting_with_random",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT (1 + 2 + (100 * round(3 + random())::int)) * 5 + 3",
 			targetCols:    "a",
 			format:        "CSV",
 			expectedError: "unsafe for import",
@@ -3287,6 +3263,44 @@ func TestImportDefault(t *testing.T) {
 				require.Equal(t, numDistinctRows, len(test.rowIDCols)*numRows)
 			})
 
+		}
+	})
+	t.Run("random-related", func(t *testing.T) {
+		testCases := []struct {
+			name       string
+			create     string
+			targetCols []string
+			randomCols []string
+		}{
+			{
+				name:       "random",
+				create:     "a INT, b FLOAT DEFAULT random(), c STRING",
+				targetCols: []string{"a", "c"},
+				randomCols: []string{selectNotNull("b")},
+			},
+			{
+				name:       "gen_random_uuid",
+				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid()",
+				targetCols: []string{"a", "b"},
+				randomCols: []string{selectNotNull("c")},
+			},
+		}
+		for _, test := range testCases {
+			t.Run(test.name, func(t *testing.T) {
+				defer sqlDB.Exec(t, `DROP TABLE t`)
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(%s)`, test.create))
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+					strings.Join(test.targetCols, ", "),
+					strings.Join(testFiles.files, ", ")))
+				var numDistinctRows int
+				sqlDB.QueryRow(t,
+					fmt.Sprintf(`SELECT DISTINCT COUNT (*) FROM (%s)`,
+						strings.Join(test.randomCols, " UNION ")),
+				).Scan(&numDistinctRows)
+				var numRows int
+				sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+				require.Equal(t, numDistinctRows, len(test.randomCols)*numRows)
+			})
 		}
 	})
 }
