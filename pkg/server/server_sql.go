@@ -17,7 +17,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -205,11 +204,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 
 		cfg.sqlLivenessStorage = slstorage.NewStorage(
-			ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slstorage.Options{})
+			ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+		)
 
 		cfg.sqlInstance = slinstance.NewSqlInstance(
-			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor,
-			&slinstance.Options{Deadline: 30 * time.Second, Heartbeat: 40 * time.Second},
+			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
 		)
 
 		*jobRegistry = *jobs.MakeRegistry(
@@ -402,6 +401,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
+	sqllivenessStorage := slstorage.NewStorage(
+		ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+	)
+
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -419,7 +422,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		DistSQLSrv:              distSQLServer,
 		StatusServer:            cfg.statusServer,
 		SessionRegistry:         cfg.sessionRegistry,
-		SQLLivenessStorage:      slstorage.NewStorage(ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slstorage.Options{}),
+		SQLLivenessStorage:      sqllivenessStorage,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
