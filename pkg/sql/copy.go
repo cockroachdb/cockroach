@@ -513,4 +513,5 @@ var decodeMap = map[byte]byte{
 	't':  '\t',
 	'v':  '\v',
 	'\\': '\\',
+	'"':  '"',
 }

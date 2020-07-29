@@ -46,6 +46,10 @@ func TestDecodeCopy(t *testing.T) {
 			in:     `T\n\07\xEV\x0fA\xb2C\1`,
 			expect: "T\n\007\x0eV\x0fA\xb2C\001",
 		},
+		{
+			in:     `\\\"`,
+			expect: "\\\"",
+		},
 
 		// Error cases.
 
