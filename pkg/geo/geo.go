@@ -755,6 +755,40 @@ func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	}
 }
 
+// GeomTContainsEmpty returns whether a geom.T contains any empty element.
+func GeomTContainsEmpty(g geom.T) bool {
+	if g.Empty() {
+		return true
+	}
+	switch g := g.(type) {
+	case *geom.MultiPoint:
+		for i := 0; i < g.NumPoints(); i++ {
+			if g.Point(i).Empty() {
+				return true
+			}
+		}
+	case *geom.MultiLineString:
+		for i := 0; i < g.NumLineStrings(); i++ {
+			if g.LineString(i).Empty() {
+				return true
+			}
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < g.NumPolygons(); i++ {
+			if g.Polygon(i).Empty() {
+				return true
+			}
+		}
+	case *geom.GeometryCollection:
+		for i := 0; i < g.NumGeoms(); i++ {
+			if GeomTContainsEmpty(g.Geom(i)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // CompareSpatialObject compares the SpatialObject.
 // This must match the byte ordering that is be produced by encoding.EncodeGeoAscending.
 func CompareSpatialObject(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
