@@ -543,14 +543,22 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				ExtraOptions:    spec.ExtraOptions,
 			}
 			if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeDefault {
-				// TODO(itsbilal): Tune these options, and allow them to be overridden
-				// in the spec (similar to the existing spec.RocksDBOptions and others).
 				pebbleConfig := storage.PebbleConfig{
 					StorageConfig: storageConfig,
 					Opts:          storage.DefaultPebbleOptions(),
 				}
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+				// If the spec contains Pebble options, set those too.
+				if len(spec.PebbleOptions) > 0 {
+					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
+					if err != nil {
+						return nil, err
+					}
+				}
+				if len(spec.RocksDBOptions) > 0 {
+					return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
+				}
 				eng, err = storage.NewPebble(ctx, pebbleConfig)
 			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
 				rocksDBConfig := storage.RocksDBConfig{
@@ -559,7 +567,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					WarnLargeBatchThreshold: 500 * time.Millisecond,
 					RocksDBOptions:          spec.RocksDBOptions,
 				}
-
+				if len(spec.PebbleOptions) > 0 {
+					return nil, errors.Errorf("store %d: using RocksDB storage engine but StoreSpec provides Pebble options", i)
+				}
 				eng, err = storage.NewRocksDB(rocksDBConfig, cache)
 			} else {
 				// cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB
@@ -570,6 +580,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+				// If the spec contains Pebble options, set those too.
+				if len(spec.PebbleOptions) > 0 {
+					err = pebbleConfig.Opts.Parse(spec.PebbleOptions, nil)
+					if err != nil {
+						return nil, err
+					}
+				}
 				pebbleEng, err := storage.NewPebble(ctx, pebbleConfig)
 				if err != nil {
 					return nil, err

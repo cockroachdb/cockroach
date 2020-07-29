@@ -21,12 +21,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
@@ -176,6 +178,10 @@ type StoreSpec struct {
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
+	// PebbleOptions contains Pebble-specific options in the same format as a
+	// Pebble OPTIONS file but treating any whitespace as a newline:
+	// (Eg, "[Options] delete_range_flush_delay=2s flush_split_bytes=4096")
+	PebbleOptions string
 	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
 	// to C CCL code.
 	ExtraOptions []byte
@@ -205,6 +211,12 @@ func (ss StoreSpec) String() string {
 			buffer.WriteString(attr)
 		}
 		fmt.Fprintf(&buffer, ",")
+	}
+	if len(ss.PebbleOptions) > 0 {
+		optsStr := strings.Replace(ss.PebbleOptions, "\n", " ", -1)
+		fmt.Fprint(&buffer, "pebble=")
+		fmt.Fprint(&buffer, optsStr)
+		fmt.Fprint(&buffer, ",")
 	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -318,6 +330,42 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			}
 		case "rocksdb":
 			ss.RocksDBOptions = value
+		case "pebble":
+			// Pebble options are supplied in the Pebble OPTIONS ini-like
+			// format, but allowing any whitespace to delimit lines. Convert
+			// the options to a newline-delimited format. This isn't a trivial
+			// character replacement because whitespace may appear within a
+			// stanza, eg ["Level 0"].
+			value = strings.TrimSpace(value)
+			var buf bytes.Buffer
+			for len(value) > 0 {
+				i := strings.IndexFunc(value, func(r rune) bool {
+					return r == '[' || unicode.IsSpace(r)
+				})
+				switch {
+				case i == -1:
+					buf.WriteString(value)
+					value = value[len(value):]
+				case value[i] == '[':
+					// If there's whitespace within [ ], we write it verbatim.
+					j := i + strings.IndexRune(value[i:], ']')
+					buf.WriteString(value[:j+1])
+					value = value[j+1:]
+				case unicode.IsSpace(rune(value[i])):
+					// NB: This doesn't handle multibyte whitespace.
+					buf.WriteString(value[:i])
+					buf.WriteRune('\n')
+					value = strings.TrimSpace(value[i+1:])
+				}
+			}
+
+			// Parse the options just to fail early if invalid. We'll parse
+			// them again later when constructing the store engine.
+			var opts pebble.Options
+			if err := opts.Parse(buf.String(), nil); err != nil {
+				return StoreSpec{}, err
+			}
+			ss.PebbleOptions = buf.String()
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
