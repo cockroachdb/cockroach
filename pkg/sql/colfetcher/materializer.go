@@ -13,6 +13,7 @@ package colfetcher
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -163,13 +164,20 @@ func NewMaterializerWithPost(
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
-	m := &Materializer{
+	m := materializerPool.Get().(*Materializer)
+	row := m.row
+	if cap(row) >= len(typs) {
+		row = row[:len(typs)]
+	} else {
+		row = make(sqlbase.EncDatumRow, len(typs))
+	}
+	*m = Materializer{
 		input:       input,
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
 		// nil vecIdxsToConvert indicates that we want to convert all vectors.
 		converter: colexecbase.NewVecToDatumConverter(len(typs), nil /* vecIdxsToConvert */),
-		row:       make(sqlbase.EncDatumRow, len(typs)),
+		row:       row,
 		closers:   toClose,
 	}
 
@@ -249,6 +257,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 			m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
 		}
 		m.curIdx++
+		// TODO(yuzefovich): template this out.
 		if outRow := m.ProcessRowHelper(m.row); outRow != nil {
 			return outRow, nil
 		}
@@ -288,4 +297,22 @@ func (m *Materializer) ConsumerDone() {
 // ConsumerClosed is part of the execinfra.RowSource interface.
 func (m *Materializer) ConsumerClosed() {
 	m.InternalClose()
+}
+
+var materializerPool = sync.Pool{
+	New: func() interface{} {
+		return &Materializer{}
+	},
+}
+
+func (m *Materializer) Release() {
+	if r, ok := m.input.(execinfra.Releasable); ok {
+		r.Release()
+	}
+	m.ProcessorBase.Reset()
+	*m = Materializer{
+		ProcessorBase: m.ProcessorBase,
+		row:           m.row[:0],
+	}
+	materializerPool.Put(m)
 }

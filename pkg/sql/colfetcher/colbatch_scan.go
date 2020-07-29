@@ -12,6 +12,7 @@ package colfetcher
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -163,33 +164,34 @@ func NewColBatchScan(
 
 	neededColumns := helper.NeededColumns()
 
-	fetcher := cFetcher{}
+	fetcher := cFetcherPool.Get().(*cFetcher)
 	if spec.IsCheck {
 		// cFetchers don't support these checks.
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
+		flowCtx.Codec(), allocator, fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, sysColDescs,
 	); err != nil {
 		return nil, err
 	}
 
-	nSpans := len(spec.Spans)
-	spans := make(roachpb.Spans, nSpans)
-	for i := range spans {
-		spans[i] = spec.Spans[i].Span
+	s := colBatchScanPool.Get().(*ColBatchScan)
+	spans := s.spans
+	for i := range spec.Spans {
+		spans = append(spans, spec.Spans[i].Span)
 	}
-	return &ColBatchScan{
+	*s = ColBatchScan{
 		spans:     spans,
 		flowCtx:   flowCtx,
-		rf:        &fetcher,
+		rf:        fetcher,
 		limitHint: limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,
 		ResultTypes: typs,
-	}, nil
+	}
+	return s, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
@@ -272,4 +274,18 @@ func NewTableReader(
 		acc.Close(ctx)
 	}
 	return m, err
+}
+
+var colBatchScanPool = sync.Pool{
+	New: func() interface{} {
+		return &ColBatchScan{}
+	},
+}
+
+func (s *ColBatchScan) Release() {
+	s.rf.Release()
+	*s = ColBatchScan{
+		spans: s.spans[:0],
+	}
+	colBatchScanPool.Put(s)
 }

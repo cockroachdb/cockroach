@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -66,7 +67,7 @@ type cTableInfo struct {
 	neededValueColsByIdx util.FastIntSet
 
 	// Map used to get the index for columns in cols.
-	colIdxMap colIdxMap
+	colIdxMap *colIdxMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -262,6 +263,31 @@ type cFetcher struct {
 // TODO(yuzefovich): tune.
 const cFetcherInitialBatchSize = 1
 
+var cFetcherPool = sync.Pool{
+	New: func() interface{} {
+		return &cFetcher{
+			table: &cTableInfo{
+				colIdxMap: &colIdxMap{},
+			},
+		}
+	},
+}
+
+func (rf *cFetcher) Release() {
+	*rf.table = cTableInfo{
+		neededColsList:         rf.table.neededColsList[:0],
+		colIdxMap:              rf.table.colIdxMap,
+		indexColOrdinals:       rf.table.indexColOrdinals[:0],
+		allIndexColOrdinals:    rf.table.allIndexColOrdinals[:0],
+		extraValColOrdinals:    rf.table.extraValColOrdinals[:0],
+		allExtraValColOrdinals: rf.table.allExtraValColOrdinals[:0],
+	}
+	rf.table.colIdxMap.vals = rf.table.colIdxMap.vals[:0]
+	rf.table.colIdxMap.ords = rf.table.colIdxMap.ords[:0]
+	rf.machine.typs = rf.machine.typs[:0]
+	cFetcherPool.Put(rf)
+}
+
 // Init sets up a Fetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
@@ -286,17 +312,14 @@ func (rf *cFetcher) Init(
 
 	tableArgs := tables[0]
 
-	m := colIdxMap{
-		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
-		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
-	}
+	m := rf.table.colIdxMap
 	for k, v := range tableArgs.ColIdxMap {
 		m.vals = append(m.vals, k)
 		m.ords = append(m.ords, v)
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	table := &cTableInfo{
+	*rf.table = cTableInfo{
 		spans:              tableArgs.Spans,
 		desc:               tableArgs.Desc,
 		colIdxMap:          m,
@@ -306,9 +329,8 @@ func (rf *cFetcher) Init(
 		timestampOutputIdx: noTimestampColumn,
 	}
 
-	rf.machine.typs = make([]*types.T, len(colDescriptors))
-	for i := range rf.machine.typs {
-		rf.machine.typs[i] = colDescriptors[i].Type
+	for i := range colDescriptors {
+		rf.machine.typs = append(rf.machine.typs, colDescriptors[i].Type)
 	}
 
 	var err error
@@ -316,21 +338,20 @@ func (rf *cFetcher) Init(
 	var neededCols util.FastIntSet
 	// Scan through the entire columns map to see which columns are
 	// required.
-	table.neededColsList = make([]int, 0, tableArgs.ValNeededForCol.Len())
 	for col, idx := range tableArgs.ColIdxMap {
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.
 			neededCols.Add(int(col))
-			table.neededColsList = append(table.neededColsList, int(col))
+			rf.table.neededColsList = append(rf.table.neededColsList, int(col))
 			// If this column is the timestamp column, set up the output index.
 			sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
 			if sysColKind == sqlbase.SystemColumnKind_MVCCTIMESTAMP {
-				table.timestampOutputIdx = idx
+				rf.table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
 			}
 		}
 	}
-	sort.Ints(table.neededColsList)
+	sort.Ints(rf.table.neededColsList)
 
 	rf.machine.curBatchSize = cFetcherInitialBatchSize
 	if rf.machine.curBatchSize > coldata.BatchSize() {
@@ -341,57 +362,46 @@ func (rf *cFetcher) Init(
 	rf.machine.nextBatchSize = rf.machine.curBatchSize
 	// If the fetcher is requested to produce a timestamp column, pull out the
 	// column as a decimal and save it.
-	if table.timestampOutputIdx != noTimestampColumn {
-		rf.machine.timestampCol = rf.machine.colvecs[table.timestampOutputIdx].Decimal()
+	if rf.table.timestampOutputIdx != noTimestampColumn {
+		rf.machine.timestampCol = rf.machine.colvecs[rf.table.timestampOutputIdx].Decimal()
 	}
 
-	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc.TableDesc(), table.index.ID))
+	rf.table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, rf.table.desc.TableDesc(), rf.table.index.ID))
 
 	var indexColumnIDs []sqlbase.ColumnID
-	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
+	indexColumnIDs, rf.table.indexColumnDirs = rf.table.index.FullColumnIDs()
 
 	compositeColumnIDs := util.MakeFastIntSet()
-	for _, id := range table.index.CompositeColumnIDs {
+	for _, id := range rf.table.index.CompositeColumnIDs {
 		compositeColumnIDs.Add(int(id))
 	}
 
-	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
+	rf.table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 
 	// If system columns are requested, they are present in ValNeededForCol.
 	// However, we don't want to include them in neededValueColsByIdx, because
 	// the handling of system columns is separate from the standard value
 	// decoding process.
-	if table.timestampOutputIdx != noTimestampColumn {
-		table.neededValueColsByIdx.Remove(table.timestampOutputIdx)
+	if rf.table.timestampOutputIdx != noTimestampColumn {
+		rf.table.neededValueColsByIdx.Remove(rf.table.timestampOutputIdx)
 	}
 
 	neededIndexCols := 0
-	nIndexCols := len(indexColumnIDs)
-	if cap(table.indexColOrdinals) >= nIndexCols {
-		table.indexColOrdinals = table.indexColOrdinals[:nIndexCols]
-	} else {
-		table.indexColOrdinals = make([]int, nIndexCols)
-	}
-	if cap(table.allIndexColOrdinals) >= nIndexCols {
-		table.allIndexColOrdinals = table.allIndexColOrdinals[:nIndexCols]
-	} else {
-		table.allIndexColOrdinals = make([]int, nIndexCols)
-	}
-	for i, id := range indexColumnIDs {
+	for _, id := range indexColumnIDs {
 		colIdx, ok := tableArgs.ColIdxMap[id]
-		table.allIndexColOrdinals[i] = colIdx
+		rf.table.allIndexColOrdinals = append(rf.table.allIndexColOrdinals, colIdx)
 		if ok && neededCols.Contains(int(id)) {
-			table.indexColOrdinals[i] = colIdx
+			rf.table.indexColOrdinals = append(rf.table.indexColOrdinals, colIdx)
 			neededIndexCols++
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
 			if compositeColumnIDs.Contains(int(id)) {
-				table.compositeIndexColOrdinals.Add(colIdx)
+				rf.table.compositeIndexColOrdinals.Add(colIdx)
 			} else {
-				table.neededValueColsByIdx.Remove(colIdx)
+				rf.table.neededValueColsByIdx.Remove(colIdx)
 			}
 		} else {
-			table.indexColOrdinals[i] = -1
+			rf.table.indexColOrdinals = append(rf.table.indexColOrdinals, -1)
 			if neededCols.Contains(int(id)) {
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
@@ -400,14 +410,14 @@ func (rf *cFetcher) Init(
 	// Unique secondary indexes contain the extra column IDs as part of
 	// the value component. We process these separately, so we need to know
 	// what extra columns are composite or not.
-	if table.isSecondaryIndex && table.index.Unique {
-		for _, id := range table.index.ExtraColumnIDs {
+	if rf.table.isSecondaryIndex && rf.table.index.Unique {
+		for _, id := range rf.table.index.ExtraColumnIDs {
 			colIdx, ok := tableArgs.ColIdxMap[id]
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
-					table.compositeIndexColOrdinals.Add(colIdx)
+					rf.table.compositeIndexColOrdinals.Add(colIdx)
 				} else {
-					table.neededValueColsByIdx.Remove(colIdx)
+					rf.table.neededValueColsByIdx.Remove(colIdx)
 				}
 			}
 		}
@@ -418,49 +428,36 @@ func (rf *cFetcher) Init(
 	// - If there are needed columns from the index key, we need to read it.
 	//
 	// Otherwise, we can completely avoid decoding the index key.
-	if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
+	if neededIndexCols > 0 || len(rf.table.index.InterleavedBy) > 0 || len(rf.table.index.Interleave.Ancestors) > 0 {
 		rf.mustDecodeIndexKey = true
 	}
 
-	if table.isSecondaryIndex {
-		for i := range table.cols {
-			if neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
-				return errors.Errorf("requested column %s not in index", table.cols[i].Name)
+	if rf.table.isSecondaryIndex {
+		for i := range rf.table.cols {
+			if neededCols.Contains(int(rf.table.cols[i].ID)) && !rf.table.index.ContainsColumnID(rf.table.cols[i].ID) {
+				return errors.Errorf("requested column %s not in index", rf.table.cols[i].Name)
 			}
 		}
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
+	rf.table.keyValTypes, err = sqlbase.GetColumnTypes(rf.table.desc.TableDesc(), indexColumnIDs)
 	if err != nil {
 		return err
 	}
-	if cHasExtraCols(table) {
+	if cHasExtraCols(rf.table) {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
-		nExtraColumns := len(table.index.ExtraColumnIDs)
-		if cap(table.extraValColOrdinals) >= nExtraColumns {
-			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
-		} else {
-			table.extraValColOrdinals = make([]int, nExtraColumns)
-		}
-
-		if cap(table.allExtraValColOrdinals) >= nExtraColumns {
-			table.allExtraValColOrdinals = table.allExtraValColOrdinals[:nExtraColumns]
-		} else {
-			table.allExtraValColOrdinals = make([]int, nExtraColumns)
-		}
-
-		for i, id := range table.index.ExtraColumnIDs {
-			table.allExtraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+		rf.table.extraTypes, err = sqlbase.GetColumnTypes(rf.table.desc.TableDesc(), rf.table.index.ExtraColumnIDs)
+		for _, id := range rf.table.index.ExtraColumnIDs {
+			rf.table.allExtraValColOrdinals = append(rf.table.allExtraValColOrdinals, tableArgs.ColIdxMap[id])
 			if neededCols.Contains(int(id)) {
-				table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+				rf.table.extraValColOrdinals = append(rf.table.extraValColOrdinals, tableArgs.ColIdxMap[id])
 			} else {
-				table.extraValColOrdinals[i] = -1
+				rf.table.extraValColOrdinals = append(rf.table.extraValColOrdinals, -1)
 			}
 		}
 		if err != nil {
@@ -470,7 +467,7 @@ func (rf *cFetcher) Init(
 
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
-	keysPerRow, err := table.desc.KeysPerRow(table.index.ID)
+	keysPerRow, err := rf.table.desc.KeysPerRow(rf.table.index.ID)
 	if err != nil {
 		return err
 	}
@@ -478,14 +475,13 @@ func (rf *cFetcher) Init(
 		rf.maxKeysPerRow = keysPerRow
 	}
 
-	for i := range table.desc.Families {
-		id := table.desc.Families[i].ID
-		if id > table.maxColumnFamilyID {
-			table.maxColumnFamilyID = id
+	for i := range rf.table.desc.Families {
+		id := rf.table.desc.Families[i].ID
+		if id > rf.table.maxColumnFamilyID {
+			rf.table.maxColumnFamilyID = id
 		}
 	}
 
-	rf.table = table
 	// Change the allocation size to be the same as the capacity of the batch
 	// we allocated above.
 	rf.table.da.AllocSize = rf.machine.curBatchSize
