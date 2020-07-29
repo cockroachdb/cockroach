@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -128,6 +129,23 @@ func runBackupProcessor(
 			return err
 		}
 		storageByLocalityKV[kv] = &conf
+	}
+
+	// We do not want the KV layer to be interacting with external KMS services,
+	// and so we must provide the ExportRequest with plaintext DataKey which can
+	// directly be used to encrypt the data. This is the only place we send a
+	// plaintext DataKey over the wire.
+	// TODO(adityamaru): Do we need to wipe the key from the spec below?
+	if spec.Encryption != nil && spec.Encryption.Mode == roachpb.EncryptionMode_KMS {
+		kms, err := cloud.KMSFromURI(spec.Encryption.KMSInfo.Uri, &kmsEnv)
+		if err != nil {
+			return err
+		}
+
+		spec.Encryption.Key, err = kms.Decrypt(ctx, spec.Encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return errors.Wrap(err, "failed to decrypt data key before sending ExportRequest")
+		}
 	}
 
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {

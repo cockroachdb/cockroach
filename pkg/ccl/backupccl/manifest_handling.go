@@ -160,11 +160,20 @@ func readBackupManifest(
 		return BackupManifest{}, err
 	}
 	if encryption != nil {
-		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return BackupManifest{}, err
+		}
+		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return BackupManifest{}, err
 		}
 	}
+
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressData(descBytes)
@@ -177,7 +186,8 @@ func readBackupManifest(
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
 			return BackupManifest{}, errors.Wrapf(
-				err, "file appears encrypted -- try specifying %q", backupOptEncPassphrase)
+				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
+				backupOptEncPassphrase, backupOptEncKMS)
 		}
 		return BackupManifest{}, err
 	}
@@ -217,11 +227,20 @@ func readBackupPartitionDescriptor(
 		return BackupPartitionDescriptor{}, err
 	}
 	if encryption != nil {
-		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return BackupPartitionDescriptor{}, err
+		}
+		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return BackupPartitionDescriptor{}, err
 		}
 	}
+
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
 		descBytes, err = DecompressData(descBytes)
@@ -255,7 +274,15 @@ func readTableStatistics(
 		return nil, err
 	}
 	if encryption != nil {
-		statsBytes, err = storageccl.DecryptFile(statsBytes, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return nil, err
+		}
+		statsBytes, err = storageccl.DecryptFile(statsBytes, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -287,13 +314,49 @@ func writeBackupManifest(
 	}
 
 	if encryption != nil {
-		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return err
 		}
 	}
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+}
+
+func getEncryptionKey(
+	ctx context.Context, encryption *roachpb.FileEncryptionOptions,
+) ([]byte, error) {
+	if encryption == nil {
+		return nil, errors.New("FileEncryptionOptions is nil when retrieving encryption key")
+	}
+	switch encryption.Mode {
+	case roachpb.EncryptionMode_Passphrase:
+		return encryption.Key, nil
+	case roachpb.EncryptionMode_KMS:
+		// Contact the selected KMS to derive the decrypted data key.
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &kmsEnv)
+		if err != nil {
+			return nil, err
+		}
+		defer kms.Close()
+
+		plaintextDataKey, err := kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to decrypt data key")
+		}
+
+		return plaintextDataKey, nil
+	}
+
+	return nil, errors.New("invalid encryption mode")
 }
 
 // writeBackupPartitionDescriptor writes metadata (containing a locality KV and
@@ -315,7 +378,15 @@ func writeBackupPartitionDescriptor(
 		return errors.Wrap(err, "compressing backup partition descriptor")
 	}
 	if encryption != nil {
-		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return err
 		}
@@ -339,7 +410,15 @@ func writeTableStatistics(
 		return err
 	}
 	if encryption != nil {
-		statsBuf, err = storageccl.EncryptFile(statsBuf, encryption.Key)
+		encryptionKey, err := getEncryptionKey(ctx, encryption)
+		if err != nil {
+			return err
+		}
+		statsBuf, err = storageccl.EncryptFile(statsBuf, encryptionKey)
+		if encryption.Mode == roachpb.EncryptionMode_KMS {
+			// Zero out the variable holding the plaintext DataKey.
+			encryptionKey = nil
+		}
 		if err != nil {
 			return err
 		}

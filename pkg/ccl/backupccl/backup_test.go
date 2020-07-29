@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2911,13 +2913,7 @@ func TestBackupLevelDB(t *testing.T) {
 	}
 }
 
-func TestBackupEncrypted(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
-	defer cleanupFn()
-
+func setupBackupEncryptedTest(ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner) {
 	// Create a table with a name and content that we never see in cleartext in a
 	// backup. And while the content and name are user data and metadata, by also
 	// partitioning the table at the sentinel value, we can ensure it also appears
@@ -2950,49 +2946,32 @@ func TestBackupEncrypted(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER neverappears`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
 	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM neverappears.neverappears`)
+}
 
-	// Full cluster-backup to capture all possible metadata.
-	backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
-	backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-	backupLoc1inc := LocalFoo + "/inc1/x?COCKROACH_LOCALITY=default"
-	backupLoc2inc := LocalFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-
-	plainBackupLoc1 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=default"
-	plainBackupLoc2 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-
-	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
-
-	sqlDB.Exec(t, `BACKUP TO ($1, $2) WITH encryption_passphrase='abcdefg'`, backupLoc1, backupLoc2)
-	// Add the actual content with our sentinel too.
-	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
-	sqlDB.Exec(t, `BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH encryption_passphrase='abcdefg'`,
-		backupLoc1inc, backupLoc2inc, backupLoc1)
-
-	t.Run("check-stats-encrypted", func(t *testing.T) {
-		partitionMatcher := regexp.MustCompile(`BACKUP-STATISTICS`)
-		subDir := path.Join(rawDir, "foo")
-		err := filepath.Walk(subDir, func(fName string, info os.FileInfo, err error) error {
+func checkBackupStatsEncrypted(t *testing.T, rawDir string) {
+	partitionMatcher := regexp.MustCompile(`BACKUP-STATISTICS`)
+	subDir := path.Join(rawDir, "foo")
+	err := filepath.Walk(subDir, func(fName string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if partitionMatcher.MatchString(fName) {
+			statsBytes, err := ioutil.ReadFile(fName)
 			if err != nil {
 				return err
 			}
-			if partitionMatcher.MatchString(fName) {
-				statsBytes, err := ioutil.ReadFile(fName)
-				if err != nil {
-					return err
-				}
-				if strings.Contains(fName, "foo/cleartext") {
-					assert.False(t, storageccl.AppearsEncrypted(statsBytes))
-				} else {
-					assert.True(t, storageccl.AppearsEncrypted(statsBytes))
-				}
+			if strings.Contains(fName, "foo/cleartext") {
+				assert.False(t, storageccl.AppearsEncrypted(statsBytes))
+			} else {
+				assert.True(t, storageccl.AppearsEncrypted(statsBytes))
 			}
-			return nil
-		})
-		require.NoError(t, err)
+		}
+		return nil
 	})
+	require.NoError(t, err)
+}
 
-	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
-
+func checkBackupFilesEncrypted(t *testing.T, rawDir string) {
 	checkedFiles := 0
 	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() && !strings.Contains(path, "foo/cleartext") {
@@ -3012,18 +2991,142 @@ func TestBackupEncrypted(t *testing.T) {
 	if checkedFiles == 0 {
 		t.Fatal("test didn't didn't check any files")
 	}
+}
+
+func TestBackupEncryptedWithPassphrase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+	defer cleanupFn()
+
+	setupBackupEncryptedTest(ctx, t, sqlDB)
+
+	// Full cluster-backup to capture all possible metadata.
+	backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
+	backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+	backupLoc1inc := LocalFoo + "/inc1/x?COCKROACH_LOCALITY=default"
+	backupLoc2inc := LocalFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	plainBackupLoc1 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=default"
+	plainBackupLoc2 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2) WITH encryption_passphrase='abcdefg'`, backupLoc1, backupLoc2)
+	// Add the actual content with our sentinel too.
+	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
+	sqlDB.Exec(t, `BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH encryption_passphrase='abcdefg'`,
+		backupLoc1inc, backupLoc2inc, backupLoc1)
+
+	t.Run("check-stats-encrypted", func(t *testing.T) {
+		checkBackupStatsEncrypted(t, rawDir)
+	})
+
+	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+
+	checkBackupFilesEncrypted(t, rawDir)
 
 	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
 	sqlDB.Exec(t, `SHOW BACKUP $1 WITH encryption_passphrase='abcdefg'`, backupLoc1)
 	sqlDB.ExpectErr(t, `cipher: message authentication failed`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, backupLoc1)
-	sqlDB.ExpectErr(t, `file appears encrypted -- try specifying "encryption_passphrase"`, `SHOW BACKUP $1`, backupLoc1)
+	sqlDB.ExpectErr(t, `file appears encrypted -- try specifying one of "encryption_passphrase" or "kms_uri"`, `SHOW BACKUP $1`, backupLoc1)
 	sqlDB.ExpectErr(t, `could not find or read encryption information`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, plainBackupLoc1)
 
 	sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
 		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
 
 	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+}
+
+func TestBackupEncryptedWithKMS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// If environment credentials are not present, we want to
+	// skip all AWS KMS tests, including auth-implicit, even though
+	// it is not used in auth-implicit.
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	}
+
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
+		"AWS_REGION":            cloudimpl.KMSRegionParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+
+	// Get AWS Key ARN from env variable.
+	// TODO(adityamaru): Check if there is a way to specify this in the default
+	// role and if we can derive it from there instead?
+	keyARN := os.Getenv("AWS_KEY_ARN")
+	if keyARN == "" {
+		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+	}
+
+	// Set AUTH to implicit
+	q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
+
+	ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+	defer cleanupFn()
+
+	setupBackupEncryptedTest(ctx, t, sqlDB)
+
+	// Full cluster-backup to capture all possible metadata.
+	backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
+	backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+	backupLoc1inc := LocalFoo + "/inc1/x?COCKROACH_LOCALITY=default"
+	backupLoc2inc := LocalFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	plainBackupLoc1 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=default"
+	plainBackupLoc2 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
+
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) WITH kms_uri='%s'`, uri), backupLoc1,
+		backupLoc2)
+	// Add the actual content with our sentinel too.
+	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, 
+$2) INCREMENTAL FROM $3 WITH kms_uri='%s'`, uri), backupLoc1inc, backupLoc2inc, backupLoc1)
+
+	t.Run("check-stats-encrypted", func(t *testing.T) {
+		checkBackupStatsEncrypted(t, rawDir)
+	})
+
+	//before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+
+	checkBackupFilesEncrypted(t, rawDir)
+
+	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+
+	sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH kms_uri='%s'`, uri), backupLoc1)
+
+	wrongKeyURI := fmt.Sprintf("aws:///%s?%s", "gibberish", q.Encode())
+	sqlDB.ExpectErr(t, `one of the provided URIs was not used when encrypting the base BACKUP`,
+		fmt.Sprintf(`SHOW BACKUP $1 WITH kms_uri='%s'`, wrongKeyURI), backupLoc1)
+	sqlDB.ExpectErr(t,
+		`file appears encrypted -- try specifying one of "encryption_passphrase" or "kms_uri"`,
+		`SHOW BACKUP $1`, backupLoc1)
+	sqlDB.ExpectErr(t, `could not find or read encryption information`,
+		fmt.Sprintf(`SHOW BACKUP $1 WITH kms_uri='%s'`, uri), plainBackupLoc1)
+
+	// TODO(adityamaru): Uncomment once RESTORE side of KMS is done.
+	//sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
+	//	backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
+	//
+	//sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
 }
 
 func TestRestoredPrivileges(t *testing.T) {

@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[124];
+  static const ::google::protobuf::internal::ParseTable schema[125];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -216,6 +216,9 @@ extern ExternalStorage_WorkloadDefaultTypeInternal _ExternalStorage_Workload_def
 class FileEncryptionOptions;
 class FileEncryptionOptionsDefaultTypeInternal;
 extern FileEncryptionOptionsDefaultTypeInternal _FileEncryptionOptions_default_instance_;
+class FileEncryptionOptions_KMSInfo;
+class FileEncryptionOptions_KMSInfoDefaultTypeInternal;
+extern FileEncryptionOptions_KMSInfoDefaultTypeInternal _FileEncryptionOptions_KMSInfo_default_instance_;
 class GCRequest;
 class GCRequestDefaultTypeInternal;
 extern GCRequestDefaultTypeInternal _GCRequest_default_instance_;
@@ -486,6 +489,7 @@ template<> ::cockroach::roachpb::ExternalStorage_LocalFilePath* Arena::CreateMay
 template<> ::cockroach::roachpb::ExternalStorage_S3* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_S3>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_Workload* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Workload>(Arena*);
 template<> ::cockroach::roachpb::FileEncryptionOptions* Arena::CreateMaybeMessage<::cockroach::roachpb::FileEncryptionOptions>(Arena*);
+template<> ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* Arena::CreateMaybeMessage<::cockroach::roachpb::FileEncryptionOptions_KMSInfo>(Arena*);
 template<> ::cockroach::roachpb::GCRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest>(Arena*);
 template<> ::cockroach::roachpb::GCRequest_GCKey* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest_GCKey>(Arena*);
 template<> ::cockroach::roachpb::GCResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GCResponse>(Arena*);
@@ -661,6 +665,17 @@ bool MVCCFilter_IsValid(int value);
 const MVCCFilter MVCCFilter_MIN = Latest;
 const MVCCFilter MVCCFilter_MAX = All;
 const int MVCCFilter_ARRAYSIZE = MVCCFilter_MAX + 1;
+
+enum EncryptionMode {
+  Passphrase = 0,
+  KMS = 1,
+  EncryptionMode_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  EncryptionMode_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool EncryptionMode_IsValid(int value);
+const EncryptionMode EncryptionMode_MIN = Passphrase;
+const EncryptionMode EncryptionMode_MAX = KMS;
+const int EncryptionMode_ARRAYSIZE = EncryptionMode_MAX + 1;
 
 // ===================================================================
 
@@ -11028,6 +11043,130 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
 };
 // -------------------------------------------------------------------
 
+class FileEncryptionOptions_KMSInfo : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.FileEncryptionOptions.KMSInfo) */ {
+ public:
+  FileEncryptionOptions_KMSInfo();
+  virtual ~FileEncryptionOptions_KMSInfo();
+
+  FileEncryptionOptions_KMSInfo(const FileEncryptionOptions_KMSInfo& from);
+
+  inline FileEncryptionOptions_KMSInfo& operator=(const FileEncryptionOptions_KMSInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  FileEncryptionOptions_KMSInfo(FileEncryptionOptions_KMSInfo&& from) noexcept
+    : FileEncryptionOptions_KMSInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline FileEncryptionOptions_KMSInfo& operator=(FileEncryptionOptions_KMSInfo&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const FileEncryptionOptions_KMSInfo& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FileEncryptionOptions_KMSInfo* internal_default_instance() {
+    return reinterpret_cast<const FileEncryptionOptions_KMSInfo*>(
+               &_FileEncryptionOptions_KMSInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    82;
+
+  void Swap(FileEncryptionOptions_KMSInfo* other);
+  friend void swap(FileEncryptionOptions_KMSInfo& a, FileEncryptionOptions_KMSInfo& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FileEncryptionOptions_KMSInfo* New() const final {
+    return CreateMaybeMessage<FileEncryptionOptions_KMSInfo>(NULL);
+  }
+
+  FileEncryptionOptions_KMSInfo* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<FileEncryptionOptions_KMSInfo>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const FileEncryptionOptions_KMSInfo& from);
+  void MergeFrom(const FileEncryptionOptions_KMSInfo& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(FileEncryptionOptions_KMSInfo* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string uri = 1;
+  void clear_uri();
+  static const int kUriFieldNumber = 1;
+  const ::std::string& uri() const;
+  void set_uri(const ::std::string& value);
+  #if LANG_CXX11
+  void set_uri(::std::string&& value);
+  #endif
+  void set_uri(const char* value);
+  void set_uri(const char* value, size_t size);
+  ::std::string* mutable_uri();
+  ::std::string* release_uri();
+  void set_allocated_uri(::std::string* uri);
+
+  // bytes encrypted_data_key = 2;
+  void clear_encrypted_data_key();
+  static const int kEncryptedDataKeyFieldNumber = 2;
+  const ::std::string& encrypted_data_key() const;
+  void set_encrypted_data_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_encrypted_data_key(::std::string&& value);
+  #endif
+  void set_encrypted_data_key(const char* value);
+  void set_encrypted_data_key(const void* value, size_t size);
+  ::std::string* mutable_encrypted_data_key();
+  ::std::string* release_encrypted_data_key();
+  void set_allocated_encrypted_data_key(::std::string* encrypted_data_key);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr uri_;
+  ::google::protobuf::internal::ArenaStringPtr encrypted_data_key_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.FileEncryptionOptions) */ {
  public:
   FileEncryptionOptions();
@@ -11062,7 +11201,7 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
                &_FileEncryptionOptions_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    82;
+    83;
 
   void Swap(FileEncryptionOptions* other);
   friend void swap(FileEncryptionOptions& a, FileEncryptionOptions& b) {
@@ -11111,6 +11250,8 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
 
   // nested types ----------------------------------------------------
 
+  typedef FileEncryptionOptions_KMSInfo KMSInfo;
+
   // accessors -------------------------------------------------------
 
   // bytes key = 1;
@@ -11127,11 +11268,30 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
   ::std::string* release_key();
   void set_allocated_key(::std::string* key);
 
+  bool has_kms_info() const;
+  void clear_kms_info();
+  static const int kKmsInfoFieldNumber = 3;
+  private:
+  const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo& _internal_kms_info() const;
+  public:
+  const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo& kms_info() const;
+  ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* release_kms_info();
+  ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* mutable_kms_info();
+  void set_allocated_kms_info(::cockroach::roachpb::FileEncryptionOptions_KMSInfo* kms_info);
+
+  // .cockroach.roachpb.EncryptionMode mode = 2;
+  void clear_mode();
+  static const int kModeFieldNumber = 2;
+  ::cockroach::roachpb::EncryptionMode mode() const;
+  void set_mode(::cockroach::roachpb::EncryptionMode value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.FileEncryptionOptions)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr key_;
+  ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* kms_info_;
+  int mode_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -11190,7 +11350,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ExportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    84;
+    85;
 
   void Swap(ExportRequest* other);
   friend void swap(ExportRequest& a, ExportRequest& b) {
@@ -11400,7 +11560,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    87;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11531,7 +11691,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    88;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11707,7 +11867,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    89;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11839,7 +11999,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    90;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -11975,7 +12135,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    91;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -12090,7 +12250,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    92;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12260,7 +12420,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    93;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12378,7 +12538,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    94;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12491,7 +12651,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    95;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12597,7 +12757,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    96;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12717,7 +12877,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    97;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12861,7 +13021,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    98;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -12986,7 +13146,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    99;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -13133,7 +13293,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    100;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13239,7 +13399,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    101;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13357,7 +13517,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    102;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13463,7 +13623,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    103;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13581,7 +13741,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    104;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13687,7 +13847,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    105;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13817,7 +13977,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    106;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13954,7 +14114,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    107;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -14060,7 +14220,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    108;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14246,7 +14406,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    109;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -15013,7 +15173,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    110;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15719,7 +15879,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    111;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15930,7 +16090,7 @@ class ClientRangeInfo : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ClientRangeInfo_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    112;
 
   void Swap(ClientRangeInfo* other);
   friend void swap(ClientRangeInfo& a, ClientRangeInfo& b) {
@@ -16036,7 +16196,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    113;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16154,7 +16314,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    114;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16322,7 +16482,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    115;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16442,7 +16602,7 @@ class RangeLookupRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeLookupRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    116;
 
   void Swap(RangeLookupRequest* other);
   friend void swap(RangeLookupRequest& a, RangeLookupRequest& b) {
@@ -16571,7 +16731,7 @@ class RangeLookupResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeLookupResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    117;
 
   void Swap(RangeLookupResponse* other);
   friend void swap(RangeLookupResponse& a, RangeLookupResponse& b) {
@@ -16702,7 +16862,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    118;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16827,7 +16987,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    119;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16959,7 +17119,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    119;
+    120;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -17077,7 +17237,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    120;
+    121;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -17183,7 +17343,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    121;
+    122;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -17316,7 +17476,7 @@ class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@pr
                &_GossipSubscriptionRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    122;
+    123;
 
   void Swap(GossipSubscriptionRequest* other);
   friend void swap(GossipSubscriptionRequest& a, GossipSubscriptionRequest& b) {
@@ -17433,7 +17593,7 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
                &_GossipSubscriptionEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    123;
+    124;
 
   void Swap(GossipSubscriptionEvent* other);
   friend void swap(GossipSubscriptionEvent& a, GossipSubscriptionEvent& b) {
@@ -27210,7 +27370,131 @@ inline void WriteBatchResponse::set_allocated_header(::cockroach::roachpb::Respo
 
 // -------------------------------------------------------------------
 
+// FileEncryptionOptions_KMSInfo
+
+// string uri = 1;
+inline void FileEncryptionOptions_KMSInfo::clear_uri() {
+  uri_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& FileEncryptionOptions_KMSInfo::uri() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+  return uri_.GetNoArena();
+}
+inline void FileEncryptionOptions_KMSInfo::set_uri(const ::std::string& value) {
+  
+  uri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+}
+#if LANG_CXX11
+inline void FileEncryptionOptions_KMSInfo::set_uri(::std::string&& value) {
+  
+  uri_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+}
+#endif
+inline void FileEncryptionOptions_KMSInfo::set_uri(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  uri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+}
+inline void FileEncryptionOptions_KMSInfo::set_uri(const char* value, size_t size) {
+  
+  uri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+}
+inline ::std::string* FileEncryptionOptions_KMSInfo::mutable_uri() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+  return uri_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* FileEncryptionOptions_KMSInfo::release_uri() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+  
+  return uri_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void FileEncryptionOptions_KMSInfo::set_allocated_uri(::std::string* uri) {
+  if (uri != NULL) {
+    
+  } else {
+    
+  }
+  uri_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), uri);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri)
+}
+
+// bytes encrypted_data_key = 2;
+inline void FileEncryptionOptions_KMSInfo::clear_encrypted_data_key() {
+  encrypted_data_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& FileEncryptionOptions_KMSInfo::encrypted_data_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+  return encrypted_data_key_.GetNoArena();
+}
+inline void FileEncryptionOptions_KMSInfo::set_encrypted_data_key(const ::std::string& value) {
+  
+  encrypted_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+}
+#if LANG_CXX11
+inline void FileEncryptionOptions_KMSInfo::set_encrypted_data_key(::std::string&& value) {
+  
+  encrypted_data_key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+}
+#endif
+inline void FileEncryptionOptions_KMSInfo::set_encrypted_data_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  encrypted_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+}
+inline void FileEncryptionOptions_KMSInfo::set_encrypted_data_key(const void* value, size_t size) {
+  
+  encrypted_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+}
+inline ::std::string* FileEncryptionOptions_KMSInfo::mutable_encrypted_data_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+  return encrypted_data_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* FileEncryptionOptions_KMSInfo::release_encrypted_data_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+  
+  return encrypted_data_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void FileEncryptionOptions_KMSInfo::set_allocated_encrypted_data_key(::std::string* encrypted_data_key) {
+  if (encrypted_data_key != NULL) {
+    
+  } else {
+    
+  }
+  encrypted_data_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), encrypted_data_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FileEncryptionOptions.KMSInfo.encrypted_data_key)
+}
+
+// -------------------------------------------------------------------
+
 // FileEncryptionOptions
+
+// .cockroach.roachpb.EncryptionMode mode = 2;
+inline void FileEncryptionOptions::clear_mode() {
+  mode_ = 0;
+}
+inline ::cockroach::roachpb::EncryptionMode FileEncryptionOptions::mode() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FileEncryptionOptions.mode)
+  return static_cast< ::cockroach::roachpb::EncryptionMode >(mode_);
+}
+inline void FileEncryptionOptions::set_mode(::cockroach::roachpb::EncryptionMode value) {
+  
+  mode_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.FileEncryptionOptions.mode)
+}
 
 // bytes key = 1;
 inline void FileEncryptionOptions::clear_key() {
@@ -27263,6 +27547,59 @@ inline void FileEncryptionOptions::set_allocated_key(::std::string* key) {
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FileEncryptionOptions.key)
+}
+
+inline bool FileEncryptionOptions::has_kms_info() const {
+  return this != internal_default_instance() && kms_info_ != NULL;
+}
+inline void FileEncryptionOptions::clear_kms_info() {
+  if (GetArenaNoVirtual() == NULL && kms_info_ != NULL) {
+    delete kms_info_;
+  }
+  kms_info_ = NULL;
+}
+inline const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo& FileEncryptionOptions::_internal_kms_info() const {
+  return *kms_info_;
+}
+inline const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo& FileEncryptionOptions::kms_info() const {
+  const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* p = kms_info_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FileEncryptionOptions.kms_info)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::FileEncryptionOptions_KMSInfo*>(
+      &::cockroach::roachpb::_FileEncryptionOptions_KMSInfo_default_instance_);
+}
+inline ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* FileEncryptionOptions::release_kms_info() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FileEncryptionOptions.kms_info)
+  
+  ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* temp = kms_info_;
+  kms_info_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* FileEncryptionOptions::mutable_kms_info() {
+  
+  if (kms_info_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::FileEncryptionOptions_KMSInfo>(GetArenaNoVirtual());
+    kms_info_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FileEncryptionOptions.kms_info)
+  return kms_info_;
+}
+inline void FileEncryptionOptions::set_allocated_kms_info(::cockroach::roachpb::FileEncryptionOptions_KMSInfo* kms_info) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete kms_info_;
+  }
+  if (kms_info) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      kms_info = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, kms_info, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  kms_info_ = kms_info;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FileEncryptionOptions.kms_info)
 }
 
 // -------------------------------------------------------------------
@@ -36244,6 +36581,8 @@ inline void GossipSubscriptionEvent::set_allocated_error(::cockroach::roachpb::E
 
 // -------------------------------------------------------------------
 
+// -------------------------------------------------------------------
+
 
 // @@protoc_insertion_point(namespace_scope)
 
@@ -36261,6 +36600,7 @@ template <> struct is_proto_enum< ::cockroach::roachpb::ChecksumMode> : ::std::t
 template <> struct is_proto_enum< ::cockroach::roachpb::PushTxnType> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::ExternalStorageProvider> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::MVCCFilter> : ::std::true_type {};
+template <> struct is_proto_enum< ::cockroach::roachpb::EncryptionMode> : ::std::true_type {};
 
 }  // namespace protobuf
 }  // namespace google

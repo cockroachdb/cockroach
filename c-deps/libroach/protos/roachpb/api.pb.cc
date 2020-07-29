@@ -27,7 +27,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_LocalFilePath;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_S3;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ExternalStorage_Workload;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions_KMSInfo;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ImportRequest_TableRekey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RequestHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableResponse;
@@ -51,6 +51,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_FileEncryptionOptions;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCRequest_GCKey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GetRequest;
@@ -578,6 +579,11 @@ class WriteBatchResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<WriteBatchResponse>
       _instance;
 } _WriteBatchResponse_default_instance_;
+class FileEncryptionOptions_KMSInfoDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<FileEncryptionOptions_KMSInfo>
+      _instance;
+} _FileEncryptionOptions_KMSInfo_default_instance_;
 class FileEncryptionOptionsDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<FileEncryptionOptions>
@@ -2152,6 +2158,20 @@ static void InitDefaultsWriteBatchResponse() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsWriteBatchResponse}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
 
+static void InitDefaultsFileEncryptionOptions_KMSInfo() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_FileEncryptionOptions_KMSInfo_default_instance_;
+    new (ptr) ::cockroach::roachpb::FileEncryptionOptions_KMSInfo();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::FileEncryptionOptions_KMSInfo::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions_KMSInfo =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsFileEncryptionOptions_KMSInfo}, {}};
+
 static void InitDefaultsFileEncryptionOptions() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2163,8 +2183,9 @@ static void InitDefaultsFileEncryptionOptions() {
   ::cockroach::roachpb::FileEncryptionOptions::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<0> scc_info_FileEncryptionOptions =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsFileEncryptionOptions}, {}};
+::google::protobuf::internal::SCCInfo<1> scc_info_FileEncryptionOptions =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsFileEncryptionOptions}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions_KMSInfo.base,}};
 
 static void InitDefaultsExportRequest_StorageByLocalityKvEntry_DoNotUse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2981,6 +3002,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ExternalStorage.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_WriteBatchResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_FileEncryptionOptions_KMSInfo.base);
   ::google::protobuf::internal::InitSCC(&scc_info_FileEncryptionOptions.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest_StorageByLocalityKvEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ExportRequest.base);
@@ -3128,6 +3150,16 @@ bool ExternalStorageProvider_IsValid(int value) {
 }
 
 bool MVCCFilter_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool EncryptionMode_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:
@@ -24171,10 +24203,247 @@ void WriteBatchResponse::InternalSwap(WriteBatchResponse* other) {
 
 // ===================================================================
 
-void FileEncryptionOptions::InitAsDefaultInstance() {
+void FileEncryptionOptions_KMSInfo::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int FileEncryptionOptions_KMSInfo::kUriFieldNumber;
+const int FileEncryptionOptions_KMSInfo::kEncryptedDataKeyFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+FileEncryptionOptions_KMSInfo::FileEncryptionOptions_KMSInfo()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions_KMSInfo.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+}
+FileEncryptionOptions_KMSInfo::FileEncryptionOptions_KMSInfo(const FileEncryptionOptions_KMSInfo& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  uri_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.uri().size() > 0) {
+    uri_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.uri_);
+  }
+  encrypted_data_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.encrypted_data_key().size() > 0) {
+    encrypted_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.encrypted_data_key_);
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+}
+
+void FileEncryptionOptions_KMSInfo::SharedCtor() {
+  uri_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  encrypted_data_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+FileEncryptionOptions_KMSInfo::~FileEncryptionOptions_KMSInfo() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  SharedDtor();
+}
+
+void FileEncryptionOptions_KMSInfo::SharedDtor() {
+  uri_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  encrypted_data_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void FileEncryptionOptions_KMSInfo::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const FileEncryptionOptions_KMSInfo& FileEncryptionOptions_KMSInfo::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_FileEncryptionOptions_KMSInfo.base);
+  return *internal_default_instance();
+}
+
+
+void FileEncryptionOptions_KMSInfo::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  uri_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  encrypted_data_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _internal_metadata_.Clear();
+}
+
+bool FileEncryptionOptions_KMSInfo::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // string uri = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_uri()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->uri().data(), static_cast<int>(this->uri().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bytes encrypted_data_key = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_encrypted_data_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  return false;
+#undef DO_
+}
+
+void FileEncryptionOptions_KMSInfo::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // string uri = 1;
+  if (this->uri().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->uri().data(), static_cast<int>(this->uri().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.FileEncryptionOptions.KMSInfo.uri");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->uri(), output);
+  }
+
+  // bytes encrypted_data_key = 2;
+  if (this->encrypted_data_key().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      2, this->encrypted_data_key(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+}
+
+size_t FileEncryptionOptions_KMSInfo::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // string uri = 1;
+  if (this->uri().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->uri());
+  }
+
+  // bytes encrypted_data_key = 2;
+  if (this->encrypted_data_key().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->encrypted_data_key());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void FileEncryptionOptions_KMSInfo::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const FileEncryptionOptions_KMSInfo*>(&from));
+}
+
+void FileEncryptionOptions_KMSInfo::MergeFrom(const FileEncryptionOptions_KMSInfo& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.uri().size() > 0) {
+
+    uri_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.uri_);
+  }
+  if (from.encrypted_data_key().size() > 0) {
+
+    encrypted_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.encrypted_data_key_);
+  }
+}
+
+void FileEncryptionOptions_KMSInfo::CopyFrom(const FileEncryptionOptions_KMSInfo& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.FileEncryptionOptions.KMSInfo)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool FileEncryptionOptions_KMSInfo::IsInitialized() const {
+  return true;
+}
+
+void FileEncryptionOptions_KMSInfo::Swap(FileEncryptionOptions_KMSInfo* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void FileEncryptionOptions_KMSInfo::InternalSwap(FileEncryptionOptions_KMSInfo* other) {
+  using std::swap;
+  uri_.Swap(&other->uri_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  encrypted_data_key_.Swap(&other->encrypted_data_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string FileEncryptionOptions_KMSInfo::GetTypeName() const {
+  return "cockroach.roachpb.FileEncryptionOptions.KMSInfo";
+}
+
+
+// ===================================================================
+
+void FileEncryptionOptions::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_FileEncryptionOptions_default_instance_._instance.get_mutable()->kms_info_ = const_cast< ::cockroach::roachpb::FileEncryptionOptions_KMSInfo*>(
+      ::cockroach::roachpb::FileEncryptionOptions_KMSInfo::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int FileEncryptionOptions::kModeFieldNumber;
 const int FileEncryptionOptions::kKeyFieldNumber;
+const int FileEncryptionOptions::kKmsInfoFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 FileEncryptionOptions::FileEncryptionOptions()
@@ -24192,11 +24461,20 @@ FileEncryptionOptions::FileEncryptionOptions(const FileEncryptionOptions& from)
   if (from.key().size() > 0) {
     key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
   }
+  if (from.has_kms_info()) {
+    kms_info_ = new ::cockroach::roachpb::FileEncryptionOptions_KMSInfo(*from.kms_info_);
+  } else {
+    kms_info_ = NULL;
+  }
+  mode_ = from.mode_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.FileEncryptionOptions)
 }
 
 void FileEncryptionOptions::SharedCtor() {
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(&kms_info_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&mode_) -
+      reinterpret_cast<char*>(&kms_info_)) + sizeof(mode_));
 }
 
 FileEncryptionOptions::~FileEncryptionOptions() {
@@ -24206,6 +24484,7 @@ FileEncryptionOptions::~FileEncryptionOptions() {
 
 void FileEncryptionOptions::SharedDtor() {
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (this != internal_default_instance()) delete kms_info_;
 }
 
 void FileEncryptionOptions::SetCachedSize(int size) const {
@@ -24224,6 +24503,11 @@ void FileEncryptionOptions::Clear() {
   (void) cached_has_bits;
 
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (GetArenaNoVirtual() == NULL && kms_info_ != NULL) {
+    delete kms_info_;
+  }
+  kms_info_ = NULL;
+  mode_ = 0;
   _internal_metadata_.Clear();
 }
 
@@ -24249,6 +24533,32 @@ bool FileEncryptionOptions::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // .cockroach.roachpb.EncryptionMode mode = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_mode(static_cast< ::cockroach::roachpb::EncryptionMode >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_kms_info()));
         } else {
           goto handle_unusual;
         }
@@ -24287,6 +24597,17 @@ void FileEncryptionOptions::SerializeWithCachedSizes(
       1, this->key(), output);
   }
 
+  // .cockroach.roachpb.EncryptionMode mode = 2;
+  if (this->mode() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      2, this->mode(), output);
+  }
+
+  if (this->has_kms_info()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_kms_info(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.FileEncryptionOptions)
@@ -24303,6 +24624,18 @@ size_t FileEncryptionOptions::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->key());
+  }
+
+  if (this->has_kms_info()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *kms_info_);
+  }
+
+  // .cockroach.roachpb.EncryptionMode mode = 2;
+  if (this->mode() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->mode());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -24326,6 +24659,12 @@ void FileEncryptionOptions::MergeFrom(const FileEncryptionOptions& from) {
 
     key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
   }
+  if (from.has_kms_info()) {
+    mutable_kms_info()->::cockroach::roachpb::FileEncryptionOptions_KMSInfo::MergeFrom(from.kms_info());
+  }
+  if (from.mode() != 0) {
+    set_mode(from.mode());
+  }
 }
 
 void FileEncryptionOptions::CopyFrom(const FileEncryptionOptions& from) {
@@ -24347,6 +24686,8 @@ void FileEncryptionOptions::InternalSwap(FileEncryptionOptions* other) {
   using std::swap;
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
+  swap(kms_info_, other->kms_info_);
+  swap(mode_, other->mode_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -39844,6 +40185,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchRe
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::WriteBatchResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::WriteBatchResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::WriteBatchResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::FileEncryptionOptions_KMSInfo* Arena::CreateMaybeMessage< ::cockroach::roachpb::FileEncryptionOptions_KMSInfo >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::FileEncryptionOptions_KMSInfo >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::FileEncryptionOptions* Arena::CreateMaybeMessage< ::cockroach::roachpb::FileEncryptionOptions >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::FileEncryptionOptions >(arena);

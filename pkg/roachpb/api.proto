@@ -1378,10 +1378,36 @@ enum MVCCFilter {
   All = 1;
 }
 
+enum EncryptionMode {
+  Passphrase = 0;
+  KMS = 1;
+}
+
 message FileEncryptionOptions {
   option (gogoproto.equal) = true;
-  // Key specifies the key to use for encryption or decryption.
+
+  EncryptionMode mode = 2;
+
+  // When mode==passphrase, Key specifies the passphrase generated key to use
+  // for encryption or decryption.
+  //
+  // When mode==KMS, Key specifies the plaintext DataKey to use for encryption
+  // or decryption. This is ONLY set before an ExportRequest is issued because
+  // we do not want the KV layer to interact with external KMS services. All
+  // other non-KV layer encryption and decryption operations must use kms_info
+  // to contact the KMS and decrypt the encrypted DataKey in place.
   bytes key = 1;
+
+  message KMSInfo {
+    option (gogoproto.equal) = true;
+
+    string uri = 1;
+    bytes encrypted_data_key = 2;
+  }
+
+  // KMSInfo specifies the KMS and encrypted DataKey pair to use for
+  // encryption or decryption when mode == KMS.
+  KMSInfo kms_info  = 3 [(gogoproto.customname) = "KMSInfo"];
 }
 
 // ExportRequest is the argument to the Export() method, to dump a keyrange into

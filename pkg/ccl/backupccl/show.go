@@ -55,6 +55,7 @@ func showBackupPlanHook(
 
 	expected := map[string]sql.KVStringOptValidate{
 		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
+		backupOptEncKMS:         sql.KVStringOptRequireValue,
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
@@ -100,6 +101,20 @@ func showBackupPlanHook(
 			}
 			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
 			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+		} else if kms, ok := opts[backupOptEncKMS]; ok {
+			opts, err := readEncryptionOptions(ctx, store)
+			if err != nil {
+				return err
+			}
+
+			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup([]string{kms},
+				opts.EncryptedDataKeyByKMSMasterKeyID, &kmsEnv)
+			if err != nil {
+				return err
+			}
+			encryption = &roachpb.FileEncryptionOptions{
+				Mode:    roachpb.EncryptionMode_KMS,
+				KMSInfo: defaultKMSInfo}
 		}
 
 		incPaths, err := findPriorBackups(ctx, store)
