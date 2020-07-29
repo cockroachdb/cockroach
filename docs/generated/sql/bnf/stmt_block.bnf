@@ -761,6 +761,7 @@ unreserved_keyword ::=
 	| 'JSON'
 	| 'KEY'
 	| 'KEYS'
+	| 'KMS_URI'
 	| 'KV'
 	| 'LANGUAGE'
 	| 'LAST'
@@ -1441,6 +1442,7 @@ backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
+	| 'KMS_URI' '=' kms_uri
 
 c_expr ::=
 	d_expr
@@ -1831,6 +1833,10 @@ role_option ::=
 	| 'NOLOGIN'
 	| password_clause
 	| valid_until_clause
+
+kms_uri ::=
+	string_or_placeholder
+	| '(' string_or_placeholder_list ')'
 
 d_expr ::=
 	'ICONST'

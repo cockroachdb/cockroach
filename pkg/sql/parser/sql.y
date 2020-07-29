@@ -532,6 +532,9 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacement {
     return u.val.(*tree.AlterTypeAddValuePlacement)
 }
+func (u *sqlSymUnion) kmsURI() tree.PartitionedKMSEncryption {
+    return u.val.(tree.PartitionedKMSEncryption)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -596,7 +599,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
-%token <str> KEY KEYS KV
+%token <str> KEY KEYS KMS_URI KV
 
 %token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
@@ -788,6 +791,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> restore_stmt
 %type <tree.PartitionedBackup> partitioned_backup
 %type <[]tree.PartitionedBackup> partitioned_backup_list
+%type <tree.PartitionedBackup> kms_uri
 %type <tree.Statement> revoke_stmt
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
@@ -2029,7 +2033,8 @@ alter_attribute_action:
 // Options:
 //    revision_history: enable revision history
 //    encryption_passphrase="secret": encrypt backups
-//    detached: execute backup job asynchronously, without waiting for its completion.
+//    kms_uri="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
+//    detached: execute backup job asynchronously, without waiting for its completion
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2106,6 +2111,20 @@ backup_options:
 | DETACHED
   {
     $$.val = &tree.BackupOptions{Detached: true}
+  }
+| KMS_URI '=' kms_uri
+	{
+		$$.val = &tree.BackupOptions{EncryptionKMSURI: $3.kmsURI()}
+	}
+
+kms_uri:
+  string_or_placeholder
+  {
+    $$.val = tree.PartitionedKMSEncryption{$1.expr()}
+  }
+| '(' string_or_placeholder_list ')'
+  {
+    $$.val = tree.PartitionedKMSEncryption($2.exprs())
   }
 
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
@@ -10708,6 +10727,7 @@ unreserved_keyword:
 | JSON
 | KEY
 | KEYS
+| KMS_URI
 | KV
 | LANGUAGE
 | LAST

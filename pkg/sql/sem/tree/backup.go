@@ -10,7 +10,11 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
+import (
+	"reflect"
+
+	"github.com/cockroachdb/errors"
+)
 
 // DescriptorCoverage specifies whether or not a subset of descriptors were
 // requested or if all the descriptors were requested, so all the descriptors
@@ -36,6 +40,7 @@ type BackupOptions struct {
 	CaptureRevisionHistory bool
 	EncryptionPassphrase   Expr
 	Detached               bool
+	EncryptionKMSURI       PartitionedKMSEncryption
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -152,6 +157,20 @@ func (node *PartitionedBackup) Format(ctx *FmtCtx) {
 	}
 }
 
+// PartitionedKMSEncryption is a list of KMS URIs for a single encrypted BACKUP.
+type PartitionedKMSEncryption []Expr
+
+// Format implements the NodeFormatter interface.
+func (node *PartitionedKMSEncryption) Format(ctx *FmtCtx) {
+	if len(*node) > 1 {
+		ctx.WriteString("(")
+	}
+	ctx.FormatNode((*Exprs)(node))
+	if len(*node) > 1 {
+		ctx.WriteString(")")
+	}
+}
+
 // Format implements the NodeFormatter interface
 func (o *BackupOptions) Format(ctx *FmtCtx) {
 	var addSep bool
@@ -175,6 +194,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 	if o.Detached {
 		maybeAddSep()
 		ctx.WriteString("detached")
+	}
+
+	if o.EncryptionKMSURI != nil {
+		maybeAddSep()
+		ctx.WriteString("kms_uri=")
+		o.EncryptionKMSURI.Format(ctx)
 	}
 }
 
@@ -203,10 +228,19 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.Detached = other.Detached
 	}
 
+	if o.EncryptionKMSURI == nil {
+		o.EncryptionKMSURI = other.EncryptionKMSURI
+	} else if other.EncryptionKMSURI != nil {
+		return errors.New("kms_uri specified multiple times")
+	}
+
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (o BackupOptions) IsDefault() bool {
-	return o == BackupOptions{}
+	options := BackupOptions{}
+	return o.CaptureRevisionHistory == options.CaptureRevisionHistory && o.Detached == options.
+		Detached && reflect.DeepEqual(o.EncryptionKMSURI, options.EncryptionKMSURI) && o.
+		EncryptionPassphrase == options.EncryptionPassphrase
 }
