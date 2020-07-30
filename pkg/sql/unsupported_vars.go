@@ -10,6 +10,29 @@
 
 package sql
 
+import "github.com/cockroachdb/cockroach/pkg/settings"
+
+// DummyVars contains a list of dummy vars we do not support that
+// PostgreSQL does, but are required as an easy fix to make certain
+// tooling/ORMs work. These vars should not affect the correctness
+// of results.
+var DummyVars = map[string]sessionVar{
+	"enable_seqscan": makeDummyBooleanSessionVar(
+		"enable_seqscan",
+		func(m *sessionDataMutator, v bool) {
+			m.SetEnableSeqScan(v)
+		},
+		func(sv *settings.Values) string { return "on" },
+	),
+	"synchronous_commit": makeDummyBooleanSessionVar(
+		"synchronous_commit",
+		func(m *sessionDataMutator, v bool) {
+			m.SetSynchronousCommit(v)
+		},
+		func(sv *settings.Values) string { return "on" },
+	),
+}
+
 // UnsupportedVars contains the set of PostgreSQL session variables
 // and client parameters that are not supported in CockroachDB.
 // These are used to produce error messages and telemetry.
@@ -70,7 +93,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"enable_material",
 	"enable_mergejoin",
 	"enable_nestloop",
-	"enable_seqscan",
+	//"enable_seqscan",
 	"enable_sort",
 	"enable_tidscan",
 	"escape_string_warning",
@@ -136,7 +159,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "standard_conforming_strings",
 	// "statement_timeout",
 	//	"synchronize_seqscans",
-	"synchronous_commit",
+	// "synchronous_commit",
 	"tcp_keepalives_count",
 	"tcp_keepalives_idle",
 	"tcp_keepalives_interval",

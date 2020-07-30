@@ -114,6 +114,29 @@ func parseBoolVar(varName, val string) (bool, error) {
 	return b, nil
 }
 
+// makeDummyBooleanSessionVar generates a sessionVar for a bool session setting.
+// These functions allow the setting to be changed, but whose values are not used.
+// They are logged to telemetry and output a notice that these are unused.
+func makeDummyBooleanSessionVar(
+	name string, setFunc func(*sessionDataMutator, bool), sv func(_ *settings.Values) string,
+) sessionVar {
+	return sessionVar{
+		GetStringVal: makePostgresBoolGetStringValFn(name),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar(name, s)
+			if err != nil {
+				return err
+			}
+			setFunc(m, b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultReadOnly)
+		},
+		GlobalDefault: sv,
+	}
+}
+
 // varGen is the main definition array for all session variables.
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
@@ -1143,6 +1166,9 @@ var varGen = map[string]sessionVar{
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
 func init() {
+	for k, v := range DummyVars {
+		varGen[k] = v
+	}
 	// Initialize delegate.ValidVars.
 	for v := range varGen {
 		delegate.ValidVars[v] = struct{}{}

@@ -31,3 +31,10 @@ var ForceSavepointRestartCounter = telemetry.GetCounterOnce("sql.force_savepoint
 func UnimplementedSessionVarValueCounter(varName, val string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("unimplemented.sql.session_var.%s.%s", varName, val))
 }
+
+// DummySessionVarValueCounter is to be incremented every time
+// a client attempts to set a compatitibility session var to a
+// dummy value.
+func DummySessionVarValueCounter(varName string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.session_var.dummy.%s", varName))
+}
