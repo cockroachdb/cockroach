@@ -94,7 +94,34 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 // as it goes, readying the families for another found of registry additions.
 func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 	for _, family := range pm.families {
-		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
+		cow := family
+		// TODO(tbg) here!
+		for i, metric := range family.Metric {
+			var skip bool
+			for _, lp := range metric.Label {
+				if *lp.Name == "tenant_id" {
+					// Skip this metric.
+					skip = true
+					break
+				}
+			}
+
+			if skip {
+				// If this is the first one we're skipping, copy previous items. Other-
+				// wise, just don't add.
+				if cow == family {
+					tmp := *family
+					cow = &tmp
+					cow.Metric = nil
+					cow.Metric = append(cow.Metric, family.Metric[:i]...)
+				}
+			} else if cow != family {
+				// If operating on a copy, add the current metric to copy as it is not
+				// being skipped.
+				cow.Metric = append(cow.Metric, metric)
+			}
+		}
+		if _, err := expfmt.MetricFamilyToText(w, cow); err != nil {
 			return err
 		}
 	}

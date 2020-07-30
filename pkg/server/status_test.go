@@ -1157,11 +1157,14 @@ func TestStatusVars(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
+	s.StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+
+	body, err := getText(s, s.AdminURL()+statusPrefix+"vars")
+	require.NoError(t, err)
+	if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
 	}
+	t.Error(string(body))
 }
 
 func TestSpanStatsResponse(t *testing.T) {
