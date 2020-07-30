@@ -169,6 +169,22 @@ func (b *Builder) Build() (err error) {
 		}
 	}()
 
+	// TODO (rohany): We shouldn't be modifying the semaCtx passed to the builder
+	//  but we unfortunately rely on mutation to the semaCtx. We modify the input
+	//  semaCtx during building of opaque statements, and then expect that those
+	//  mutations are visible on the planner's semaCtx.
+
+	// Hijack the input TypeResolver in the semaCtx to record all of the user
+	// defined types that we resolve while building this query.
+	existingResolver := b.semaCtx.TypeResolver
+	// Ensure that the original TypeResolver is reset after.
+	defer func() { b.semaCtx.TypeResolver = existingResolver }()
+	typeTracker := &optTrackingTypeResolver{
+		res:      b.semaCtx.TypeResolver,
+		metadata: b.factory.Metadata(),
+	}
+	b.semaCtx.TypeResolver = typeTracker
+
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
@@ -378,4 +394,35 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 			}
 		}
 	}
+}
+
+// optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
+// remembers all of the resolved types in the provided Metadata.
+type optTrackingTypeResolver struct {
+	res      tree.TypeReferenceResolver
+	metadata *opt.Metadata
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (o *optTrackingTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	typ, err := o.res.ResolveType(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	o.metadata.AddUserDefinedType(typ)
+	return typ, nil
+}
+
+// ResolveTypeByID implements the tree.TypeResolver interface.
+func (o *optTrackingTypeResolver) ResolveTypeByID(
+	ctx context.Context, id uint32,
+) (*types.T, error) {
+	typ, err := o.res.ResolveTypeByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	o.metadata.AddUserDefinedType(typ)
+	return typ, nil
 }

@@ -31,6 +31,31 @@ import (
 func TestNewStoreSpec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const examplePebbleOptions = `[Version]
+pebble_version=0.1
+[Options]
+bytes_per_sync=524288
+cleaner=delete
+disable_wal=true
+l0_compaction_threshold=4
+l0_stop_writes_threshold=12
+lbase_max_bytes=67108864
+max_concurrent_compactions=1
+max_manifest_file_size=134217728
+max_open_files=1000
+mem_table_size=4194304
+mem_table_stop_writes_threshold=2
+min_compaction_rate=4194304
+min_flush_rate=1048576
+table_property_collectors=[]
+wal_dir=
+[Level "0"]
+block_restart_interval=16
+block_size=4096
+compression=Snappy
+index_block_size=4096
+target_file_size=2097152`
+
 	testCases := []struct {
 		value       string
 		expectedErr string
@@ -121,6 +146,12 @@ func TestNewStoreSpec(t *testing.T) {
 
 		// RocksDB
 		{"path=/,rocksdb=key1=val1;key2=val2", "", StoreSpec{Path: "/", RocksDBOptions: "key1=val1;key2=val2"}},
+
+		// Pebble
+		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",
+			PebbleOptions: "[Options]\nl0_compaction_threshold=2\nl0_stop_writes_threshold=10"}},
+		{fmt.Sprintf("path=/,pebble=%s", examplePebbleOptions), "", StoreSpec{Path: "/", PebbleOptions: examplePebbleOptions}},
+		{"path=/mnt/hda1,pebble=[Options] not_a_real_option=10", "pebble: unknown option: Options.not_a_real_option", StoreSpec{}},
 
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{

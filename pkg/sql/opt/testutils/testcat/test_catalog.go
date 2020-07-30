@@ -170,6 +170,11 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
+// ResolveTypeByID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
+	return nil, errors.Newf("test catalog cannot handle user defined types")
+}
+
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	return tc.CheckAnyPrivilege(ctx, o)
