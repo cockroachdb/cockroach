@@ -2176,8 +2176,8 @@ func cmdLogFileName(t time.Time, nodes nodeListOption, args ...string) string {
 
 // RunE runs a command on the specified node, returning an error. The output
 // will be redirected to a file which is logged via the cluster-wide logger in
-// case of an error. Logs will sort chronologically and those belonging to
-// failing invocations will be suffixed `.failed.log`.
+// case of an error. Logs will sort chronologically. Failing invocations will
+// have an additional marker file with a `.failed` extension instead of `.log`.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
 	cmdString := strings.Join(args, " ")
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
@@ -2196,7 +2196,10 @@ func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string)
 	physicalFileName := l.file.Name()
 	l.close()
 	if err != nil {
-		_ = os.Rename(physicalFileName, strings.TrimSuffix(physicalFileName, ".log")+".failed.log")
+		failedPhysicalFileName := strings.TrimSuffix(physicalFileName, ".log") + ".failed"
+		if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
+			failedFile.Close()
+		}
 	}
 	err = errors.Wrapf(err, "output in %s", logFile)
 	return err
