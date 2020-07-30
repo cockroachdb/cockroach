@@ -102,4 +102,6 @@ if [ $# -ge 1 ]; then
     shift
 fi
 
-(set -x && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
+# lib is populated in v20.2 or higher, but we make a temporary directory
+# in /lib such that TeamCity can pick up the artifacts.
+(set -x && mkdir -p lib && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
