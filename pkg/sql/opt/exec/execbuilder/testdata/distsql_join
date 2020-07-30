@@ -197,3 +197,47 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1v-jYUh-_3KaxzBatRsB
 # SELECT url FROM [EXPLAIN (DISTSQL) (SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k)]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJyskk9Lw0AQxe9-CpmT0pVk06SHgJBrBVup3qSUmB3jSpqNsxtQSr-7JHtIE8z2D952Z-f35r1ldlAqgYt0ixriV-DAIII1g4pUhlorasq2aS6-IfYZyLKqTVNeM8gUIcQ7MNIUCDEs1J2qvAgYCDSpLNq2PQNVmw7SJs0R4tmeHQhzt_BL-lbgClOB5Pk9eahIblP6SYTURn8Vm-3nxqA2wGBZm_g64TDmgJ_j4FmRQfJ4f3jCJ6PywaUBg_8KOL0g4PT0gOGofKdal4oEEorhThxv-cPjI1KOD0qWSF7YN1rgu7lJ-OT2nmT-YY_dF7EkGI0R9WIc2fAV6kqVGk9acb_JgCJH-yda1ZThE6msHWOvy5ZrCwK1sa8ze5mX9qkxeAhzJxy44cAJRz2YD-GpEw7dk8MzJgdDOHLC_mDyen_1GwAA___yFZqv
+
+# Regression test for incorrectly populating PlanToStreamColMap for the right
+# side of merge joins (#51883).
+statement ok
+CREATE TABLE customer (c_custkey INT8 PRIMARY KEY);
+CREATE TABLE orders (
+  o_orderkey INT8 PRIMARY KEY, o_custkey INT8 NOT NULL,
+  CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer (c_custkey)
+);
+CREATE TABLE lineitem (
+  l_orderkey INT8 NOT NULL,
+  l_linenumber INT8 NOT NULL,
+  l_quantity FLOAT8 NOT NULL,
+  PRIMARY KEY (l_orderkey, l_linenumber),
+  CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders (o_orderkey)
+);
+ALTER TABLE lineitem SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
+ALTER TABLE lineitem EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# This query checks that there is no type mismatch during the vectorized flow
+# setup which would occur if the stream column indices got messed up.
+statement ok
+SET vectorize=on;
+EXPLAIN (VEC)
+  SELECT
+    sum(l_quantity)
+  FROM
+    customer,
+    orders
+    INNER MERGE JOIN lineitem ON o_orderkey = l_orderkey
+  WHERE
+    o_orderkey
+    IN (
+        SELECT
+          l_orderkey
+        FROM
+          lineitem
+        GROUP BY
+          l_orderkey
+        HAVING
+          sum(l_quantity) > 300
+      )
+    AND c_custkey = o_custkey;
+RESET vectorize

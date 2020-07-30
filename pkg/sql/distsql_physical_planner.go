@@ -2385,8 +2385,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
 	helper := &joinPlanningHelper{
-		numLeftCols:             n.pred.numLeftCols,
-		numRightCols:            n.pred.numRightCols,
+		numLeftOutCols:          n.pred.numLeftCols,
+		numRightOutCols:         n.pred.numRightCols,
+		numAllLeftCols:          len(leftPlan.ResultTypes),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
