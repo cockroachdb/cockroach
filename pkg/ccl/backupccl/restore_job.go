@@ -603,7 +603,7 @@ func restore(
 	oldTableIDs []sqlbase.ID,
 	spans []roachpb.Span,
 	job *jobs.Job,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	user string,
 ) (RowCount, error) {
 	// A note about contexts and spans in this method: the top-level context
@@ -712,6 +712,17 @@ func restore(
 		defer tracing.FinishSpan(progressSpan)
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
+
+	// Wrap the relevant BackupEncryptionOptions to be used by the KV
+	// ImportRequest.
+	// TODO(adityamaru): Move this wrapping to when the Restore DataSpec is being
+	// created once we switch to using DistSQL for RESTORE. This is how BACKUP
+	// does it currently.
+	var fileEncryption *roachpb.FileEncryptionOptions
+	if encryption != nil {
+		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
+	}
+
 	g.GoCtx(func(ctx context.Context) error {
 		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
 		for readyForImportSpan := range readyForImportCh {
@@ -730,7 +741,7 @@ func restore(
 				Files:         readyForImportSpan.files,
 				EndTime:       endTime,
 				Rekeys:        rekeys,
-				Encryption:    encryption,
+				Encryption:    fileEncryption,
 			}
 
 			log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
@@ -800,7 +811,7 @@ func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
 	details jobspb.RestoreDetails,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
 	backupManifests, err := loadBackupManifests(ctx, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
@@ -849,7 +860,7 @@ type restoreResumer struct {
 func getStatisticsFromBackup(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	backup BackupManifest,
 ) ([]*stats.TableStatisticProto, error) {
 	// This part deals with pre-20.2 stats format where backup statistics

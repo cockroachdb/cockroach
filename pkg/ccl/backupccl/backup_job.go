@@ -176,7 +176,7 @@ func backup(
 	backupManifest *BackupManifest,
 	checkpointDesc *BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
 ) (RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this

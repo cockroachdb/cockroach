@@ -990,14 +990,14 @@ func doRestorePlan(
 		baseStores[i] = store
 	}
 
-	var encryption *roachpb.FileEncryptionOptions
+	var encryption *jobspb.BackupEncryptionOptions
 	if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 		opts, err := readEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
 		}
 		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-		encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+		encryption = &jobspb.BackupEncryptionOptions{Key: encryptionKey}
 	}
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(

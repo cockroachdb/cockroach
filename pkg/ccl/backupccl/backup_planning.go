@@ -421,7 +421,7 @@ func backupPlanHook(
 			defaultStore.Close()
 		}()
 
-		var encryption *roachpb.FileEncryptionOptions
+		var encryption *jobspb.BackupEncryptionOptions
 		var prevBackups []BackupManifest
 		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
@@ -435,7 +435,7 @@ func backupPlanHook(
 				if err != nil {
 					return err
 				}
-				encryption = &roachpb.FileEncryptionOptions{
+				encryption = &jobspb.BackupEncryptionOptions{
 					Key: storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
 				}
 			}
@@ -474,7 +474,7 @@ func backupPlanHook(
 					if err != nil {
 						return err
 					}
-					encryption = &roachpb.FileEncryptionOptions{
+					encryption = &jobspb.BackupEncryptionOptions{
 						Key: storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
 					}
 				}
@@ -704,7 +704,8 @@ func backupPlanHook(
 			if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt}, exportStore); err != nil {
 				return err
 			}
-			encryption = &roachpb.FileEncryptionOptions{Key: storageccl.GenerateKey(encryptionPassphrase, salt)}
+			encryption = &jobspb.BackupEncryptionOptions{Key: storageccl.GenerateKey(
+				encryptionPassphrase, salt)}
 		}
 
 		// TODO (lucy): For partitioned backups, also add verification for other
