@@ -100,3 +100,12 @@ SELECT v FROM kv ORDER BY v DESC
 1
 1
 NULL
+
+# Check that an SRF is supported.
+query I colnames
+SELECT * FROM generate_series(1, 3)
+----
+generate_series
+1
+2
+3

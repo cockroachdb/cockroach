@@ -33,7 +33,12 @@ import (
 // with zip(a,b,c).
 type projectSetNode struct {
 	source planNode
+	projectSetPlanningInfo
+}
 
+// projectSetPlanningInfo is a helper struct that is extracted from
+// projectSetNode to be reused during physical planning.
+type projectSetPlanningInfo struct {
 	// columns contains all the columns from the source, and then
 	// the columns from the generators.
 	columns sqlbase.ResultColumns

@@ -912,11 +912,13 @@ func (ef *execFactory) ConstructProjectSet(
 	src := asDataSource(n)
 	cols := append(src.columns, zipCols...)
 	return &projectSetNode{
-		source:          src.plan,
-		columns:         cols,
-		numColsInSource: len(src.columns),
-		exprs:           exprs,
-		numColsPerGen:   numColsPerGen,
+		source: src.plan,
+		projectSetPlanningInfo: projectSetPlanningInfo{
+			columns:         cols,
+			numColsInSource: len(src.columns),
+			exprs:           exprs,
+			numColsPerGen:   numColsPerGen,
+		},
 	}, nil
 }
 
