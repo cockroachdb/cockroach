@@ -187,19 +187,41 @@ sort
       │    │    │         ├── key columns: [127] = [130]
       │    │    │         ├── lookup columns are key
       │    │    │         ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34), (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)~~>(74), (74)~~>(73), (78)-->(79), (98)-->(99), (126)-->(127,128), (130)-->(131), (131)-->(130)
-      │    │    │         ├── left-join (lookup pg_foreign_table)
+      │    │    │         ├── right-join (hash)
       │    │    │         │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 i.inhrelid:41 i.inhparent:42 c2.oid:45 c2.relname:46 c2.relnamespace:47 n2.oid:73 n2.nspname:74 indexrelid:78 indrelid:79 indisclustered:85 ci.oid:98 ci.relname:99 ftrelid:126 ftserver:127 ftoptions:128
-      │    │    │         │    ├── key columns: [1] = [126]
-      │    │    │         │    ├── lookup columns are key
       │    │    │         │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34), (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)~~>(74), (74)~~>(73), (78)-->(79), (98)-->(99), (126)-->(127,128)
+      │    │    │         │    ├── left-join (hash)
+      │    │    │         │    │    ├── columns: i.inhrelid:41!null i.inhparent:42!null c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null n2.oid:73 n2.nspname:74
+      │    │    │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    │    │         │    │    ├── fd: (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)-->(74), (74)-->(73)
+      │    │    │         │    │    ├── inner-join (hash)
+      │    │    │         │    │    │    ├── columns: i.inhrelid:41!null i.inhparent:42!null c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
+      │    │    │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │         │    │    │    ├── fd: (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42)
+      │    │    │         │    │    │    ├── scan i
+      │    │    │         │    │    │    │    └── columns: i.inhrelid:41!null i.inhparent:42!null
+      │    │    │         │    │    │    ├── scan c2@pg_class_relname_nsp_index
+      │    │    │         │    │    │    │    ├── columns: c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
+      │    │    │         │    │    │    │    ├── key: (45)
+      │    │    │         │    │    │    │    └── fd: (45)-->(46,47), (46,47)-->(45)
+      │    │    │         │    │    │    └── filters
+      │    │    │         │    │    │         └── i.inhparent:42 = c2.oid:45 [outer=(42,45), constraints=(/42: (/NULL - ]; /45: (/NULL - ]), fd=(42)==(45), (45)==(42)]
+      │    │    │         │    │    ├── scan n2@pg_namespace_nspname_index
+      │    │    │         │    │    │    ├── columns: n2.oid:73!null n2.nspname:74!null
+      │    │    │         │    │    │    ├── key: (73)
+      │    │    │         │    │    │    └── fd: (73)-->(74), (74)-->(73)
+      │    │    │         │    │    └── filters
+      │    │    │         │    │         └── n2.oid:73 = c2.relnamespace:47 [outer=(47,73), constraints=(/47: (/NULL - ]; /73: (/NULL - ]), fd=(47)==(73), (73)==(47)]
       │    │    │         │    ├── left-join (lookup pg_class)
-      │    │    │         │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 i.inhrelid:41 i.inhparent:42 c2.oid:45 c2.relname:46 c2.relnamespace:47 n2.oid:73 n2.nspname:74 indexrelid:78 indrelid:79 indisclustered:85 ci.oid:98 ci.relname:99
+      │    │    │         │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 indexrelid:78 indrelid:79 indisclustered:85 ci.oid:98 ci.relname:99 ftrelid:126 ftserver:127 ftoptions:128
       │    │    │         │    │    ├── key columns: [78] = [98]
       │    │    │         │    │    ├── lookup columns are key
-      │    │    │         │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34), (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)~~>(74), (74)~~>(73), (78)-->(79), (98)-->(99)
+      │    │    │         │    │    ├── key: (1,78)
+      │    │    │         │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,126-128), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (126)-->(127,128), (78)-->(79), (1,78)-->(34,35,85,98,99), (98)-->(99), (34)-->(35), (35)-->(34), (3)==(29), (29)==(3)
       │    │    │         │    │    ├── right-join (hash)
-      │    │    │         │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 i.inhrelid:41 i.inhparent:42 c2.oid:45 c2.relname:46 c2.relnamespace:47 n2.oid:73 n2.nspname:74 indexrelid:78 indrelid:79 indisclustered:85
-      │    │    │         │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34), (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)~~>(74), (74)~~>(73), (78)-->(79)
+      │    │    │         │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 indexrelid:78 indrelid:79 indisclustered:85 ftrelid:126 ftserver:127 ftoptions:128
+      │    │    │         │    │    │    ├── key: (1,78)
+      │    │    │         │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,126-128), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (126)-->(127,128), (78)-->(79), (1,78)-->(34,35,85), (34)-->(35), (35)-->(34), (3)==(29), (29)==(3)
       │    │    │         │    │    │    ├── select
       │    │    │         │    │    │    │    ├── columns: indexrelid:78!null indrelid:79!null indisclustered:85!null
       │    │    │         │    │    │    │    ├── key: (78)
@@ -210,37 +232,18 @@ sort
       │    │    │         │    │    │    │    │    └── fd: (78)-->(79,85)
       │    │    │         │    │    │    │    └── filters
       │    │    │         │    │    │    │         └── indisclustered:85 = true [outer=(85), constraints=(/85: [/true - /true]; tight), fd=()-->(85)]
-      │    │    │         │    │    │    ├── right-join (hash)
-      │    │    │         │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 i.inhrelid:41 i.inhparent:42 c2.oid:45 c2.relname:46 c2.relnamespace:47 n2.oid:73 n2.nspname:74
-      │    │    │         │    │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34), (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)~~>(74), (74)~~>(73)
-      │    │    │         │    │    │    │    ├── left-join (hash)
-      │    │    │         │    │    │    │    │    ├── columns: i.inhrelid:41!null i.inhparent:42!null c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null n2.oid:73 n2.nspname:74
-      │    │    │         │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │    │         │    │    │    │    │    ├── fd: (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42), (73)-->(74), (74)-->(73)
-      │    │    │         │    │    │    │    │    ├── inner-join (hash)
-      │    │    │         │    │    │    │    │    │    ├── columns: i.inhrelid:41!null i.inhparent:42!null c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
-      │    │    │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │         │    │    │    │    │    │    ├── fd: (45)-->(46,47), (46,47)-->(45), (42)==(45), (45)==(42)
-      │    │    │         │    │    │    │    │    │    ├── scan i
-      │    │    │         │    │    │    │    │    │    │    └── columns: i.inhrelid:41!null i.inhparent:42!null
-      │    │    │         │    │    │    │    │    │    ├── scan c2@pg_class_relname_nsp_index
-      │    │    │         │    │    │    │    │    │    │    ├── columns: c2.oid:45!null c2.relname:46!null c2.relnamespace:47!null
-      │    │    │         │    │    │    │    │    │    │    ├── key: (45)
-      │    │    │         │    │    │    │    │    │    │    └── fd: (45)-->(46,47), (46,47)-->(45)
-      │    │    │         │    │    │    │    │    │    └── filters
-      │    │    │         │    │    │    │    │    │         └── i.inhparent:42 = c2.oid:45 [outer=(42,45), constraints=(/42: (/NULL - ]; /45: (/NULL - ]), fd=(42)==(45), (45)==(42)]
-      │    │    │         │    │    │    │    │    ├── scan n2@pg_namespace_nspname_index
-      │    │    │         │    │    │    │    │    │    ├── columns: n2.oid:73!null n2.nspname:74!null
-      │    │    │         │    │    │    │    │    │    ├── key: (73)
-      │    │    │         │    │    │    │    │    │    └── fd: (73)-->(74), (74)-->(73)
-      │    │    │         │    │    │    │    │    └── filters
-      │    │    │         │    │    │    │    │         └── n2.oid:73 = c2.relnamespace:47 [outer=(47,73), constraints=(/47: (/NULL - ]; /73: (/NULL - ]), fd=(47)==(73), (73)==(47)]
-      │    │    │         │    │    │    │    ├── left-join (lookup pg_tablespace)
-      │    │    │         │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35
-      │    │    │         │    │    │    │    │    ├── key columns: [8] = [34]
+      │    │    │         │    │    │    ├── left-join (lookup pg_tablespace)
+      │    │    │         │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 ftrelid:126 ftserver:127 ftoptions:128
+      │    │    │         │    │    │    │    ├── key columns: [8] = [34]
+      │    │    │         │    │    │    │    ├── lookup columns are key
+      │    │    │         │    │    │    │    ├── key: (1)
+      │    │    │         │    │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35,126-128), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (126)-->(127,128), (34)-->(35), (35)-->(34), (3)==(29), (29)==(3)
+      │    │    │         │    │    │    │    ├── left-join (lookup pg_foreign_table)
+      │    │    │         │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null ftrelid:126 ftserver:127 ftoptions:128
+      │    │    │         │    │    │    │    │    ├── key columns: [1] = [126]
       │    │    │         │    │    │    │    │    ├── lookup columns are key
       │    │    │         │    │    │    │    │    ├── key: (1)
-      │    │    │         │    │    │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,34,35), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(29), (29)==(3), (34)-->(35), (35)-->(34)
+      │    │    │         │    │    │    │    │    ├── fd: ()-->(3,29,30), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,126-128), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (126)-->(127,128), (3)==(29), (29)==(3)
       │    │    │         │    │    │    │    │    ├── inner-join (hash)
       │    │    │         │    │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null
       │    │    │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -265,12 +268,12 @@ sort
       │    │    │         │    │    │    │    │    │    └── filters
       │    │    │         │    │    │    │    │    │         └── n.oid:29 = c.relnamespace:3 [outer=(3,29), constraints=(/3: (/NULL - ]; /29: (/NULL - ]), fd=(3)==(29), (29)==(3)]
       │    │    │         │    │    │    │    │    └── filters (true)
-      │    │    │         │    │    │    │    └── filters
-      │    │    │         │    │    │    │         └── i.inhrelid:41 = c.oid:1 [outer=(1,41), constraints=(/1: (/NULL - ]; /41: (/NULL - ]), fd=(1)==(41), (41)==(1)]
+      │    │    │         │    │    │    │    └── filters (true)
       │    │    │         │    │    │    └── filters
       │    │    │         │    │    │         └── indrelid:79 = c.oid:1 [outer=(1,79), constraints=(/1: (/NULL - ]; /79: (/NULL - ]), fd=(1)==(79), (79)==(1)]
       │    │    │         │    │    └── filters (true)
-      │    │    │         │    └── filters (true)
+      │    │    │         │    └── filters
+      │    │    │         │         └── i.inhrelid:41 = c.oid:1 [outer=(1,41), constraints=(/1: (/NULL - ]; /41: (/NULL - ]), fd=(1)==(41), (41)==(1)]
       │    │    │         └── filters (true)
       │    │    └── filters
       │    │         └── pg_inherits.inhparent:140 = c.oid:1 [outer=(1,140), constraints=(/1: (/NULL - ]; /140: (/NULL - ]), fd=(1)==(140), (140)==(1)]
