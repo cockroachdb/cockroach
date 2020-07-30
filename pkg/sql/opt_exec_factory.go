@@ -491,10 +491,6 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 	return &ordinalityNode{
 		source:  plan,
 		columns: cols,
-		run: ordinalityRun{
-			row:    make(tree.Datums, len(cols)),
-			curCnt: 1,
-		},
 	}, nil
 }
 
