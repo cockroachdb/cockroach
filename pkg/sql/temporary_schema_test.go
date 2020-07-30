@@ -219,6 +219,55 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
+// Test that the temporary object cleaner doesn't break with a connection
+// that gets uncleanly shutdown. See issue #52147.
+func TestTemporaryObjectCleanerUncleanShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	var err error
+	c1, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = c1.ExecContext(ctx, `SET experimental_enable_temp_tables=true;
+SET application_name = 'cancel_me';`)
+	require.NoError(t, err)
+	tx, err := c1.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `CREATE TABLE bar()`)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `CREATE TEMPORARY TABLE foo()`)
+	require.NoError(t, err)
+
+	doneCh := make(chan struct{})
+	c2, err := db.Conn(ctx)
+	require.NoError(t, err)
+	go func() {
+		_, err = c2.ExecContext(ctx, `CREATE TABLE bar()`)
+		// This should hang until c1 is closed, but not further.
+		// See issue #52147 for a deadlock that this is testing.
+		require.NoError(t, err)
+		doneCh <- struct{}{}
+	}()
+	c3, err := db.Conn(ctx)
+
+	// Cancel the first session once the second session has started its work.
+	_, err = c3.ExecContext(ctx,
+		"CANCEL SESSIONS SELECT session_id FROM [SHOW SESSIONS] WHERE application_name = 'cancel_me';")
+	require.NoError(t, err)
+
+	<-doneCh
+	// This rollback will fail due to "bad connection" since it got canceled.
+	_ = tx.Rollback()
+	require.NoError(t, c2.Close())
+	require.NoError(t, c3.Close())
+}
+
 // TestTemporarySchemaDropDatabase tests having a temporary schema on one session
 // whilst dropping a database on another session will have the database drop
 // succeed.

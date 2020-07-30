@@ -810,6 +810,24 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
+	ev := noEvent
+	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
+		ev = txnRollback
+	}
+
+	if closeType == normalClose {
+		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
+		// This event is guaranteed to be accepted in every state.
+		ev := eventNonRetriableErr{IsCommit: fsm.True}
+		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
+			"connExecutor closing")}
+		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
+			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+		}
+	} else if closeType == externalTxnClose {
+		ex.state.finishExternalTxn()
+	}
+
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
 		err := cleanupSessionTempObjects(
@@ -828,24 +846,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 				err,
 			)
 		}
-	}
-
-	ev := noEvent
-	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
-		ev = txnRollback
-	}
-
-	if closeType == normalClose {
-		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
-		// This event is guaranteed to be accepted in every state.
-		ev := eventNonRetriableErr{IsCommit: fsm.True}
-		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
-			"connExecutor closing")}
-		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
-			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
-		}
-	} else if closeType == externalTxnClose {
-		ex.state.finishExternalTxn()
 	}
 
 	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache, ev); err != nil {
