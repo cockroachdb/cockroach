@@ -654,6 +654,12 @@ func rewriteTypeDescs(types []*sqlbase.TypeDescriptor, descriptorRewrites DescRe
 		}
 		typ.ID = rewrite.ID
 		typ.ParentID = rewrite.ParentID
+		for i := range typ.ReferencingDescriptorIDs {
+			id := typ.ReferencingDescriptorIDs[i]
+			if rw, ok := descriptorRewrites[id]; ok {
+				typ.ReferencingDescriptorIDs[i] = rw.ID
+			}
+		}
 		switch t := typ.Kind; t {
 		case sqlbase.TypeDescriptor_ENUM:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {

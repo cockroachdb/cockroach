@@ -192,7 +192,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Finally, make sure all of the leases are updated.
-	if err := waitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
+	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil
 		}

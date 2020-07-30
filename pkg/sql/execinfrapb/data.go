@@ -93,7 +93,7 @@ func makeTypeLookupFunc(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) sqlbase.TypeLookupFunc {
 	return func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
+		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlagsWithRequired())
 	}
 }
 
