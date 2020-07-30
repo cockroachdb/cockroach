@@ -76,7 +76,7 @@ func ReadBackupManifestFromURI(
 	uri string,
 	user string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
@@ -88,7 +88,9 @@ func ReadBackupManifestFromURI(
 }
 
 func readBackupManifestFromStore(
-	ctx context.Context, exportStore cloud.ExternalStorage, encryption *roachpb.FileEncryptionOptions,
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
 
 	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName, encryption)
@@ -148,7 +150,7 @@ func readBackupManifest(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -205,7 +207,7 @@ func readBackupPartitionDescriptor(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupPartitionDescriptor, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -243,7 +245,7 @@ func readTableStatistics(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) (*StatsTable, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -272,7 +274,7 @@ func writeBackupManifest(
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	desc *BackupManifest,
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
@@ -303,7 +305,7 @@ func writeBackupPartitionDescriptor(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	desc *BackupPartitionDescriptor,
 ) error {
 	descBuf, err := protoutil.Marshal(desc)
@@ -331,7 +333,7 @@ func writeTableStatistics(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	stats *StatsTable,
 ) error {
 	statsBuf, err := protoutil.Marshal(stats)
@@ -352,7 +354,7 @@ func loadBackupManifests(
 	uris []string,
 	user string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, error) {
 	backupManifests := make([]BackupManifest, len(uris))
 
@@ -377,7 +379,7 @@ func getLocalityInfo(
 	stores []cloud.ExternalStorage,
 	uris []string,
 	mainBackupManifest BackupManifest,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	prefix string,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	var info jobspb.RestoreDetails_BackupLocalityInfo
@@ -443,7 +445,7 @@ func resolveBackupManifests(
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
 	endTime hlc.Timestamp,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 	user string,
 ) (
 	defaultURIs []string,
@@ -746,7 +748,7 @@ func VerifyUsableExportTarget(
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	readable string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *jobspb.BackupEncryptionOptions,
 ) error {
 	r, err := exportStore.ReadFile(ctx, BackupManifestName)
 	if err == nil {
