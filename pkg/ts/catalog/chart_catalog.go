@@ -760,12 +760,6 @@ var charts = []sectionDescription{
 		Organization: [][]string{{KVTransactionLayer, "Storage"}},
 		Charts: []chartDescription{
 			{
-				Rate:        DescribeDerivative_DERIVATIVE,
-				Percentiles: false,
-				Title:       "Metric Update Frequency",
-				Metrics:     []string{"lastupdatenanos"},
-			},
-			{
 				Title:     "Counts",
 				AxisLabel: "MVCC Keys & Values",
 				Metrics: []string{
@@ -2041,10 +2035,6 @@ var charts = []sectionDescription{
 			{
 				Title:   "Cumultative Intent Age",
 				Metrics: []string{"intentage"},
-			},
-			{
-				Title:   "Metric Update Frequency",
-				Metrics: []string{"lastupdatenanos"},
 			},
 			{
 				Title: "Size",
