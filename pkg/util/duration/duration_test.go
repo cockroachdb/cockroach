@@ -11,6 +11,7 @@
 package duration
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -212,6 +213,56 @@ func TestAdd(t *testing.T) {
 			d:   Duration{Months: 15},
 			exp: time.Date(1994, 1, 01, 0, 0, 0, 0, time.UTC),
 		},
+		{
+			t:   time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 12},
+			exp: time.Date(2021, time.July, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 18},
+			exp: time.Date(2022, time.January, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 30},
+			exp: time.Date(2023, time.January, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 12},
+			exp: time.Date(2021, time.July, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 12, nanos: int64(10 * time.Second)},
+			exp: time.Date(2021, time.July, 29, 0, 0, 10, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 17, nanos: int64(10 * time.Second)},
+			exp: time.Date(2021, time.December, 29, 0, 0, 10, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 18, nanos: int64(10 * time.Second)},
+			exp: time.Date(2022, time.January, 29, 0, 0, 10, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 19, nanos: int64(10 * time.Second)},
+			exp: time.Date(2022, time.February, 28, 0, 0, 10, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 20, nanos: int64(10 * time.Second)},
+			exp: time.Date(2022, time.March, 29, 0, 0, 10, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 30, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 12},
+			exp: time.Date(2021, time.July, 30, 0, 0, 0, 0, time.UTC),
+		},
 
 		// Check leap behaviors
 		{
@@ -270,12 +321,54 @@ func TestAdd(t *testing.T) {
 			d:   Duration{Months: -1, Days: -1},
 			exp: time.Date(2015, 12, 31, 0, 0, 0, 0, time.UTC),
 		},
+		{
+			t:   time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -12},
+			exp: time.Date(2019, time.July, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -18},
+			exp: time.Date(2019, time.January, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -30},
+			exp: time.Date(2018, time.January, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -12},
+			exp: time.Date(2019, time.July, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -12, nanos: int64(-10 * time.Second)},
+			exp: time.Date(2019, time.July, 28, 23, 59, 50, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -19, nanos: int64(-10 * time.Second)},
+			exp: time.Date(2018, time.December, 28, 23, 59, 50, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -20, nanos: int64(-10 * time.Second)},
+			exp: time.Date(2018, time.November, 28, 23, 59, 50, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2020, time.July, 30, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -12},
+			exp: time.Date(2019, time.July, 30, 0, 0, 0, 0, time.UTC),
+		},
 	}
 	for i, test := range tests {
-		if res := Add(nil, test.t, test.d); !test.exp.Equal(res) {
-			t.Errorf("%d: expected Add(%v, %d) = %v, found %v",
-				i, test.t, test.d, test.exp, res)
-		}
+		t.Run(fmt.Sprintf("%s_%s", test.t, test.d), func(t *testing.T) {
+			if res := Add(nil, test.t, test.d); !test.exp.Equal(res) {
+				t.Errorf("%d: expected Add(%s, %s) = %s, found %s",
+					i, test.t, test.d, test.exp, res)
+			}
+		})
 	}
 }
 
