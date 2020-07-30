@@ -211,8 +211,22 @@ var djangoBlocklist19_2 = blocklist{
 	//"postgres_tests.test_array.TestOtherTypesExactQuerying.test_exact_decimals":                                     "23468",
 }
 
-var djangoIgnoreList20_2 = blocklist{}
+var djangoIgnoreList20_2 = djangoIgnoreList20_1
 
-var djangoIgnoreList20_1 = blocklist{}
+var djangoIgnoreList20_1 = djangoIgnoreList19_2
 
-var djangoIgnoreList19_2 = blocklist{}
+var djangoIgnoreList19_2 = blocklist{
+	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
+	"inspectdb.tests.InspectDBTestCase.test_digits_column_name_introspection":    "unknown",
+	"inspectdb.tests.InspectDBTestCase.test_field_types":                         "unknown",
+	"introspection.tests.IntrospectionTests.test_get_constraints_indexes_orders": "unknown",
+	"introspection.tests.IntrospectionTests.test_get_table_description_types":    "unknown",
+	"schema.tests.SchemaTests.test_add_field_temp_default":                       "unknown",
+	"schema.tests.SchemaTests.test_alter":                                        "unknown",
+	"schema.tests.SchemaTests.test_alter_field_fk_keeps_index":                   "unknown",
+	"schema.tests.SchemaTests.test_alter_field_fk_to_o2o":                        "unknown",
+	"schema.tests.SchemaTests.test_alter_numeric_field_keep_null_status":         "unknown",
+	"schema.tests.SchemaTests.test_alter_smallint_pk_to_smallautofield_pk":       "unknown",
+	"schema.tests.SchemaTests.test_db_table":                                     "unknown",
+	"schema.tests.SchemaTests.test_foreign_key_index_long_names_regression":      "unknown",
+}
