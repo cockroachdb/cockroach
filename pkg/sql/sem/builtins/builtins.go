@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"reflect"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/knz/strtime"
 )
 
@@ -2864,6 +2866,8 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
+	"crdb_internal.pb_to_json": makeBuiltin(jsonProps(), decodeProtoAsJson),
+
 	// Enum functions.
 	"enum_first": makeBuiltin(
 		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
@@ -4846,6 +4850,75 @@ var jsonArrayLengthImpl = tree.Overload{
 	},
 	Info:       "Returns the number of elements in the outermost JSON or JSONB array.",
 	Volatility: tree.VolatilityImmutable,
+}
+
+func messageToJSON(name string, data []byte) (json.JSON, error) {
+	// Get the reflected type of the protocol message.
+	rt := proto.MessageType(name)
+	if rt == nil {
+		return nil, errors.Newf("unknown proto message type %s", name)
+	}
+
+	// If the message is known, we should get the pointer to our message.
+	if rt.Kind() != reflect.Ptr {
+		return nil, errors.Newf("expected ptr to message, got %s instead", rt.Kind().String())
+	}
+
+	rt = rt.Elem()
+	// Construct message of appropriate type, through reflection.
+	rv := reflect.New(rt)
+	msg, ok := rv.Interface().(proto.Message)
+
+	if !ok {
+		// Just to be safe;
+		return nil, errors.Newf(
+			"unexpected proto type for %s; expected proto.Message, got %T",
+			name, rv.Interface())
+	}
+
+	// Now, parse data as our proto message.
+	if err := proto.Unmarshal(data, msg); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal proto %s", name)
+	}
+
+	// Convert to json.
+	msgBytes, err := gojson.Marshal(msg)
+	if err != nil {
+		return nil, errors.Wrapf(err, "marshaling %s; msg=%+v", name, msg)
+	}
+
+	// We need to take encoded json object and, unfortunately, unmarshal
+	// it again, this time as a string->value map.
+	var msgMap map[string]interface{}
+	if err := gojson.Unmarshal(msgBytes, &msgMap); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling to map")
+	}
+	// Build JSONB.
+	builder := json.NewObjectBuilder(len(msgMap))
+	for k, v := range msgMap {
+		jv, err := json.MakeJSON(v)
+		if err != nil {
+			return nil, errors.Wrapf(err, "encoding json value for %s", k)
+		}
+		builder.Add(k, jv)
+	}
+	return builder.Build(), nil
+}
+
+var decodeProtoAsJson = tree.Overload{
+	Types: tree.ArgTypes{
+		{"protoname", types.String},
+		{"data", types.Bytes},
+	},
+	ReturnType: tree.FixedReturnType(types.Jsonb),
+	Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		decoderName := tree.MustBeDString(args[0])
+		j, err := messageToJSON(string(decoderName), []byte(tree.MustBeDBytes(args[1])))
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJSON(j), nil
+	},
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
