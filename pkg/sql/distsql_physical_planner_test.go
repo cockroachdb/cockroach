@@ -576,14 +576,14 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	}
 
 	// Verify distribution.
-	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyskd-Lm0AQx9_7V8g8mbKHWZO-7NMd1xSEnF7Vo4UgYesOIphduz-gJfi_F7WQGBKblj46O9_5fJw5gvneAINss908557TjfcpTV683ebr6_Ypij3_Y5Tl2eftwvvdUionrf9-MfZJdzAFEJBKYMwPaIDtgAKBEAoCrVYlGqN0Xz4OTZH4AWxJoJats325IFAqjcCOYGvbIDDI-bcGU-QCdbAEAgItr5thdKvrA9c_H3suEMhaLg3zHoIemTjLvFhJhKIjoJw9EYzlFQKjHbnf4qmqNFbcKh2EU4nn5C3O92nyJfMXN1nhTdYJ4aTSAjWKyfyim7dZT22yt5d9FOf-I70ts5rI0PvXT-9Zf0Af_mH9f7A4--HVf13_FVaKplXS4MUZrk9e9udBUeF4S6OcLvFVq3LAjJ_JkBsKAo0dX-n4EcnxqRc8D9PZcDgJ08twOBv-ME9ezYbX8-H1X2kX3btfAQAA__9aiHOO"}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyskd-Lm0AQx9_7V8g8mbKHWZO-7NMd1xSEnF7Vo4UgYesOIphduz-gJfi_F7WQGBKblj46O9_5fJw5gvneAINss908557TjfcpTV683ebr6_Ypij3_Y5Tl2eftwvvdUionrf9-MfZJdzAFEJBKYMwPaIDtgAKBEAoCrVYlGqN0Xz4OTZH4AWxJoJats325IFAqjcCOYGvbIDDI-bcGU-QCdbAEAgItr5thdM97bHV94PonEMhaLg3zHoIemTjLvFhJhKIjoJw9EYzlFQKjHbnf4qmqNFbcKh2EU4nn5C3O92nyJfMXN1nhTdYJ4aTSAjWKyfyim7dZT22yt5d9FOf-I70ts5rI0PvXT-9Zf0Af_mH9f7A4--HVf13_FVaKplXS4MUZrk9e9udBUeF4S6OcLvFVq3LAjJ_JkBsKAo0dX-n4EcnxqRc8D9PZcDgJ08twOBv-ME9ezYbX8-H1X2kX3btfAQAA__9aEHOO"}})
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
 	distServer := tc.Server(1).DistSQLServer().(*distsql.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */, nil /* reporter */)
 
-	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkM9Kw0AYxO8-xTKnVlba9LgnS60QqElNIgolyJp8hEC6G_cPKCHvLkkErVDR4843M79hO9jXBgLpdrfdZMybht0m8R07bJ_2u3UYsdlNmGbp_W7OPi2F9srNLueTT_mjzcGhdEmRPJKFOCBAztEaXZC12gxSNxrC8g1iyVGr1rtBzjkKbQiig6tdQxDI5EtDCcmSzGIJjpKcrJuxtjX1UZr364EJjrSVygp2BY7YO8EirQh5z6G9--q3TlYEEfT87xvWVWWokk6bRXA6YRM_RNlzEj-ms_lZ1uo_rIRsq5WlE8655mWfc1BZ0fSnVntT0N7oYsRMz3jMjUJJ1k3XYHqEajoNA7-Hg1_Dqx_hvL_4CAAA__-ln7ge"}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkM9Kw0AYxO8-xTKnVlba9LgnS60QqElNIgolyJp8hEC6G_cPKCHvLkkErVDR4843M79hO9jXBgLpdrfdZMybht0m8R07bJ_2u3UYsdlNmGbp_W7OPi2F9srNLueTT_mjzcGhdEmRPJKFOCBAztEaXZC12gxSNxrC8g1iyVGr1rtBzjkKbQiig6tdQxDI5EtDCcmSzGIJjpKcrJuxdmBdt6Y-SvMOjrSVygp2BY7YO8EirQh5z6G9--q3TlYEEfT87xvWVWWokk6bRXA6YRM_RNlzEj-ms_lZ1uo_rIRsq5WlE8655mWfc1BZ0fSnVntT0N7oYsRMz3jMjUJJ1k3XYHqEajoNA7-Hg1_Dqx_hvL_4CAAA__-lY7ge"}})
 
 	// Verify correctness.
 	var res int
