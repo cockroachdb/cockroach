@@ -156,7 +156,9 @@ func splitPreApply(
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
-// split with the Store. Requires that Replica.raftMu is held.
+// split with the Store. Requires that Replica.raftMu is held. The deltaMS are
+// the MVCC stats which apply to the RHS and have already been removed from the
+// LHS.
 func splitPostApply(
 	ctx context.Context, deltaMS enginepb.MVCCStats, split *roachpb.SplitTrigger, r *Replica,
 ) {
@@ -173,10 +175,13 @@ func splitPostApply(
 	}
 
 	// Update store stats with difference in stats before and after split.
-	if tenantID, ok := r.TenantID(); ok {
-		r.store.metrics.addMVCCStats(ctx, tenantID, deltaMS)
-	} else {
-		log.Fatalf(ctx, "%s: found replica which is part of a split without a valid tenant ID", r)
+	if rightReplOrNil != nil {
+		if tenantID, ok := rightReplOrNil.TenantID(); ok {
+			rightReplOrNil.store.metrics.addMVCCStats(ctx, tenantID, deltaMS)
+		} else {
+			log.Fatalf(ctx, "%s: found replica which is RHS of a split "+
+				"without a valid tenant ID", rightReplOrNil)
+		}
 	}
 
 	now := r.store.Clock().Now()
