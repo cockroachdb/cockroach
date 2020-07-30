@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -318,4 +319,12 @@ func collectSystemColumnsFromCfg(
 		}
 	}
 	return systemColumns, systemColumnOrdinals
+}
+
+func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
+	o, ok := metadata.(*opaqueMetadata)
+	if !ok {
+		return nil, errors.AssertionFailedf("unexpected OpaqueMetadata object type %T", metadata)
+	}
+	return o.plan, nil
 }
