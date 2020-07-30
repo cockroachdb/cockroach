@@ -160,8 +160,8 @@ sort
       │    │    │    ├── key: (37)
       │    │    │    └── fd: (37)-->(40)
       │    │    └── filters
-      │    │         ├── l_suppkey:22 = s_suppkey:37 [type=bool, outer=(22,37), constraints=(/22: (/NULL - ]; /37: (/NULL - ]), fd=(22)==(37), (37)==(22)]
-      │    │         └── c_nationkey:4 = s_nationkey:40 [type=bool, outer=(4,40), constraints=(/4: (/NULL - ]; /40: (/NULL - ]), fd=(4)==(40), (40)==(4)]
+      │    │         ├── s_nationkey:40 = n_nationkey:45 [type=bool, outer=(40,45), constraints=(/40: (/NULL - ]; /45: (/NULL - ]), fd=(40)==(45), (45)==(40)]
+      │    │         └── l_suppkey:22 = s_suppkey:37 [type=bool, outer=(22,37), constraints=(/22: (/NULL - ]; /37: (/NULL - ]), fd=(22)==(37), (37)==(22)]
       │    └── projections
       │         └── l_extendedprice:25 * (1.0 - l_discount:26) [as=column54:54, type=float, outer=(25,26), immutable]
       └── aggregations

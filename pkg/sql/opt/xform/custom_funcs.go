@@ -2583,8 +2583,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 }
 
 // deriveJoinSize returns the number of nodes in the root's connected component
-// after removing all non-inner-join nodes in the tree (can be zero). It is used
-// to decide whether join reordering rules should fire.
+// after removing all non-join nodes in the tree (can be zero). It is used to
+// decide whether join reordering rules should fire.
 func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
 	relProps := e.Relational()
 	if relProps.IsAvailable(props.JoinSize) {
@@ -2593,8 +2593,17 @@ func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
 	relProps.SetAvailable(props.JoinSize)
 
 	switch j := e.(type) {
-	case *memo.InnerJoinExpr:
-		relProps.Rule.JoinSize = 1 + c.deriveJoinSize(j.Left) + c.deriveJoinSize(j.Right)
+	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
+		*memo.LeftJoinExpr, *memo.FullJoinExpr:
+		if !j.Private().(*memo.JoinPrivate).Flags.Empty() {
+			// A join with flags cannot be reordered; don't consider it for join size.
+			relProps.Rule.JoinSize = 0
+		} else {
+			left := j.Child(0).(memo.RelExpr)
+			right := j.Child(1).(memo.RelExpr)
+			relProps.Rule.JoinSize = 1 + c.deriveJoinSize(left) + c.deriveJoinSize(right)
+		}
+
 	default:
 		relProps.Rule.JoinSize = 0
 	}

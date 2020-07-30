@@ -11,6 +11,7 @@
 package lang
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -262,17 +263,26 @@ func (p *Parser) parseDefineField() *DefineFieldExpr {
 	src := p.src
 	name := p.s.Literal()
 
-	if !p.scanToken(IDENT, "define field type") {
-		return nil
+	// Scan tokens until the first white space.
+	var typ bytes.Buffer
+	tok := p.scan()
+	for {
+		if tok != IDENT && tok != ASTERISK && tok != LBRACKET && tok != RBRACKET && tok != DOT {
+			p.addExpectedTokenErr("define field type")
+			return nil
+		}
+		typ.WriteString(p.s.Literal())
+		tok = p.scanInternal(false /* skipWhitespace */)
+		if tok == EOF || tok == WHITESPACE {
+			break
+		}
 	}
-
-	typ := p.s.Literal()
 
 	field := &DefineFieldExpr{
 		Src:      &src,
 		Name:     StringExpr(name),
 		Comments: p.getComments(),
-		Type:     StringExpr(typ),
+		Type:     StringExpr(typ.String()),
 	}
 	p.setComments(field, field.Comments)
 	return field
@@ -678,6 +688,10 @@ func (p *Parser) scanToken(expected Token, desc string) bool {
 // scan returns the next non-whitespace, non-comment token from the underlying
 // scanner. If a token has been unscanned then read that instead.
 func (p *Parser) scan() Token {
+	return p.scanInternal(true /* skipWhitespace */)
+}
+
+func (p *Parser) scanInternal(skipWhitespace bool) Token {
 	// If we have a token in the buffer, then return it.
 	if p.unscanned {
 		// Restore saved current token, and save previous token.
@@ -716,9 +730,15 @@ func (p *Parser) scan() Token {
 			return ERROR
 
 		case COMMENT:
+			if !skipWhitespace {
+				return tok
+			}
 			p.comments = append(p.comments, CommentExpr(p.s.Literal()))
 
 		case WHITESPACE:
+			if !skipWhitespace {
+				return tok
+			}
 			if strings.Count(p.s.Literal(), "\n") > 1 {
 				p.appendComments()
 			}

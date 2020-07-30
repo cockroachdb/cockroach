@@ -707,7 +707,7 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: window")
 }
 
-func (e *distSQLSpecExecFactory) RenameColumns(
+func (e *distSQLSpecExecFactory) ConstructRenameColumns(
 	input exec.Node, colNames []string,
 ) (exec.Node, error) {
 	var inputCols sqlbase.ResultColumns
@@ -856,7 +856,7 @@ func (e *distSQLSpecExecFactory) ConstructSaveTable(
 }
 
 func (e *distSQLSpecExecFactory) ConstructErrorIfRows(
-	input exec.Node, mkErr func(tree.Datums) error,
+	input exec.Node, mkErr exec.MkErrFn,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: error if rows")
 }
@@ -887,14 +887,12 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }
 
-func (e *distSQLSpecExecFactory) ConstructBuffer(
-	input exec.Node, label string,
-) (exec.BufferNode, error) {
+func (e *distSQLSpecExecFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: buffer")
 }
 
 func (e *distSQLSpecExecFactory) ConstructScanBuffer(
-	ref exec.BufferNode, label string,
+	ref exec.Node, label string,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: scan buffer")
 }
