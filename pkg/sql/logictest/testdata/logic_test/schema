@@ -102,3 +102,9 @@ CREATE TEMP TABLE myschema.tmp (x int)
 # We should error out trying to modify any virtual schemas.
 statement error pq: schema cannot be modified: "pg_catalog"
 CREATE TABLE pg_catalog.bad (x int)
+
+statement error pq: unimplemented: DROP SCHEMA
+DROP SCHEMA myschema
+
+statement error pq: unimplemented: ALTER SCHEMA
+ALTER SCHEMA myschema RENAME TO yourschema

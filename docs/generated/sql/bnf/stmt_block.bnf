@@ -310,6 +310,7 @@ alter_ddl_stmt ::=
 	| alter_database_stmt
 	| alter_range_stmt
 	| alter_partition_stmt
+	| alter_schema_stmt
 	| alter_type_stmt
 
 alter_role_stmt ::=
@@ -406,6 +407,7 @@ drop_ddl_stmt ::=
 	| drop_table_stmt
 	| drop_view_stmt
 	| drop_sequence_stmt
+	| drop_schema_stmt
 	| drop_type_stmt
 
 drop_role_stmt ::=
@@ -1064,6 +1066,9 @@ alter_range_stmt ::=
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
 
+alter_schema_stmt ::=
+	'ALTER' 'SCHEMA' schema_name 'RENAME' 'TO' schema_name
+
 alter_type_stmt ::=
 	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'SCONST' opt_add_val_placement
 	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' 'SCONST' opt_add_val_placement
@@ -1202,6 +1207,10 @@ drop_view_stmt ::=
 drop_sequence_stmt ::=
 	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
 	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+drop_schema_stmt ::=
+	'DROP' 'SCHEMA' schema_name_list opt_drop_behavior
+	| 'DROP' 'SCHEMA' 'IF' 'EXISTS' schema_name_list opt_drop_behavior
 
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
@@ -1455,6 +1464,9 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
+schema_name ::=
+	name
+
 type_name ::=
 	db_object_name
 
@@ -1462,9 +1474,6 @@ opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
 	| 'AFTER' 'SCONST'
 	| 
-
-schema_name ::=
-	name
 
 opt_with ::=
 	'WITH'
@@ -1644,6 +1653,9 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+schema_name_list ::=
+	( schema_name ) ( ( ',' schema_name ) )*
 
 type_name_list ::=
 	( type_name ) ( ( ',' type_name ) )*

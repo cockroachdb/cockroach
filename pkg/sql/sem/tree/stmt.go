@@ -195,6 +195,14 @@ func (*AlterTableSetSchema) StatementTag() string { return "ALTER TABLE SET SCHE
 func (*AlterTableSetSchema) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterSchema) StatementType() StatementType { return DDL }
+
+// StatementTag implements the Statement interface.
+func (*AlterSchema) StatementTag() string { return "ALTER SCHEMA" }
+
+func (*AlterSchema) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterType) StatementType() StatementType { return DDL }
 
 // StatementTag implements the Statement interface.
@@ -481,6 +489,12 @@ func (*DropType) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropType) StatementTag() string { return "DROP TYPE" }
+
+// StatementType implements the Statement interface.
+func (*DropSchema) StatementType() StatementType { return DDL }
+
+// StatementTag implements the Statement interface.
+func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
 
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
@@ -951,6 +965,7 @@ func (*ValuesClause) StatementType() StatementType { return Rows }
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterIndex) String() string                     { return AsString(n) }
+func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
 func (n *AlterTableAddColumn) String() string            { return AsString(n) }
@@ -994,6 +1009,7 @@ func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
+func (n *DropSchema) String() string                     { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropType) String() string                       { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
