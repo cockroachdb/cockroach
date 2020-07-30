@@ -51,15 +51,8 @@ type vecToDatumConverter struct {
 
 // newVecToDatumConverter creates a new vecToDatumConverter.
 // - batchWidth determines the width of the batches that it will be converting.
-// - vecIdxsToConvert determines which vectors need to be converted. It can be
-// nil indicating that all vectors need to be converted.
+// - vecIdxsToConvert determines which vectors need to be converted.
 func newVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *vecToDatumConverter {
-	if vecIdxsToConvert == nil {
-		vecIdxsToConvert = make([]int, batchWidth)
-		for i := range vecIdxsToConvert {
-			vecIdxsToConvert[i] = i
-		}
-	}
 	return &vecToDatumConverter{
 		convertedVecs:    make([]tree.Datums, batchWidth),
 		vecIdxsToConvert: vecIdxsToConvert,

@@ -145,14 +145,17 @@ func NewMaterializer(
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
+	vecIdxsToConvert := make([]int, len(typs))
+	for i := range vecIdxsToConvert {
+		vecIdxsToConvert[i] = i
+	}
 	m := &Materializer{
 		input:       input,
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
-		// nil vecIdxsToConvert indicates that we want to convert all vectors.
-		converter: newVecToDatumConverter(len(typs), nil /* vecIdxsToConvert */),
-		row:       make(sqlbase.EncDatumRow, len(typs)),
-		closers:   toClose,
+		converter:   newVecToDatumConverter(len(typs), vecIdxsToConvert),
+		row:         make(sqlbase.EncDatumRow, len(typs)),
+		closers:     toClose,
 	}
 
 	if err := m.ProcessorBase.Init(

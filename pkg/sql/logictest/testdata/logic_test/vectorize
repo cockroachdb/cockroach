@@ -1270,3 +1270,14 @@ query B
 SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc@i
 ----
 true
+
+# Regression test for builtin funcs that take no arguments, combined with
+# data that can't be safely decoded as input.
+
+statement ok
+RESET vectorize;
+CREATE TABLE t51841 (a) AS SELECT gen_random_uuid();
+SET vectorize = experimental_always
+
+statement ok
+SELECT random() from t51841
