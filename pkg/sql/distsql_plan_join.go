@@ -154,8 +154,9 @@ func (dsp *DistSQLPlanner) createPlanForInterleavedJoin(
 
 	leftMap, rightMap := plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap
 	helper := &joinPlanningHelper{
-		numLeftCols:             len(n.left.cols),
-		numRightCols:            len(n.right.cols),
+		numLeftOutCols:          len(n.left.cols),
+		numRightOutCols:         len(n.right.cols),
+		numAllLeftCols:          len(plans[0].ResultTypes),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
@@ -283,7 +284,14 @@ func (dsp *DistSQLPlanner) createPlanForInterleavedJoin(
 // joinPlanningHelper is a utility struct that helps with the physical planning
 // of joins.
 type joinPlanningHelper struct {
-	numLeftCols, numRightCols                       int
+	// numLeftOutCols and numRightOutCols store the number of columns that need
+	// to be included in the output of the join from each of the sides.
+	numLeftOutCols, numRightOutCols int
+	// numAllLeftCols stores the width of the rows coming from the left side.
+	// Note that it includes all of the left "out" columns and might include
+	// other "internal" columns that are needed to merge the streams for the
+	// left input.
+	numAllLeftCols                                  int
 	leftPlanToStreamColMap, rightPlanToStreamColMap []int
 }
 
@@ -302,16 +310,16 @@ func (h *joinPlanningHelper) joinOutColumns(
 	}
 
 	// The join columns are in two groups:
-	//  - the columns on the left side (numLeftCols)
-	//  - the columns on the right side (numRightCols)
-	for i := 0; i < h.numLeftCols; i++ {
+	//  - the columns on the left side (numLeftOutCols)
+	//  - the columns on the right side (numRightOutCols)
+	for i := 0; i < h.numLeftOutCols; i++ {
 		joinToStreamColMap[i] = addOutCol(uint32(h.leftPlanToStreamColMap[i]))
 	}
 
-	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
-		for i := 0; i < h.numRightCols; i++ {
-			joinToStreamColMap[h.numLeftCols+i] = addOutCol(
-				uint32(h.numLeftCols + h.rightPlanToStreamColMap[i]),
+	if joinType.ShouldIncludeRightColsInOutput() {
+		for i := 0; i < h.numRightOutCols; i++ {
+			joinToStreamColMap[h.numLeftOutCols+i] = addOutCol(
+				uint32(h.numAllLeftCols + h.rightPlanToStreamColMap[i]),
 			)
 		}
 	}
@@ -319,7 +327,7 @@ func (h *joinPlanningHelper) joinOutColumns(
 	return post, joinToStreamColMap
 }
 
-// remapOnExpr remaps ordinal references in the on condition (which refer to the
+// remapOnExpr remaps ordinal references in the ON condition (which refer to the
 // join columns as described above) to values that make sense in the joiner (0
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
 func (h *joinPlanningHelper) remapOnExpr(
@@ -329,17 +337,17 @@ func (h *joinPlanningHelper) remapOnExpr(
 		return execinfrapb.Expression{}, nil
 	}
 
-	joinColMap := make([]int, h.numLeftCols+h.numRightCols)
+	joinColMap := make([]int, h.numLeftOutCols+h.numRightOutCols)
 	idx := 0
 	leftCols := 0
-	for i := 0; i < h.numLeftCols; i++ {
+	for i := 0; i < h.numLeftOutCols; i++ {
 		joinColMap[idx] = h.leftPlanToStreamColMap[i]
 		if h.leftPlanToStreamColMap[i] != -1 {
 			leftCols++
 		}
 		idx++
 	}
-	for i := 0; i < h.numRightCols; i++ {
+	for i := 0; i < h.numRightOutCols; i++ {
 		joinColMap[idx] = leftCols + h.rightPlanToStreamColMap[i]
 		idx++
 	}
