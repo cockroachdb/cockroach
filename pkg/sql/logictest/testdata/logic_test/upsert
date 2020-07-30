@@ -987,3 +987,24 @@ query III
 SELECT * from table38627
 ----
 1  1  5
+
+# Regression test for UPSERT batching logic (#51391).
+statement ok
+SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+CREATE TABLE src (s STRING);
+CREATE TABLE dest (s STRING);
+INSERT INTO src
+SELECT
+	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FROM
+	generate_series(1, 50000)
+
+# This statement produces a raft command of about 6.6 MiB in size, so if the
+# batching logic is incorrect, we'll encounter "command is too large" error.
+statement ok
+UPSERT INTO dest (s) (SELECT s FROM src)
+
+statement ok
+RESET CLUSTER SETTING kv.raft.command.max_size;
+DROP TABLE src;
+DROP TABLE dest
