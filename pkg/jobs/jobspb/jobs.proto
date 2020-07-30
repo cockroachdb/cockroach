@@ -44,7 +44,7 @@ message BackupDetails {
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
   bytes backup_manifest = 4;
-  roachpb.FileEncryptionOptions encryption = 6;
+  roachpb.BackupEncryptionOptions encryption = 6;
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
@@ -101,7 +101,7 @@ message RestoreDetails {
   int32 descriptor_coverage = 11 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
-  roachpb.FileEncryptionOptions encryption = 12;
+  roachpb.BackupEncryptionOptions encryption = 12;
   // NEXT ID: 14.
 }
 

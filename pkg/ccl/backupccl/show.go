@@ -92,14 +92,14 @@ func showBackupPlanHook(
 		}
 		defer store.Close()
 
-		var encryption *roachpb.FileEncryptionOptions
+		var encryption *roachpb.BackupEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 			opts, err := readEncryptionOptions(ctx, store)
 			if err != nil {
 				return err
 			}
 			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+			encryption = &roachpb.BackupEncryptionOptions{Key: encryptionKey}
 		}
 
 		incPaths, err := findPriorBackups(ctx, store)

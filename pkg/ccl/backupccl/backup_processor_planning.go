@@ -33,7 +33,7 @@ func distBackup(
 	pkIDs map[uint64]bool,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *roachpb.BackupEncryptionOptions,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
@@ -130,7 +130,7 @@ func makeBackupDataProcessorSpecs(
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	mvccFilter roachpb.MVCCFilter,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *roachpb.BackupEncryptionOptions,
 	startTime, endTime hlc.Timestamp,
 	user string,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
@@ -150,6 +150,13 @@ func makeBackupDataProcessorSpecs(
 		}
 	}
 
+	// Wrap the relevant BackupEncryptionOptions to be used by the Backup
+	// processor and KV ExportRequest.
+	var fileEncryption *roachpb.FileEncryptionOptions
+	if encryption != nil {
+		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
+	}
+
 	// First construct spans based on span partitions. Then add on
 	// introducedSpans based on how those partition.
 	nodeToSpec := make(map[roachpb.NodeID]*execinfrapb.BackupDataSpec)
@@ -159,7 +166,7 @@ func makeBackupDataProcessorSpecs(
 			DefaultURI:       defaultURI,
 			URIsByLocalityKV: urisByLocalityKV,
 			MVCCFilter:       mvccFilter,
-			Encryption:       encryption,
+			Encryption:       fileEncryption,
 			PKIDs:            pkIDs,
 			BackupStartTime:  startTime,
 			BackupEndTime:    endTime,
@@ -180,7 +187,7 @@ func makeBackupDataProcessorSpecs(
 				DefaultURI:       defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
 				MVCCFilter:       mvccFilter,
-				Encryption:       encryption,
+				Encryption:       fileEncryption,
 				PKIDs:            pkIDs,
 				BackupStartTime:  startTime,
 				BackupEndTime:    endTime,
