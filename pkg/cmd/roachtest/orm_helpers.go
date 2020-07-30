@@ -160,9 +160,13 @@ func (r *ormTestsResults) summarizeFailed(
 	var bResults strings.Builder
 	fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
 	fmt.Fprintf(&bResults, "Tests run against %s %s\n", ormName, latestTag)
+	totalTestsRun := r.passExpectedCount + r.passUnexpectedCount + r.failExpectedCount + r.failUnexpectedCount
 	fmt.Fprintf(&bResults, "%d Total Tests Run\n",
-		r.passExpectedCount+r.passUnexpectedCount+r.failExpectedCount+r.failUnexpectedCount,
+		totalTestsRun,
 	)
+	if totalTestsRun == 0 {
+		t.Fatal("No tests ran! Fix the testing commands.")
+	}
 
 	p := func(msg string, count int) {
 		testString := "tests"

@@ -154,7 +154,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
 		`cd /mnt/data1/sqlalchemy/ && pytest --maxfail=0 \
 		--requirements=cockroachdb.sqlalchemy.test_requirements:Requirements \
-		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable
+		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable \
 		test/dialect/test_suite.py
 	`)
 
