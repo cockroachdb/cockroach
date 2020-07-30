@@ -7,14 +7,23 @@ source "$(dirname "${0}")/teamcity-support.sh"
 tc_start_block "Prepare environment"
 # Grab a testing license good for one hour.
 COCKROACH_DEV_LICENSE=$(curl -f "https://register.cockroachdb.com/api/prodtest")
-run mkdir -p artifacts
+
+# The GCS artifacts plugin in TeamCity doesn't play well with renaming files.
+# To work around this, use a temp directory name to collect artifacts and
+# rename it at the end.
+run mkdir -p in-progress
+rename_to_artifacts() {
+  mv in-progress artifacts
+}
+trap rename_to_artifacts EXIT
+
 maybe_ccache
 tc_end_block "Prepare environment"
 
 tc_start_block "Compile CockroachDB"
 # Buffer noisy output and only print it on failure.
-run build/builder.sh make build &> artifacts/roachtests-compile.log || (cat artifacts/roachtests-compile.log && false)
-rm artifacts/roachtests-compile.log
+run build/builder.sh make build &> in-progress/roachtests-compile.log || (cat in-progress/roachtests-compile.log && false)
+rm in-progress/roachtests-compile.log
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile roachprod/workload/roachtest"
@@ -40,6 +49,6 @@ build/builder.sh env \
   --cockroach "cockroach" \
   --roachprod "bin/roachprod" \
   --workload "bin/workload" \
-  --artifacts artifacts \
+  --artifacts in-progress \
   --teamcity
 tc_end_block "Run local roachtests"
