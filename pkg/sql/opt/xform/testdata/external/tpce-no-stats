@@ -243,30 +243,30 @@ limit
  │         ├── key: (1)
  │         ├── fd: (1)-->(20,21)
  │         ├── group-by
- │         │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:19
+ │         │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null sum:19!null
  │         │    ├── grouping columns: ca_id:1!null
  │         │    ├── internal-ordering: +1
  │         │    ├── immutable
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(6,19)
  │         │    ├── project
- │         │    │    ├── columns: column18:18 ca_id:1!null customer_account.ca_bal:6!null
+ │         │    │    ├── columns: column18:18!null ca_id:1!null customer_account.ca_bal:6!null
  │         │    │    ├── immutable
  │         │    │    ├── fd: (1)-->(6)
  │         │    │    ├── ordering: +1
  │         │    │    ├── inner-join (lookup last_trade)
- │         │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:8 hs_s_symb:9!null hs_qty:10 lt_s_symb:12!null lt_price:14!null
+ │         │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:8!null hs_s_symb:9!null hs_qty:10!null lt_s_symb:12!null lt_price:14!null
  │         │    │    │    ├── key columns: [9] = [12]
  │         │    │    │    ├── lookup columns are key
- │         │    │    │    ├── key: (1,8,12)
- │         │    │    │    ├── fd: ()-->(3), (1)-->(6), (8,9)-->(10), (12)-->(14), (9)==(12), (12)==(9)
- │         │    │    │    ├── ordering: +1 opt(3) [actual: +1]
- │         │    │    │    ├── left-join (lookup holding_summary)
- │         │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:8 hs_s_symb:9 hs_qty:10
+ │         │    │    │    ├── key: (8,12)
+ │         │    │    │    ├── fd: ()-->(3), (1)-->(6), (8,9)-->(10), (1)==(8), (8)==(1), (12)-->(14), (9)==(12), (12)==(9)
+ │         │    │    │    ├── ordering: +(1|8) opt(3) [actual: +1]
+ │         │    │    │    ├── inner-join (lookup holding_summary)
+ │         │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null hs_ca_id:8!null hs_s_symb:9!null hs_qty:10!null
  │         │    │    │    │    ├── key columns: [1] = [8]
- │         │    │    │    │    ├── key: (1,8,9)
- │         │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (8,9)-->(10)
- │         │    │    │    │    ├── ordering: +1 opt(3) [actual: +1]
+ │         │    │    │    │    ├── key: (8,9)
+ │         │    │    │    │    ├── fd: ()-->(3), (1)-->(6), (8,9)-->(10), (1)==(8), (8)==(1)
+ │         │    │    │    │    ├── ordering: +(1|8) opt(3) [actual: +1]
  │         │    │    │    │    ├── select
  │         │    │    │    │    │    ├── columns: ca_id:1!null ca_c_id:3!null customer_account.ca_bal:6!null
  │         │    │    │    │    │    ├── key: (1)
