@@ -778,6 +778,7 @@ func (z *zigzagJoiner) nextRow(
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			false,
 		)
 		if err != nil {
 			return nil, z.producerMeta(err)
@@ -924,6 +925,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			false,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)

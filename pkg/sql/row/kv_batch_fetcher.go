@@ -55,6 +55,7 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
+	singleFamily    bool
 	// lockStr represents the locking mode to use when fetching KVs.
 	lockStr descpb.ScanLockingStrength
 
@@ -159,6 +160,7 @@ func makeKVBatchFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	reverse bool,
+	singleFamily bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr descpb.ScanLockingStrength,
@@ -171,7 +173,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
+		sendFn, spans, reverse, singleFamily, useBatchLimit, firstBatchLimit, lockStr,
 	)
 }
 
@@ -181,6 +183,7 @@ func makeKVBatchFetcherWithSendFunc(
 	sendFn sendFunc,
 	spans roachpb.Spans,
 	reverse bool,
+	singleFamily bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr descpb.ScanLockingStrength,
@@ -232,6 +235,7 @@ func makeKVBatchFetcherWithSendFunc(
 		sendFn:          sendFn,
 		spans:           copySpans,
 		reverse:         reverse,
+		singleFamily:    singleFamily,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		lockStr:         lockStr,
@@ -263,14 +267,25 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
-		scans := make([]roachpb.ScanRequest, len(f.spans))
-		for i := range f.spans {
-			scans[i].SetSpan(f.spans[i])
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
-			scans[i].KeyLocking = keyLocking
-			ba.Requests[i].MustSetInner(&scans[i])
+		if f.singleFamily {
+			scans := make([]roachpb.GetRequest, len(f.spans))
+			for i := range f.spans {
+				scans[i].Key = f.spans[i].Key
+				ba.Requests[i].MustSetInner(&scans[i])
+			}
+			ba.Header.MaxSpanRequestKeys = 0
+			ba.Header.TargetBytes = 0
+		} else {
+			scans := make([]roachpb.ScanRequest, len(f.spans))
+			for i := range f.spans {
+				scans[i].SetSpan(f.spans[i])
+				scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+				scans[i].KeyLocking = keyLocking
+				ba.Requests[i].MustSetInner(&scans[i])
+			}
 		}
 	}
+
 	if cap(f.requestSpans) < len(f.spans) {
 		f.requestSpans = make(roachpb.Spans, len(f.spans))
 	} else {
@@ -286,7 +301,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			}
 			buf.WriteString(span.String())
 		}
-		log.VEventf(ctx, 2, "Scan %s", buf.String())
+		if f.singleFamily {
+			log.VEventf(ctx, 2, "Get %s", buf.String())
+		} else {
+			log.VEventf(ctx, 2, "Scan %s", buf.String())
+		}
 	}
 
 	// Reset spans in preparation for adding resume-spans below.
@@ -364,6 +383,14 @@ func (f *txnKVFetcher) nextBatch(
 				f.remainingBatches = t.BatchResponses[1:]
 			}
 			return true, t.Rows, batchResp, origSpan, nil
+		case *roachpb.GetResponse:
+			if t.Value != nil {
+				kvs = []roachpb.KeyValue{{
+					Key:   origSpan.Key,
+					Value: *t.Value,
+				}}
+			}
+			return true, kvs, batchResp, origSpan, nil
 		}
 	}
 	if f.fetchEnd {

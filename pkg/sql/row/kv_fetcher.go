@@ -38,12 +38,13 @@ func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	reverse bool,
+	singleFamily bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr descpb.ScanLockingStrength,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
+		txn, spans, reverse, singleFamily, useBatchLimit, firstBatchLimit, lockStr,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }

@@ -183,7 +183,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
 			ctx, tr.FlowCtx.Txn, tr.spans,
-			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV, false,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()

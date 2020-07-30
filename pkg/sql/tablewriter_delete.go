@@ -139,7 +139,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV, false); err != nil {
 		return resume, err
 	}
 
@@ -261,7 +261,7 @@ func (td *tableDeleter) deleteIndexScan(
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV, false); err != nil {
 		return resume, err
 	}
 

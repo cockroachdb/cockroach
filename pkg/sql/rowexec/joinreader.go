@@ -241,11 +241,13 @@ func newJoinReader(
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.FinishTrace = jr.outputStatsToTrace
+		jr.fetcher = &fetcher
 	} else {
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), spec.MaintainOrdering, rightCols, readerType)
+	useGets := len(jr.lookupCols) == len(indexCols)
+	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), spec.MaintainOrdering, rightCols, readerType, useGets)
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -259,6 +261,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	maintainOrdering bool,
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
+	useGets bool,
 ) {
 	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
@@ -268,6 +271,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		keyToInputRowIndices: make(map[string][]int),
 		numKeyCols:           numKeyCols,
 		lookupCols:           jr.lookupCols,
+		useGets:              useGets,
 	}
 	if readerType == indexJoinReaderType {
 		jr.strategy = &joinReaderIndexJoinStrategy{
@@ -442,7 +446,6 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		// All of the input rows were filtered out. Skip the index lookup.
 		return jrEmittingRows, nil
 	}
-
 	if jr.readerType == lookupJoinReaderType {
 		// Sort the spans so that we can rely upon the fetcher to limit the number of
 		// results per batch. It's safe to reorder the spans here because we already
@@ -450,10 +453,11 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		// phase.
 		sort.Sort(spans)
 	}
+	famType := jr.strategy.getSpanFamilyType()
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
-		jr.FlowCtx.TraceKV); err != nil {
+		jr.FlowCtx.TraceKV, famType == singleFamilyType); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, jr.DrainHelper()
 	}

@@ -184,6 +184,8 @@ type cFetcher struct {
 	// or not when StartScan is invoked.
 	reverse bool
 
+	singleFamily bool
+
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvBatchFetcher's
 	// firstBatchLimit.
@@ -514,7 +516,7 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := row.NewKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.lockStr)
+	f, err := row.NewKVFetcher(txn, spans, rf.reverse, rf.singleFamily, limitBatches, firstBatchLimit, rf.lockStr)
 	if err != nil {
 		return err
 	}
