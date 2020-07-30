@@ -693,7 +693,26 @@ func (e *distSQLSpecExecFactory) ConstructMax1Row(
 func (e *distSQLSpecExecFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: project set")
+	physPlan, plan := getPhysPlan(n)
+	cols := append(plan.physPlan.ResultColumns, zipCols...)
+	err := e.dsp.addProjectSet(
+		physPlan,
+		// Currently, projectSetProcessors are always planned as a "grouping"
+		// stage (meaning a single processor on the gateway), so we use
+		// cannotDistribute as the recommendation.
+		e.getPlanCtx(cannotDistribute),
+		&projectSetPlanningInfo{
+			columns:         cols,
+			numColsInSource: len(plan.physPlan.ResultColumns),
+			exprs:           exprs,
+			numColsPerGen:   numColsPerGen,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = cols
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructWindow(
