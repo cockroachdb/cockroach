@@ -1378,6 +1378,8 @@ enum MVCCFilter {
   All = 1;
 }
 
+// FileEncryptionOptions stores information needed by KV level requests (egs:
+// ExportRequest, ImportRequest) to encrypt or decrypt data.
 message FileEncryptionOptions {
   option (gogoproto.equal) = true;
   // Key specifies the key to use for encryption or decryption.

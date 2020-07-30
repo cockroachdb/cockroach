@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -92,14 +93,14 @@ func showBackupPlanHook(
 		}
 		defer store.Close()
 
-		var encryption *roachpb.FileEncryptionOptions
+		var encryption *jobspb.BackupEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 			opts, err := readEncryptionOptions(ctx, store)
 			if err != nil {
 				return err
 			}
 			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+			encryption = &jobspb.BackupEncryptionOptions{Key: encryptionKey}
 		}
 
 		incPaths, err := findPriorBackups(ctx, store)
