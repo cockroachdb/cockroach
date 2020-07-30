@@ -60,6 +60,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			"cannot create schema without being connected to a database")
 	}
 
+	// TODO (lucy): We need a MutableDatabaseDescriptor resolution function.
 	db, err := p.ResolveUncachedDatabaseByName(params.ctx, p.CurrentDatabase(), true /* required */)
 	if err != nil {
 		return err
@@ -117,6 +118,19 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		// Inherit the parent privileges.
 		Privileges: db.GetPrivileges(),
 	})
+
+	// Update the parent database with this schema information.
+	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
+	if mutDB.Schemas == nil {
+		mutDB.Schemas = make(map[string]sqlbase.DatabaseDescriptor_SchemaInfo)
+	}
+	mutDB.Schemas[desc.Name] = sqlbase.DatabaseDescriptor_SchemaInfo{
+		ID:      desc.ID,
+		Dropped: false,
+	}
+	if err := p.writeDatabaseChange(params.ctx, mutDB); err != nil {
+		return err
+	}
 
 	// Finally create the schema on disk.
 	return p.createDescriptorWithID(
