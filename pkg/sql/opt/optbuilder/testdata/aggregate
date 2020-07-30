@@ -4057,3 +4057,9 @@ scalar-group-by
  └── aggregations
       └── max [type=string]
            └── variable: column2 [type=string]
+
+# Regression test for #51877.
+build
+SELECT max((SELECT jsonb_agg(v))) FROM kv
+----
+error (42803): aggregate function calls cannot be nested

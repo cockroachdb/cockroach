@@ -577,6 +577,10 @@ func (s *scope) endAggFunc(cols opt.ColSet) (g *groupby) {
 // verifyAggregateContext checks that the current scope is allowed to contain
 // aggregate functions.
 func (s *scope) verifyAggregateContext() {
+	if s.inAgg {
+		panic(sqlbase.NewAggInAggError())
+	}
+
 	switch s.context {
 	case exprKindLateralJoin:
 		panic(pgerror.Newf(pgcode.Grouping,
@@ -983,6 +987,12 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 	expr := f.Walk(s)
 
+	// Update this scope to indicate that we are now inside an aggregate function
+	// so that any nested aggregates referencing this scope from a subquery will
+	// return an appropriate error. The returned tempScope will be used for
+	// building aggregate function arguments below in buildAggregateFunction.
+	tempScope := s.startAggFunc()
+
 	// We need to do this check here to ensure that we check the usage of special
 	// functions with the right error message.
 	if f.Filter != nil {
@@ -1014,7 +1024,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		Overload:   f.ResolvedOverload(),
 	}
 
-	return s.builder.buildAggregateFunction(f, &private, s)
+	return s.builder.buildAggregateFunction(f, &private, tempScope, s)
 }
 
 func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {
