@@ -69,6 +69,10 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
 		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
 
+		{`ALTER SCHEMA ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x RENAME ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x OWNER ??`, `ALTER SCHEMA`},
+
 		{`ALTER USER IF ??`, `ALTER ROLE`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER ROLE`},
 
@@ -181,6 +185,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP SCHEDULE ???`, `DROP SCHEDULES`},
 		{`DROP SCHEDULES ???`, `DROP SCHEDULES`},
+
+		{`DROP SCHEMA ??`, `DROP SCHEMA`},
 
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},
