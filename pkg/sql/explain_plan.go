@@ -47,7 +47,7 @@ type explainPlanNode struct {
 // makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
-	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents,
+	ctx context.Context, opts *tree.ExplainOptions, plan planComponents,
 ) (planNode, error) {
 	flags := explain.MakeFlags(opts)
 
@@ -59,7 +59,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	columns = append(sqlbase.ResultColumns(nil), columns...)
 
 	node := &explainPlanNode{
-		plan: *plan,
+		plan: plan,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},

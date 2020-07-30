@@ -44,17 +44,10 @@ NULL       /1       {5}       5
 statement ok
 SET experimental_distsql_planning = always
 
-query TTT
-EXPLAIN SELECT * FROM kv
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
 ----
-·  distribution  full
-·  vectorized    true
-
-
-query BT
-EXPLAIN (DISTSQL) SELECT * FROM kv
-----
-true  https://cockroachdb.github.io/distsqlplan/decode.html#eJyk0s1K80AYBeD9dxXhrD5lQv5dZKVohUBta9OFIFnEzEsJTTNxJilKyb1LJ4vaUnW0y_k588wLZwv1WiHG6Gk2vkkm1v-7JF2kj-MLKx2NR7cL69K6n08frNUGDLXgNMnXpBA_wwODD4YADCEYImQMjRQFKSXk7spWBxL-hthlKOuma3fbGUMhJCHeoi3bihBjkb9UNKeck3RcMHBq87LSzGpz3chynct3MKRNXqvYsh0fWc8gunb_pmrzJSH2evaFu-e6WkhOkvgBlfUnfjYRtmic6Ojiado_oD3zkb2fR3Z82wkMh_bNZd9ADmwnNJQDczkwkEPbiQzl0FwODeTI_kPBTrhzUo2oFRn1x90VkPiShrYq0cmCZlIUmhmWU53TG5xUO5x6wyKp9ZH-4Oew92346iDsHof9c-TgnHB4Tjj6VTjr_30EAAD__2R3o50=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyk0s9q4zAQBvD7PoX5TruLjP_vwactbQqGNEnjHArBB9cagoljuZIdWoLfvUQupAlpqzZHSfPpNwOzg3qqECMdjUfXC6uTlXU7n95Zy9HDbHyVTKzfN0m6SO_Hf6y3kr9DwXqbgaEWnCb5hhTiJTww-GAIwBCCIULG0EhRkFJC7kt2OpDwZ8QuQ1k3Xbu_zhgKIQnxDm3ZVoQYi_yxojnlnKTjgoFTm5eVZtbb_40sN7l8AUPa5LWKLdvxkfUMomsPf6o2XxFir2cfuAeuq4XkJIkfUVl_prOJsEXjRCeF52n_iPbMR_a-HtnxbScwHNo3l30DObCd0FAOzOXAQA5tJzKUQ3M5NJAj-wcLdsadk2pErchof9z9AhJf0bCtSnSyoJkUhWaG41Tn9AUn1Q6v3nBIav2kG3wf9j4N_zsKu6dh_xI5uCQcXhKOvhXO-l-vAQAA__-hwaj8
 
 # Note that we want to test DistSQL physical planning and the obvious choice
 # would be to use EXPLAIN (DISTSQL). However, this explain variant doesn't have
@@ -135,12 +128,6 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 └ Node 5
   └ *colrpc.Outbox
     └ *colfetcher.ColBatchScan
-
-query TTT
-EXPLAIN SELECT k::REGCLASS FROM kv
-----
-·  distribution  partial
-·  vectorized    true
 
 # Check that hash join is supported by the new factory.
 query II rowsort
