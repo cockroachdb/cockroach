@@ -1298,8 +1298,7 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO (rohany): Add tests for backup/restore with revision history and
-	//  incremental backups once types can change.
+	// TODO (rohany): Add some tests for backup/restore with revision history.
 
 	// Test full cluster backup/restore.
 	t.Run("full-cluster", func(t *testing.T) {
@@ -1352,6 +1351,12 @@ INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
 		sqlDBRestore.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
 		sqlDBRestore.ExpectErr(t, `pq: type "d2.public.farewell" already exists`, `CREATE TYPE d2.farewell AS ENUM ('go', 'away')`)
 		sqlDBRestore.ExpectErr(t, `pq: type "d2.public._farewell" already exists`, `CREATE TYPE d2._farewell AS ENUM ('go', 'away')`)
+
+		// We shouldn't be able to drop the types since there are tables that
+		// depend on them. These tests ensure that the back references from types
+		// to tables that use them are handled correctly by backup and restore.
+		sqlDBRestore.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d.public.t1 d.public.t2\]\) still depend on it`, `DROP TYPE d.greeting`)
+		sqlDBRestore.ExpectErr(t, `pq: cannot drop type "farewell" because other objects \(\[d2.public.t1 d2.public.t2\]\) still depend on it`, `DROP TYPE d2.farewell`)
 	})
 
 	// Test backup/restore of a database.
@@ -1400,6 +1405,12 @@ CREATE TABLE d.expr (
 		sqlDB.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
 		sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`, `CREATE TYPE d.farewell AS ENUM ('hello', 'hiya')`)
 		sqlDB.ExpectErr(t, `pq: type "d.public._farewell" already exists`, `CREATE TYPE d._farewell AS ENUM ('hello', 'hiya')`)
+
+		// We shouldn't be able to drop the types since there are tables that
+		// depend on them. These tests ensure that the back references from types
+		// to tables that use them are handled correctly by backup and restore.
+		sqlDB.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d.public.t1 d.public.t2 d.public.expr d.public.t3\]\) still depend on it`, `DROP TYPE d.greeting`)
+		sqlDB.ExpectErr(t, `pq: cannot drop type "farewell" because other objects \(\[d.public.t3\]\) still depend on it`, `DROP TYPE d.farewell`)
 	})
 
 	// Test backup/restore of a single table.
@@ -1466,8 +1477,6 @@ INSERT INTO d.t3 VALUES ('hi');
 	// Test cases where we attempt to remap types in the backup to types that
 	// already exist in the cluster.
 	t.Run("backup-remap", func(t *testing.T) {
-		// TODO (rohany): Add a test for remapping to enums that are compatible
-		//  but not the same once ALTER TYPE is possibe.
 		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
@@ -1489,6 +1498,9 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			// Check that the table data is restored correctly and the types aren't touched.
 			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d.greeting, ARRAY['hello']::d.greeting[]`, [][]string{{"hello", "{hello}"}})
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
+
+			// d.t should be added as a back reference to greeting.
+			sqlDB.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d.public.t2 d.public.t\]\) still depend on it`, `DROP TYPE d.greeting`)
 		}
 
 		{
@@ -1515,6 +1527,9 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = 'd2'`)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d2.t2 ORDER BY x`, [][]string{{"{hello}"}})
 			sqlDB.Exec(t, `INSERT INTO d2.t2 VALUES (ARRAY['hi'::d2.greeting])`)
+
+			// d2.t and d2.t2 should both have back references to d2.greeting.
+			sqlDB.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d2.public.t d2.public.t2\]\) still depend on it`, `DROP TYPE d2.greeting`)
 		}
 
 		{
@@ -1554,6 +1569,23 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `RESTORE TABLE d5.tb1 FROM 'nodelocal://0/test3/' WITH into_db = 'd6'`)
 			sqlDB.Exec(t, `INSERT INTO d6.tb1 VALUES (ARRAY['v1']::d6._typ1)`)
 		}
+
+		{
+			// Test a case where we restore to an existing enum that is compatible with,
+			// but not the same as greeting.
+			sqlDB.Exec(t, `CREATE DATABASE d7`)
+			sqlDB.Exec(t, `CREATE TYPE d7.greeting AS ENUM ('hello', 'howdy', 'hi')`)
+			// Now add a value to greeting -- this will keep the internal representations
+			// of the existing enum members the same.
+			sqlDB.Exec(t, `ALTER TYPE d7.greeting ADD VALUE 'greetings' BEFORE 'howdy'`)
+
+			// We should be able to restore d.greeting using d7.greeting.
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd7'`)
+			sqlDB.Exec(t, `INSERT INTO d7.t VALUES ('greetings')`)
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d7.t ORDER BY x`, [][]string{{"hello"}, {"greetings"}, {"howdy"}})
+			// d7.t should have a back reference from d7.greeting.
+			sqlDB.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d7.public.t\]\) still depend on it`, `DROP TYPE d7.greeting`)
+		}
 	})
 
 	t.Run("incremental", func(t *testing.T) {
@@ -1578,6 +1610,37 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 			sqlDB.Exec(t, `CREATE DATABASE d2`)
 			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
 			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d2.newname`, [][]string{{"hello"}})
+		}
+
+		{
+			// Create a database with a type, and take a backup.
+			sqlDB.Exec(t, `CREATE DATABASE d3`)
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+
+			// Now create a new type in that database.
+			sqlDB.Exec(t, `CREATE TYPE d3.farewell AS ENUM ('bye', 'cya')`)
+
+			// Perform an incremental backup, which should pick up the new type.
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+
+			// Until #51362 lands we have to manually clean up this type before the
+			// DROP DATABASE statement otherwise we'll leave behind an orphaned desc.
+			sqlDB.Exec(t, `DROP TYPE d3.farewell`)
+
+			// Now restore it.
+			sqlDB.Exec(t, `DROP DATABASE d3`)
+			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/test2/'`)
+			// Check that we are able to use the type.
+			sqlDB.Exec(t, `CREATE TABLE d3.t (x d3.farewell)`)
+			sqlDB.Exec(t, `DROP TABLE d3.t`)
+
+			// If we drop the type and back up again, it should be gone.
+			sqlDB.Exec(t, `DROP TYPE d3.farewell`)
+
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `DROP DATABASE d3`)
+			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/test2/'`)
+			sqlDB.ExpectErr(t, `pq: type "d3.farewell" does not exist`, `CREATE TABLE d3.t (x d3.farewell)`)
 		}
 	})
 }

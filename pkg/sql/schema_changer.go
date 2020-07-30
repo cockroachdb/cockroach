@@ -316,7 +316,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 
 		fks := table.AllActiveAndInactiveForeignKeys()
 		for _, fk := range fks {
-			if err := waitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
+			if err := WaitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
 				return err
 			}
 		}
@@ -496,7 +496,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
@@ -574,7 +574,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
@@ -732,12 +732,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "finished stepping through state machine")
 
 	// wait for the state change to propagate to all leases.
-	return waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID)
+	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID)
 }
 
-// Wait until the entire cluster has been updated to the latest version
-// of the descriptor.
-func waitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID sqlbase.ID) error {
+// WaitToUpdateLeases until the entire cluster has been updated to the latest
+// version of the descriptor.
+func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID sqlbase.ID) error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -1329,11 +1329,11 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		return err
 	}
 
-	if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 		return err
 	}
 	for id := range fksByBackrefTable {
-		if err := waitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
 			return err
 		}
 	}
