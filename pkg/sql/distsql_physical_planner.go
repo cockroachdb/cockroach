@@ -2983,11 +2983,8 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	}
 	numResults := len(plan.ResultTypes)
 
-	indexVarMap := makePlanToStreamColMap(len(n.columns))
-	copy(indexVarMap, plan.PlanToStreamColMap)
-
 	// Create the project set processor spec.
-	projectSetSpec, err := createProjectSetSpec(planCtx, n, indexVarMap)
+	projectSetSpec, err := createProjectSetSpec(planCtx, n, plan.PlanToStreamColMap)
 	if err != nil {
 		return nil, err
 	}

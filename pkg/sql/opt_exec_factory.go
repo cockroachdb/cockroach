@@ -921,29 +921,13 @@ func (ef *execFactory) ConstructProjectSet(
 ) (exec.Node, error) {
 	src := asDataSource(n)
 	cols := append(src.columns, zipCols...)
-	p := &projectSetNode{
+	return &projectSetNode{
 		source:          src.plan,
-		sourceCols:      src.columns,
 		columns:         cols,
 		numColsInSource: len(src.columns),
 		exprs:           exprs,
-		funcs:           make([]*tree.FuncExpr, len(exprs)),
 		numColsPerGen:   numColsPerGen,
-		run: projectSetRun{
-			gens:      make([]tree.ValueGenerator, len(exprs)),
-			done:      make([]bool, len(exprs)),
-			rowBuffer: make(tree.Datums, len(cols)),
-		},
-	}
-
-	for i, expr := range exprs {
-		if tFunc, ok := expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
-			// Set-generating functions: generate_series() etc.
-			p.funcs[i] = tFunc
-		}
-	}
-
-	return p, nil
+	}, nil
 }
 
 // ConstructWindow is part of the exec.Factory interface.
