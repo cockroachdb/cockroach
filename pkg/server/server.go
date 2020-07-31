@@ -135,13 +135,14 @@ type Server struct {
 	recorder     *status.MetricsRecorder
 	runtime      *status.RuntimeStatSampler
 
-	admin          *adminServer
-	status         *statusServer
-	authentication *authenticationServer
-	tsDB           *ts.DB
-	tsServer       *ts.Server
-	raftTransport  *kvserver.RaftTransport
-	stopper        *stop.Stopper
+	admin              *adminServer
+	status             *statusServer
+	authentication     *authenticationServer
+	oidcAuthentication *oidcAuthenticationServer
+	tsDB               *ts.DB
+	tsServer           *ts.Server
+	raftTransport      *kvserver.RaftTransport
+	stopper            *stop.Stopper
 
 	debug *debug.Server
 
@@ -1591,6 +1592,13 @@ func (s *Server) Start(ctx context.Context) error {
 	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
 
+	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
+	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
+	err = s.ConfigureOIDC(ctx, s.ClusterSettings())
+	if err != nil {
+		return err
+	}
+
 	// Serve UI assets.
 	//
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
@@ -1603,6 +1611,7 @@ func (s *Server) Start(ctx context.Context) error {
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         s.cfg.RequireWebSession(),
 			NodeID:               s.nodeIDContainer,
+			GetOIDCConf:          s.oidcAuthentication.GetUIConf,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u

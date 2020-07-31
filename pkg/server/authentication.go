@@ -120,6 +120,46 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	cookie, err := s.createSessionFor(ctx, username)
+	if err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLoginResponse{}, nil
+}
+
+var errUsernameDoesNotExist = errors.New("username for session does not exist")
+
+// UserLoginFromSSO checks for the existence of a given username and if it exists,
+// creates a session for the username in the `web_sessions` table.
+// The session's ID and secret are returned to the caller as an HTTP cookie,
+// added via a "Set-Cookie" header.
+func (s *authenticationServer) UserLoginFromSSO(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
+	exists, _, _, _, err := sql.GetUserHashedPassword(
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed creating session for username")
+	}
+
+	if !exists {
+		return nil, errUsernameDoesNotExist
+	}
+
+	return s.createSessionFor(ctx, username)
+}
+
+func (s *authenticationServer) createSessionFor(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
 	if err != nil {
@@ -133,17 +173,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
-	if err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	return &serverpb.UserLoginResponse{}, nil
+	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.

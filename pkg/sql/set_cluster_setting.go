@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/oidc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -279,6 +280,13 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				break
 			}
 			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
+		case oidc.OIDCEnabledSettingName:
+			switch expectedEncodedValue {
+			case "true":
+				telemetry.Inc(oidc.OIDCEnabledCounter)
+			case "false":
+				telemetry.Inc(oidc.OIDCDisabledCounter)
+			}
 		}
 
 		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
