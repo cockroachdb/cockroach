@@ -49,10 +49,10 @@ type ProcOutputHelper struct {
 	output   RowReceiver
 	RowAlloc sqlbase.EncDatumRowAlloc
 
-	filter *ExprHelper
+	filter *execinfrapb.ExprHelper
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
-	renderExprs []ExprHelper
+	renderExprs []execinfrapb.ExprHelper
 	// outputCols is non-nil if we have a projection. Only one of renderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
@@ -108,7 +108,7 @@ func (h *ProcOutputHelper) Init(
 	h.output = output
 	h.numInternalCols = len(typs)
 	if post.Filter != (execinfrapb.Expression{}) {
-		h.filter = &ExprHelper{}
+		h.filter = &execinfrapb.ExprHelper{}
 		if err := h.filter.Init(post.Filter, typs, semaCtx, evalCtx); err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.renderExprs) >= nRenders {
 			h.renderExprs = h.renderExprs[:nRenders]
 		} else {
-			h.renderExprs = make([]ExprHelper, nRenders)
+			h.renderExprs = make([]execinfrapb.ExprHelper, nRenders)
 		}
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
@@ -145,7 +145,7 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			h.renderExprs[i] = ExprHelper{}
+			h.renderExprs[i] = execinfrapb.ExprHelper{}
 			if err := h.renderExprs[i].Init(expr, typs, semaCtx, evalCtx); err != nil {
 				return err
 			}
