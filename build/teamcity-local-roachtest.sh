@@ -38,7 +38,7 @@ env \
     TC_SERVER_URL="${TC_SERVER_URL-}" \
     TC_BUILD_BRANCH="${TC_BUILD_BRANCH-}" \
   stdbuf -oL -eL \
-  ./bin/roachtest run acceptance kv/splits cdc/bank \
+  ./bin.docker_amd64/roachtest run acceptance kv/splits cdc/bank \
   --local \
   --parallelism=1 \
   --cockroach "cockroach" \
