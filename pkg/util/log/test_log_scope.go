@@ -241,18 +241,6 @@ func (l *loggerT) dirTestOverride(expected, newDir string) error {
 	return l.closeFileLocked()
 }
 
-func (l *loggerT) closeFileLocked() error {
-	if l.mu.file != nil {
-		if sb, ok := l.mu.file.(*syncBuffer); ok {
-			if err := sb.file.Close(); err != nil {
-				return err
-			}
-		}
-		l.mu.file = nil
-	}
-	return restoreStderr()
-}
-
 func isDirEmpty(dirname string) (bool, error) {
 	f, err := os.Open(dirname)
 	if err != nil {
