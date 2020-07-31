@@ -100,6 +100,7 @@ if [ $# -ge 1 ]; then
     shift
 fi
 
-# lib is populated in v20.2 or higher, but we make a temporary directory
-# in /lib such that TeamCity can pick up the artifacts.
-(set -x && mkdir -p lib && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
+# lib is populated in v20.2 or higher, but we make a placeholder for the same
+# files in /lib such that TeamCity can pick up the artifacts.
+# These placeholders are unused in the actual release process.
+(set -x && mkdir -p lib && touch lib/libgeos.so && touch lib/libgeos_c.so && CGO_ENABLED=1 make BUILDTYPE=release "${args[@]}" "$@")
