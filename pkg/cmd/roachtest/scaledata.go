@@ -40,11 +40,18 @@ func registerScaleData(r *testRegistry) {
 		app, flags := app, flags // copy loop iterator vars
 		const duration = 10 * time.Minute
 		for _, n := range []int{3, 6} {
+			var skip, skipDetail string
+			if app == "job-coordinator" {
+				skip = "skipping flaky scaledata/job-coordinator test"
+				skipDetail = "work underway to deflake https://github.com/cockroachdb/cockroach/issues/51765"
+			}
 			r.Add(testSpec{
-				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
-				Owner:   OwnerKV,
-				Timeout: 2 * duration,
-				Cluster: makeClusterSpec(n + 1),
+				Name:        fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
+				Owner:       OwnerKV,
+				Timeout:     2 * duration,
+				Cluster:     makeClusterSpec(n + 1),
+				Skip:        skip,
+				SkipDetails: skipDetail,
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runSqlapp(ctx, t, c, app, flags, duration)
 				},
