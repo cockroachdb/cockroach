@@ -355,23 +355,6 @@ func setActive() {
 	}
 }
 
-func resetActive() (restore func()) {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-
-	prevActive, prevFirstuse := logging.mu.active, logging.mu.firstUseStack
-	// Mark loggging as non-active: a test log scope
-	// resets the active bit to override the logging destination.
-	logging.mu.active = false
-
-	return func() {
-		logging.mu.Lock()
-		defer logging.mu.Unlock()
-		logging.mu.active = prevActive
-		logging.mu.firstUseStack = prevFirstuse
-	}
-}
-
 // outputToStderr writes the provided entry and potential stack
 // trace(s) to the process' external stderr stream.
 func (l *loggerT) outputToStderr(entry Entry, stacks []byte) error {
