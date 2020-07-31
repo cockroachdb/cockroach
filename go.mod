@@ -47,6 +47,7 @@ require (
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a
 	github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
+	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/dave/dst v0.24.0
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/docker/distribution v2.7.0+incompatible
@@ -75,7 +76,7 @@ require (
 	github.com/golang/snappy v0.0.2-0.20190904063534-ff6b7dc882cf
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.5.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
@@ -129,6 +130,7 @@ require (
 	github.com/pierrre/geohash v1.0.0
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pmezard/go-difflib v1.0.0
+	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
@@ -143,12 +145,12 @@ require (
 	github.com/twpayne/go-geom v1.3.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
-	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
 	golang.org/x/mod v0.3.0 // indirect
-	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
-	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
+	golang.org/x/net v0.0.0-20200707034311-ab3426394381
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae
@@ -156,10 +158,12 @@ require (
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
 	google.golang.org/api v0.1.0
-	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
+	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/grpc v1.29.1
+	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.5.0 // indirect
+	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
