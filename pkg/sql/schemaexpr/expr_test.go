@@ -107,3 +107,46 @@ func TestValidateExpr(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractColumnIDs(t *testing.T) {
+	// Trick to get the init() for the builtins package to run.
+	_ = builtins.AllBuiltinNames
+
+	table := tree.Name("foo")
+	desc := testTableDesc(
+		string(table),
+		[]testCol{{"a", types.Bool}, {"b", types.Int}},
+		[]testCol{{"c", types.String}},
+	)
+
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{"true", "()"},
+		{"now()", "()"},
+		{"a", "(1)"},
+		{"a AND b > 1", "(1,2)"},
+		{"a AND c = 'foo'", "(1,3)"},
+		{"a OR (b > 1 AND c = 'foo')", "(1-3)"},
+		{"a AND abs(b) > 5 AND lower(c) = 'foo'", "(1-3)"},
+	}
+
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			colIDs, err := ExtractColumnIDs(&desc, expr)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			if colIDs.String() != d.expected {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expected, colIDs)
+			}
+		})
+	}
+}
