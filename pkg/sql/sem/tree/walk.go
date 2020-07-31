@@ -963,19 +963,19 @@ func (stmt *ControlJobs) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
-func (stmt *ControlSchedules) copyNode() *ControlSchedules {
-	stmtCopy := *stmt
+func (n *ControlSchedules) copyNode() *ControlSchedules {
+	stmtCopy := *n
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
-func (stmt *ControlSchedules) walkStmt(v Visitor) Statement {
-	sel, changed := walkStmt(v, stmt.Schedules)
+func (n *ControlSchedules) walkStmt(v Visitor) Statement {
+	sel, changed := walkStmt(v, n.Schedules)
 	if changed {
-		stmt = stmt.copyNode()
-		stmt.Schedules = sel.(*Select)
+		n = n.copyNode()
+		n.Schedules = sel.(*Select)
 	}
-	return stmt
+	return n
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
@@ -1419,6 +1419,7 @@ var _ walkableStmt = &ValuesClause{}
 var _ walkableStmt = &CancelQueries{}
 var _ walkableStmt = &CancelSessions{}
 var _ walkableStmt = &ControlJobs{}
+var _ walkableStmt = &ControlSchedules{}
 var _ walkableStmt = &BeginTransaction{}
 
 // walkStmt walks the entire parsed stmt calling WalkExpr on each

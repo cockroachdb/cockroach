@@ -781,6 +781,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> insert_stmt
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
+%type <*tree.Select>   for_schedules_clause
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
@@ -2527,6 +2528,10 @@ cancel_jobs_stmt:
 | CANCEL JOBS select_stmt
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.CancelJob}
+  }
+| CANCEL JOBS for_schedules_clause
+  {
+    $$.val = &tree.ControlJobsForSchedules{Schedules: $3.slct(), Command: tree.CancelJob}
   }
 | CANCEL JOBS error // SHOW HELP: CANCEL JOBS
 
@@ -4782,12 +4787,29 @@ pause_jobs_stmt:
       Command: tree.PauseJob,
     }
   }
-| PAUSE JOB error  // SHOW HELP: PAUSE JOBS
+| PAUSE JOB error // SHOW HELP: PAUSE JOBS
 | PAUSE JOBS select_stmt
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob}
   }
+| PAUSE JOBS for_schedules_clause
+  {
+    $$.val = &tree.ControlJobsForSchedules{Schedules: $3.slct(), Command: tree.PauseJob}
+  }
 | PAUSE JOBS error // SHOW HELP: PAUSE JOBS
+
+
+for_schedules_clause:
+  FOR SCHEDULES select_stmt
+  {
+    $$.val = $3.slct()
+  }
+| FOR SCHEDULE a_expr
+  {
+   $$.val = &tree.Select{
+     Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+   }
+  }
 
 // %Help: PAUSE SCHEDULES - pause scheduled jobs
 // %Category: Misc
@@ -4814,7 +4836,6 @@ pause_schedules_stmt:
       Command: tree.PauseSchedule,
     }
   }
-| with_clause PAUSE SCHEDULES
 | PAUSE SCHEDULES error // SHOW HELP: PAUSE SCHEDULES
 
 // %Help: CREATE SCHEMA - create a new schema
@@ -6253,6 +6274,10 @@ resume_jobs_stmt:
 | RESUME JOBS select_stmt
   {
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.ResumeJob}
+  }
+| RESUME JOBS for_schedules_clause
+  {
+    $$.val = &tree.ControlJobsForSchedules{Schedules: $3.slct(), Command: tree.ResumeJob}
   }
 | RESUME JOBS error // SHOW HELP: RESUME JOBS
 
