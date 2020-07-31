@@ -483,6 +483,11 @@ func decodeCopy(in string) string {
 		}
 		start = i + 1
 	}
+	// If there were no backslashes in the input string, we can simply
+	// return it.
+	if start == 0 {
+		return in
+	}
 	if start < len(in) {
 		buf.WriteString(in[start:])
 	}

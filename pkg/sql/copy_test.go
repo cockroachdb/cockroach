@@ -26,6 +26,10 @@ func TestDecodeCopy(t *testing.T) {
 		expect string
 	}{
 		{
+			in:     "simple",
+			expect: "simple",
+		},
+		{
 			in:     `new\nline`,
 			expect: "new\nline",
 		},
@@ -82,5 +86,17 @@ func TestDecodeCopy(t *testing.T) {
 				t.Errorf("%q: got %q, expected %q", test.in, out, test.expect)
 			}
 		})
+	}
+}
+
+func BenchmarkDecodeCopySimple(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		decodeCopy("test string")
+	}
+}
+
+func BenchmarkDecodeCopyEscaped(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		decodeCopy(`string \x1 with escape`)
 	}
 }
