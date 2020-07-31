@@ -155,6 +155,13 @@ type Datum interface {
 // Datums is a slice of Datum values.
 type Datums []Datum
 
+const (
+	// SizeOfDatum is the memory size of a Datum reference.
+	SizeOfDatum = int64(unsafe.Sizeof(Datum(nil)))
+	// SizeOfDatums is the memory size of a Datum slice.
+	SizeOfDatums = int64(unsafe.Sizeof(Datums(nil)))
+)
+
 // Len returns the number of Datum values.
 func (d Datums) Len() int { return len(d) }
 
