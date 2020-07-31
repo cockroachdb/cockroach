@@ -623,6 +623,13 @@ func TestRedirectStderr(t *testing.T) {
 
 	Infof(context.Background(), "test")
 
+	TestingResetActive()
+	cleanup, err := SetupRedactionAndStderrRedirects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
