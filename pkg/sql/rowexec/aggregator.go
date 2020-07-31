@@ -117,6 +117,7 @@ func (ag *aggregatorBase) init(
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
 	ag.inputTypes = input.OutputTypes()
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
@@ -130,41 +131,17 @@ func (ag *aggregatorBase) init(
 				)
 			}
 		}
-		argTypes := make([]*types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
-		for j, c := range aggInfo.ColIdx {
-			if c >= uint32(len(ag.inputTypes)) {
-				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
-			}
-			argTypes[j] = ag.inputTypes[c]
-		}
-
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
-		arguments := make(tree.Datums, len(aggInfo.Arguments))
-		for j, argument := range aggInfo.Arguments {
-			h := execinfra.ExprHelper{}
-			// Pass nil types and row - there are no variables in these expressions.
-			if err := h.Init(argument, nil /* types */, semaCtx, flowCtx.EvalCtx); err != nil {
-				return errors.Wrapf(err, "%s", argument)
-			}
-			d, err := h.Eval(nil /* row */)
-			if err != nil {
-				return errors.Wrapf(err, "%s", argument)
-			}
-			argTypes[len(aggInfo.ColIdx)+j] = d.ResolvedType()
-			arguments[j] = d
-		}
-
-		aggConstructor, retType, err := execinfrapb.GetAggregateInfo(aggInfo.Func, argTypes...)
+		constructor, arguments, outputType, err := execinfrapb.GetAggregateConstructor(
+			flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
+		)
 		if err != nil {
 			return err
 		}
-
-		ag.funcs[i] = ag.newAggregateFuncHolder(aggConstructor, arguments)
+		ag.funcs[i] = ag.newAggregateFuncHolder(constructor, arguments)
 		if aggInfo.Distinct {
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
-
-		ag.outputTypes[i] = retType
+		ag.outputTypes[i] = outputType
 	}
 
 	return ag.ProcessorBase.Init(
@@ -903,7 +880,6 @@ type aggregateFuncHolder struct {
 	// aggregate, for instance, the separator in string_agg.
 	arguments tree.Datums
 
-	group *aggregatorBase
 	seen  map[string]struct{}
 	arena *stringarena.Arena
 }
@@ -919,7 +895,6 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:    create,
-		group:     ag,
 		arena:     &ag.arena,
 		arguments: arguments,
 	}

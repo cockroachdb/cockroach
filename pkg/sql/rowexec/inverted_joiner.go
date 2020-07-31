@@ -70,7 +70,7 @@ type invertedJoiner struct {
 	// the table column that was indexed.
 	invertedColID descpb.ColumnID
 
-	onExprHelper execinfra.ExprHelper
+	onExprHelper execinfrapb.ExprHelper
 	combinedRow  sqlbase.EncDatumRow
 
 	joinType descpb.JoinType
@@ -229,7 +229,7 @@ func newInvertedJoiner(
 	ij.combinedRow = make(sqlbase.EncDatumRow, 0, len(onExprColTypes))
 
 	if ij.datumsToInvertedExpr == nil {
-		var invertedExprHelper execinfra.ExprHelper
+		var invertedExprHelper execinfrapb.ExprHelper
 		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 			return nil, err
 		}

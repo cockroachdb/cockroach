@@ -35,15 +35,14 @@ func GetAggregateFuncIdx(funcName string) (int32, error) {
 	return funcIdx, nil
 }
 
+// AggregateConstructor is a function that creates an aggregate function.
+type AggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...*types.T,
-) (
-	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType *types.T,
-	err error,
-) {
+) (aggregateConstructor AggregateConstructor, returnType *types.T, err error) {
 	if fn == AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
@@ -101,6 +100,43 @@ func GetAggregateInfo(
 	return nil, nil, errors.Errorf(
 		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
+}
+
+// GetAggregateConstructor processes the specification of a single aggregate
+// function.
+func GetAggregateConstructor(
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	aggInfo *AggregatorSpec_Aggregation,
+	inputTypes []*types.T,
+) (constructor AggregateConstructor, arguments tree.Datums, outputType *types.T, err error) {
+	argTypes := make([]*types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+	for j, c := range aggInfo.ColIdx {
+		if c >= uint32(len(inputTypes)) {
+			err = errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
+			return
+		}
+		argTypes[j] = inputTypes[c]
+	}
+	arguments = make(tree.Datums, len(aggInfo.Arguments))
+	var d tree.Datum
+	for j, argument := range aggInfo.Arguments {
+		h := ExprHelper{}
+		// Pass nil types and row - there are no variables in these expressions.
+		if err = h.Init(argument, nil /* types */, semaCtx, evalCtx); err != nil {
+			err = errors.Wrapf(err, "%s", argument)
+			return
+		}
+		d, err = h.Eval(nil /* row */)
+		if err != nil {
+			err = errors.Wrapf(err, "%s", argument)
+			return
+		}
+		argTypes[len(aggInfo.ColIdx)+j] = d.ResolvedType()
+		arguments[j] = d
+	}
+	constructor, outputType, err = GetAggregateInfo(aggInfo.Func, argTypes...)
+	return
 }
 
 // Equals returns true if two aggregation specifiers are identical (and thus
