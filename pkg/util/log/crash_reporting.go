@@ -101,44 +101,44 @@ func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
+//
+// Note that ReportPanic() does not assume that the panic object
+// will be left uncaught to terminate the process. For example,
+// at the time of this writing, ReportPanic() is called from
+// RecoverAndReportNonfatalPanic() above.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	// Announce the panic has occurred to all places. The purpose
-	// of this call is double:
+	// of this call is threefold:
 	// - it ensures there's a notice on the terminal, in case
 	//   logging would only go to file otherwise;
+	// - it ensures there's a notice on the output file, in
+	//   case the panic is uncaught and internal stderr
+	//   writes by the Go runtime have not been set up to
+	//   redirect to a separate log file.
 	// - it places a timestamp in front of the panic object,
 	//   in case the various configuration options make
 	//   the Go runtime solely responsible for printing
 	//   out the panic object to the log file.
 	//   (The go runtime doesn't time stamp its output.)
-	Shout(ctx, Severity_ERROR, "a panic has occurred!")
+	//
+	// Note that this code will cause the panic object to be printed
+	// twice in some cases (specifically, when the panic is uncaught).
+	// A previous version of this code was trying to prevent the
+	// double print and was failing to do so effectively, causing
+	// instead panics to be lost in the case where they were
+	// recovered (eg via RecoverAndReportNonfatalPanic()).
+	//
+	// To properly prevent double prints, the API could be changed to
+	// indicate whether the Go runtime will *eventually* print the panic
+	// on its own. Unfortunately, this is a bit hard to do, as the
+	// caller of ReportPanic() may not be in a position to know for
+	// sure, whether some other caller further in the call stack is
+	// catching the panic object in the end or not.
+	panicErr := PanicAsError(depth+1, r)
+	Shoutf(ctx, Severity_ERROR, "a panic has occurred!\n%+v", panicErr)
 
-	if stderrLog.redirectInternalStderrWrites {
-		// If we decided that the internal stderr writes performed by the
-		// Go runtime are going to our file, that's also where the panic
-		// details will go automatically when the runtime processes the
-		// uncaught panic.
-		// This means the panic details won't get copied to
-		// the process' external stderr stream automatically
-		// any more.
-		// Now, if the user asked that fatal errors be copied
-		// to the external stderr as well, we'll take that
-		// as an indication they also want to see panic details
-		// there. Do it here.
-		if LoggingToStderr(Severity_FATAL) {
-			stderrLog.printPanicToExternalStderr(ctx, depth+1, r)
-		}
-	} else {
-		// If we are not redirecting internal stderr writes, then the
-		// details printed by the Go runtime won't automatically reach our
-		// log file and instead go to the process' external stderr.
-		//
-		// However, we actually want to persist these details. So print
-		// them in the log file ourselves.
-		stderrLog.printPanicToFile(ctx, depth+1, r)
-	}
-
-	sendCrashReport(ctx, sv, PanicAsError(depth+1, r), ReportTypePanic)
+	// In addition to informing the user, also report the details to telemetry.
+	sendCrashReport(ctx, sv, panicErr, ReportTypePanic)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
