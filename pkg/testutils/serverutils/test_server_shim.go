@@ -204,6 +204,8 @@ type TestServerInterface interface {
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
 	StartTenant(params base.TestTenantArgs) (pgAddr string, _ error)
+
+	ScratchRange() (roachpb.Key, error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

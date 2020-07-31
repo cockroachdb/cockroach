@@ -689,11 +689,10 @@ func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
 	if tc.scratchRangeID > 0 {
 		return scratchKey
 	}
-	_, right, err := tc.SplitRange(scratchKey)
+	scratchKey, err := tc.Servers[0].ScratchRange()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tc.scratchRangeID = right.RangeID
 	return scratchKey
 }
 
