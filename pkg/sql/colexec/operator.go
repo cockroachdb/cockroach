@@ -139,6 +139,8 @@ type Closers []Closer
 
 // CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
 // is 1 or higher. The given prefix is prepended to the log message.
+// Note: this method should *only* be used when returning an error doesn't make
+// sense.
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 	prefix += ":"
 	for _, closer := range c {
@@ -146,6 +148,17 @@ func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
 		}
 	}
+}
+
+// Close closes all Closers and returns the last error (if any occurs).
+func (c Closers) Close(ctx context.Context) error {
+	var lastErr error
+	for _, closer := range c {
+		if err := closer.Close(ctx); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 // CallbackCloser is a utility struct that implements the Closer interface by

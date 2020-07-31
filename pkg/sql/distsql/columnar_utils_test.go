@@ -76,7 +76,6 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	}
 	if rng.Float64() < 0.5 {
 		randomBatchSize := 1 + rng.Intn(3)
-		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
 		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
 			return err
 		}
@@ -172,7 +171,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		args.outputTypes,
 		nil, /* output */
 		result.MetadataSources,
-		nil, /* toClose */
+		result.ToClose,
 		nil, /* outputStatsToTrace */
 		nil, /* cancelFlow */
 	)
@@ -241,7 +240,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		colOpErr := colOpMetas[0].Err.Error()
 		if procErr != colOpErr {
 			return errors.Errorf("different errors returned:\n"+
-				"processor return\n%+v\ncolumnar operator returned\n%+v",
+				"processor returned\n%+v\ncolumnar operator returned\n%+v",
 				procMetas[0].Err, colOpMetas[0].Err)
 		}
 		// The errors are the same, so the rows that were returned do not matter.

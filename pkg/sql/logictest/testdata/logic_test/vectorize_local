@@ -102,8 +102,9 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 ----
 │
 └ Node 1
-└ *rowexec.orderedAggregator
-  └ *rowexec.tableReader
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *rowexec.tableReader
 
 # Regression test for #46122 (checking that we gracefully fallback to row
 # execution on cross joins).
@@ -129,7 +130,7 @@ EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t464
 ----
 │
 └ Node 1
-  └ *rowexec.hashAggregator
+  └ *colexec.hashAggregator
     └ *rowexec.noopProcessor
       └ *colexec.hashJoiner
         ├ *colfetcher.ColBatchScan

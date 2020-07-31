@@ -867,6 +867,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/hash_bool_and_or_agg.eg.go \
   pkg/sql/colexec/hash_concat_agg.eg.go \
   pkg/sql/colexec/hash_count_agg.eg.go \
+  pkg/sql/colexec/hash_default_agg.eg.go \
   pkg/sql/colexec/hash_min_max_agg.eg.go \
   pkg/sql/colexec/hash_sum_agg.eg.go \
   pkg/sql/colexec/hash_sum_int_agg.eg.go \
@@ -886,6 +887,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/ordered_bool_and_or_agg.eg.go \
   pkg/sql/colexec/ordered_concat_agg.eg.go \
   pkg/sql/colexec/ordered_count_agg.eg.go \
+  pkg/sql/colexec/ordered_default_agg.eg.go \
   pkg/sql/colexec/ordered_min_max_agg.eg.go \
   pkg/sql/colexec/ordered_sum_agg.eg.go \
   pkg/sql/colexec/ordered_sum_int_agg.eg.go \

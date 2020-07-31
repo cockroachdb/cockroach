@@ -160,16 +160,6 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 			if agg.FilterColIdx != nil {
 				return errors.Newf("filtering aggregation not supported")
 			}
-			if len(agg.Arguments) > 0 {
-				return errors.Newf("aggregates with arguments not supported")
-			}
-			inputTypes := make([]*types.T, len(agg.ColIdx))
-			for pos, colIdx := range agg.ColIdx {
-				inputTypes[pos] = spec.Input[0].ColumnTypes[colIdx]
-			}
-			if err := isAggregateSupported(agg.Func, inputTypes); err != nil {
-				return err
-			}
 		}
 		return nil
 
@@ -660,11 +650,9 @@ func NewColOperator(
 			}
 
 			var groupCols, orderedCols util.FastIntSet
-
 			for _, col := range aggSpec.OrderedGroupCols {
 				orderedCols.Add(int(col))
 			}
-
 			needHash := false
 			for _, col := range aggSpec.GroupCols {
 				if !orderedCols.Contains(int(col)) {
@@ -676,23 +664,19 @@ func NewColOperator(
 				return r, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 			}
 
-			aggTyps := make([][]*types.T, len(aggSpec.Aggregations))
-			aggCols := make([][]uint32, len(aggSpec.Aggregations))
-			aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-			for i, agg := range aggSpec.Aggregations {
-				aggTyps[i] = make([]*types.T, len(agg.ColIdx))
-				for j, colIdx := range agg.ColIdx {
-					aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
-				}
-				aggCols[i] = agg.ColIdx
-				aggFns[i] = agg.Func
-			}
-			result.ColumnTypes, err = colexec.MakeAggregateFuncsOutputTypes(aggTyps, aggFns)
+			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
+			copy(inputTypes, spec.Input[0].ColumnTypes)
+			evalCtx := flowCtx.NewEvalCtx()
+			var constructors []execinfrapb.AggregateConstructor
+			var constArguments []tree.Datums
+			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+			constructors, constArguments, result.ColumnTypes, err = colexec.ProcessAggregations(
+				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
+			)
 			if err != nil {
 				return r, err
 			}
-			typs := make([]*types.T, len(spec.Input[0].ColumnTypes))
-			copy(typs, spec.Input[0].ColumnTypes)
+
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
@@ -704,17 +688,21 @@ func NewColOperator(
 					// "unlimited") amount of memory to the aggregator.
 					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
+				evalCtx.SingleDatumAggMemAccount = hashAggregatorMemAccount
 				result.Op, err = colexec.NewHashAggregator(
-					colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory), inputs[0], typs, aggFns,
-					aggSpec.GroupCols, aggCols,
+					colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory),
+					inputs[0], inputTypes, aggSpec, evalCtx, constructors,
+					constArguments, result.ColumnTypes,
 				)
 			} else {
+				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
 				result.Op, err = colexec.NewOrderedAggregator(
-					streamingAllocator, inputs[0], typs, aggFns,
-					aggSpec.GroupCols, aggCols, aggSpec.IsScalar(),
+					streamingAllocator, inputs[0], inputTypes, aggSpec, evalCtx,
+					constructors, constArguments, result.ColumnTypes, aggSpec.IsScalar(),
 				)
 				result.IsStreaming = true
 			}
+			result.ToClose = append(result.ToClose, result.Op.(colexec.Closer))
 
 		case core.Distinct != nil:
 			if err := checkNumIn(inputs, 1); err != nil {

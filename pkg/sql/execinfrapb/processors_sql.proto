@@ -618,9 +618,6 @@ message AggregatorSpec {
     JSONB_OBJECT_AGG = 28;
     VAR_POP = 29;
     STDDEV_POP = 30;
-    // NOTE: if you're adding a new aggregate function here, make sure to add
-    // an appropriate entry in execinfrapb.AggregateFuncToNumArguments map.
-    // Also, please keep this note at the very bottom of this enum.
   }
 
   enum Type {

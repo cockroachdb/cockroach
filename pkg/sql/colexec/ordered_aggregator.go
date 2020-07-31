@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -45,12 +46,11 @@ type orderedAggregator struct {
 	OneInputNode
 
 	allocator *colmem.Allocator
+	spec      *execinfrapb.AggregatorSpec
 	done      bool
 
-	aggCols  [][]uint32
-	aggTypes [][]*types.T
-
-	outputTypes []*types.T
+	outputTypes        []*types.T
+	inputArgsConverter *vecToDatumConverter
 
 	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
@@ -87,9 +87,10 @@ type orderedAggregator struct {
 	// seenNonEmptyBatch indicates whether a non-empty input batch has been
 	// observed.
 	seenNonEmptyBatch bool
+	toClose           Closers
 }
 
-var _ colexecbase.Operator = &orderedAggregator{}
+var _ closableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
@@ -98,24 +99,15 @@ var _ colexecbase.Operator = &orderedAggregator{}
 func NewOrderedAggregator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []*types.T,
-	aggFns []execinfrapb.AggregatorSpec_Func,
-	groupCols []uint32,
-	aggCols [][]uint32,
+	inputTypes []*types.T,
+	spec *execinfrapb.AggregatorSpec,
+	evalCtx *tree.EvalContext,
+	constructors []execinfrapb.AggregateConstructor,
+	constArguments []tree.Datums,
+	outputTypes []*types.T,
 	isScalar bool,
 ) (colexecbase.Operator, error) {
-	if len(aggFns) != len(aggCols) {
-		return nil,
-			errors.Errorf(
-				"mismatched aggregation lengths: aggFns(%d), aggCols(%d)",
-				len(aggFns),
-				len(aggCols),
-			)
-	}
-
-	aggTypes := extractAggTypes(aggCols, typs)
-
-	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, typs)
+	op, groupCol, err := OrderedDistinctColsToOperators(input, spec.GroupCols, inputTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -141,32 +133,29 @@ func NewOrderedAggregator(
 		outputSourceRef: &a.input,
 	}
 
-	*a = orderedAggregator{
-		OneInputNode: NewOneInputNode(op),
-
-		allocator: allocator,
-		aggCols:   aggCols,
-		aggTypes:  aggTypes,
-		groupCol:  groupCol,
-		isScalar:  isScalar,
-	}
-
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
-	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */, false /* isHashAgg */)
-	if err != nil {
-		return nil, errors.AssertionFailedf(
-			"this error should have been checked in isAggregateSupported\n%+v", err,
-		)
-	}
-	a.aggregateFuncs = funcsAlloc.makeAggregateFuncs()
-	a.outputTypes, err = MakeAggregateFuncsOutputTypes(aggTypes, aggFns)
+	funcsAlloc, inputArgsConverter, toClose, err := newAggregateFuncsAlloc(
+		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
+		outputTypes, 1 /* allocSize */, false, /* isHashAgg */
+	)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
 		)
 	}
 
+	*a = orderedAggregator{
+		OneInputNode:       NewOneInputNode(op),
+		allocator:          allocator,
+		spec:               spec,
+		groupCol:           groupCol,
+		aggregateFuncs:     funcsAlloc.makeAggregateFuncs(),
+		isScalar:           isScalar,
+		outputTypes:        outputTypes,
+		inputArgsConverter: inputArgsConverter,
+		toClose:            toClose,
+	}
 	return a, nil
 }
 
@@ -274,10 +263,11 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			if batchLength > 0 {
+				a.inputArgsConverter.convertBatchAndDeselect(batch)
 				sel := batch.Selection()
 				inputVecs := batch.ColVecs()
 				for i, fn := range a.aggregateFuncs {
-					fn.Compute(inputVecs, a.aggCols[i], batchLength, sel)
+					fn.Compute(inputVecs, a.spec.Aggregations[i].ColIdx, batchLength, sel)
 				}
 			} else {
 				for _, fn := range a.aggregateFuncs {
@@ -339,4 +329,8 @@ func (a *orderedAggregator) reset(ctx context.Context) {
 	for _, fn := range a.aggregateFuncs {
 		fn.Reset()
 	}
+}
+
+func (a *orderedAggregator) Close(ctx context.Context) error {
+	return a.toClose.Close(ctx)
 }
