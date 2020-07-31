@@ -178,6 +178,25 @@ t7  CREATE TABLE public.t7 (
     FAMILY "primary" (b, rowid)
 )
 
+#### CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
+#### expressions to the new table.
+
+statement ok
+CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
+
+statement ok
+CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+     a INT8 NULL,
+     b INT8 NULL,
+     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8,
+     FAMILY "primary" (a, b, rowid)
+)
+
 #### Update a non-indexed column referenced by the predicate.
 
 statement ok
