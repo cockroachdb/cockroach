@@ -207,28 +207,6 @@ func SetClusterID(clusterID string) {
 	logging.mu.clusterID = clusterID
 }
 
-// ensureFileLocked ensures that l.file is set and valid.
-// Assumes that l.mu is held by the caller.
-func (l *loggerT) ensureFileLocked() error {
-	if l.mu.file == nil {
-		return l.createFileLocked()
-	}
-	return nil
-}
-
-// writeToFileLocked writes to the file and applies the synchronization policy.
-// Assumes that l.mu is held by the caller.
-func (l *loggerT) writeToFileLocked(data []byte) error {
-	if _, err := l.mu.file.Write(data); err != nil {
-		return err
-	}
-	if l.mu.syncWrites {
-		_ = l.mu.file.Flush()
-		_ = l.mu.file.Sync()
-	}
-	return nil
-}
-
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
