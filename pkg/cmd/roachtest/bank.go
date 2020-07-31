@@ -413,6 +413,8 @@ func (s *bankState) waitClientsStop(
 }
 
 func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
+	t.Fatal("boom")
+	return
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t)
 

@@ -26,7 +26,11 @@ tc_start_block "Run local roachtests"
 # NB: roachtest has its own teamcity output format and posts issues (whenever
 # GITHUB_API_TOKEN) is set, so it doesn't fit into the streamlined process
 # around the run_json_test helper.
-build/builder.sh env \
+#
+# NB: we intentionally don't go through the builder to remove a layer of
+# complexity. For example, roachtest can't retrieve dmesg for us when run
+# through the builder.
+env \
     COCKROACH_DEV_LICENSE="${COCKROACH_DEV_LICENSE}" \
     GITHUB_API_TOKEN="${GITHUB_API_TOKEN-}" \
     BUILD_VCS_NUMBER="${BUILD_VCS_NUMBER-}" \

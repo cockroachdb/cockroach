@@ -1681,7 +1681,7 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 		if err := execCmd(
 			ctx, c.l, roachprod, "ssh", c.name, "--",
 			// NB: -n is for --non-interactive.
-			"/bin/bash", "-c", "'sudo -n dmesg > "+name+"'", /* src */
+			"/bin/bash", "-c", "'sudo -n dmesg > "+name+"'; env; ls /usr/bin", /* src */
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
