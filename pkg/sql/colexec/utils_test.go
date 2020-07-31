@@ -1436,7 +1436,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	return c.batch
 }
 
-func (c *chunkingBatchSource) reset() {
+func (c *chunkingBatchSource) reset(context.Context) {
 	c.curIdx = 0
 }
 

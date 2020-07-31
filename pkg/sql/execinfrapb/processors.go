@@ -138,6 +138,41 @@ func ProcessAggFnSpec(
 	return
 }
 
+// AggregateFuncToNumArguments maps aggregate functions to the number of
+// arguments they take.
+var AggregateFuncToNumArguments = map[AggregatorSpec_Func]int{
+	AggregatorSpec_ANY_NOT_NULL:         1,
+	AggregatorSpec_AVG:                  1,
+	AggregatorSpec_BOOL_AND:             1,
+	AggregatorSpec_BOOL_OR:              1,
+	AggregatorSpec_CONCAT_AGG:           1,
+	AggregatorSpec_COUNT:                1,
+	AggregatorSpec_MAX:                  1,
+	AggregatorSpec_MIN:                  1,
+	AggregatorSpec_STDDEV:               1,
+	AggregatorSpec_SUM:                  1,
+	AggregatorSpec_SUM_INT:              1,
+	AggregatorSpec_VARIANCE:             1,
+	AggregatorSpec_XOR_AGG:              1,
+	AggregatorSpec_COUNT_ROWS:           0,
+	AggregatorSpec_SQRDIFF:              1,
+	AggregatorSpec_FINAL_VARIANCE:       3,
+	AggregatorSpec_FINAL_STDDEV:         3,
+	AggregatorSpec_ARRAY_AGG:            1,
+	AggregatorSpec_JSON_AGG:             1,
+	AggregatorSpec_JSONB_AGG:            1,
+	AggregatorSpec_STRING_AGG:           2,
+	AggregatorSpec_BIT_AND:              1,
+	AggregatorSpec_BIT_OR:               1,
+	AggregatorSpec_CORR:                 2,
+	AggregatorSpec_PERCENTILE_DISC_IMPL: 2,
+	AggregatorSpec_PERCENTILE_CONT_IMPL: 2,
+	AggregatorSpec_JSON_OBJECT_AGG:      2,
+	AggregatorSpec_JSONB_OBJECT_AGG:     2,
+	AggregatorSpec_VAR_POP:              1,
+	AggregatorSpec_STDDEV_POP:           1,
+}
+
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).
 func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {

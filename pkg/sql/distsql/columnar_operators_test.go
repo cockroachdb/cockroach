@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,6 +44,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	nRuns := 20
 	nRows := 100
+	nAggFnsToTest := 5
 	const (
 		maxNumGroupingCols = 3
 		nextGroupProb      = 0.2
@@ -57,50 +57,89 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	}
 	var da sqlbase.DatumAlloc
 
-	deterministicAggFns := make([]execinfrapb.AggregatorSpec_Func, 0, len(colexec.SupportedAggFns)-1)
-	for _, aggFn := range colexec.SupportedAggFns {
-		if aggFn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
-			// We skip ANY_NOT_NULL aggregate function because it returns
-			// non-deterministic results.
-			continue
+	// We need +1 because an entry for index=6 was omitted by mistake.
+	numSupportedAggFns := len(execinfrapb.AggregatorSpec_Func_name) + 1
+	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, 0, nAggFnsToTest)
+	for len(aggregations) < nAggFnsToTest {
+		var aggFn execinfrapb.AggregatorSpec_Func
+		found := false
+		for !found {
+			aggFn = execinfrapb.AggregatorSpec_Func(rng.Intn(numSupportedAggFns))
+			if _, valid := execinfrapb.AggregateFuncToNumArguments[aggFn]; !valid {
+				continue
+			}
+			switch aggFn {
+			case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
+				// We skip ANY_NOT_NULL aggregate function because it returns
+				// non-deterministic results.
+			case execinfrapb.AggregatorSpec_PERCENTILE_DISC_IMPL,
+				execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL:
+				// We skip percentile functions because those can only be
+				// planned as window functions.
+			default:
+				found = true
+			}
+
 		}
-		deterministicAggFns = append(deterministicAggFns, aggFn)
+		aggregations = append(aggregations, execinfrapb.AggregatorSpec_Aggregation{Func: aggFn})
 	}
-	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(deterministicAggFns))
 	for _, hashAgg := range []bool{false, true} {
 		for numGroupingCols := 1; numGroupingCols <= maxNumGroupingCols; numGroupingCols++ {
-			for i, aggFn := range deterministicAggFns {
-				aggregations[i].Func = aggFn
-				aggregations[i].ColIdx = []uint32{uint32(i + numGroupingCols)}
-			}
-			inputTypes := make([]*types.T, len(aggregations)+numGroupingCols)
+			// We will be grouping based on the first numGroupingCols columns
+			// (which will be of INT types) with the values for the columns set
+			// manually below.
+			inputTypes := make([]*types.T, 0, numGroupingCols+len(aggregations))
 			for i := 0; i < numGroupingCols; i++ {
-				inputTypes[i] = types.Int
+				inputTypes = append(inputTypes, types.Int)
+			}
+			// After all grouping columns, we will have input columns for each
+			// of the aggregate functions. Here, we will set up the column
+			// indices, and the types will be regenerated below
+			numColsSoFar := numGroupingCols
+			for i := range aggregations {
+				numArguments := execinfrapb.AggregateFuncToNumArguments[aggregations[i].Func]
+				aggregations[i].ColIdx = make([]uint32, numArguments)
+				for j := range aggregations[i].ColIdx {
+					aggregations[i].ColIdx[j] = uint32(numColsSoFar)
+					numColsSoFar++
+				}
 			}
 			outputTypes := make([]*types.T, len(aggregations))
 
 			for run := 0; run < nRuns; run++ {
+				inputTypes = inputTypes[:numGroupingCols]
 				var rows sqlbase.EncDatumRows
-				// We will be grouping based on the first numGroupingCols columns (which
-				// we already set to be of INT types) with the values for the column set
-				// manually below.
 				for i := range aggregations {
 					aggFn := aggregations[i].Func
-					var aggTyp *types.T
+					aggFnInputTypes := make([]*types.T, len(aggregations[i].ColIdx))
 					for {
-						aggTyp = sqlbase.RandType(rng)
-						aggInputTypes := []*types.T{aggTyp}
-						if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
-							// Count rows takes no arguments.
-							aggregations[i].ColIdx = []uint32{}
-							aggInputTypes = aggInputTypes[:0]
+						for j := range aggFnInputTypes {
+							aggFnInputTypes[j] = sqlbase.RandType(rng)
 						}
-						if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
+						// There is a special case for string_agg when at least
+						// one of the arguments is an empty tuple. Such case
+						// passes GetAggregateInfo check below, but it is
+						// actually invalid, and during normal execution it is
+						// caught during type-checking. However, we don't want
+						// to do fully-fledged type checking, so we hard-code
+						// an exception here.
+						invalid := false
+						if aggFn == execinfrapb.AggregatorSpec_STRING_AGG {
+							for _, typ := range aggFnInputTypes {
+								if typ.Family() == types.TupleFamily && len(typ.TupleContents()) == 0 {
+									invalid = true
+								}
+							}
+						}
+						if invalid {
+							continue
+						}
+						if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
 							outputTypes[i] = outputType
 							break
 						}
 					}
-					inputTypes[i+numGroupingCols] = aggTyp
+					inputTypes = append(inputTypes, aggFnInputTypes...)
 				}
 				rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 				groupIdx := 0
@@ -155,14 +194,36 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 					pspec:       pspec,
 				}
 				if err := verifyColOperator(args); err != nil {
-					// Columnar aggregators check whether an overflow occurs whereas
-					// processors don't, so we simply swallow the integer out of range
-					// error if such occurs and move on.
-					if strings.Contains(err.Error(), tree.ErrIntOutOfRange.Error()) {
+					if strings.Contains(err.Error(), "different errors returned") {
+						// Columnar and row-based aggregators are likely to hit
+						// different errors, and we will swallow those and move
+						// on.
 						continue
+						// TODO(yuzefovich): here is a more tight condition,
+						// should we use it? I'm worried that it'll be flaky,
+						// and it is quite likely that we're generating invalid
+						// input data, so the operators and processors will be
+						// getting errors often.
+						//if strings.Contains(err.Error(), "unexpected type *tree.DOidWrapper for ") ||
+						//	strings.Contains(err.Error(), "field name must not be null") ||
+						//	strings.Contains(err.Error(), "out of range") ||
+						//	strings.Contains(err.Error(), "number of values in aggregate exceed max count of 9223372036854775807") ||
+						//	strings.Contains(err.Error(), "bit strings of different sizes") ||
+						//	strings.Contains(err.Error(), "key value must be scalar, not array, tuple, or json") ||
+						//	strings.Contains(err.Error(), "arguments to xor must all be the same length") {
+						//	continue
+						//}
 					}
 					fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
 						seed, run, hashAgg)
+					var aggFnNames string
+					for i, agg := range aggregations {
+						if i > 0 {
+							aggFnNames += " "
+						}
+						aggFnNames += agg.Func.String()
+					}
+					fmt.Printf("--- %s ---\n", aggFnNames)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
 					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 					t.Fatal(err)
