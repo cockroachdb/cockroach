@@ -13,8 +13,15 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -112,4 +119,100 @@ func TestScheduleControl(t *testing.T) {
 		th.sqlDB.Exec(t, "DROP SCHEDULES "+querySchedules)
 		require.Equal(t, 0, len(th.sqlDB.QueryStr(t, querySchedules)))
 	})
+}
+
+func TestJobsControlForSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
+	defer cleanup()
+
+	registry := th.server.JobRegistry().(*Registry)
+	blockResume := make(chan struct{})
+	defer close(blockResume)
+
+	// Our resume never completes any jobs, until this test completes.
+	// As such, the job does not undergo usual job state transitions
+	// (e.g. pause-request -> paused).
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
+		return FakeResumer{
+			OnResume: func(_ context.Context, _ chan<- tree.Datums) error {
+				<-blockResume
+				return nil
+			},
+		}
+	})
+
+	record := Record{
+		Description: "fake job",
+		Username:    "test",
+		Details:     jobspb.ImportDetails{},
+		Progress:    jobspb.ImportProgress{},
+	}
+
+	const numJobs = 5
+
+	// Create few jobs not started by any schedule.
+	for i := 0; i < numJobs; i++ {
+		require.NoError(t, registry.NewJob(record).Created(context.Background()))
+	}
+
+	var scheduleID int64 = 123
+
+	for _, tc := range []struct {
+		command      string
+		numSchedules int
+	}{
+		{"pause", 1},
+		{"resume", 1},
+		{"cancel", 1},
+		{"pause", 2},
+		{"resume", 3},
+		{"cancel", 4},
+	} {
+		schedulesStr := &strings.Builder{}
+		for i := 0; i < tc.numSchedules; i++ {
+			scheduleID++
+			if schedulesStr.Len() > 0 {
+				schedulesStr.WriteByte(',')
+			}
+			fmt.Fprintf(schedulesStr, "%d", scheduleID)
+
+			for i := 0; i < numJobs; i++ {
+				record.CreatedBy = &CreatedByInfo{
+					Name: CreatedByScheduledJobs,
+					ID:   scheduleID,
+				}
+				require.NoError(t, registry.NewJob(record).Created(context.Background()))
+
+				if tc.command == "resume" {
+					// Job has to be in paused state in order for it to be resumable;
+					// Alas, because we don't actually run real jobs (see comment above),
+					// We can't just pause the job (since it will stay in pause-requested state forever).
+					// So, just force set job status to paused.
+					th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", StatusPaused, scheduleID)
+				}
+			}
+		}
+
+		jobControl := tc.command + " JOBS FOR "
+		if tc.numSchedules == 1 {
+			jobControl += "SCHEDULE " + schedulesStr.String()
+		} else {
+			jobControl += fmt.Sprintf("SCHEDULES SELECT unnest(array[%s])", schedulesStr)
+		}
+
+		t.Run(jobControl, func(t *testing.T) {
+			// Go through internal executor to execute job control command.
+			// This correctly reports the number of effected rows.
+			numEffected, err := th.cfg.InternalExecutor.ExecEx(
+				context.Background(),
+				"test-num-effected",
+				nil,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				jobControl,
+			)
+			require.NoError(t, err)
+			require.Equal(t, numJobs*tc.numSchedules, numEffected)
+		})
+	}
 }
