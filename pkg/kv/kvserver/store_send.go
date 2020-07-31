@@ -199,6 +199,13 @@ func (s *Store) Send(
 	// Augment error if necessary and return.
 	switch t := pErr.GetDetail().(type) {
 	case *roachpb.RangeKeyMismatchError:
+		// TODO(andrei): It seems silly that, if the client specified a RangeID that
+		// doesn't match the keys it wanted to access, but this node can serve those
+		// keys anyway, we still return a RangeKeyMismatchError to the client
+		// instead of serving the request. Particularly since we have the mechanism
+		// to communicate correct range information to the client when returning a
+		// successful response (i.e. br.RangeInfos).
+
 		// On a RangeKeyMismatchError where the batch didn't even overlap
 		// the start of the mismatched Range, try to suggest a more suitable
 		// Range from this Store.
@@ -223,7 +230,7 @@ func (s *Store) Send(
 		if endKey.Less(rSpan.EndKey) {
 			endKey = rSpan.EndKey
 		}
-		s.VisitReplicasByKey(ctx, startKey, endKey, func(ctx context.Context, r KeyRange) bool {
+		s.VisitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, r KeyRange) bool {
 			var l roachpb.Lease
 			var desc roachpb.RangeDescriptor
 			if rep, ok := r.(*Replica); ok {
