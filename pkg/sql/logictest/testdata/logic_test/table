@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant(50049)
+
 statement ok
 SET DATABASE = ""
 
@@ -40,11 +42,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query TTT colnames
+query TTTI colnames
 SHOW TABLES FROM test
 ----
-schema_name  table_name  type
-public       a           table
+schema_name  table_name  type   estimated_row_count
+public       a           table  0
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -133,15 +135,15 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TTTT
+query TTTIT
 SHOW TABLES FROM test WITH COMMENT
 ----
-public  a  table  a_comment
-public  b  table  ·
-public  c  table  ·
-public  d  table  ·
-public  e  table  ·
-public  f  table  ·
+public  a  table  0  a_comment
+public  b  table  0  ·
+public  c  table  0  ·
+public  d  table  0  ·
+public  e  table  0  ·
+public  f  table  0  ·
 
 statement ok
 SET DATABASE = ""
@@ -497,3 +499,175 @@ query I
 SELECT a.public.c.d FROM a.public.c
 ----
 1
+
+statement ok
+CREATE TABLE t0 (a INT)
+
+statement ok
+GRANT ALL ON t0 to testuser
+
+statement ok
+CREATE DATABASE rowtest
+
+statement ok
+GRANT ALL ON DATABASE rowtest TO testuser
+
+user testuser
+
+statement ok
+SET DATABASE = rowtest
+
+statement ok
+CREATE TABLE t1 (a INT)
+
+statement ok
+INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
+
+# only tables from current database
+query TTTI
+SHOW TABLES
+----
+public  t1  table  0
+
+# see only virtual tables (estimated_row_count is NULL)
+# and tables testuser has access to (estimated_row_count >= 0)
+query TI rowsort
+select table_name, estimated_row_count from crdb_internal.table_row_statistics;
+----
+backward_dependencies              NULL
+builtin_functions                  NULL
+cluster_queries                    NULL
+cluster_sessions                   NULL
+cluster_settings                   NULL
+cluster_transactions               NULL
+create_statements                  NULL
+create_type_statements             NULL
+databases                          NULL
+feature_usage                      NULL
+forward_dependencies               NULL
+gossip_alerts                      NULL
+gossip_liveness                    NULL
+gossip_network                     NULL
+gossip_nodes                       NULL
+index_columns                      NULL
+jobs                               NULL
+kv_node_status                     NULL
+kv_store_status                    NULL
+leases                             NULL
+node_build_info                    NULL
+node_metrics                       NULL
+node_queries                       NULL
+node_runtime_info                  NULL
+node_sessions                      NULL
+node_statement_statistics          NULL
+node_transactions                  NULL
+node_txn_stats                     NULL
+partitions                         NULL
+predefined_comments                NULL
+ranges                             NULL
+ranges_no_leases                   NULL
+schema_changes                     NULL
+session_trace                      NULL
+session_variables                  NULL
+table_columns                      NULL
+table_indexes                      NULL
+table_row_statistics               NULL
+tables                             NULL
+zones                              NULL
+administrable_role_authorizations  NULL
+applicable_roles                   NULL
+check_constraints                  NULL
+column_privileges                  NULL
+columns                            NULL
+constraint_column_usage            NULL
+enabled_roles                      NULL
+key_column_usage                   NULL
+parameters                         NULL
+referential_constraints            NULL
+role_table_grants                  NULL
+routines                           NULL
+schema_privileges                  NULL
+schemata                           NULL
+sequences                          NULL
+statistics                         NULL
+table_constraints                  NULL
+table_privileges                   NULL
+tables                             NULL
+user_privileges                    NULL
+views                              NULL
+pg_aggregate                       NULL
+pg_am                              NULL
+pg_attrdef                         NULL
+pg_attribute                       NULL
+pg_auth_members                    NULL
+pg_authid                          NULL
+pg_available_extensions            NULL
+pg_cast                            NULL
+pg_class                           NULL
+pg_collation                       NULL
+pg_constraint                      NULL
+pg_conversion                      NULL
+pg_database                        NULL
+pg_default_acl                     NULL
+pg_depend                          NULL
+pg_description                     NULL
+pg_enum                            NULL
+pg_event_trigger                   NULL
+pg_extension                       NULL
+pg_foreign_data_wrapper            NULL
+pg_foreign_server                  NULL
+pg_foreign_table                   NULL
+pg_index                           NULL
+pg_indexes                         NULL
+pg_inherits                        NULL
+pg_language                        NULL
+pg_locks                           NULL
+pg_matviews                        NULL
+pg_namespace                       NULL
+pg_operator                        NULL
+pg_prepared_statements             NULL
+pg_prepared_xacts                  NULL
+pg_proc                            NULL
+pg_range                           NULL
+pg_rewrite                         NULL
+pg_roles                           NULL
+pg_seclabel                        NULL
+pg_seclabels                       NULL
+pg_sequence                        NULL
+pg_settings                        NULL
+pg_shdepend                        NULL
+pg_shdescription                   NULL
+pg_shseclabel                      NULL
+pg_stat_activity                   NULL
+pg_tables                          NULL
+pg_tablespace                      NULL
+pg_trigger                         NULL
+pg_type                            NULL
+pg_user                            NULL
+pg_user_mapping                    NULL
+pg_views                           NULL
+geography_columns                  NULL
+geometry_columns                   NULL
+spatial_ref_sys                    NULL
+t1                                 0
+
+statement ok
+ANALYZE t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES] where table_name = 't1'
+----
+1024
+
+statement ok
+DELETE FROM rowtest.t1 WHERE a > 1000;
+
+statement ok
+ANALYZE rowtest.t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
+----
+1000
+
+user root
