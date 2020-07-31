@@ -94,20 +94,6 @@ type loggerT struct {
 	// stderr sink.
 	stderrThreshold Severity
 
-	// redirectInternalStderrWrites, when set, causes this logger to
-	// capture writes to system-wide file descriptor 2 (the standard
-	// error stream) and os.Stderr and redirect them to this logger's
-	// output file.
-	// Users of the logging package should ensure that at most one
-	// logger has this flag set to redirect the system-wide stderr.
-	//
-	// Note that this mechanism redirects file descriptor 2, and does
-	// not only assign a different *os.File reference to
-	// os.Stderr. This is because the Go runtime hardcodes stderr writes
-	// as writes to file descriptor 2 and disregards the value of
-	// os.Stderr entirely.
-	redirectInternalStderrWrites bool
-
 	// whether or not to include redaction markers.
 	// This is atomic because tests using TestLogScope might
 	// override this asynchronously with log calls.
@@ -132,6 +118,29 @@ type loggerT struct {
 
 		// syncWrites if true calls file.Flush and file.Sync on every log write.
 		syncWrites bool
+
+		// redirectInternalStderrWrites, when set, causes this logger to
+		// capture writes to system-wide file descriptor 2 (the standard
+		// error stream) and os.Stderr and redirect them to this logger's
+		// output file.
+		// This is managed by the takeOverInternalStderr() method.
+		//
+		// Note that this mechanism redirects file descriptor 2, and does
+		// not only assign a different *os.File reference to
+		// os.Stderr. This is because the Go runtime hardcodes stderr writes
+		// as writes to file descriptor 2 and disregards the value of
+		// os.Stderr entirely.
+		//
+		// There can be at most one logger with this boolean set. This
+		// constraint is enforced by takeOverInternalStderr().
+		redirectInternalStderrWrites bool
+
+		// currentlyOwnsInternalStderr determines whether a logger
+		// _currently_ has taken over fd 2. This may be false while
+		// redirectInternalStderrWrites above is true, when the logger has
+		// not yet opened its output file, or is in the process of
+		// switching over from one directory to the next.
+		currentlyOwnsInternalStderr bool
 	}
 }
 
@@ -160,7 +169,7 @@ func init() {
 	mainLog.fileThreshold = Severity_INFO
 	// Don't capture stderr output until
 	// SetupRedactionAndStderrRedirects() has been called.
-	mainLog.redirectInternalStderrWrites = false
+	mainLog.mu.redirectInternalStderrWrites = false
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make

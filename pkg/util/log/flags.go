@@ -95,21 +95,39 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 		secLogger := NewSecondaryLogger(ctx, &mainLog.logDir, "stderr",
 			true /* enableGC */, true /* forceSyncWrites */, false /* enableMsgCount */)
 
-		// This logger will capture direct stderr writes.
-		secLogger.logger.redirectInternalStderrWrites = true
 		// Stderr capture produces unsafe strings. This logger
 		// thus generally produces non-redactable entries.
 		secLogger.logger.redactableLogs.Set(false)
 
 		// Force a log entry. This does two things: it forces
-		// the creation of a file and the redirection of fd 2 / os.Stderr.
-		// It also introduces a timestamp marker.
+		// the creation of a file and introduces a timestamp marker
+		// for any writes to the file performed after this point.
 		secLogger.Logf(ctx, "stderr capture started")
+
+		// Now tell this logger to capture internal stderr writes.
+		if err := secLogger.logger.takeOverInternalStderr(); err != nil {
+			// Oof, it turns out we can't use this logger after all. Give up
+			// on it.
+			cancel()
+			secLogger.Close()
+			return nil, err
+		}
+
+		// Now inform the other functions using stderrLog that we
+		// have a new logger for it.
 		prevStderrLogger := stderrLog
 		stderrLog = &secLogger.logger
 
 		// The cleanup fn is for use in tests.
 		cleanup := func() {
+			// Relinquish the stderr redirect.
+			if err := secLogger.logger.relinquishInternalStderr(); err != nil {
+				// This should not fail. If it does, some caller messed up by
+				// switching over stderr redirection to a different logger
+				// without our involvement. That's invalid API usage.
+				panic(err)
+			}
+
 			// Restore the apparent stderr logger used by Shout() and tests.
 			stderrLog = prevStderrLogger
 
