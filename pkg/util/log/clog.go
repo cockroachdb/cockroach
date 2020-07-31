@@ -207,18 +207,18 @@ func SetClusterID(clusterID string) {
 	logging.mu.clusterID = clusterID
 }
 
-// ensureFile ensures that l.file is set and valid.
+// ensureFileLocked ensures that l.file is set and valid.
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) ensureFile() error {
+func (l *loggerT) ensureFileLocked() error {
 	if l.mu.file == nil {
-		return l.createFile()
+		return l.createFileLocked()
 	}
 	return nil
 }
 
-// writeToFile writes to the file and applies the synchronization policy.
+// writeToFileLocked writes to the file and applies the synchronization policy.
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) writeToFile(data []byte) error {
+func (l *loggerT) writeToFileLocked(data []byte) error {
 	if _, err := l.mu.file.Write(data); err != nil {
 		return err
 	}
@@ -322,7 +322,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		}
 	}
 	if l.logDir.IsSet() && entry.Severity >= l.fileThreshold.get() {
-		if err := l.ensureFile(); err != nil {
+		if err := l.ensureFileLocked(); err != nil {
 			// We definitely do not like to lose log entries, so we stop
 			// here. Note that exitLocked() shouts the error to both stderr
 			// and the log file, so even though the file is not available
@@ -335,7 +335,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 		buf := logging.processForFile(entry, stacks)
 		data := buf.Bytes()
 
-		if err := l.writeToFile(data); err != nil {
+		if err := l.writeToFileLocked(data); err != nil {
 			l.exitLocked(err)
 			l.mu.Unlock()  // unreachable except in tests
 			putBuffer(buf) // unreachable except in tests
@@ -346,7 +346,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 	}
 	// Flush and exit on fatal logging.
 	if entry.Severity == Severity_FATAL {
-		l.flushAndSync(true /*doSync*/)
+		l.flushAndSyncLocked(true /*doSync*/)
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
 		// below when s == Severity_FATAL, this is not so, because the

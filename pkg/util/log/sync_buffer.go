@@ -44,7 +44,7 @@ func (sb *syncBuffer) Sync() error {
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
-		if err := sb.rotateFile(timeutil.Now()); err != nil {
+		if err := sb.rotateFileLocked(timeutil.Now()); err != nil {
 			sb.logger.exitLocked(err)
 		}
 	}
@@ -56,16 +56,16 @@ func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	return
 }
 
-// createFile initializes the syncBuffer for a logger, and triggers
+// createFileLocked initializes the syncBuffer for a logger, and triggers
 // creation of the log file.
 // Assumes that l.mu is held by the caller.
-func (l *loggerT) createFile() error {
+func (l *loggerT) createFileLocked() error {
 	now := timeutil.Now()
 	if l.mu.file == nil {
 		sb := &syncBuffer{
 			logger: l,
 		}
-		if err := sb.rotateFile(now); err != nil {
+		if err := sb.rotateFileLocked(now); err != nil {
 			return err
 		}
 		l.mu.file = sb
@@ -73,8 +73,8 @@ func (l *loggerT) createFile() error {
 	return nil
 }
 
-// rotateFile closes the syncBuffer's file and starts a new one.
-func (sb *syncBuffer) rotateFile(now time.Time) error {
+// rotateFileLocked closes the syncBuffer's file and starts a new one.
+func (sb *syncBuffer) rotateFileLocked(now time.Time) error {
 	if sb.file != nil {
 		if err := sb.Flush(); err != nil {
 			return err
