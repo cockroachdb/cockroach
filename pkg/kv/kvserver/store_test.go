@@ -880,12 +880,26 @@ func TestStoreVisitReplicasByKey(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Iterate ascendingly.
 			var visited []roachpb.RSpan
-			s.VisitReplicasByKey(ctx, tc.start, tc.end, func(_ context.Context, r KeyRange) bool {
+			s.VisitReplicasByKey(ctx, tc.start, tc.end, AscendingKeyOrder, func(_ context.Context, r KeyRange) bool {
 				visited = append(visited, r.Desc().RSpan())
 				return true
 			})
-			require.Equal(t, tc.exp, visited)
+			require.Equal(t, tc.exp, visited, tc.exp)
+
+			// Iterate descendingly.
+			visited = visited[:0]
+			s.VisitReplicasByKey(ctx, tc.start, tc.end, DescendingKeyOrder, func(_ context.Context, r KeyRange) bool {
+				visited = append(visited, r.Desc().RSpan())
+				return true
+			})
+			// Reverse the expected values.
+			exp := make([]roachpb.RSpan, len(tc.exp))
+			for i, sp := range tc.exp {
+				exp[len(exp)-i-1] = sp
+			}
+			require.Equal(t, exp, visited)
 		})
 	}
 }
