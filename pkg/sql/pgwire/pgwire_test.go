@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgproto3"
 	"github.com/lib/pq"
 )
 
@@ -1903,10 +1903,7 @@ func TestCancelRequest(t *testing.T) {
 		// Reset telemetry so we get a deterministic count below.
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-		fe, err := pgproto3.NewFrontend(conn, conn)
-		if err != nil {
-			t.Fatal(err)
-		}
+		fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
 		// versionCancel is the special code sent as header for cancel requests.
 		// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
 		// and the explanation in server.go.
@@ -1914,7 +1911,7 @@ func TestCancelRequest(t *testing.T) {
 		if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: versionCancel}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fe.Receive(); err != io.EOF {
+		if _, err := fe.Receive(); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("unexpected: %v", err)
 		}
 		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
