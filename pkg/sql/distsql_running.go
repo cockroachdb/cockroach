@@ -490,10 +490,7 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
 
-	// bytesRead and rowsRead track the corresponding metrics while executing the
-	// statement.
-	bytesRead int64
-	rowsRead  int64
+	stats topLevelQueryStats
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
@@ -681,10 +678,10 @@ func (r *DistSQLReceiver) Push(
 			}
 		}
 		if meta.Metrics != nil {
-			r.bytesRead += meta.Metrics.BytesRead
-			r.rowsRead += meta.Metrics.RowsRead
+			r.stats.bytesRead += meta.Metrics.BytesRead
+			r.stats.rowsRead += meta.Metrics.RowsRead
 			if r.progressAtomic != nil && r.expectedRowsRead != 0 {
-				progress := float64(r.rowsRead) / float64(r.expectedRowsRead)
+				progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
 			}
 			meta.Metrics.Release()

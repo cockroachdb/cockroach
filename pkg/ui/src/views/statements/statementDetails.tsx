@@ -29,7 +29,7 @@ import {
 } from "src/util/appStats";
 import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import { Duration } from "src/util/format";
+import {Bytes, Duration} from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
 import Loading from "src/views/shared/components/loading";
@@ -39,7 +39,7 @@ import { formatNumberForDisplay } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
 import { SummaryCard } from "../shared/components/summaryCard";
-import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
+import { approximify, latencyBreakdown, genericBarChart, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
 import DiagnosticsView from "./diagnostics";
@@ -53,6 +53,7 @@ import { trackSubnavSelection } from "src/util/analytics";
 import styles from "./statementDetails.module.styl";
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
 import summaryCardStyles from "src/views/shared/components/summaryCard/summaryCard.module.styl";
+import d3 from "d3";
 
 const { TabPane } = Tabs;
 
@@ -119,6 +120,9 @@ interface NumericStatRow {
   value: NumericStat;
   bar?: () => ReactNode;
   summary?: boolean;
+  // You can override the table's formatter on a per-row basis with this format
+  // method.
+  format?: (v: number) => string;
 }
 
 interface NumericStatTableProps {
@@ -142,7 +146,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
         <thead>
           <tr className={sortableTableCx("sort-table__row", "sort-table__row--header")}>
             <th className={sortableTableCx("sort-table__cell", "sort-table__cell--header")}>
-              Phase
+              {this.props.title}
             </th>
             <th className={sortableTableCx("sort-table__cell")}>
               Mean {this.props.measure}
@@ -155,6 +159,10 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
         <tbody>
           {
             rows.map((row: NumericStatRow) => {
+              let { format } = this.props;
+              if (row.format) {
+                format = row.format;
+              }
               const className = sortableTableCx(
                 "sort-table__row",
                 "sort-table__row--body",
@@ -174,7 +182,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
                     { row.bar ? row.bar() : null }
                   </td>
                   <td className={sortableTableCx("sort-table__cell", "sort-table__cell--active")}>
-                    { this.props.format(stdDev(row.value, this.props.count)) }
+                    { format(stdDev(row.value, this.props.count)) }
                   </td>
                 </tr>
               );
@@ -470,6 +478,28 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 { name: "Run", value: stats.run_lat, bar: runBarChart },
                 { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
                 { name: "Overall", summary: true, value: stats.service_lat, bar: overallBarChart },
+              ]}
+            />
+          </SummaryCard>
+          <SummaryCard>
+            <h2
+              className={classNames(
+                cx("base-heading"),
+                summaryCardStylesCx("summary--card__title"),
+              )}
+            >
+              Other Execution Statistics
+            </h2>
+            <NumericStatTable
+              title="Stat"
+              measure="Quantity"
+              count={ count }
+              format={ d3.format(".2f") }
+              rows={[
+                { name: "Rows Read", value: stats.rows_read, bar: genericBarChart(stats.rows_read, stats.count)},
+                { name: "Disk Bytes Read", value: stats.bytes_read, bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
+                  format: Bytes,
+                },
               ]}
             />
           </SummaryCard>

@@ -11,8 +11,11 @@
 import React from "react";
 import { storiesOf, RenderFunction } from "@storybook/react";
 
-import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
+import {countBarChart, genericBarChart, latencyBarChart, retryBarChart, rowsBarChart} from "./barCharts";
 import statementsPagePropsFixture from "./statementsPage.fixture";
+import {cockroach} from "src/js/protos";
+import NumericStat = cockroach.sql.NumericStat;
+import Long from "long";
 
 const { statements } = statementsPagePropsFixture;
 
@@ -58,6 +61,13 @@ storiesOf("BarCharts", module)
   .add("rowsBarChart", () => {
     const chartFactory = rowsBarChart(statements);
     return chartFactory(statements[0]);
+  })
+  .add("genericBarChart", () => {
+    const stat = new NumericStat();
+    stat.mean = 25;
+    stat.squared_diffs = 25;
+    const barChartFactory = genericBarChart(stat, Long.fromInt(10));
+    return barChartFactory();
   });
 
 storiesOf("BarCharts/within column (150px)", module)
@@ -77,4 +87,11 @@ storiesOf("BarCharts/within column (150px)", module)
   .add("rowsBarChart", () => {
     const chartFactory = rowsBarChart(statements);
     return chartFactory(statements[0]);
+  })
+  .add("genericBarChart", () => {
+    const stat = new NumericStat();
+    stat.mean = 25;
+    stat.squared_diffs = 25;
+    const barChartFactory = genericBarChart(stat, Long.fromInt(10));
+    return barChartFactory();
   });
