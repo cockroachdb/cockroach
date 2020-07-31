@@ -124,8 +124,7 @@ func (ex *connExecutor) recordStatementSummary(
 	automaticRetryCount int,
 	rowsAffected int,
 	err error,
-	bytesRead int64,
-	rowsRead int64,
+	stats topLevelQueryStats,
 ) {
 	phaseTimes := &ex.statsCollector.phaseTimes
 
@@ -163,7 +162,7 @@ func (ex *connExecutor) recordStatementSummary(
 		stmt, planner.curPlan.instrumentation.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead, bytesRead, rowsRead,
+		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
 
 	if log.V(2) {
