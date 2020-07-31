@@ -76,6 +76,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.schema_changes",
 	"crdb_internal.partitions",
 	"crdb_internal.zones",
+	"crdb_internal.table_row_statistics",
 }
 
 // Tables collected from each node in a debug zip.

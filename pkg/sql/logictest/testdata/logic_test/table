@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query TTT colnames
+query TTTI colnames
 SHOW TABLES FROM test
 ----
-schema_name  table_name  type
-public       a           table
+schema_name  table_name  type   estimated_row_count
+public       a           table  0
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -133,15 +133,15 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TTTT
+query TTTIT
 SHOW TABLES FROM test WITH COMMENT
 ----
-public  a  table  a_comment
-public  b  table  ·
-public  c  table  ·
-public  d  table  ·
-public  e  table  ·
-public  f  table  ·
+public  a  table  0  a_comment
+public  b  table  0  ·
+public  c  table  0  ·
+public  d  table  0  ·
+public  e  table  0  ·
+public  f  table  0  ·
 
 statement ok
 SET DATABASE = ""
@@ -497,3 +497,46 @@ query I
 SELECT a.public.c.d FROM a.public.c
 ----
 1
+
+statement ok
+CREATE DATABASE rowtest
+
+statement ok
+GRANT ALL ON DATABASE rowtest TO testuser
+
+user testuser
+
+statement ok
+SET DATABASE = rowtest
+
+statement ok
+CREATE TABLE t1 (a INT)
+
+statement ok
+INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES]
+----
+0
+
+statement ok
+ANALYZE t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES]
+----
+1024
+
+statement ok
+DELETE FROM rowtest.t1 WHERE a > 1000;
+
+statement ok
+ANALYZE rowtest.t1
+
+query I
+SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
+----
+1000
+
+user root

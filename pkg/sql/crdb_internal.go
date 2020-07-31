@@ -106,6 +106,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
 		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
 		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		sqlbase.CrdbInternalTablesTableLastStatsID:      crdbInternalTablesTableLastStats,
 		sqlbase.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
@@ -334,6 +335,59 @@ CREATE TABLE crdb_internal.tables (
 		}
 		next, cleanup := setupGenerator(ctx, worker)
 		return next, cleanup, nil
+	},
+}
+
+var crdbInternalTablesTableLastStats = virtualSchemaTable{
+	comment: "the latest stats for all tables accessible by current user in current database (KV scan)",
+	schema: `
+CREATE TABLE crdb_internal.table_row_statistics (
+  table_id                   INT         NOT NULL,
+  table_name                 STRING      NOT NULL,
+  estimated_row_count        INT         NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Collect the latests statistics for all tables.
+		query := `` +
+			`SELECT s."tableID", max(s."rowCount")` +
+			`  FROM system.table_statistics          AS s ` +
+			`  JOIN (` +
+			`     SELECT "tableID", MAX("createdAt") AS last_dt ` +
+			`       FROM system.table_statistics ` +
+			`      GROUP BY "tableID"` +
+			`       )                                AS l ON l."tableID" = s."tableID" ` +
+			`                                       AND l.last_dt = s."createdAt"` +
+			` GROUP BY s."tableID"`
+		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+			ctx, "crdb-internal-statistics-table", p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			query)
+		if err != nil {
+			return err
+		}
+
+		// Convert statistics into map: tableID -> rowCount.
+		statMap := make(map[tree.DInt]tree.DInt)
+		for _, r := range statRows {
+			statMap[tree.MustBeDInt(r[0])] = tree.MustBeDInt(r[1])
+		}
+
+		// Walk over all available tables and show row count for each of them
+		// using collected statistics.
+		return forEachTableDescAll(ctx, p, db, virtualMany,
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
+				tableID := tree.DInt(table.ID)
+				rowCount := tree.DInt(0)
+				if cnt, ok := statMap[tableID]; ok {
+					rowCount = cnt
+				}
+				return addRow(
+					tree.NewDInt(tableID),
+					tree.NewDString(table.Name),
+					&rowCount,
+				)
+			},
+		)
 	},
 }
 
