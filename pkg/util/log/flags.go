@@ -52,13 +52,13 @@ func IsActive() (active bool, firstUse string) {
 // is emitted.
 //
 // The returned cleanup fn can be invoked by the caller to terminate
-// the secondary logger. This may be useful in tests. However, for a
+// the secondary logger. This is only useful in tests: for a
 // long-running server process the cleanup function should likely not
 // be called, to ensure that the file used to capture direct stderr
 // writes remains open up until the process entirely terminates. This
 // ensures that any Go runtime assertion failures on the way to
 // termination can be properly captured.
-func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
+func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error) {
 	// The general goal of this function is to set up a secondary logger
 	// to capture internal Go writes to os.Stderr / fd 2 and redirect
 	// them to a separate (non-redactable) log file, This is, of course,
@@ -113,15 +113,10 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 			// Restore the apparent stderr logger used by Shout() and tests.
 			stderrLog = prevStderrLogger
 
-			// Cancel the gc process for the secondary logger and close it.
-			//
-			// Note: this will close the file descriptor 2 used for direct
-			// writes to fd 2, as well as os.Stderr. We don't restore the
-			// stderr output with e.g. hijackStderr(OrigStderr). This is
-			// intentional. We can't risk redirecting that to the main
-			// logger's output file, or the terminal, if the main logger can
-			// also interleave redactable log entries.
+			// Cancel the gc process for the secondary logger.
 			cancel()
+
+			// Close the logger.
 			secLogger.Close()
 		}
 
@@ -135,7 +130,7 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 
 	// There is no log directory.
 
-	// If redaction is requested and we have a change to produce some
+	// If redaction is requested and we have a chance to produce some
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
 	if redactableLogsRequested && mainLog.stderrThreshold.get() != Severity_NONE {
@@ -158,3 +153,12 @@ func SetupRedactionAndStderrRedirects() (cleanup func(), err error) {
 // markers until we have some confidence they won't be interleaved
 // with arbitrary writes to the stderr file descriptor.
 var redactableLogsRequested bool
+
+// TestingResetActive clears the active bit. This is for use int tests
+// that call stderr redirection alongside other tests that use
+// logging.
+func TestingResetActive() {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	logging.mu.active = false
+}

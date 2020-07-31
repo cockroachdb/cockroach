@@ -81,9 +81,13 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	setFlags()
 	mainLog.stderrThreshold = Severity_NONE
 
-	// Ensure that the main log is initialized. This should take over
-	// stderr.
-	Infof(context.Background(), "test123")
+	// Take over stderr.
+	TestingResetActive()
+	cleanup, err := SetupRedactionAndStderrRedirects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
 
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
