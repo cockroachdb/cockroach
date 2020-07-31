@@ -126,6 +126,12 @@ func (mux *safeServeMux) Handle(pattern string, handler http.Handler) {
 	mux.mu.Unlock()
 }
 
+func (mux *safeServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	mux.mu.Lock()
+	mux.mux.HandleFunc(pattern, handler)
+	mux.mu.Unlock()
+}
+
 func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mux.mu.RLock()
 	mux.mux.ServeHTTP(w, r)
@@ -1601,6 +1607,12 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusPrefix, authHandler)
 	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(loginPath, gwMux)
+
+	err = s.ConfigureOIDC(ctx, s.ClusterSettings())
+	if err != nil {
+		return err
+	}
+
 	s.mux.Handle(logoutPath, authHandler)
 
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.

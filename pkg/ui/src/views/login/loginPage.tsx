@@ -128,6 +128,12 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
                   <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress} textAlign={"center"}>
                     {loginState.inProgress ? "Logging in..." : "Log in"}
                   </Button>
+
+                  <a href="/oidc/login" >
+                    <Button className="submit-button-oidc" disabled={loginState.inProgress} textAlign={"center"}>
+                      Login with OIDC SSO
+                    </Button>
+                  </a>
                 </form>
               </div>
             </section>
