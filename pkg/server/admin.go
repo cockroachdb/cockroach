@@ -328,7 +328,7 @@ func (s *adminServer) DatabaseDetails(
 	// Marshal table names.
 	{
 		scanner := makeResultScanner(cols)
-		if a, e := len(cols), 3; a != e {
+		if a, e := len(cols), 4; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {

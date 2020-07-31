@@ -11,30 +11,30 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query TTT
+query TTTI
 SHOW TABLES FROM information_schema
 ----
-information_schema  administrable_role_authorizations  table
-information_schema  applicable_roles                   table
-information_schema  check_constraints                  table
-information_schema  column_privileges                  table
-information_schema  columns                            table
-information_schema  constraint_column_usage            table
-information_schema  enabled_roles                      table
-information_schema  key_column_usage                   table
-information_schema  parameters                         table
-information_schema  referential_constraints            table
-information_schema  role_table_grants                  table
-information_schema  routines                           table
-information_schema  schema_privileges                  table
-information_schema  schemata                           table
-information_schema  sequences                          table
-information_schema  statistics                         table
-information_schema  table_constraints                  table
-information_schema  table_privileges                   table
-information_schema  tables                             table
-information_schema  user_privileges                    table
-information_schema  views                              table
+information_schema  administrable_role_authorizations  table  NULL
+information_schema  applicable_roles                   table  NULL
+information_schema  check_constraints                  table  NULL
+information_schema  column_privileges                  table  NULL
+information_schema  columns                            table  NULL
+information_schema  constraint_column_usage            table  NULL
+information_schema  enabled_roles                      table  NULL
+information_schema  key_column_usage                   table  NULL
+information_schema  parameters                         table  NULL
+information_schema  referential_constraints            table  NULL
+information_schema  role_table_grants                  table  NULL
+information_schema  routines                           table  NULL
+information_schema  schema_privileges                  table  NULL
+information_schema  schemata                           table  NULL
+information_schema  sequences                          table  NULL
+information_schema  statistics                         table  NULL
+information_schema  table_constraints                  table  NULL
+information_schema  table_privileges                   table  NULL
+information_schema  tables                             table  NULL
+information_schema  user_privileges                    table  NULL
+information_schema  views                              table  NULL
 
 # Verify that the name is not special for databases.
 
@@ -118,30 +118,30 @@ postgres
 system
 test
 
-query TTT
+query TTTI
 SHOW TABLES FROM test.information_schema
 ----
-information_schema  administrable_role_authorizations  table
-information_schema  applicable_roles                   table
-information_schema  check_constraints                  table
-information_schema  column_privileges                  table
-information_schema  columns                            table
-information_schema  constraint_column_usage            table
-information_schema  enabled_roles                      table
-information_schema  key_column_usage                   table
-information_schema  parameters                         table
-information_schema  referential_constraints            table
-information_schema  role_table_grants                  table
-information_schema  routines                           table
-information_schema  schema_privileges                  table
-information_schema  schemata                           table
-information_schema  sequences                          table
-information_schema  statistics                         table
-information_schema  table_constraints                  table
-information_schema  table_privileges                   table
-information_schema  tables                             table
-information_schema  user_privileges                    table
-information_schema  views                              table
+information_schema  administrable_role_authorizations  table  NULL
+information_schema  applicable_roles                   table  NULL
+information_schema  check_constraints                  table  NULL
+information_schema  column_privileges                  table  NULL
+information_schema  columns                            table  NULL
+information_schema  constraint_column_usage            table  NULL
+information_schema  enabled_roles                      table  NULL
+information_schema  key_column_usage                   table  NULL
+information_schema  parameters                         table  NULL
+information_schema  referential_constraints            table  NULL
+information_schema  role_table_grants                  table  NULL
+information_schema  routines                           table  NULL
+information_schema  schema_privileges                  table  NULL
+information_schema  schemata                           table  NULL
+information_schema  sequences                          table  NULL
+information_schema  statistics                         table  NULL
+information_schema  table_constraints                  table  NULL
+information_schema  table_privileges                   table  NULL
+information_schema  tables                             table  NULL
+information_schema  user_privileges                    table  NULL
+information_schema  views                              table  NULL
 
 query TT colnames
 SHOW CREATE TABLE information_schema.tables
@@ -253,6 +253,7 @@ crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       table_columns
 crdb_internal       table_indexes
+crdb_internal       table_row_statistics
 crdb_internal       tables
 crdb_internal       zones
 information_schema  administrable_role_authorizations
@@ -402,6 +403,7 @@ session_trace
 session_variables
 table_columns
 table_indexes
+table_row_statistics
 tables
 zones
 administrable_role_authorizations
@@ -511,6 +513,7 @@ views
 user_privileges
 tables
 tables
+table_row_statistics
 table_privileges
 table_indexes
 table_constraints
@@ -558,6 +561,7 @@ system         crdb_internal       session_trace                      SYSTEM VIE
 system         crdb_internal       session_variables                  SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                      SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                      SYSTEM VIEW  NO                  1
+system         crdb_internal       table_row_statistics               SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                             SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                              SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations  SYSTEM VIEW  NO                  1
@@ -1654,6 +1658,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_columns                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_indexes                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       table_row_statistics               SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
@@ -2018,6 +2023,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_columns                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_indexes                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       table_row_statistics               SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
