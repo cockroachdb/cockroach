@@ -50,6 +50,34 @@ message SessionCookie {
 	bytes secret = 2;
 }
 
+// OIDCState is a message that is serialized and sent over with an OIDC authentication request
+// when the identity provider triggers our callback, it returns the same state message back to
+// us so that we can ensure that we're only processing responses that we originated.
+message OIDCState {
+	// ID of node that originated the OIDC session.
+	int32 node_id = 1 [
+		(gogoproto.customname) = "NodeID",
+		(gogoproto.casttype) =
+			"github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+	];
+	// Random bytes that the originating node stores to validate the callback response.
+	bytes secret = 2;
+}
+
+// ValidateOIDCStateRequest is a message that one node sends to another to request
+// a state validation. When an OIDC identity provider triggers our callback URL it
+// sends back a serialized OIDCState (defined above). If the NodeID in that state
+// does not match the node we're processing the callback with, we will request a
+// validation from the appropriate node using this message.
+message ValidateOIDCStateRequest {
+	OIDCState state = 1;
+}
+
+// ValidateOIDCStateResponse simply tells us if a given state was considered valid
+// by the node. It will usually result in that state being cleared from the node's
+// cache and discarded to prevent reuse.
+message ValidateOIDCStateResponse {}
+
 // LogIn and LogOut are the GRPC APIs used to create web authentication sessions.
 // Intended for use over GRPC-Gateway, which identifies sessions using HTTP
 // cookies.
@@ -65,13 +93,21 @@ service LogIn {
 			body: "*"
 		};
 	}
+
+	// ValidateOIDCState is used for nodes to validate OIDC state that another node
+	// may have cached since auth requests can originate and be completed at any
+	// node in the cluster.
+	//
+	// This endpoint does not have an HTTP API since we only intend to use it for
+	// inter-node communication.
+	rpc ValidateOIDCState(ValidateOIDCStateRequest) returns (ValidateOIDCStateResponse) {}
 }
 
 service LogOut {
-  // UserLogout terminates an active authentication session.
-  rpc UserLogout(UserLogoutRequest) returns (UserLogoutResponse) {
-    option (google.api.http) = {
+	// UserLogout terminates an active authentication session.
+	rpc UserLogout(UserLogoutRequest) returns (UserLogoutResponse) {
+		option (google.api.http) = {
 			get: "/logout"
 		};
-  }
+	}
 }
