@@ -14,7 +14,7 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ·               distribution  local
 ·               vectorized    true
 render          ·             ·
- └── hash-join  ·             ·
+ └── hash join  ·             ·
       │         type          inner
       │         equality      (x) = (x)
       ├── scan  ·             ·
@@ -29,7 +29,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 ·          distribution  local
 ·          vectorized    true
-hash-join  ·             ·
+hash join  ·             ·
  │         type          inner
  │         equality      (x) = (y)
  ├── scan  ·             ·
@@ -45,7 +45,7 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ·                    distribution  local
 ·                    vectorized    true
 render               ·             ·
- └── cross-join      ·             ·
+ └── cross join      ·             ·
       │              type          cross
       ├── scan       ·             ·
       │              table         twocolumn@primary
@@ -61,7 +61,7 @@ EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 ·          distribution  local
 ·          vectorized    true
-hash-join  ·             ·
+hash join  ·             ·
  │         type          inner
  │         equality      (x) = (y)
  ├── scan  ·             ·
@@ -76,7 +76,7 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 ·          distribution  local
 ·          vectorized    true
-hash-join  ·             ·
+hash join  ·             ·
  │         type          inner
  │         equality      (x) = (y)
  ├── scan  ·             ·
@@ -98,10 +98,10 @@ LIMIT 1
 ·                    vectorized    true
 limit                ·             ·
  │                   count         1
- └── hash-join       ·             ·
+ └── hash join       ·             ·
       │              type          inner
       │              equality      (x) = (x)
-      ├── hash-join  ·             ·
+      ├── hash join  ·             ·
       │    │         type          inner
       │    │         equality      (x) = (x)
       │    ├── scan  ·             ·
@@ -110,7 +110,7 @@ limit                ·             ·
       │    └── scan  ·             ·
       │              table         twocolumn@primary
       │              spans         FULL SCAN
-      └── hash-join  ·             ·
+      └── hash join  ·             ·
            │         type          inner
            │         equality      (x) = (x)
            ├── scan  ·             ·
@@ -126,7 +126,7 @@ EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 ·           distribution  local              ·       ·
 ·           vectorized    true               ·       ·
-cross-join  ·             ·                  (x, y)  ·
+cross join  ·             ·                  (x, y)  ·
  │          type          cross              ·       ·
  ├── scan   ·             ·                  (x)     ·
  │          table         twocolumn@primary  ·       ·
@@ -142,7 +142,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ·               vectorized    true               ·          ·
 render          ·             ·                  (y)        ·
  │              render 0      y                  ·          ·
- └── hash-join  ·             ·                  (x, x, y)  ·
+ └── hash join  ·             ·                  (x, x, y)  ·
       │         type          inner              ·          ·
       │         equality      (x) = (x)          ·          ·
       ├── scan  ·             ·                  (x)        ·
@@ -159,7 +159,7 @@ EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b
 ·               vectorized    true               ·          ·
 render          ·             ·                  (y)        ·
  │              render 0      y                  ·          ·
- └── hash-join  ·             ·                  (x, x, y)  ·
+ └── hash join  ·             ·                  (x, x, y)  ·
       │         type          inner              ·          ·
       │         equality      (x) = (x)          ·          ·
       ├── scan  ·             ·                  (x)        ·
@@ -176,7 +176,7 @@ EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b
 ·                vectorized    true               ·       ·
 render           ·             ·                  (x)     ·
  │               render 0      x                  ·       ·
- └── cross-join  ·             ·                  (x, y)  ·
+ └── cross join  ·             ·                  (x, y)  ·
       │          type          inner              ·       ·
       │          pred          x < y              ·       ·
       ├── scan   ·             ·                  (x)     ·
@@ -195,7 +195,7 @@ render               ·             ·                  (x, two, plus1)     ·
  │                   render 0      COALESCE(x, x)     ·                   ·
  │                   render 1      two                ·                   ·
  │                   render 2      plus1              ·                   ·
- └── hash-join       ·             ·                  (two, x, plus1, x)  ·
+ └── hash join       ·             ·                  (two, x, plus1, x)  ·
       │              type          full outer         ·                   ·
       │              equality      (x) = (x)          ·                   ·
       ├── render     ·             ·                  (two, x)            ·
@@ -228,7 +228,7 @@ render                      ·              ·                      (k, u, w)   
            │                render 0       column1                ·                                     ·
            │                render 1       column2                ·                                     ·
            │                render 2       column2                ·                                     ·
-           └── hash-join    ·              ·                      (column1, column2, column1, column2)  ·
+           └── hash join    ·              ·                      (column1, column2, column1, column2)  ·
                 │           type           inner                  ·                                     ·
                 │           equality       (column2) = (column1)  ·                                     ·
                 ├── values  ·              ·                      (column1, column2)                    ·
@@ -346,11 +346,11 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 2   ·                          render 10           conname
 2   ·                          render 11           generate_series
 2   ·                          render 12           relname
-3   hash-join                  ·                   ·
+3   hash join                  ·                   ·
 3   ·                          type                inner
 3   ·                          equality            (refobjid) = (oid)
 3   ·                          right cols are key  ·
-4   hash-join                  ·                   ·
+4   hash join                  ·                   ·
 4   ·                          type                inner
 4   ·                          equality            (oid) = (relnamespace)
 5   render                     ·                   ·
@@ -358,7 +358,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 5   ·                          render 1            nspname
 6   virtual table              ·                   ·
 6   ·                          source              pg_namespace@primary
-5   hash-join                  ·                   ·
+5   hash join                  ·                   ·
 5   ·                          type                inner
 5   ·                          equality            (objid) = (oid)
 6   render                     ·                   ·
@@ -366,28 +366,28 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 6   ·                          render 1            refobjid
 7   virtual table              ·                   ·
 7   ·                          source              pg_depend@primary
-6   hash-join                  ·                   ·
+6   hash join                  ·                   ·
 6   ·                          type                inner
 6   ·                          equality            (relnamespace) = (oid)
-7   cross-join                 ·                   ·
+7   cross join                 ·                   ·
 7   ·                          type                inner
 7   ·                          pred                (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
 8   project set                ·                   ·
 8   ·                          render 0            generate_series(1, 32)
 9   emptyrow                   ·                   ·
-8   virtual-table-lookup-join  ·                   ·
+8   virtual table lookup join  ·                   ·
 8   ·                          table               pg_attribute@pg_attribute_attrelid_idx
 8   ·                          type                inner
 8   ·                          equality            (oid) = (attrelid)
-9   virtual-table-lookup-join  ·                   ·
+9   virtual table lookup join  ·                   ·
 9   ·                          table               pg_class@pg_class_oid_idx
 9   ·                          type                inner
 9   ·                          equality            (attrelid) = (oid)
-10  virtual-table-lookup-join  ·                   ·
+10  virtual table lookup join  ·                   ·
 10  ·                          table               pg_attribute@pg_attribute_attrelid_idx
 10  ·                          type                inner
 10  ·                          equality            (confrelid) = (attrelid)
-11  virtual-table-lookup-join  ·                   ·
+11  virtual table lookup join  ·                   ·
 11  ·                          table               pg_constraint@pg_constraint_conrelid_idx
 11  ·                          type                inner
 11  ·                          equality            (oid) = (conrelid)
@@ -425,7 +425,7 @@ EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cu
 ----
 ·           distribution        local
 ·           vectorized          true
-merge-join  ·                   ·
+merge join  ·                   ·
  │          type                inner
  │          equality            (cust) = (id)
  │          right cols are key  ·
@@ -451,7 +451,7 @@ EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 ·          distribution        local
 ·          vectorized          true
-hash-join  ·                   ·
+hash join  ·                   ·
  │         type                inner
  │         equality            (b) = (n)
  │         right cols are key  ·
@@ -473,7 +473,7 @@ render               ·             ·                 (a, b, n, sq)           �
  │                   render 1      b                 ·                       ·
  │                   render 2      n                 ·                       ·
  │                   render 3      sq                ·                       ·
- └── hash-join       ·             ·                 (column8, a, b, n, sq)  ·
+ └── hash join       ·             ·                 (column8, a, b, n, sq)  ·
       │              type          inner             ·                       ·
       │              equality      (column8) = (sq)  ·                       ·
       ├── render     ·             ·                 (column8, a, b)         ·
@@ -507,7 +507,7 @@ render                     ·             ·               (a, b, n, sq)       �
            │               render 2      b               ·                   ·
            │               render 3      n               ·                   ·
            │               render 4      sq              ·                   ·
-           └── cross-join  ·             ·               (a, b, n, sq)       ·
+           └── cross join  ·             ·               (a, b, n, sq)       ·
                 │          type          cross           ·                   ·
                 ├── scan   ·             ·               (a, b)              ·
                 │          table         pairs@primary   ·                   ·
@@ -527,7 +527,7 @@ render               ·             ·                 (a, b, n, sq)           �
  │                   render 1      b                 ·                       ·
  │                   render 2      n                 ·                       ·
  │                   render 3      sq                ·                       ·
- └── hash-join       ·             ·                 (column8, a, b, n, sq)  ·
+ └── hash join       ·             ·                 (column8, a, b, n, sq)  ·
       │              type          full outer        ·                       ·
       │              equality      (column8) = (sq)  ·                       ·
       ├── render     ·             ·                 (column8, a, b)         ·
@@ -553,7 +553,7 @@ render                    ·             ·                    (a, b, n, sq)    
  │                        render 3      sq                   ·                       ·
  └── filter               ·             ·                    (column8, a, b, n, sq)  ·
       │                   filter        (b % 2) != (sq % 2)  ·                       ·
-      └── hash-join       ·             ·                    (column8, a, b, n, sq)  ·
+      └── hash join       ·             ·                    (column8, a, b, n, sq)  ·
            │              type          full outer           ·                       ·
            │              equality      (column8) = (sq)     ·                       ·
            ├── render     ·             ·                    (column8, a, b)         ·
@@ -581,7 +581,7 @@ SELECT *
 ·                    vectorized    true
 filter               ·             ·
  │                   filter        ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
- └── hash-join       ·             ·
+ └── hash join       ·             ·
       │              type          left outer
       │              equality      (b) = (sq)
       │              pred          a > 1
@@ -613,7 +613,7 @@ render                    ·             ·
  │                        render 3      sq
  └── filter               ·             ·
       │                   filter        ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
-      └── hash-join       ·             ·
+      └── hash join       ·             ·
            │              type          left outer
            │              equality      (sq) = (b)
            │              pred          n < 6
@@ -637,7 +637,7 @@ SELECT *
 ----
 ·               distribution  local
 ·               vectorized    true
-hash-join       ·             ·
+hash join       ·             ·
  │              type          inner
  │              equality      (b) = (sq)
  ├── filter     ·             ·
@@ -664,7 +664,7 @@ EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ·               vectorized    true             ·             ·
 render          ·             ·                (x)           ·
  │              render 0      x                ·             ·
- └── hash-join  ·             ·                (x, y, y, x)  ·
+ └── hash join  ·             ·                (x, y, y, x)  ·
       │         type          inner            ·             ·
       │         equality      (x, y) = (x, y)  ·             ·
       ├── scan  ·             ·                (x, y)        ·
@@ -692,7 +692,7 @@ EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = 
 ----
 ·          distribution        local                  ·                         ·
 ·          vectorized          true                   ·                         ·
-hash-join  ·                   ·                      (a, b, c, d, a, b, c, d)  ·
+hash join  ·                   ·                      (a, b, c, d, a, b, c, d)  ·
  │         type                inner                  ·                         ·
  │         equality            (a, b, c) = (a, b, c)  ·                         ·
  │         left cols are key   ·                      ·                         ·
@@ -714,7 +714,7 @@ render          ·                   ·                            (a, b, c, d) 
  │              render 1            b                            ·                         ·
  │              render 2            c                            ·                         ·
  │              render 3            d                            ·                         ·
- └── hash-join  ·                   ·                            (a, b, c, d, a, b, c, d)  ·
+ └── hash join  ·                   ·                            (a, b, c, d, a, b, c, d)  ·
       │         type                inner                        ·                         ·
       │         equality            (a, b, c, d) = (a, b, c, d)  ·                         ·
       │         left cols are key   ·                            ·                         ·
@@ -737,7 +737,7 @@ render           ·                   ·                           (a, b, c, d, 
  │               render 2            c                           ·                         ·
  │               render 3            d                           ·                         ·
  │               render 4            d                           ·                         ·
- └── merge-join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
+ └── merge join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
       │          type                inner                       ·                         ·
       │          equality            (b, a, c) = (b, a, c)       ·                         ·
       │          left cols are key   ·                           ·                         ·
@@ -755,7 +755,7 @@ EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a 
 ----
 ·           distribution        local                       ·                         ·
 ·           vectorized          true                        ·                         ·
-merge-join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
+merge join  ·                   ·                           (a, b, c, d, a, b, c, d)  ·
  │          type                inner                       ·                         ·
  │          equality            (b, a, c) = (b, a, d)       ·                         ·
  │          left cols are key   ·                           ·                         ·
@@ -784,7 +784,7 @@ render          ·             ·             (s, s, s)  ·
  │              render 0      s             ·          ·
  │              render 1      s             ·          ·
  │              render 2      s             ·          ·
- └── hash-join  ·             ·             (s, s)     ·
+ └── hash join  ·             ·             (s, s)     ·
       │         type          inner         ·          ·
       │         equality      (s) = (s)     ·          ·
       ├── scan  ·             ·             (s)        ·
@@ -803,7 +803,7 @@ render          ·             ·             (s, s, s)  ·
  │              render 0      s             ·          ·
  │              render 1      s             ·          ·
  │              render 2      s             ·          ·
- └── hash-join  ·             ·             (s, s)     ·
+ └── hash join  ·             ·             (s, s)     ·
       │         type          left outer    ·          ·
       │         equality      (s) = (s)     ·          ·
       ├── scan  ·             ·             (s)        ·
@@ -822,7 +822,7 @@ render          ·             ·               (s, s, s)  ·
  │              render 0      COALESCE(s, s)  ·          ·
  │              render 1      s               ·          ·
  │              render 2      s               ·          ·
- └── hash-join  ·             ·               (s, s)     ·
+ └── hash join  ·             ·               (s, s)     ·
       │         type          left outer      ·          ·
       │         equality      (s) = (s)       ·          ·
       ├── scan  ·             ·               (s)        ·
@@ -841,7 +841,7 @@ render          ·             ·               (s, s, s)  ·
  │              render 0      COALESCE(s, s)  ·          ·
  │              render 1      s               ·          ·
  │              render 2      s               ·          ·
- └── hash-join  ·             ·               (s, s)     ·
+ └── hash join  ·             ·               (s, s)     ·
       │         type          full outer      ·          ·
       │         equality      (s) = (s)       ·          ·
       ├── scan  ·             ·               (s)        ·
@@ -861,7 +861,7 @@ EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 render          ·                   ·                (a, s)        ·
  │              render 0            a                ·             ·
  │              render 1            COALESCE(s, s)   ·             ·
- └── hash-join  ·                   ·                (a, s, a, s)  ·
+ └── hash join  ·                   ·                (a, s, a, s)  ·
       │         type                left outer       ·             ·
       │         equality            (a, s) = (a, s)  ·             ·
       │         left cols are key   ·                ·             ·
@@ -890,7 +890,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+ └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
       │          type            inner              ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -911,7 +911,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+ └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -932,7 +932,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+ └── merge join  ·               ·                  (x, y, v, x, y, u)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -955,7 +955,7 @@ filter                ·               ·                  (x, y, u, v)        �
       │               render 1        COALESCE(y, y)     ·                   ·
       │               render 2        u                  ·                   ·
       │               render 3        v                  ·                   ·
-      └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+      └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
            │          type            full outer         ·                   ·
            │          equality        (x, y) = (x, y)    ·                   ·
            │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -972,7 +972,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = 
 ----
 ·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+merge join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -988,7 +988,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = 
 ----
 ·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+merge join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1004,7 +1004,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu
 ----
 ·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+merge join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1027,7 +1027,7 @@ render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 3        x                  ·                   ·
  │               render 4        y                  ·                   ·
  │               render 5        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+ └── merge join  ·               ·                  (x, y, v, x, y, u)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1051,7 +1051,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+ └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1072,7 +1072,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+ └── merge join  ·               ·                  (x, y, v, x, y, u)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1095,7 +1095,7 @@ filter                ·               ·                  (x, y, u, v)        �
       │               render 1        COALESCE(y, y)     ·                   ·
       │               render 2        u                  ·                   ·
       │               render 3        v                  ·                   ·
-      └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+      └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
            │          type            full outer         ·                   ·
            │          equality        (x, y) = (x, y)    ·                   ·
            │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1111,7 +1111,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OU
 ----
 ·           distribution    local              ·                   ·
 ·           vectorized      true               ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+merge join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1134,7 +1134,7 @@ render           ·               ·                  (x, y, u, x, y, v)  ·
  │               render 3        x                  ·                   ·
  │               render 4        y                  ·                   ·
  │               render 5        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+ └── merge join  ·               ·                  (x, y, v, x, y, u)  ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1156,7 +1156,7 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
+ └── merge join  ·               ·                  (x, y, u, x, y, v)  ·
       │          type            inner              ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
@@ -1187,7 +1187,7 @@ render           ·                   ·           (a, b1, b2)     ·
  │               render 0            a           ·               ·
  │               render 1            b1          ·               ·
  │               render 2            b2          ·               ·
- └── merge-join  ·                   ·           (a, b1, a, b2)  ·
+ └── merge join  ·                   ·           (a, b1, a, b2)  ·
       │          type                left outer  ·               ·
       │          equality            (a) = (a)   ·               ·
       │          left cols are key   ·           ·               ·
@@ -1205,7 +1205,7 @@ EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
 ·           distribution        local       ·               ·
 ·           vectorized          true        ·               ·
-merge-join  ·                   ·           (a, b1, a, b2)  ·
+merge join  ·                   ·           (a, b1, a, b2)  ·
  │          type                left outer  ·               ·
  │          equality            (a) = (a)   ·               ·
  │          left cols are key   ·           ·               ·
@@ -1227,7 +1227,7 @@ render           ·                   ·           (a, b1, b2)     ·
  │               render 0            a           ·               ·
  │               render 1            b1          ·               ·
  │               render 2            b2          ·               ·
- └── merge-join  ·                   ·           (a, b2, a, b1)  ·
+ └── merge join  ·                   ·           (a, b2, a, b1)  ·
       │          type                left outer  ·               ·
       │          equality            (a) = (a)   ·               ·
       │          left cols are key   ·           ·               ·
@@ -1250,7 +1250,7 @@ render           ·                   ·           (a, b1, a, b2)  ·
  │               render 1            b1          ·               ·
  │               render 2            a           ·               ·
  │               render 3            b2          ·               ·
- └── merge-join  ·                   ·           (a, b2, a, b1)  ·
+ └── merge join  ·                   ·           (a, b2, a, b1)  ·
       │          type                left outer  ·               ·
       │          equality            (a) = (a)   ·               ·
       │          left cols are key   ·           ·               ·
@@ -1289,7 +1289,7 @@ EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a, b) = (a, b)
       │          right cols are key  ·
@@ -1331,7 +1331,7 @@ render          ·             ·
  │              render 1      b
  │              render 2      c
  │              render 3      d
- └── hash-join  ·             ·
+ └── hash join  ·             ·
       │         type          inner
       │         equality      (a, c) = (a, c)
       │         pred          (b = b) AND (d = d)
@@ -1358,7 +1358,7 @@ render           ·             ·
  │               render 4      a
  │               render 5      c
  │               render 6      d
- └── cross-join  ·             ·
+ └── cross join  ·             ·
       │          type          inner
       │          pred          b = b
       ├── scan   ·             ·
@@ -1383,7 +1383,7 @@ render          ·             ·
  │              render 3      d
  │              render 4      c
  │              render 5      d
- └── hash-join  ·             ·
+ └── hash join  ·             ·
       │         type          inner
       │         equality      (a) = (a)
       │         pred          b = b
@@ -1408,7 +1408,7 @@ render          ·             ·
  │              render 2      c
  │              render 3      d
  │              render 4      d
- └── hash-join  ·             ·
+ └── hash join  ·             ·
       │         type          inner
       │         equality      (a, c) = (a, c)
       │         pred          b = b
@@ -1427,7 +1427,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ----
 ·           distribution  local
 ·           vectorized    true
-cross-join  ·             ·
+cross join  ·             ·
  │          type          inner
  │          pred          b = b
  ├── scan   ·             ·
@@ -1445,7 +1445,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ----
 ·          distribution  local
 ·          vectorized    true
-hash-join  ·             ·
+hash join  ·             ·
  │         type          inner
  │         equality      (a) = (a)
  │         pred          b = b
@@ -1463,7 +1463,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ----
 ·           distribution  local
 ·           vectorized    true
-cross-join  ·             ·
+cross join  ·             ·
  │          type          inner
  │          pred          b = b
  ├── scan   ·             ·
@@ -1481,7 +1481,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ----
 ·          distribution  local
 ·          vectorized    true
-hash-join  ·             ·
+hash join  ·             ·
  │         type          inner
  │         equality      (a) = (a)
  │         pred          b = b
@@ -1499,7 +1499,7 @@ EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = b
 ·               distribution  local
 ·               vectorized    true
 render          ·             ·
- └── hash-join  ·             ·
+ └── hash join  ·             ·
       │         type          inner
       │         equality      (a, c) = (a, c)
       │         pred          (b = b) AND (d = d)
@@ -1532,7 +1532,7 @@ EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ·                vectorized    true
 filter           ·             ·
  │               filter        c = 6.0
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         zigzag@primary
       │          key columns   a
       └── scan   ·             ·
@@ -1549,7 +1549,7 @@ EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 ·            distribution  local
 ·            vectorized    true
-zigzag-join  ·             ·
+zigzag join  ·             ·
  │           type          inner
  │           pred          (@2 = 5) AND (@3 = 6.0)
  ├── scan    ·             ·
@@ -1566,13 +1566,13 @@ EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 ·                 distribution           local
 ·                 vectorized             true
-lookup-join       ·                      ·
+lookup join       ·                      ·
  │                table                  zigzag@primary
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
  │                parallel               ·
- └── zigzag-join  ·                      ·
+ └── zigzag join  ·                      ·
       │           type                   inner
       │           pred                   (@2 = 5) AND (@3 = 6.0)
       ├── scan    ·                      ·
@@ -1588,14 +1588,14 @@ EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 ·                 distribution           local
 ·                 vectorized             true
-lookup-join       ·                      ·
+lookup join       ·                      ·
  │                table                  zigzag@primary
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
  │                parallel               ·
  │                pred                   d > 4.0
- └── zigzag-join  ·                      ·
+ └── zigzag join  ·                      ·
       │           type                   inner
       │           pred                   (@2 = 5) AND (@3 = 6.0)
       ├── scan    ·                      ·
@@ -1626,7 +1626,7 @@ EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ·                vectorized    true
 filter           ·             ·
  │               filter        c IS NULL
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         zigzag2@primary
       │          key columns   rowid
       └── scan   ·             ·
@@ -1640,7 +1640,7 @@ EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ·                    distribution    local
 ·                    vectorized      true
 render               ·               ·
- └── merge-join      ·               ·
+ └── merge join      ·               ·
       │              type            inner
       │              equality        (x) = (x)
       │              mergeJoinOrder  +"(x=x)"
@@ -1662,7 +1662,7 @@ EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ·                    distribution    local
 ·                    vectorized      true
 render               ·               ·
- └── merge-join      ·               ·
+ └── merge join      ·               ·
       │              type            inner
       │              equality        (x) = (x)
       │              mergeJoinOrder  +"(x=x)"
@@ -1683,7 +1683,7 @@ EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = t
 ----
 ·               distribution    local
 ·               vectorized      true
-merge-join      ·               ·
+merge join      ·               ·
  │              type            inner
  │              equality        (x) = (x)
  │              mergeJoinOrder  +"(x=x)"
@@ -1713,7 +1713,7 @@ EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = car
 ----
 ·          distribution        local
 ·          vectorized          true
-hash-join  ·                   ·
+hash join  ·                   ·
  │         type                inner
  │         equality            (cust) = (id)
  │         right cols are key  ·

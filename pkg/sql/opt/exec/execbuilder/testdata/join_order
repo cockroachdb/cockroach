@@ -41,13 +41,13 @@ EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc
 ----
 ·                 distribution           local        ·                         ·
 ·                 vectorized             true         ·                         ·
-lookup-join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
+lookup join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
  │                table                  cy@primary   ·                         ·
  │                type                   inner        ·                         ·
  │                equality               (c) = (c)    ·                         ·
  │                equality cols are key  ·            ·                         ·
  │                parallel               ·            ·                         ·
- └── lookup-join  ·                      ·            (a, b, c, d, b, x)        ·
+ └── lookup join  ·                      ·            (a, b, c, d, b, x)        ·
       │           table                  bx@primary   ·                         ·
       │           type                   inner        ·                         ·
       │           equality               (b) = (b)    ·                         ·
@@ -65,13 +65,13 @@ EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc
 ----
 ·                 distribution           local        ·                         ·
 ·                 vectorized             true         ·                         ·
-lookup-join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
+lookup join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
  │                table                  cy@primary   ·                         ·
  │                type                   inner        ·                         ·
  │                equality               (c) = (c)    ·                         ·
  │                equality cols are key  ·            ·                         ·
  │                parallel               ·            ·                         ·
- └── lookup-join  ·                      ·            (a, b, c, d, b, x)        ·
+ └── lookup join  ·                      ·            (a, b, c, d, b, x)        ·
       │           table                  bx@primary   ·                         ·
       │           type                   inner        ·                         ·
       │           equality               (b) = (b)    ·                         ·

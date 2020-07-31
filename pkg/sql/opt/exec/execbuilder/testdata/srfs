@@ -15,7 +15,7 @@ EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 ·                   distribution  local
 ·                   vectorized    true
-cross-join          ·             ·
+cross join          ·             ·
  │                  type          cross
  ├── project set    ·             ·
  │    └── emptyrow  ·             ·
@@ -60,9 +60,9 @@ EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) F
 ----
 ·                   distribution  local                  ·                                         ·
 ·                   vectorized    true                   ·                                         ·
-cross-join          ·             ·                      (a, b, generate_series, generate_series)  ·
+cross join          ·             ·                      (a, b, generate_series, generate_series)  ·
  │                  type          cross                  ·                                         ·
- ├── cross-join     ·             ·                      (a, b)                                    ·
+ ├── cross join     ·             ·                      (a, b)                                    ·
  │    │             type          cross                  ·                                         ·
  │    ├── scan      ·             ·                      (a)                                       ·
  │    │             table         t@primary              ·                                         ·
@@ -119,7 +119,7 @@ render                          ·                   ·                         
            │                    render 3            z                                                      ·                                                ·
            └── project set      ·                   ·                                                      (x, y, x, z, x, n)                               ·
                 │               render 0            information_schema._pg_expandarray(ARRAY[@1, @2, @4])  ·                                                ·
-                └── merge-join  ·                   ·                                                      (x, y, x, z)                                     ·
+                └── merge join  ·                   ·                                                      (x, y, x, z)                                     ·
                      │          type                inner                                                  ·                                                ·
                      │          equality            (x) = (x)                                              ·                                                ·
                      │          left cols are key   ·                                                      ·                                                ·
@@ -142,7 +142,7 @@ render                      ·             ·                        (generate_s
  │                          render 0      generate_series          ·                        ·
  └── project set            ·             ·                        (x, z, generate_series)  ·
       │                     render 0      generate_series(@1, @2)  ·                        ·
-      └── cross-join        ·             ·                        (x, z)                   ·
+      └── cross join        ·             ·                        (x, z)                   ·
            │                type          semi                     ·                        ·
            │                pred          z < generate_series      ·                        ·
            ├── scan         ·             ·                        (x, z)                   ·
@@ -170,7 +170,7 @@ render                ·                   ·                                   
       │               render 0            generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                           ·
       │               render 1            generate_series(@1, @2)                  ·                                                           ·
       │               render 2            unnest(ARRAY[0, @1, @2, @4])             ·                                                           ·
-      └── merge-join  ·                   ·                                        (x, y, x, z)                                                ·
+      └── merge join  ·                   ·                                        (x, y, x, z)                                                ·
            │          type                left outer                               ·                                                           ·
            │          equality            (x) = (x)                                ·                                                           ·
            │          left cols are key   ·                                        ·                                                           ·
@@ -203,7 +203,7 @@ root                            ·             ·                               
       └── max1row               ·             ·                                     (unnest)              ·
            └── render           ·             ·                                     (unnest)              ·
                 │               render 0      unnest                                ·                     ·
-                └── apply-join  ·             ·                                     (x, y, unnest)        ·
+                └── apply join  ·             ·                                     (x, y, unnest)        ·
                      │          type          inner                                 ·                     ·
                      └── scan   ·             ·                                     (x, y)                ·
 ·                               table         xy@primary                            ·                     ·
@@ -238,7 +238,7 @@ render                              ·                   ·                     
                 │                   render 0            id                        ·                                             ·
                 │                   render 1            data                      ·                                             ·
                 │                   render 2            "?column?"                ·                                             ·
-                └── hash-join       ·                   ·                         (column10, id, data, column11, "?column?")    ·
+                └── hash join       ·                   ·                         (column10, id, data, column11, "?column?")    ·
                      │              type                left outer                ·                                             ·
                      │              equality            (column10) = (column11)   ·                                             ·
                      ├── render     ·                   ·                         (column10, id, data)                          ·

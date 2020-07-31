@@ -34,7 +34,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 tree         field         description  columns             ordering
 ·            distribution  full         ·                   ·
 ·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
+lookup join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
@@ -48,7 +48,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 tree         field                  description      columns             ordering
 ·            distribution           full             ·                   ·
 ·            vectorized             true             ·                   ·
-lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
+lookup join  ·                      ·                (a, b, c, d, e, f)  ·
  │           table                  def@primary      ·                   ·
  │           type                   inner            ·                   ·
  │           equality               (b, c) = (f, e)  ·                   ·
@@ -64,7 +64,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 tree         field         description  columns             ordering
 ·            distribution  full         ·                   ·
 ·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
+lookup join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
@@ -79,7 +79,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 tree         field         description  columns             ordering
 ·            distribution  full         ·                   ·
 ·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
+lookup join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (a) = (f)    ·                   ·
@@ -94,7 +94,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 tree         field         description  columns             ordering
 ·            distribution  full         ·                   ·
 ·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
+lookup join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
@@ -109,7 +109,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 tree         field         description  columns             ordering
 ·            distribution  full         ·                   ·
 ·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
+lookup join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
@@ -170,7 +170,7 @@ render               ·                      ·                            (a, b
  │                   render 1               b                            ·                         ·
  │                   render 2               c                            ·                         ·
  │                   render 3               d                            ·                         ·
- └── lookup-join     ·                      ·                            (a, b, c, d, a, b, c, d)  ·
+ └── lookup join     ·                      ·                            (a, b, c, d, a, b, c, d)  ·
       │              table                  data@primary                 ·                         ·
       │              type                   inner                        ·                         ·
       │              equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
@@ -228,7 +228,7 @@ distinct               ·             ·                  (title)               
  │                     order key     title              ·                             ·
  └── render            ·             ·                  (title)                       +title
       │                render 0      title              ·                             ·
-      └── lookup-join  ·             ·                  (title, shelf, title, shelf)  +title
+      └── lookup join  ·             ·                  (title, shelf, title, shelf)  +title
            │           table         books2@primary     ·                             ·
            │           type          inner              ·                             ·
            │           equality      (title) = (title)  ·                             ·
@@ -260,12 +260,12 @@ distinct                  ·             ·                 (name)              
  │                        distinct on   name              ·                                         ·
  └── render               ·             ·                 (name)                                    ·
       │                   render 0      name              ·                                         ·
-      └── lookup-join     ·             ·                 (title, shelf, name, book, title, shelf)  ·
+      └── lookup join     ·             ·                 (title, shelf, name, book, title, shelf)  ·
            │              table         books2@primary    ·                                         ·
            │              type          inner             ·                                         ·
            │              equality      (book) = (title)  ·                                         ·
            │              pred          shelf != shelf    ·                                         ·
-           └── hash-join  ·             ·                 (title, shelf, name, book)                ·
+           └── hash join  ·             ·                 (title, shelf, name, book)                ·
                 │         type          inner             ·                                         ·
                 │         equality      (title) = (book)  ·                                         ·
                 ├── scan  ·             ·                 (title, shelf)                            ·
@@ -295,7 +295,7 @@ tree                 field         description       columns              orderi
 ·                    vectorized    true              ·                    ·
 render               ·             ·                 (name)               +name
  │                   render 0      name              ·                    ·
- └── lookup-join     ·             ·                 (name, book, title)  +name
+ └── lookup join     ·             ·                 (name, book, title)  +name
       │              table         books2@primary    ·                    ·
       │              type          inner             ·                    ·
       │              equality      (book) = (title)  ·                    ·
@@ -319,7 +319,7 @@ render           ·             ·               (title, edition, shelf, title, 
  │               render 3      title           ·                                               ·
  │               render 4      edition         ·                                               ·
  │               render 5      shelf           ·                                               ·
- └── cross-join  ·             ·               (title, edition, shelf, title, edition, shelf)  ·
+ └── cross join  ·             ·               (title, edition, shelf, title, edition, shelf)  ·
       │          type          cross           ·                                               ·
       ├── scan   ·             ·               (title, edition, shelf)                         ·
       │          table         books2@primary  ·                                               ·
@@ -383,7 +383,7 @@ EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = lar
 render            ·             ·              (a, c)     ·
  │                render 0      a              ·          ·
  │                render 1      c              ·          ·
- └── lookup-join  ·             ·              (a, b, c)  ·
+ └── lookup join  ·             ·              (a, b, c)  ·
       │           table         large@bc       ·          ·
       │           type          inner          ·          ·
       │           equality      (a) = (b)      ·          ·
@@ -400,13 +400,13 @@ EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = lar
 render                 ·                      ·                (a, d)        ·
  │                     render 0               a                ·             ·
  │                     render 1               d                ·             ·
- └── lookup-join       ·                      ·                (a, a, b, d)  ·
+ └── lookup join       ·                      ·                (a, a, b, d)  ·
       │                table                  large@primary    ·             ·
       │                type                   inner            ·             ·
       │                equality               (a, b) = (a, b)  ·             ·
       │                equality cols are key  ·                ·             ·
       │                parallel               ·                ·             ·
-      └── lookup-join  ·                      ·                (a, a, b)     ·
+      └── lookup join  ·                      ·                (a, a, b)     ·
            │           table                  large@bc         ·             ·
            │           type                   inner            ·             ·
            │           equality               (a) = (b)        ·             ·
@@ -424,7 +424,7 @@ EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b 
 ----
 ·            distribution  full           ·       ·
 ·            vectorized    true           ·       ·
-lookup-join  ·             ·              (b, a)  ·
+lookup join  ·             ·              (b, a)  ·
  │           table         large@primary  ·       ·
  │           type          left outer     ·       ·
  │           equality      (b) = (a)      ·       ·
@@ -441,7 +441,7 @@ EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t
 render            ·             ·              (a, b)     +a
  │                render 0      a              ·          ·
  │                render 1      b              ·          ·
- └── lookup-join  ·             ·              (a, a, b)  +a
+ └── lookup join  ·             ·              (a, a, b)  +a
       │           table         large@primary  ·          ·
       │           type          left outer     ·          ·
       │           equality      (a) = (a)      ·          ·
@@ -464,7 +464,7 @@ EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c 
 render            ·             ·              (c, c)     ·
  │                render 0      c              ·          ·
  │                render 1      c              ·          ·
- └── lookup-join  ·             ·              (c, b, c)  ·
+ └── lookup join  ·             ·              (c, b, c)  ·
       │           table         large@bc       ·          ·
       │           type          left outer     ·          ·
       │           equality      (c) = (b)      ·          ·
@@ -481,13 +481,13 @@ EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c 
 render                 ·                      ·                (c, d)        ·
  │                     render 0               c                ·             ·
  │                     render 1               d                ·             ·
- └── lookup-join       ·                      ·                (c, a, b, d)  ·
+ └── lookup join       ·                      ·                (c, a, b, d)  ·
       │                table                  large@primary    ·             ·
       │                type                   left outer       ·             ·
       │                equality               (a, b) = (a, b)  ·             ·
       │                equality cols are key  ·                ·             ·
       │                parallel               ·                ·             ·
-      └── lookup-join  ·                      ·                (c, a, b)     ·
+      └── lookup join  ·                      ·                (c, a, b)     ·
            │           table                  large@bc         ·             ·
            │           type                   left outer       ·             ·
            │           equality               (c) = (b)        ·             ·
@@ -504,7 +504,7 @@ EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c 
 render            ·             ·              (c, c)     ·
  │                render 0      c              ·          ·
  │                render 1      c              ·          ·
- └── lookup-join  ·             ·              (c, b, c)  ·
+ └── lookup join  ·             ·              (c, b, c)  ·
       │           table         large@bc       ·          ·
       │           type          left outer     ·          ·
       │           equality      (c) = (b)      ·          ·
@@ -524,7 +524,7 @@ EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c 
 render               ·             ·              (c, d)     ·
  │                   render 0      c              ·          ·
  │                   render 1      d              ·          ·
- └── hash-join       ·             ·              (b, d, c)  ·
+ └── hash join       ·             ·              (b, d, c)  ·
       │              type          right outer    ·          ·
       │              equality      (b) = (c)      ·          ·
       ├── filter     ·             ·              (b, d)     ·
@@ -557,7 +557,7 @@ EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e 
 ·                    vectorized    true             ·                ·
 render               ·             ·                (a)              ·
  │                   render 0      a                ·                ·
- └── lookup-join     ·             ·                (a, d, e, a, d)  ·
+ └── lookup join     ·             ·                (a, d, e, a, d)  ·
       │              table         u@idx            ·                ·
       │              type          inner            ·                ·
       │              equality      (d, a) = (d, a)  ·                ·
@@ -581,7 +581,7 @@ EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e 
 ·                    vectorized             true       ·                ·
 render               ·                      ·          (a)              ·
  │                   render 0               a          ·                ·
- └── lookup-join     ·                      ·          (a, d, e, a, d)  ·
+ └── lookup join     ·                      ·          (a, d, e, a, d)  ·
       │              table                  u@idx      ·                ·
       │              type                   inner      ·                ·
       │              equality               (d) = (d)  ·                ·
@@ -608,7 +608,7 @@ EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = 
 ·                    vectorized    true                   ·                      ·
 render               ·             ·                      (a)                    ·
  │                   render 0      a                      ·                      ·
- └── lookup-join     ·             ·                      (a, b, d, e, a, b, d)  ·
+ └── lookup join     ·             ·                      (a, b, d, e, a, b, d)  ·
       │              table         u@idx                  ·                      ·
       │              type          inner                  ·                      ·
       │              equality      (d, a, b) = (d, a, b)  ·                      ·
@@ -632,7 +632,7 @@ EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = 
 ·                    vectorized    true                   ·                      ·
 render               ·             ·                      (a)                    ·
  │                   render 0      a                      ·                      ·
- └── lookup-join     ·             ·                      (a, b, d, e, a, b, d)  ·
+ └── lookup join     ·             ·                      (a, b, d, e, a, b, d)  ·
       │              table         u@idx                  ·                      ·
       │              type          inner                  ·                      ·
       │              equality      (d, b, a) = (d, b, a)  ·                      ·
@@ -656,7 +656,7 @@ EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = 
 ·                    vectorized    true       ·                ·
 render               ·             ·          (a)              ·
  │                   render 0      a          ·                ·
- └── lookup-join     ·             ·          (a, d, e, a, d)  ·
+ └── lookup join     ·             ·          (a, d, e, a, d)  ·
       │              table         u@idx      ·                ·
       │              type          inner      ·                ·
       │              equality      (d) = (d)  ·                ·
@@ -679,7 +679,7 @@ render            ·             ·            (d, e, f, a, b, c)  ·
  │                render 3      a            ·                   ·
  │                render 4      b            ·                   ·
  │                render 5      c            ·                   ·
- └── lookup-join  ·             ·            (a, b, c, d, e, f)  +a
+ └── lookup join  ·             ·            (a, b, c, d, e, f)  +a
       │           table         def@primary  ·                   ·
       │           type          inner        ·                   ·
       │           equality      (a) = (f)    ·                   ·
@@ -693,7 +693,7 @@ EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
 ·           distribution    full         ·                   ·
 ·           vectorized      true         ·                   ·
-merge-join  ·               ·            (d, e, f, a, b, c)  +f
+merge join  ·               ·            (d, e, f, a, b, c)  +f
  │          type            inner        ·                   ·
  │          equality        (f) = (a)    ·                   ·
  │          mergeJoinOrder  +"(f=a)"     ·                   ·
@@ -712,7 +712,7 @@ EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ·               vectorized    true         ·                   ·
 sort            ·             ·            (d, e, f, a, b, c)  +f
  │              order         +f           ·                   ·
- └── hash-join  ·             ·            (d, e, f, a, b, c)  ·
+ └── hash join  ·             ·            (d, e, f, a, b, c)  ·
       │         type          inner        ·                   ·
       │         equality      (f) = (a)    ·                   ·
       ├── scan  ·             ·            (d, e, f)           ·
@@ -728,7 +728,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
 ·            distribution  full         ·          ·
 ·            vectorized    true         ·          ·
-lookup-join  ·             ·            (a, b, c)  ·
+lookup join  ·             ·            (a, b, c)  ·
  │           table         def@primary  ·          ·
  │           type          semi         ·          ·
  │           equality      (a) = (f)    ·          ·
@@ -741,7 +741,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=
 ----
 ·            distribution  full         ·          ·
 ·            vectorized    true         ·          ·
-lookup-join  ·             ·            (a, b, c)  ·
+lookup join  ·             ·            (a, b, c)  ·
  │           table         def@primary  ·          ·
  │           type          anti         ·          ·
  │           equality      (a) = (f)    ·          ·
@@ -754,7 +754,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AN
 ----
 ·            distribution           full             ·          ·
 ·            vectorized             true             ·          ·
-lookup-join  ·                      ·                (a, b, c)  ·
+lookup join  ·                      ·                (a, b, c)  ·
  │           table                  def@primary      ·          ·
  │           type                   semi             ·          ·
  │           equality               (a, c) = (f, e)  ·          ·
@@ -769,7 +769,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=
 ----
 ·            distribution           full             ·          ·
 ·            vectorized             true             ·          ·
-lookup-join  ·                      ·                (a, b, c)  ·
+lookup join  ·                      ·                (a, b, c)  ·
  │           table                  def@primary      ·          ·
  │           type                   anti             ·          ·
  │           equality               (a, c) = (f, e)  ·          ·
@@ -784,7 +784,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AN
 ----
 ·            distribution  full         ·          ·
 ·            vectorized    true         ·          ·
-lookup-join  ·             ·            (a, b, c)  ·
+lookup join  ·             ·            (a, b, c)  ·
  │           table         def@primary  ·          ·
  │           type          semi         ·          ·
  │           equality      (a) = (f)    ·          ·
@@ -798,7 +798,7 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=
 ----
 ·            distribution  full         ·          ·
 ·            vectorized    true         ·          ·
-lookup-join  ·             ·            (a, b, c)  ·
+lookup join  ·             ·            (a, b, c)  ·
  │           table         def@primary  ·          ·
  │           type          anti         ·          ·
  │           equality      (a) = (f)    ·          ·
@@ -846,7 +846,7 @@ group                  ·             ·
  │                     aggregate 0   count_rows()
  │                     scalar        ·
  └── render            ·             ·
-      └── lookup-join  ·             ·
+      └── lookup join  ·             ·
            │           table         a@primary
            │           type          inner
            │           equality      (a) = (a)
@@ -1440,42 +1440,42 @@ limit                                                                  ·       
            │                                                           aggregate 1            count_rows()
            │                                                           group by               s_name
            └── render                                                  ·                      ·
-                └── lookup-join                                        ·                      ·
+                └── lookup join                                        ·                      ·
                      │                                                 table                  lineitem@primary
                      │                                                 type                   semi
                      │                                                 equality               (l_orderkey) = (l_orderkey)
                      │                                                 pred                   l_suppkey != l_suppkey
-                     └── lookup-join                                   ·                      ·
+                     └── lookup join                                   ·                      ·
                           │                                            table                  orders@primary
                           │                                            type                   inner
                           │                                            equality               (l_orderkey) = (o_orderkey)
                           │                                            equality cols are key  ·
                           │                                            parallel               ·
                           │                                            pred                   o_orderstatus = 'F'
-                          └── lookup-join                              ·                      ·
+                          └── lookup join                              ·                      ·
                                │                                       table                  lineitem@primary
                                │                                       type                   anti
                                │                                       equality               (l_orderkey) = (l_orderkey)
                                │                                       pred                   l_receiptdate > l_commitdate
                                └── render                              ·                      ·
-                                    └── lookup-join                    ·                      ·
+                                    └── lookup join                    ·                      ·
                                          │                             table                  lineitem@primary
                                          │                             type                   inner
                                          │                             equality               (l_orderkey, l_linenumber) = (l_orderkey, l_linenumber)
                                          │                             equality cols are key  ·
                                          │                             parallel               ·
                                          │                             pred                   l_receiptdate > l_commitdate
-                                         └── lookup-join               ·                      ·
+                                         └── lookup join               ·                      ·
                                               │                        table                  lineitem@l_sk
                                               │                        type                   inner
                                               │                        equality               (s_suppkey) = (l_suppkey)
-                                              └── lookup-join          ·                      ·
+                                              └── lookup join          ·                      ·
                                                    │                   table                  supplier@primary
                                                    │                   type                   inner
                                                    │                   equality               (s_suppkey) = (s_suppkey)
                                                    │                   equality cols are key  ·
                                                    │                   parallel               ·
-                                                   └── lookup-join     ·                      ·
+                                                   └── lookup join     ·                      ·
                                                         │              table                  supplier@s_nk
                                                         │              type                   inner
                                                         │              equality               (n_nationkey) = (s_nationkey)
@@ -1500,7 +1500,7 @@ EXPLAIN (VERBOSE)
 ·                          vectorized             true                                          ·                                          ·
 render                     ·                      ·                                             (pk)                                       ·
  │                         render 0               pk                                            ·                                          ·
- └── lookup-join           ·                      ·                                             ("project_const_col_@14", pk, col0, col3)  ·
+ └── lookup join           ·                      ·                                             ("project_const_col_@14", pk, col0, col3)  ·
       │                    table                  tab4@tab4_col3_col4_key                       ·                                          ·
       │                    type                   semi                                          ·                                          ·
       │                    equality               (col0, project_const_col_@14) = (col3, col4)  ·                                          ·
@@ -1511,7 +1511,7 @@ render                     ·                      ·                           
            │               render 1               pk                                            ·                                          ·
            │               render 2               col0                                          ·                                          ·
            │               render 3               col3                                          ·                                          ·
-           └── index-join  ·                      ·                                             (pk, col0, col3)                           ·
+           └── index join  ·                      ·                                             (pk, col0, col3)                           ·
                 │          table                  tab4@primary                                  ·                                          ·
                 │          key columns            pk                                            ·                                          ·
                 └── scan   ·                      ·                                             (pk, col3)                                 ·

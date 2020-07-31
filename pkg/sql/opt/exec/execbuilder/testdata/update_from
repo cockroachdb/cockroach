@@ -16,7 +16,7 @@ count                      ·                   ·
       │                    strategy            updater
       │                    auto commit         ·
       └── render           ·                   ·
-           └── merge-join  ·                   ·
+           └── merge join  ·                   ·
                 │          type                inner
                 │          equality            (a) = (a)
                 │          left cols are key   ·
@@ -47,7 +47,7 @@ count                          ·                  ·
       └── render               ·                  ·
            └── distinct        ·                  ·
                 │              distinct on        a
-                └── hash-join  ·                  ·
+                └── hash join  ·                  ·
                      │         type               inner
                      │         equality           (a) = (a)
                      │         left cols are key  ·
@@ -80,7 +80,7 @@ render                          ·                   ·
            │                    strategy            updater
            │                    auto commit         ·
            └── render           ·                   ·
-                └── merge-join  ·                   ·
+                └── merge join  ·                   ·
                      │          type                inner
                      │          equality            (a) = (a)
                      │          left cols are key   ·
@@ -114,7 +114,7 @@ run                        ·                   ·            (a, b, c, a, b, c)
            │               render 5            a            ·                                 ·
            │               render 6            b            ·                                 ·
            │               render 7            c            ·                                 ·
-           └── merge-join  ·                   ·            (a, b, c, a, b, c)                ·
+           └── merge join  ·                   ·            (a, b, c, a, b, c)                ·
                 │          type                inner        ·                                 ·
                 │          equality            (a) = (a)    ·                                 ·
                 │          left cols are key   ·            ·                                 ·
@@ -142,7 +142,7 @@ count                            ·                      ·
       └── render                 ·                      ·
            └── distinct          ·                      ·
                 │                distinct on            a
-                └── lookup-join  ·                      ·
+                └── lookup join  ·                      ·
                      │           table                  abc@primary
                      │           type                   inner
                      │           equality               (column1) = (a)
@@ -172,13 +172,13 @@ count                               ·                  ·
       └── render                    ·                  ·
            └── distinct             ·                  ·
                 │                   distinct on        a
-                └── hash-join       ·                  ·
+                └── hash join       ·                  ·
                      │              type               inner
                      │              equality           (a) = (a)
                      ├── scan       ·                  ·
                      │              table              ab@primary
                      │              spans              FULL SCAN
-                     └── hash-join  ·                  ·
+                     └── hash join  ·                  ·
                           │         type               inner
                           │         equality           (a) = (a)
                           │         left cols are key  ·
@@ -213,13 +213,13 @@ run                                 ·                  ·
       └── render                    ·                  ·
            └── distinct             ·                  ·
                 │                   distinct on        a
-                └── hash-join       ·                  ·
+                └── hash join       ·                  ·
                      │              type               inner
                      │              equality           (a) = (a)
                      ├── scan       ·                  ·
                      │              table              ab@primary
                      │              spans              FULL SCAN
-                     └── hash-join  ·                  ·
+                     └── hash join  ·                  ·
                           │         type               inner
                           │         equality           (a) = (a)
                           │         left cols are key  ·

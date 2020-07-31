@@ -87,7 +87,7 @@ EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ·                vectorized    true
 filter           ·             ·
  │               filter        (a >= 20) AND (a <= 30)
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         abcd@primary
       │          key columns   a
       └── scan   ·             ·
@@ -102,7 +102,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} WHERE a >= 20 AND a <= 30
 ·                  vectorized    true
 filter             ·             ·
  │                 filter        (a >= 20) AND (a <= 30)
- └── index-join    ·             ·
+ └── index join    ·             ·
       │            table         abcd@primary
       │            key columns   a
       └── revscan  ·             ·
@@ -115,7 +115,7 @@ EXPLAIN SELECT * FROM abcd@b ORDER BY b DESC LIMIT 5
 ----
 ·             distribution  local
 ·             vectorized    true
-index-join    ·             ·
+index join    ·             ·
  │            table         abcd@primary
  │            key columns   a
  └── revscan  ·             ·
@@ -129,7 +129,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} ORDER BY b DESC LIMIT 5
 ----
 ·             distribution  local
 ·             vectorized    true
-index-join    ·             ·
+index join    ·             ·
  │            table         abcd@primary
  │            key columns   a
  └── revscan  ·             ·
@@ -144,7 +144,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,ASC} ORDER BY b DESC LIMIT 5
 ----
 ·                    distribution  local
 ·                    vectorized    true
-index-join           ·             ·
+index join           ·             ·
  │                   table         abcd@primary
  │                   key columns   a
  └── limit           ·             ·
@@ -163,7 +163,7 @@ EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ·                vectorized    true
 filter           ·             ·
  │               filter        (a >= 20) AND (a <= 30)
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         abcd@primary
       │          key columns   a
       └── scan   ·             ·
@@ -204,7 +204,7 @@ EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 render                ·             ·
  └── filter           ·             ·
       │               filter        (c >= 20) AND (c <= 30)
-      └── index-join  ·             ·
+      └── index join  ·             ·
            │          table         abcd@primary
            │          key columns   a
            └── scan   ·             ·
@@ -241,7 +241,7 @@ EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ·                vectorized    true
 filter           ·             ·
  │               filter        (c >= 20) AND (c < 40)
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         abcd@primary
       │          key columns   a
       └── scan   ·             ·
@@ -255,7 +255,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ·                vectorized    true
 filter           ·             ·
  │               filter        (a >= 20) AND (a <= 30)
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         abcd@primary
       │          key columns   a
       └── scan   ·             ·
@@ -267,7 +267,7 @@ EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
 ·           distribution  local
 ·           vectorized    true
-index-join  ·             ·
+index join  ·             ·
  │          table         abcd@primary
  │          key columns   a
  └── scan   ·             ·

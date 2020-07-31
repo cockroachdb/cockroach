@@ -270,7 +270,7 @@ render                ·                ·
  └── sort             ·                ·
       │               order            +b,+a,+d
       │               already ordered  +b,+a
-      └── index-join  ·                ·
+      └── index join  ·                ·
            │          table            abc@primary
            │          key columns      a, b, c
            └── scan   ·                ·
@@ -574,7 +574,7 @@ EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDE
 render                      ·              ·                   (b)     ·
  │                          render 0       b                   ·       ·
  └── run                    ·              ·                   (a, b)  ·
-      └── insert-fast-path  ·              ·                   (a, b)  ·
+      └── insert fast path  ·              ·                   (a, b)  ·
 ·                           into           t(a, b, c)          ·       ·
 ·                           strategy       inserter            ·       ·
 ·                           auto commit    ·                   ·       ·
@@ -869,7 +869,7 @@ render                      ·                      ·                 (k)      
       └── render            ·                      ·                 (k, v)           ·
            │                render 0               k                 ·                ·
            │                render 1               v                 ·                ·
-           └── lookup-join  ·                      ·                 (column1, k, v)  ·
+           └── lookup join  ·                      ·                 (column1, k, v)  ·
                 │           table                  kv@primary        ·                ·
                 │           type                   inner             ·                ·
                 │           equality               (column1) = (k)   ·                ·
@@ -887,7 +887,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ·                vectorized          true               ·             ·
 render           ·                   ·                  (k)           ·
  │               render 0            k                  ·             ·
- └── merge-join  ·                   ·                  (k, v, k, v)  -v,+k
+ └── merge join  ·                   ·                  (k, v, k, v)  -v,+k
       │          type                inner              ·             ·
       │          equality            (v, k) = (v, k)    ·             ·
       │          left cols are key   ·                  ·             ·
@@ -913,7 +913,7 @@ sort                  ·             ·                (x, y, z)      +x
  │                    order         +x               ·              ·
  └── filter           ·             ·                (x, y, z)      ·
       │               filter        x = y            ·              ·
-      └── index-join  ·             ·                (x, y, z)      ·
+      └── index join  ·             ·                (x, y, z)      ·
            │          table         xyz@primary      ·              ·
            │          key columns   rowid            ·              ·
            └── scan   ·             ·                (y, z, rowid)  ·

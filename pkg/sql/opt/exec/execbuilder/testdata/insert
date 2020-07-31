@@ -467,7 +467,7 @@ EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 render                      ·              ·                      (x)         ·
  │                          render 0       x                      ·           ·
  └── run                    ·              ·                      (x, rowid)  ·
-      └── insert-fast-path  ·              ·                      (x, rowid)  ·
+      └── insert fast path  ·              ·                      (x, rowid)  ·
 ·                           into           mutation(x, rowid, y)  ·           ·
 ·                           strategy       inserter               ·           ·
 ·                           size           3 columns, 1 row       ·           ·
@@ -488,7 +488,7 @@ EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ·                      distribution   local                  ·   ·
 ·                      vectorized     false                  ·   ·
 count                  ·              ·                      ()  ·
- └── insert-fast-path  ·              ·                      ()  ·
+ └── insert fast path  ·              ·                      ()  ·
 ·                      into           mutation(x, y, rowid)  ·   ·
 ·                      strategy       inserter               ·   ·
 ·                      size           3 columns, 1 row       ·   ·
@@ -516,13 +516,13 @@ EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNI
 root                                          ·             ·                                                    (z)                  +z
  ├── sort                                     ·             ·                                                    (z)                  +z
  │    │                                       order         +z                                                   ·                    ·
- │    └── scan buffer node                    ·             ·                                                    (z)                  ·
+ │    └── scan buffer                         ·             ·                                                    (z)                  ·
  │                                            label         buffer 1                                             ·                    ·
  └── subquery                                 ·             ·                                                    ·                    ·
       │                                       id            @S1                                                  ·                    ·
       │                                       original sql  INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
       │                                       exec mode     all rows                                             ·                    ·
-      └── buffer node                         ·             ·                                                    (z)                  ·
+      └── buffer                              ·             ·                                                    (z)                  ·
            │                                  label         buffer 1                                             ·                    ·
            └── spool                          ·             ·                                                    (z)                  ·
                 └── render                    ·             ·                                                    (z)                  ·
