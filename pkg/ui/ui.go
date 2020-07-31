@@ -93,6 +93,18 @@ type indexHTMLArgs struct {
 	Tag                  string
 	Version              string
 	NodeID               string
+	PasswordLoginEnabled bool
+	OIDCLoginEnabled     bool
+	OIDCButtonText       string
+}
+
+// OidcUIConf is a variable that stores data required by the
+// Admin UI to display and manage the OIDC login flow. It is
+// provided by the `oidcAuthenticationServer` at runtime
+// since that's where all the OIDC configuration is centralized.
+type OidcUIConf struct {
+	ButtonText string
+	Enabled    bool
 }
 
 // bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
@@ -109,6 +121,7 @@ type Config struct {
 	LoginEnabled         bool
 	NodeID               *base.NodeIDContainer
 	GetUser              func(ctx context.Context) *string
+	GetOIDCConf          func() OidcUIConf
 }
 
 // Handler returns an http.Handler that serves the UI,
@@ -133,6 +146,8 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 
+		oidcConf := cfg.GetOIDCConf()
+
 		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
 			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
 			LoginEnabled:         cfg.LoginEnabled,
@@ -140,6 +155,9 @@ func Handler(cfg Config) http.Handler {
 			Tag:                  buildInfo.Tag,
 			Version:              build.VersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
+			PasswordLoginEnabled: true,
+			OIDCLoginEnabled:     oidcConf.Enabled,
+			OIDCButtonText:       oidcConf.ButtonText,
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)

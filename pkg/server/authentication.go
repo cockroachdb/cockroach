@@ -60,6 +60,22 @@ type authenticationServer struct {
 	server *Server
 }
 
+func (s *authenticationServer) ValidateOIDCState(
+	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
+) (*serverpb.ValidateOIDCStateResponse, error) {
+	s.server.oidcAuthentication.Lock()
+	defer s.server.oidcAuthentication.Unlock()
+
+	valid, err := s.server.oidcAuthentication.Validate(req.State)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ValidateOIDCStateResponse{
+		Valid: valid,
+	}, nil
+}
+
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
 func newAuthenticationServer(s *Server) *authenticationServer {
@@ -120,6 +136,34 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	cookie, err := s.createSessionFor(ctx, username)
+	if err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLoginResponse{}, nil
+}
+
+func (s *authenticationServer) createSessionFor(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
+	// TODO(davidh): Probably need to write a more specialized functiona here instead of reusing
+	exists, _, _, _, err := sql.GetUserHashedPassword(
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed creating session for username")
+	}
+
+	if !exists {
+		return nil, errors.New("username for session does not exist")
+	}
+
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
 	if err != nil {
@@ -133,17 +177,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
-	if err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	return &serverpb.UserLoginResponse{}, nil
+	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.
