@@ -32,7 +32,6 @@ var psycopgBlocklists = blocklistsForVersion{
 var psycopgBlockList20_2 = blocklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
 	"tests.test_async.AsyncTests.test_error":                                                                 "44803",
-	"tests.test_async.AsyncTests.test_flush_on_write":                                                        "44709",
 	"tests.test_async.AsyncTests.test_non_block_after_notification":                                          "17511",
 	"tests.test_async.AsyncTests.test_notices":                                                               "44711",
 	"tests.test_async.AsyncTests.test_notify":                                                                "41522",
@@ -238,7 +237,6 @@ var psycopgBlockList20_2 = blocklist{
 var psycopgBlockList20_1 = blocklist{
 	"tests.test_async.AsyncTests.test_async_callproc":                                                        "44701",
 	"tests.test_async.AsyncTests.test_error":                                                                 "44803",
-	"tests.test_async.AsyncTests.test_flush_on_write":                                                        "44709",
 	"tests.test_async.AsyncTests.test_non_block_after_notification":                                          "17511",
 	"tests.test_async.AsyncTests.test_notices":                                                               "44711",
 	"tests.test_async.AsyncTests.test_notify":                                                                "41522",
@@ -1031,6 +1029,7 @@ var psycopgIgnoreList20_1 = psycopgIgnoreList19_2
 var psycopgIgnoreList19_2 = psycopgIgnoreList19_1
 
 var psycopgIgnoreList19_1 = blocklist{
+	"tests.test_async.AsyncTests.test_flush_on_write":           "44709",
 	"tests.test_green.GreenTestCase.test_flush_on_write":        "flakey",
 	"tests.test_connection.TestConnectionInfo.test_backend_pid": "we return -1 for pg_backend_pid()",
 }
