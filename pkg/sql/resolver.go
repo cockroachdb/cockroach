@@ -179,7 +179,7 @@ func (p *planner) ResolveType(
 	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 
-	// Disllow cross-database type resolution. Note that we check
+	// Disallow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != sqlbase.InvalidID when we have been restricted to
 	// accessing types in the database with ID = p.contextDatabaseID by
 	// p.runWithOptions. So, check to see if the resolved descriptor's parentID

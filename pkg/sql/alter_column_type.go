@@ -356,7 +356,7 @@ func alterColumnTypeGeneral(
 
 	tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)
 
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	if err := tableDesc.AllocateIDs(ctx, &params.p.semaCtx); err != nil {
 		return err
 	}
 

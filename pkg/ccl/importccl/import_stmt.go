@@ -950,7 +950,7 @@ func prepareNewTableDescsForIngestion(
 	// imported data.
 	if err := backupccl.WriteDescriptors(ctx, txn, nil, /* databases */
 		newMutableTableDescriptors, nil, tree.RequestedDescriptors,
-		p.ExecCfg().Settings, seqValKVs); err != nil {
+		p.ExecCfg().Settings, seqValKVs, p.SemaCtx()); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 

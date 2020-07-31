@@ -76,7 +76,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	if err := tableDesc.AllocateIDs(ctx, &p.semaCtx); err != nil {
 		return err
 	}
 
@@ -402,7 +402,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.ctx, &params.p.semaCtx); err != nil {
 		return err
 	}
 	// The index name may have changed as a result of

@@ -208,7 +208,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := newDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := newDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec, &params.p.semaCtx); err != nil {
 		return err
 	}
 
@@ -367,7 +367,7 @@ func addResultColumns(
 		}
 		desc.AddColumn(col)
 	}
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, semaCtx); err != nil {
 		return err
 	}
 	return nil

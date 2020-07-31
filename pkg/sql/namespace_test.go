@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -37,6 +38,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
 	codec := keys.SystemSQLCodec
 
 	// IDs to map (parentID, name) to. Actual ID value is irrelevant to the test.
@@ -138,7 +140,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		&sqlbase.PrivilegeDescriptor{},
 		false,
 	)
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, &semaCtx); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(ctx, mKey, desc.DescriptorProto()); err != nil {

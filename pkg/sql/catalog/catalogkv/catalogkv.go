@@ -84,7 +84,7 @@ func ResolveSchemaID(
 //
 // TODO(ajwerner): Consider passing mutability information into here.
 func GetDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID, semaCtx *tree.SemaContext,
 ) (catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
@@ -93,14 +93,19 @@ func GetDescriptorByID(
 	if err != nil {
 		return nil, err
 	}
-	return unwrapDescriptor(ctx, txn, codec, ts, desc)
+	return unwrapDescriptor(ctx, txn, codec, ts, desc, semaCtx)
 }
 
 // unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
 // it into an immutable implementation of DescriptorInterface. It ensures that
 // the ModificationTime is set properly.
 func unwrapDescriptor(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	ts hlc.Timestamp,
+	desc *sqlbase.Descriptor,
+	semaCtx *tree.SemaContext,
 ) (catalog.Descriptor, error) {
 	// TODO(ajwerner): Fill in the ModificationTime field for the descriptor.
 	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
@@ -110,7 +115,7 @@ func unwrapDescriptor(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
+		if err := table.Validate(ctx, txn, codec, semaCtx); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
@@ -135,7 +140,7 @@ func unwrapDescriptor(
 // TODO (lucy): Should this be unified with GetDescriptorByID? See the comment
 // there.
 func GetMutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID, semaCtx *tree.SemaContext,
 ) (catalog.MutableDescriptor, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
@@ -144,14 +149,19 @@ func GetMutableDescriptorByID(
 	if err != nil {
 		return nil, err
 	}
-	return unwrapDescriptorMutable(ctx, txn, codec, ts, desc)
+	return unwrapDescriptorMutable(ctx, txn, codec, ts, desc, semaCtx)
 }
 
 // unwrapDescriptorMutable takes a descriptor retrieved using a transaction and
 // unwraps it into a mutable implementation of DescriptorInterface. It ensures
 // that the ModificationTime is set properly.
 func unwrapDescriptorMutable(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	ts hlc.Timestamp,
+	desc *sqlbase.Descriptor,
+	semaCtx *tree.SemaContext,
 ) (catalog.MutableDescriptor, error) {
 	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
 	table, database, typ, schema := desc.Table(hlc.Timestamp{}), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
@@ -160,7 +170,7 @@ func unwrapDescriptorMutable(
 		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
 			return nil, err
 		}
-		if err := table.ValidateTable(ctx); err != nil {
+		if err := table.ValidateTable(ctx, semaCtx); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewMutableExistingTableDescriptor(*table), nil
@@ -181,8 +191,10 @@ func unwrapDescriptorMutable(
 
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
-func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn, codec)
+func CountUserDescriptors(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, semaCtx *tree.SemaContext,
+) (int, error) {
+	allDescs, err := GetAllDescriptors(ctx, txn, codec, semaCtx)
 	if err != nil {
 		return 0, err
 	}
@@ -199,7 +211,7 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, semaCtx *tree.SemaContext,
 ) ([]sqlbase.DescriptorInterface, error) {
 	log.Eventf(ctx, "fetching all descriptors")
 	descsKey := sqlbase.MakeAllDescsMetadataKey(codec)
@@ -217,7 +229,7 @@ func GetAllDescriptors(
 			return nil, err
 		}
 		var err error
-		if descs[i], err = unwrapDescriptor(ctx, txn, codec, kv.Value.Timestamp, desc); err != nil {
+		if descs[i], err = unwrapDescriptor(ctx, txn, codec, kv.Value.Timestamp, desc, semaCtx); err != nil {
 			return nil, err
 		}
 	}
@@ -324,9 +336,9 @@ func GetDatabaseID(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func GetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID, semaCtx *tree.SemaContext,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, semaCtx)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -341,9 +353,9 @@ func GetDatabaseDescByID(
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID, semaCtx *tree.SemaContext,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
-	desc, err := GetDatabaseDescByID(ctx, txn, codec, id)
+	desc, err := GetDatabaseDescByID(ctx, txn, codec, id, semaCtx)
 	if err != nil {
 		return nil, err
 	}

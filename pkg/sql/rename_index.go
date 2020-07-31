@@ -96,7 +96,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec, &p.semaCtx); err != nil {
 		return err
 	}
 

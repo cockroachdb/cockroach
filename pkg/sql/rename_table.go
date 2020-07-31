@@ -148,7 +148,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
 		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec, &p.semaCtx); err != nil {
 		return err
 	}
 

@@ -165,7 +165,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 		}
 	}
 
-	if err := tableDesc.AllocateIDs(params.ctx); err != nil {
+	if err := tableDesc.AllocateIDs(params.ctx, &params.p.semaCtx); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID
@@ -496,7 +496,7 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec, &p.semaCtx); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

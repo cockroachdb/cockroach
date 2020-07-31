@@ -438,6 +438,7 @@ func WriteDescriptors(
 	descCoverage tree.DescriptorCoverage,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
+	semaCtx *tree.SemaContext,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
 	defer tracing.FinishSpan(span)
@@ -531,7 +532,7 @@ func WriteDescriptors(
 		}
 
 		for _, table := range tables {
-			if err := table.TableDesc().Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
+			if err := table.TableDesc().Validate(ctx, txn, keys.SystemSQLCodec, semaCtx); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.GetID()))
 			}
@@ -1049,7 +1050,16 @@ func createImportingDescriptors(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteDescriptors(ctx, txn, databases, tables, typesToWrite, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
+			if err := WriteDescriptors(
+				ctx,
+				txn,
+				databases,
+				tables,
+				typesToWrite,
+				details.DescriptorCoverage,
+				r.settings,
+				nil, /* extra */
+				p.SemaCtx()); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 

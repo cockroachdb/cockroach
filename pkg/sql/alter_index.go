@@ -89,7 +89,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.ctx, &params.p.semaCtx); err != nil {
 		return err
 	}
 

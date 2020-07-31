@@ -1390,7 +1390,9 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
-func (desc *MutableTableDescriptor) AllocateIDs(ctx context.Context) error {
+func (desc *MutableTableDescriptor) AllocateIDs(
+	ctx context.Context, semaCtx *tree.SemaContext,
+) error {
 	// Only physical tables can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
@@ -1427,7 +1429,7 @@ func (desc *MutableTableDescriptor) AllocateIDs(ctx context.Context) error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := desc.ValidateTable(ctx)
+	err := desc.ValidateTable(ctx, semaCtx)
 	desc.ID = savedID
 	return err
 }
@@ -1756,8 +1758,10 @@ func (desc *MutableTableDescriptor) OriginalVersion() DescriptorVersion {
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
-	err := desc.ValidateTable(ctx)
+func (desc *TableDescriptor) Validate(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, semaCtx *tree.SemaContext,
+) error {
+	err := desc.ValidateTable(ctx, semaCtx)
 	if err != nil {
 		return err
 	}
@@ -1952,7 +1956,7 @@ func (desc *TableDescriptor) ValidateIndexNameIsUnique(indexName string) error {
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func (desc *TableDescriptor) ValidateTable(ctx context.Context) error {
+func (desc *TableDescriptor) ValidateTable(ctx context.Context, semaCtx *tree.SemaContext) error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -2088,7 +2092,7 @@ func (desc *TableDescriptor) ValidateTable(ctx context.Context) error {
 			return err
 		}
 
-		if err := desc.validateTableIndexes(ctx, columnNames); err != nil {
+		if err := desc.validateTableIndexes(ctx, columnNames, semaCtx); err != nil {
 			return err
 		}
 		if err := desc.validatePartitioning(); err != nil {
@@ -2233,7 +2237,7 @@ var SchemaExprPartialIndexPredicateValidateHook func(context.Context, TableDescr
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func (desc *TableDescriptor) validateTableIndexes(
-	ctx context.Context, columnNames map[string]ColumnID,
+	ctx context.Context, columnNames map[string]ColumnID, semaCtx *tree.SemaContext,
 ) error {
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
@@ -2318,11 +2322,7 @@ func (desc *TableDescriptor) validateTableIndexes(
 			}
 
 			immutableDesc := NewImmutableTableDescriptor(*desc)
-			// TODO(mgartner): Set a TypeResolver in semaCtx to support user
-			// defined types in partial index predicates.
-			semaCtx := tree.MakeSemaContext()
-
-			_, err = SchemaExprPartialIndexPredicateValidateHook(ctx, immutableDesc, expr, &semaCtx)
+			_, err = SchemaExprPartialIndexPredicateValidateHook(ctx, immutableDesc, expr, semaCtx)
 			if err != nil {
 				return err
 			}

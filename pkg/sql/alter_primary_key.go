@@ -175,7 +175,7 @@ func (p *planner) AlterPrimaryKey(
 	if err := tableDesc.AddIndexMutation(newPrimaryIndexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	if err := tableDesc.AllocateIDs(ctx, &p.semaCtx); err != nil {
 		return err
 	}
 
@@ -224,7 +224,7 @@ func (p *planner) AlterPrimaryKey(
 		// Make the copy of the old primary index not-interleaved. This decision
 		// can be revisited based on user experience.
 		oldPrimaryIndexCopy.Interleave = sqlbase.InterleaveDescriptor{}
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc, &p.semaCtx); err != nil {
 			return err
 		}
 	}
@@ -282,7 +282,7 @@ func (p *planner) AlterPrimaryKey(
 		newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
 		basename := newIndex.Name + "_rewrite_for_primary_key_change"
 		newIndex.Name = sqlbase.GenerateUniqueConstraintName(basename, nameExists)
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, newIndex, newPrimaryIndexDesc, &p.semaCtx); err != nil {
 			return err
 		}
 		// If the index that we are rewriting is interleaved, we need to setup the rewritten

@@ -385,7 +385,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec, &params.p.semaCtx); err != nil {
 		return err
 	}
 
@@ -878,6 +878,7 @@ func addIndexForFK(
 	srcCols []*sqlbase.ColumnDescriptor,
 	constraintName string,
 	ts FKTableState,
+	semaCtx *tree.SemaContext,
 ) (sqlbase.IndexID, error) {
 	autoIndexName := sqlbase.GenerateUniqueConstraintName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
@@ -900,7 +901,7 @@ func addIndexForFK(
 		if err := tbl.AddIndex(idx, false); err != nil {
 			return 0, err
 		}
-		if err := tbl.AllocateIDs(ctx); err != nil {
+		if err := tbl.AllocateIDs(ctx, semaCtx); err != nil {
 			return 0, err
 		}
 		added := tbl.Indexes[len(tbl.Indexes)-1]
@@ -914,7 +915,7 @@ func addIndexForFK(
 	if err := tbl.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
-	if err := tbl.AllocateIDs(ctx); err != nil {
+	if err := tbl.AllocateIDs(ctx, semaCtx); err != nil {
 		return 0, err
 	}
 	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
@@ -1601,7 +1602,7 @@ func MakeTableDesc(
 		}
 	}
 
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, semaCtx); err != nil {
 		return desc, err
 	}
 
@@ -1732,7 +1733,7 @@ func MakeTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	err := desc.AllocateIDs(ctx)
+	err := desc.AllocateIDs(ctx, semaCtx)
 
 	// Record the types of indexes that the table has.
 	if err := desc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {

@@ -48,6 +48,7 @@ func makeIndexDescriptor(name string, columnNames []string) IndexDescriptor {
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	semaCtx := tree.MakeSemaContext()
 	desc := NewMutableCreatedTableDescriptor(TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
@@ -70,7 +71,7 @@ func TestAllocateIDs(t *testing.T) {
 		Privileges:    NewDefaultPrivilegeDescriptor(),
 		FormatVersion: FamilyFormatVersion,
 	})
-	if err := desc.AllocateIDs(context.Background()); err != nil {
+	if err := desc.AllocateIDs(context.Background(), &semaCtx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +122,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 
-	if err := desc.AllocateIDs(context.Background()); err != nil {
+	if err := desc.AllocateIDs(context.Background(), &semaCtx); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expected, desc) {
@@ -1346,6 +1347,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 }
 
 func TestUnvalidateConstraints(t *testing.T) {
+	semaCtx := tree.MakeSemaContext()
 	desc := NewMutableCreatedTableDescriptor(TableDescriptor{
 		Name:     "test",
 		ParentID: ID(1),
@@ -1364,7 +1366,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			},
 		},
 	})
-	if err := desc.AllocateIDs(context.Background()); err != nil {
+	if err := desc.AllocateIDs(context.Background(), &semaCtx); err != nil {
 		t.Fatal(err)
 	}
 	lookup := func(_ ID) (*TableDescriptor, error) {

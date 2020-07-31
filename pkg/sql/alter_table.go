@@ -508,7 +508,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec, &params.p.semaCtx); err != nil {
 				return err
 			}
 
@@ -535,7 +535,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec, &params.p.semaCtx); err != nil {
 				return err
 			}
 
@@ -712,7 +712,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		if err := n.tableDesc.AllocateIDs(params.ctx, &params.p.semaCtx); err != nil {
 			return err
 		}
 	}
@@ -793,13 +793,14 @@ func addIndexMutationWithSpecificPrimaryKey(
 	table *sqlbase.MutableTableDescriptor,
 	toAdd *sqlbase.IndexDescriptor,
 	primary *sqlbase.IndexDescriptor,
+	semaCtx *tree.SemaContext,
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
 	if err := table.AddIndexMutation(toAdd, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := table.AllocateIDs(ctx); err != nil {
+	if err := table.AllocateIDs(ctx, semaCtx); err != nil {
 		return err
 	}
 	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
