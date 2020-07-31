@@ -67,7 +67,7 @@ EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_cl
 ----
 ·                          distribution  local
 ·                          vectorized    false
-virtual-table-lookup-join  ·             ·
+virtual table lookup join  ·             ·
  │                         table         pg_class@pg_class_oid_idx
  │                         type          inner
  │                         equality      (conrelid) = (oid)
@@ -79,7 +79,7 @@ EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_cla
 ----
 ·                          distribution  local
 ·                          vectorized    false
-virtual-table-lookup-join  ·             ·
+virtual table lookup join  ·             ·
  │                         table         pg_class@pg_class_oid_idx
  │                         type          left outer
  │                         equality      (conrelid) = (oid)
@@ -122,7 +122,7 @@ render                                                                     ·   
  └── sort                                                                  ·             ·
       │                                                                    order         +conname
       └── render                                                           ·             ·
-           └── hash-join                                                   ·             ·
+           └── hash join                                                   ·             ·
                 │                                                          type          inner
                 │                                                          equality      (oid) = (connamespace)
                 ├── filter                                                 ·             ·
@@ -130,24 +130,24 @@ render                                                                     ·   
                 │    └── render                                            ·             ·
                 │         └── virtual table                                ·             ·
                 │                                                          source        pg_namespace@primary
-                └── virtual-table-lookup-join                              ·             ·
+                └── virtual table lookup join                              ·             ·
                      │                                                     table         pg_attribute@pg_attribute_attrelid_idx
                      │                                                     type          inner
                      │                                                     equality      (oid) = (attrelid)
                      │                                                     pred          column135 = attnum
                      └── render                                            ·             ·
-                          └── virtual-table-lookup-join                    ·             ·
+                          └── virtual table lookup join                    ·             ·
                                │                                           table         pg_attribute@pg_attribute_attrelid_idx
                                │                                           type          inner
                                │                                           equality      (oid) = (attrelid)
                                │                                           pred          (column110 = attnum) AND (attrelid = 'b'::REGCLASS)
                                └── render                                  ·             ·
-                                    └── virtual-table-lookup-join          ·             ·
+                                    └── virtual table lookup join          ·             ·
                                          │                                 table         pg_class@pg_class_oid_idx
                                          │                                 type          inner
                                          │                                 equality      (conrelid) = (oid)
                                          │                                 pred          oid = 'b'::REGCLASS
-                                         └── virtual-table-lookup-join     ·             ·
+                                         └── virtual table lookup join     ·             ·
                                               │                            table         pg_class@pg_class_oid_idx
                                               │                            type          inner
                                               │                            equality      (confrelid) = (oid)

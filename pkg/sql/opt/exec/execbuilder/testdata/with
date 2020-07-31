@@ -10,24 +10,24 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
-·                           distribution  local            ·       ·
-·                           vectorized    false            ·       ·
-root                        ·             ·                (a, a)  ·
- ├── cross-join             ·             ·                (a, a)  ·
- │    │                     type          cross            ·       ·
- │    ├── scan buffer node  ·             ·                (a)     ·
- │    │                     label         buffer 1 (t)     ·       ·
- │    └── scan buffer node  ·             ·                (a)     ·
- │                          label         buffer 1 (t)     ·       ·
- └── subquery               ·             ·                ·       ·
-      │                     id            @S1              ·       ·
-      │                     original sql  SELECT a FROM y  ·       ·
-      │                     exec mode     all rows         ·       ·
-      └── buffer node       ·             ·                (a)     ·
-           │                label         buffer 1 (t)     ·       ·
-           └── scan         ·             ·                (a)     ·
-·                           table         y@primary        ·       ·
-·                           spans         FULL SCAN        ·       ·
+·                      distribution  local            ·       ·
+·                      vectorized    false            ·       ·
+root                   ·             ·                (a, a)  ·
+ ├── cross join        ·             ·                (a, a)  ·
+ │    │                type          cross            ·       ·
+ │    ├── scan buffer  ·             ·                (a)     ·
+ │    │                label         buffer 1 (t)     ·       ·
+ │    └── scan buffer  ·             ·                (a)     ·
+ │                     label         buffer 1 (t)     ·       ·
+ └── subquery          ·             ·                ·       ·
+      │                id            @S1              ·       ·
+      │                original sql  SELECT a FROM y  ·       ·
+      │                exec mode     all rows         ·       ·
+      └── buffer       ·             ·                (a)     ·
+           │           label         buffer 1 (t)     ·       ·
+           └── scan    ·             ·                (a)     ·
+·                      table         y@primary        ·       ·
+·                      spans         FULL SCAN        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -48,13 +48,13 @@ EXPLAIN (VERBOSE)
 ·                                          distribution   local                                 ·                   ·
 ·                                          vectorized     false                                 ·                   ·
 root                                       ·              ·                                     (a)                 ·
- ├── scan buffer node                      ·              ·                                     (a)                 ·
+ ├── scan buffer                           ·              ·                                     (a)                 ·
  │                                         label          buffer 1 (t)                          ·                   ·
  └── subquery                              ·              ·                                     ·                   ·
       │                                    id             @S1                                   ·                   ·
       │                                    original sql   INSERT INTO x VALUES (1) RETURNING a  ·                   ·
       │                                    exec mode      all rows                              ·                   ·
-      └── buffer node                      ·              ·                                     (a)                 ·
+      └── buffer                           ·              ·                                     (a)                 ·
            │                               label          buffer 1 (t)                          ·                   ·
            └── spool                       ·              ·                                     (a)                 ·
                 └── render                 ·              ·                                     (a)                 ·
@@ -84,7 +84,7 @@ EXPLAIN (VERBOSE)
 ----
 ·           distribution  local               ·      ·
 ·           vectorized    true                ·      ·
-cross-join  ·             ·                   (col)  ·
+cross join  ·             ·                   (col)  ·
  │          type          cross               ·      ·
  ├── scan   ·             ·                   ()     ·
  │          table         table39010@primary  ·      ·
@@ -102,15 +102,15 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-·                             distribution   local               ·          ·
-·                             vectorized     false               ·          ·
-group                         ·              ·                   (sum)      ·
- │                            aggregate 0    sum(n)              ·          ·
- │                            scalar         ·                   ·          ·
- └── render                   ·              ·                   (n)        ·
-      │                       render 0       column1             ·          ·
-      └── recursive cte node  ·              ·                   (column1)  ·
-           │                  label          working buffer (t)  ·          ·
-           └── values         ·              ·                   (column1)  ·
-·                             size           1 column, 1 row     ·          ·
-·                             row 0, expr 0  1                   ·          ·
+·                        distribution   local               ·          ·
+·                        vectorized     false               ·          ·
+group                    ·              ·                   (sum)      ·
+ │                       aggregate 0    sum(n)              ·          ·
+ │                       scalar         ·                   ·          ·
+ └── render              ·              ·                   (n)        ·
+      │                  render 0       column1             ·          ·
+      └── recursive cte  ·              ·                   (column1)  ·
+           │             label          working buffer (t)  ·          ·
+           └── values    ·              ·                   (column1)  ·
+·                        size           1 column, 1 row     ·          ·
+·                        row 0, expr 0  1                   ·          ·

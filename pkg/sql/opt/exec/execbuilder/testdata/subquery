@@ -85,7 +85,7 @@ EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE b < 0)
 ----
 ·               distribution        local        ·       ·
 ·               vectorized          true         ·       ·
-merge-join      ·                   ·            (a)     ·
+merge join      ·                   ·            (a)     ·
  │              type                semi         ·       ·
  │              equality            (a) = (a)    ·       ·
  │              left cols are key   ·            ·       ·
@@ -148,7 +148,7 @@ WHERE
 ·                    vectorized    true             ·                          ·
 render               ·             ·                (col0)                     ·
  │                   render 0      col0             ·                          ·
- └── index-join      ·             ·                (col0, col3, col4, rowid)  ·
+ └── index join      ·             ·                (col0, col3, col4, rowid)  ·
       │              table         tab4@primary     ·                          ·
       │              key columns   rowid            ·                          ·
       └── filter     ·             ·                (col0, col4, rowid)        ·
@@ -169,7 +169,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
 ·           distribution        local      ·       ·
 ·           vectorized          true       ·       ·
-merge-join  ·                   ·          (x, y)  ·
+merge join  ·                   ·          (x, y)  ·
  │          type                semi       ·       ·
  │          equality            (x) = (x)  ·       ·
  │          left cols are key   ·          ·       ·
@@ -187,7 +187,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x
 ----
 ·               distribution       local            ·          ·
 ·               vectorized         true             ·          ·
-hash-join       ·                  ·                (x, y)     ·
+hash join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
  │              equality           (x) = (column7)  ·          ·
  │              left cols are key  ·                ·          ·
@@ -205,7 +205,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a
 ----
 ·           distribution        local      ·       ·
 ·           vectorized          true       ·       ·
-merge-join  ·                   ·          (x, y)  ·
+merge join  ·                   ·          (x, y)  ·
  │          type                anti       ·       ·
  │          equality            (x) = (x)  ·       ·
  │          left cols are key   ·          ·       ·
@@ -223,7 +223,7 @@ EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b
 ----
 ·               distribution       local            ·          ·
 ·               vectorized         true             ·          ·
-hash-join       ·                  ·                (x, z)     ·
+hash join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
  │              equality           (x) = (column7)  ·          ·
  │              left cols are key  ·                ·          ·
@@ -259,7 +259,7 @@ EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) 
 ----
 ·           distribution  local        ·          ·
 ·           vectorized    false        ·          ·
-apply-join  ·             ·            (a, b, c)  ·
+apply join  ·             ·            (a, b, c)  ·
  │          type          semi         ·          ·
  │          pred          column1 = a  ·          ·
  └── scan   ·             ·            (a, b, c)  ·

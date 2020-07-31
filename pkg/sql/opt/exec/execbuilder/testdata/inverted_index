@@ -166,7 +166,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
 ·           distribution  local                        ·       ·
 ·           vectorized    true                         ·       ·
-index-join  ·             ·                            (a, b)  ·
+index join  ·             ·                            (a, b)  ·
  │          table         d@primary                    ·       ·
  │          key columns   a                            ·       ·
  └── scan   ·             ·                            (a)     ·
@@ -178,7 +178,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ----
 ·           distribution  local                                    ·       ·
 ·           vectorized    true                                     ·       ·
-index-join  ·             ·                                        (a, b)  ·
+index join  ·             ·                                        (a, b)  ·
  │          table         d@primary                                ·       ·
  │          key columns   a                                        ·       ·
  └── scan   ·             ·                                        (a)     ·
@@ -190,7 +190,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ----
 ·           distribution  local                                            ·       ·
 ·           vectorized    true                                             ·       ·
-index-join  ·             ·                                                (a, b)  ·
+index join  ·             ·                                                (a, b)  ·
  │          table         d@primary                                        ·       ·
  │          key columns   a                                                ·       ·
  └── scan   ·             ·                                                (a)     ·
@@ -202,7 +202,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ----
 ·           distribution  local                         ·       ·
 ·           vectorized    true                          ·       ·
-index-join  ·             ·                             (a, b)  ·
+index join  ·             ·                             (a, b)  ·
  │          table         d@primary                     ·       ·
  │          key columns   a                             ·       ·
  └── scan   ·             ·                             (a)     ·
@@ -214,7 +214,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ----
 ·           distribution  local                    ·       ·
 ·           vectorized    true                     ·       ·
-index-join  ·             ·                        (a, b)  ·
+index join  ·             ·                        (a, b)  ·
  │          table         d@primary                ·       ·
  │          key columns   a                        ·       ·
  └── scan   ·             ·                        (a)     ·
@@ -226,7 +226,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ----
 ·           distribution  local                                            ·       ·
 ·           vectorized    true                                             ·       ·
-index-join  ·             ·                                                (a, b)  ·
+index join  ·             ·                                                (a, b)  ·
  │          table         d@primary                                        ·       ·
  │          key columns   a                                                ·       ·
  └── scan   ·             ·                                                (a)     ·
@@ -262,7 +262,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
 ·           distribution  local                        ·       ·
 ·           vectorized    true                         ·       ·
-index-join  ·             ·                            (a, b)  ·
+index join  ·             ·                            (a, b)  ·
  │          table         d@primary                    ·       ·
  │          key columns   a                            ·       ·
  └── scan   ·             ·                            (a)     ·
@@ -274,7 +274,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
 ----
 ·           distribution  local                                ·       ·
 ·           vectorized    true                                 ·       ·
-index-join  ·             ·                                    (a, b)  ·
+index join  ·             ·                                    (a, b)  ·
  │          table         d@primary                            ·       ·
  │          key columns   a                                    ·       ·
  └── scan   ·             ·                                    (a)     ·
@@ -293,7 +293,7 @@ EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
 ·           distribution  local                        ·       ·
 ·           vectorized    true                         ·       ·
-index-join  ·             ·                            (a, b)  ·
+index join  ·             ·                            (a, b)  ·
  │          table         d@primary                    ·       ·
  │          key columns   a                            ·       ·
  └── scan   ·             ·                            (a)     ·
@@ -341,14 +341,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
 ·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
-lookup-join       ·                      ·                                   (a, b)  ·
+lookup join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
  │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                   (a)     ·
+ └── zigzag join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
       │           table                  d@foo_inv                           ·       ·
@@ -362,14 +362,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "
 ----
 ·                 distribution           local                                         ·       ·
 ·                 vectorized             true                                          ·       ·
-lookup-join       ·                      ·                                             (a, b)  ·
+lookup join       ·                      ·                                             (a, b)  ·
  │                table                  d@primary                                     ·       ·
  │                type                   inner                                         ·       ·
  │                equality               (a) = (a)                                     ·       ·
  │                equality cols are key  ·                                             ·       ·
  │                parallel               ·                                             ·       ·
  │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                             (a)     ·
+ └── zigzag join  ·                      ·                                             (a)     ·
       │           type                   inner                                         ·       ·
       ├── scan    ·                      ·                                             (a)     ·
       │           table                  d@foo_inv                                     ·       ·
@@ -383,14 +383,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 ·                 distribution           local                              ·       ·
 ·                 vectorized             true                               ·       ·
-lookup-join       ·                      ·                                  (a, b)  ·
+lookup join       ·                      ·                                  (a, b)  ·
  │                table                  d@primary                          ·       ·
  │                type                   inner                              ·       ·
  │                equality               (a) = (a)                          ·       ·
  │                equality cols are key  ·                                  ·       ·
  │                parallel               ·                                  ·       ·
  │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag-join  ·                      ·                                  (a)     ·
+ └── zigzag join  ·                      ·                                  (a)     ·
       │           type                   inner                              ·       ·
       ├── scan    ·                      ·                                  (a)     ·
       │           table                  d@foo_inv                          ·       ·
@@ -407,14 +407,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
 ·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
-lookup-join       ·                      ·                                   (a, b)  ·
+lookup join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
  │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                   (a)     ·
+ └── zigzag join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
       │           table                  d@foo_inv                           ·       ·
@@ -428,14 +428,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "
 ----
 ·                 distribution           local                                         ·       ·
 ·                 vectorized             true                                          ·       ·
-lookup-join       ·                      ·                                             (a, b)  ·
+lookup join       ·                      ·                                             (a, b)  ·
  │                table                  d@primary                                     ·       ·
  │                type                   inner                                         ·       ·
  │                equality               (a) = (a)                                     ·       ·
  │                equality cols are key  ·                                             ·       ·
  │                parallel               ·                                             ·       ·
  │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                             (a)     ·
+ └── zigzag join  ·                      ·                                             (a)     ·
       │           type                   inner                                         ·       ·
       ├── scan    ·                      ·                                             (a)     ·
       │           table                  d@foo_inv                                     ·       ·
@@ -449,14 +449,14 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 ·                 distribution           local                              ·       ·
 ·                 vectorized             true                               ·       ·
-lookup-join       ·                      ·                                  (a, b)  ·
+lookup join       ·                      ·                                  (a, b)  ·
  │                table                  d@primary                          ·       ·
  │                type                   inner                              ·       ·
  │                equality               (a) = (a)                          ·       ·
  │                equality cols are key  ·                                  ·       ·
  │                parallel               ·                                  ·       ·
  │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag-join  ·                      ·                                  (a)     ·
+ └── zigzag join  ·                      ·                                  (a)     ·
       │           type                   inner                              ·       ·
       ├── scan    ·                      ·                                  (a)     ·
       │           table                  d@foo_inv                          ·       ·
@@ -472,7 +472,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ·                vectorized    true                      ·       ·
 filter           ·             ·                         (a, b)  ·
  │               filter        b @> '{"a": {}, "b": 2}'  ·       ·
- └── index-join  ·             ·                         (a, b)  ·
+ └── index join  ·             ·                         (a, b)  ·
       │          table         d@primary                 ·       ·
       │          key columns   a                         ·       ·
       └── scan   ·             ·                         (a)     ·
@@ -498,7 +498,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ----
 ·           distribution  local      ·       ·
 ·           vectorized    true       ·       ·
-index-join  ·             ·          (a, b)  ·
+index join  ·             ·          (a, b)  ·
  │          table         e@primary  ·       ·
  │          key columns   a          ·       ·
  └── scan   ·             ·          (a)     ·
@@ -522,7 +522,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
 ·            distribution  local      ·       ·
 ·            vectorized    true       ·       ·
-index-join   ·             ·          (a, b)  ·
+index join   ·             ·          (a, b)  ·
  │           table         e@primary  ·       ·
  │           key columns   a          ·       ·
  └── norows  ·             ·          (a)     ·
@@ -550,14 +550,14 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
 ·                 distribution           local            ·       ·
 ·                 vectorized             true             ·       ·
-lookup-join       ·                      ·                (a, b)  ·
+lookup join       ·                      ·                (a, b)  ·
  │                table                  e@primary        ·       ·
  │                type                   inner            ·       ·
  │                equality               (a) = (a)        ·       ·
  │                equality cols are key  ·                ·       ·
  │                parallel               ·                ·       ·
  │                pred                   b @> ARRAY[1,2]  ·       ·
- └── zigzag-join  ·                      ·                (a)     ·
+ └── zigzag join  ·                      ·                (a)     ·
       │           type                   inner            ·       ·
       ├── scan    ·                      ·                (a)     ·
       │           table                  e@e_b_idx        ·       ·
@@ -571,14 +571,14 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
 ·                 distribution           local                                ·       ·
 ·                 vectorized             true                                 ·       ·
-lookup-join       ·                      ·                                    (a, b)  ·
+lookup join       ·                      ·                                    (a, b)  ·
  │                table                  e@primary                            ·       ·
  │                type                   inner                                ·       ·
  │                equality               (a) = (a)                            ·       ·
  │                equality cols are key  ·                                    ·       ·
  │                parallel               ·                                    ·       ·
  │                pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
- └── zigzag-join  ·                      ·                                    (a)     ·
+ └── zigzag join  ·                      ·                                    (a)     ·
       │           type                   inner                                ·       ·
       ├── scan    ·                      ·                                    (a)     ·
       │           table                  e@e_b_idx                            ·       ·
@@ -617,12 +617,12 @@ render                               ·                ·                       
  │                                   render 0         k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
  └── filter                          ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
       │                              filter           st_intersects('010100000000000000000008400000000000000840', geom)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
-      └── index-join                 ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+      └── index join                 ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
            │                         table            geo_table@primary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
            │                         key columns      k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
            └── render                ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k)        ·
                 │                    render 0         k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
-                └── inverted-filter  ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+                └── inverted filter  ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
                      │               inverted column  2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
                      │               num spans        31                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     ·          ·
                      └── scan        ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
@@ -641,7 +641,7 @@ ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 ·                        distribution           local                      ·                   ·
 ·                        vectorized             true                       ·                   ·
-lookup-join              ·                      ·                          (k, geom, k, geom)  ·
+lookup join              ·                      ·                          (k, geom, k, geom)  ·
  │                       table                  geo_table@primary          ·                   ·
  │                       type                   inner                      ·                   ·
  │                       equality               (k) = (k)                  ·                   ·
@@ -652,7 +652,7 @@ lookup-join              ·                      ·                          (k,
       │                  render 0               k                          ·                   ·
       │                  render 1               geom                       ·                   ·
       │                  render 2               k                          ·                   ·
-      └── inverted-join  ·                      ·                          (k, geom, k, geom)  ·
+      └── inverted join  ·                      ·                          (k, geom, k, geom)  ·
            │             table                  geo_table@geom_index       ·                   ·
            │             type                   inner                      ·                   ·
            │             ·                      st_intersects(@2, @4)      ·                   ·

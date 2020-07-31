@@ -85,7 +85,7 @@ EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x 
 render               ·                   ·                    (x, str)     ·
  │                   render 0            x                    ·            ·
  │                   render 1            str                  ·            ·
- └── merge-join      ·                   ·                    (x, y, str)  ·
+ └── merge join      ·                   ·                    (x, y, str)  ·
       │              type                inner                ·            ·
       │              equality            (x) = (y)            ·            ·
       │              left cols are key   ·                    ·            ·

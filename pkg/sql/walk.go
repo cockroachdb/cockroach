@@ -871,12 +871,12 @@ func nodeName(plan planNode) string {
 
 	case *joinNode:
 		if len(n.mergeJoinOrdering) > 0 {
-			return "merge-join"
+			return "merge join"
 		}
 		if len(n.pred.leftEqualityIndices) == 0 {
-			return "cross-join"
+			return "cross join"
 		}
-		return "hash-join"
+		return "hash join"
 	}
 
 	name, ok := planNodeNames[reflect.TypeOf(plan)]
@@ -914,8 +914,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):        "alter table",
 	reflect.TypeOf(&alterTypeNode{}):         "alter type",
 	reflect.TypeOf(&alterRoleNode{}):         "alter role",
-	reflect.TypeOf(&applyJoinNode{}):         "apply-join",
-	reflect.TypeOf(&bufferNode{}):            "buffer node",
+	reflect.TypeOf(&applyJoinNode{}):         "apply join",
+	reflect.TypeOf(&bufferNode{}):            "buffer",
 	reflect.TypeOf(&cancelQueriesNode{}):     "cancel queries",
 	reflect.TypeOf(&cancelSessionsNode{}):    "cancel sessions",
 	reflect.TypeOf(&changePrivilegesNode{}):  "change privileges",
@@ -954,19 +954,19 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&GrantRoleNode{}):         "grant role",
 	reflect.TypeOf(&groupNode{}):             "group",
 	reflect.TypeOf(&hookFnNode{}):            "plugin",
-	reflect.TypeOf(&indexJoinNode{}):         "index-join",
+	reflect.TypeOf(&indexJoinNode{}):         "index join",
 	reflect.TypeOf(&insertNode{}):            "insert",
-	reflect.TypeOf(&insertFastPathNode{}):    "insert-fast-path",
-	reflect.TypeOf(&interleavedJoinNode{}):   "interleaved-join",
-	reflect.TypeOf(&invertedFilterNode{}):    "inverted-filter",
-	reflect.TypeOf(&invertedJoinNode{}):      "inverted-join",
+	reflect.TypeOf(&insertFastPathNode{}):    "insert fast path",
+	reflect.TypeOf(&interleavedJoinNode{}):   "interleaved join",
+	reflect.TypeOf(&invertedFilterNode{}):    "inverted filter",
+	reflect.TypeOf(&invertedJoinNode{}):      "inverted join",
 	reflect.TypeOf(&joinNode{}):              "join",
 	reflect.TypeOf(&limitNode{}):             "limit",
-	reflect.TypeOf(&lookupJoinNode{}):        "lookup-join",
+	reflect.TypeOf(&lookupJoinNode{}):        "lookup join",
 	reflect.TypeOf(&max1RowNode{}):           "max1row",
 	reflect.TypeOf(&ordinalityNode{}):        "ordinality",
 	reflect.TypeOf(&projectSetNode{}):        "project set",
-	reflect.TypeOf(&recursiveCTENode{}):      "recursive cte node",
+	reflect.TypeOf(&recursiveCTENode{}):      "recursive cte",
 	reflect.TypeOf(&relocateNode{}):          "relocate",
 	reflect.TypeOf(&renameColumnNode{}):      "rename column",
 	reflect.TypeOf(&renameDatabaseNode{}):    "rename database",
@@ -977,7 +977,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&rowCountNode{}):          "count",
 	reflect.TypeOf(&rowSourceToPlanNode{}):   "row source to plan node",
 	reflect.TypeOf(&saveTableNode{}):         "save table",
-	reflect.TypeOf(&scanBufferNode{}):        "scan buffer node",
+	reflect.TypeOf(&scanBufferNode{}):        "scan buffer",
 	reflect.TypeOf(&scanNode{}):              "scan",
 	reflect.TypeOf(&scatterNode{}):           "scatter",
 	reflect.TypeOf(&scrubNode{}):             "scrub",
@@ -986,7 +986,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&setClusterSettingNode{}): "set cluster setting",
 	reflect.TypeOf(&setVarNode{}):            "set",
 	reflect.TypeOf(&setZoneConfigNode{}):     "configure zone",
-	reflect.TypeOf(&showFingerprintsNode{}):  "showFingerprints",
+	reflect.TypeOf(&showFingerprintsNode{}):  "show fingerprints",
 	reflect.TypeOf(&showTraceNode{}):         "show trace for",
 	reflect.TypeOf(&showTraceReplicaNode{}):  "replica trace",
 	reflect.TypeOf(&sortNode{}):              "sort",
@@ -1001,8 +1001,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&upsertNode{}):            "upsert",
 	reflect.TypeOf(&valuesNode{}):            "values",
 	reflect.TypeOf(&virtualTableNode{}):      "virtual table values",
-	reflect.TypeOf(&vTableLookupJoinNode{}):  "virtual-table-lookup-join",
+	reflect.TypeOf(&vTableLookupJoinNode{}):  "virtual table lookup join",
 	reflect.TypeOf(&windowNode{}):            "window",
 	reflect.TypeOf(&zeroNode{}):              "norows",
-	reflect.TypeOf(&zigzagJoinNode{}):        "zigzag-join",
+	reflect.TypeOf(&zigzagJoinNode{}):        "zigzag join",
 }

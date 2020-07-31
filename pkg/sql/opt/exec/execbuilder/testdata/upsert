@@ -98,7 +98,7 @@ count                                         ·                      ·
            │                                  render 0               k
            │                                  render 1               column7
            │                                  render 2               k
-           └── lookup-join                    ·                      ·
+           └── lookup join                    ·                      ·
                 │                             table                  kv@primary
                 │                             type                   inner
                 │                             equality               (k) = (k)
@@ -169,7 +169,7 @@ count                            ·              ·
                 │                render 6       b
                 │                render 7       c
                 │                render 8       d
-                └── cross-join   ·              ·
+                └── cross join   ·              ·
                      │           type           left outer
                      ├── values  ·              ·
                      │           size           4 columns, 1 row
@@ -354,13 +354,13 @@ EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNI
 root                                               ·             ·                                                    (z)                           +z
  ├── sort                                          ·             ·                                                    (z)                           +z
  │    │                                            order         +z                                                   ·                             ·
- │    └── scan buffer node                         ·             ·                                                    (z)                           ·
+ │    └── scan buffer                              ·             ·                                                    (z)                           ·
  │                                                 label         buffer 1                                             ·                             ·
  └── subquery                                      ·             ·                                                    ·                             ·
       │                                            id            @S1                                                  ·                             ·
       │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                             ·
       │                                            exec mode     all rows                                             ·                             ·
-      └── buffer node                              ·             ·                                                    (z)                           ·
+      └── buffer                                   ·             ·                                                    (z)                           ·
            │                                       label         buffer 1                                             ·                             ·
            └── spool                               ·             ·                                                    (z)                           ·
                 └── render                         ·             ·                                                    (z)                           ·
@@ -446,7 +446,7 @@ count                       ·                      ·                   ()     
            │                render 4               c                   ·                      ·
            │                render 5               b                   ·                      ·
            │                render 6               a                   ·                      ·
-           └── lookup-join  ·                      ·                   (a, b, a, b, c)        ·
+           └── lookup join  ·                      ·                   (a, b, a, b, c)        ·
                 │           table                  table38627@primary  ·                      ·
                 │           type                   inner               ·                      ·
                 │           equality               (a) = (a)           ·                      ·
@@ -496,7 +496,7 @@ count                                 ·                      ·                
                 │                     render 4               x                                            ·                                                  ·
                 │                     render 5               y                                            ·                                                  ·
                 │                     render 6               z                                            ·                                                  ·
-                └── lookup-join       ·                      ·                                            (column1, column2, column3, x, y, z)               ·
+                └── lookup join       ·                      ·                                            (column1, column2, column3, x, y, z)               ·
                      │                table                  tdup@tdup_y_z_key                            ·                                                  ·
                      │                type                   left outer                                   ·                                                  ·
                      │                equality               (column2, column3) = (y, z)                  ·                                                  ·
@@ -552,7 +552,7 @@ count                                    ·                   ·                
                 │                        render 4            a                                      ·                                ·
                 │                        render 5            b                                      ·                                ·
                 │                        render 6            c                                      ·                                ·
-                └── merge-join           ·                   ·                                      (a, b, c, x, y, z)               ·
+                └── merge join           ·                   ·                                      (a, b, c, x, y, z)               ·
                      │                   type                right outer                            ·                                ·
                      │                   equality            (b, c) = (y, z)                        ·                                ·
                      │                   mergeJoinOrder      +"(b=y)",+"(c=z)"                      ·                                ·
