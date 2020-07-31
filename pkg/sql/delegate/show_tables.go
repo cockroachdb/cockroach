@@ -43,53 +43,37 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 		schemaClause = "AND ns.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')"
 	}
 
-	var query string
+	const getTablesQuery = `
+SELECT ns.nspname                         AS schema_name
+     , pc.relname                         AS table_name
+     , CASE
+            WHEN pc.relkind = 'v' THEN 'view'
+            WHEN pc.relkind = 'S' THEN 'sequence'
+            ELSE 'table'
+       END                                AS "type"
+     , (
+        SELECT row_count
+          FROM crdb_internal.table_row_stats
+         WHERE table_id = pc.oid::int
+       )                                  AS "row_count_estimate"
+     %[3]s
+  FROM %[1]s.pg_catalog.pg_class          AS pc
+  JOIN %[1]s.pg_catalog.pg_namespace      AS ns ON (ns.oid = pc.relnamespace)
+  LEFT
+  JOIN %[1]s.pg_catalog.pg_description    AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
+ WHERE pc.relkind IN ('r', 'v', 'S')
+ %[2]s
+ ORDER BY schema_name, table_name
+`
+	var comment string
 	if n.WithComment {
-		const getTablesQuery = `
-SELECT
-	ns.nspname AS schema_name,
-	pc.relname AS table_name,
-	(CASE
-		WHEN pc.relkind = 'v' THEN 'view'
-		WHEN pc.relkind = 'S' THEN 'sequence'
-		ELSE 'table'
-	END) AS "type",
-  COALESCE(pd.description, '') AS comment
- FROM %[1]s.pg_catalog.pg_class       AS pc
- JOIN %[1]s.pg_catalog.pg_namespace   AS ns ON (ns.oid = pc.relnamespace)
- LEFT JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
-WHERE pc.relkind IN ('r', 'v', 'S') %[2]s
-ORDER BY schema_name, table_name
-`
-
-		query = fmt.Sprintf(
-			getTablesQuery,
-			&name.CatalogName,
-			schemaClause,
-		)
-
-	} else {
-		const getTablesQuery = `
-SELECT
-	ns.nspname AS schema_name,
-	pc.relname AS table_name,
-	(CASE
-		WHEN pc.relkind = 'v' THEN 'view'
-		WHEN pc.relkind = 'S' THEN 'sequence'
-		ELSE 'table'
-	END) AS "type"
- FROM %[1]s.pg_catalog.pg_class       AS pc
- JOIN %[1]s.pg_catalog.pg_namespace   AS ns ON (ns.oid = pc.relnamespace)
-WHERE pc.relkind IN ('r', 'v', 'S') %[2]s
-ORDER BY schema_name, table_name
-`
-
-		query = fmt.Sprintf(
-			getTablesQuery,
-			&name.CatalogName,
-			schemaClause,
-		)
+		comment = `, COALESCE(pd.description, '')       AS "comment"`
 	}
-
+	query := fmt.Sprintf(
+		getTablesQuery,
+		&name.CatalogName,
+		schemaClause,
+		comment,
+	)
 	return parse(query)
 }

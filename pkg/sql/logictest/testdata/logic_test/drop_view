@@ -12,12 +12,12 @@ CREATE VIEW b AS SELECT k,v from a
 statement ok
 CREATE VIEW c AS SELECT k,v from b
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
-public  a  table
-public  b  view
-public  c  view
+public  a  table  NULL
+public  b  view   NULL
+public  c  view   NULL
 
 statement error cannot drop relation "a" because view "b" depends on it
 DROP TABLE a
@@ -40,14 +40,14 @@ DROP VIEW d
 statement ok
 GRANT ALL ON d TO testuser
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
-public  a        table
-public  b        view
-public  c        view
-public  d        view
-public  diamond  view
+public  a        table  NULL
+public  b        view   NULL
+public  c        view   NULL
+public  d        view   NULL
+public  diamond  view   NULL
 
 user testuser
 
@@ -77,24 +77,24 @@ GRANT ALL ON testuser2 to testuser
 statement ok
 GRANT ALL ON testuser3 to testuser
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
-public  a          table
-public  b          view
-public  c          view
-public  d          view
-public  diamond    view
-public  testuser1  view
-public  testuser2  view
-public  testuser3  view
+public  a          table  NULL
+public  b          view   NULL
+public  c          view   NULL
+public  d          view   NULL
+public  diamond    view   NULL
+public  testuser1  view   NULL
+public  testuser2  view   NULL
+public  testuser3  view   NULL
 
 user testuser
 
 statement ok
 DROP VIEW testuser3
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
 
@@ -107,7 +107,7 @@ DROP VIEW testuser1 RESTRICT
 statement ok
 DROP VIEW testuser1 CASCADE
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
 
@@ -138,7 +138,7 @@ user root
 statement ok
 DROP TABLE a CASCADE
 
-query TTT
+query TTTT
 SHOW TABLES FROM test
 ----
 

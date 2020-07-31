@@ -77,20 +77,20 @@ key  val
 9    nine
 10   one-zero
 
-query TTT rowsort
+query TTTT rowsort
 SHOW TABLES
 ----
-public  save_table_test_scan_1  table
-public  st_lookup_join_2        table
-public  st_project_1            table
-public  st_scan_4               table
-public  st_select_3             table
-public  st_test_merge_join_2    table
-public  st_test_project_1       table
-public  st_test_scan_3          table
-public  st_test_scan_4          table
-public  t                       table
-public  u                       table
+public  save_table_test_scan_1  table  NULL
+public  st_lookup_join_2        table  NULL
+public  st_project_1            table  NULL
+public  st_scan_4               table  NULL
+public  st_select_3             table  NULL
+public  st_test_merge_join_2    table  NULL
+public  st_test_project_1       table  NULL
+public  st_test_scan_3          table  NULL
+public  st_test_scan_4          table  NULL
+public  t                       table  NULL
+public  u                       table  NULL
 
 # Only root may use the saveTableNode.
 

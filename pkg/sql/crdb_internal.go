@@ -106,6 +106,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
 		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
 		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		sqlbase.CrdbInternalTablesTableLastStatsID:      crdbInternalTablesTableLastStats,
 		sqlbase.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
@@ -331,6 +332,57 @@ CREATE TABLE crdb_internal.tables (
 				}
 			}
 			return nil
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
+	},
+}
+
+var crdbInternalTablesTableLastStats = virtualSchemaTable{
+	comment: "the latest stats for all tables accessible by current user in current database (KV scan)",
+	schema: `
+CREATE TABLE crdb_internal.table_row_stats (
+  table_id         INT         NOT NULL,
+  table_name       STRING      NOT NULL,
+  row_count        INT         NOT NULL
+)`,
+	generator: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 3)
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescAll(ctx, p, dbContext, virtualMany,
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
+					tableID := tree.DInt(table.ID)
+
+					query := `SELECT max("rowCount")` +
+						` FROM system.table_statistics ` +
+						` WHERE "tableID" = $1 ` +
+						`   AND "createdAt" = (SELECT MAX("createdAt") FROM system.table_statistics ` +
+						`                       WHERE "tableID" = $1)`
+
+					statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+						ctx, "crdb-internal-statistics-table", p.txn,
+						sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+						query, tableID)
+					if err != nil {
+						return err
+					}
+					rowCount := tree.DInt(0)
+					for _, r := range statRows {
+						rowCount, _ = tree.AsDInt(r[0])
+					}
+					row = row[:0]
+					row = append(row,
+						tree.NewDInt(tableID),
+						tree.NewDString(table.Name),
+						&rowCount,
+					)
+					if err := pusher.pushRow(row...); err != nil {
+						return err
+					}
+
+					return nil
+				},
+			)
 		}
 		next, cleanup := setupGenerator(ctx, worker)
 		return next, cleanup, nil

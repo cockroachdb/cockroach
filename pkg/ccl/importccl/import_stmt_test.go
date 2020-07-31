@@ -759,7 +759,7 @@ COPY t (a, b, c) FROM stdin;
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
 			query: map[string][][]string{
-				`SHOW TABLES`:              {{"public", "cities", "table"}, {"public", "weather", "table"}},
+				`SHOW TABLES`:              {{"public", "cities", "table", "NULL"}, {"public", "weather", "table", "NULL"}},
 				`SELECT city FROM cities`:  {{"Berkeley"}},
 				`SELECT city FROM weather`: {{"Berkeley"}},
 
@@ -783,7 +783,7 @@ COPY t (a, b, c) FROM stdin;
 			typ:  "PGDUMP",
 			data: testPgdumpFkCircular,
 			query: map[string][][]string{
-				`SHOW TABLES`:        {{"public", "a", "table"}, {"public", "b", "table"}},
+				`SHOW TABLES`:        {{"public", "a", "table", "NULL"}, {"public", "b", "table", "NULL"}},
 				`SELECT i, k FROM a`: {{"2", "2"}},
 				`SELECT j FROM b`:    {{"2"}},
 
@@ -833,7 +833,7 @@ COPY t (a, b, c) FROM stdin;
 			data: testPgdumpFk,
 			with: `WITH skip_foreign_keys`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "cities", "table"}, {"public", "weather", "table"}},
+				`SHOW TABLES`: {{"public", "cities", "table", "NULL"}, {"public", "weather", "table", "NULL"}},
 				// Verify the constraint is skipped.
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
 				`SHOW CONSTRAINTS FROM weather`:                                  {},
@@ -851,7 +851,7 @@ COPY t (a, b, c) FROM stdin;
 			data: testPgdumpFk,
 			with: `WITH skip_foreign_keys`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "weather", "table"}},
+				`SHOW TABLES`: {{"public", "weather", "table", "NULL"}},
 			},
 		},
 		{
@@ -907,7 +907,7 @@ COPY t (a, b, c) FROM stdin;
 				CREATE TABLE t (i INT8);
 			`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "t", "table"}},
+				`SHOW TABLES`: {{"public", "t", "table", "NULL"}},
 			},
 		},
 		{
