@@ -72,10 +72,6 @@ func NewSecondaryLogger(
 			stderrThreshold: mainLog.stderrThreshold.get(),
 			logCounter:      EntryCounter{EnableMsgCount: enableMsgCount},
 			gcNotify:        make(chan struct{}, 1),
-			// Only one logger can have redirectInternalStderrWrites set to
-			// true; this is going to be either mainLog or stderrLog
-			// depending on configuration.
-			redirectInternalStderrWrites: false,
 		},
 		forceSyncWrites: forceSyncWrites,
 	}

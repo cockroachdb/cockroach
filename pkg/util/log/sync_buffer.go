@@ -108,15 +108,39 @@ func (l *loggerT) createFileLocked() error {
 // rotation to new files, in which case a new file is immediately
 // opened. See rotateFileLocked() below.
 func (l *loggerT) closeFileLocked() error {
-	if l.mu.file != nil {
-		if sb, ok := l.mu.file.(*syncBuffer); ok {
-			if err := sb.file.Close(); err != nil {
-				return err
-			}
-		}
-		l.mu.file = nil
+	if l.mu.file == nil {
+		return nil
 	}
-	return restoreStderr()
+
+	// First disconnect stderr, if it was connected. We do this before
+	// closing the file to ensure no direct stderr writes are lost.
+	if err := l.maybeRelinquishInternalStderrLocked(); err != nil {
+		return err
+	}
+
+	if sb, ok := l.mu.file.(*syncBuffer); ok {
+		if err := sb.file.Close(); err != nil {
+			return err
+		}
+	}
+	l.mu.file = nil
+
+	return nil
+}
+
+// maybeRelinquishInternalStderrLocked restores the internal fd 2 and
+// os.Stderr if this logger had previously taken ownership of it.
+//
+// This is used by the TestLogScope only when the scope is closed.
+func (l *loggerT) maybeRelinquishInternalStderrLocked() error {
+	if !l.mu.currentlyOwnsInternalStderr {
+		return nil
+	}
+	if err := hijackStderr(OrigStderr); err != nil {
+		return err
+	}
+	l.mu.currentlyOwnsInternalStderr = false
+	return nil
 }
 
 // rotateFileLocked closes the syncBuffer's file and starts a new one.
@@ -175,7 +199,7 @@ func (sb *syncBuffer) rotateFileLocked(now time.Time) (err error) {
 
 	// Switch over internal stderr writes, if currently captured, to the
 	// new file.
-	if sb.logger.redirectInternalStderrWrites {
+	if sb.logger.mu.redirectInternalStderrWrites {
 		if err := hijackStderr(newFile); err != nil {
 			return err
 		}
