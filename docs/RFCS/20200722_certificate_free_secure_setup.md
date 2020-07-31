@@ -66,6 +66,7 @@ My earlier hypothesis did not hold and it looks like the existing init path woul
 Upon launch:
 - The new node will be provided a `join-token` containing the hostname of the surrogate node (node that generated the join token) and will attempt to connect to, authenticate, validate, and provision itself from the surrogate.
 - The surrogate will then generate a new node certificate for the joining node and return it as part of a provisioning bundle. The bundle will also include the internode CA (public and private keys), the user certificate CA (if present) and any other initialization information.
+- The surrogate will make the `join-token` as consumed in the cluster registry to avoid reuse.
 - The joining node may then use its valid node certificate and gossip to align itself with the rest of the cluster.
 
 ### Success monitoring
