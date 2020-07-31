@@ -8,48 +8,49 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTT
+query TTTI
 SHOW TABLES FROM crdb_internal
 ----
-crdb_internal  backward_dependencies      table
-crdb_internal  builtin_functions          table
-crdb_internal  cluster_queries            table
-crdb_internal  cluster_sessions           table
-crdb_internal  cluster_settings           table
-crdb_internal  cluster_transactions       table
-crdb_internal  create_statements          table
-crdb_internal  create_type_statements     table
-crdb_internal  databases                  table
-crdb_internal  feature_usage              table
-crdb_internal  forward_dependencies       table
-crdb_internal  gossip_alerts              table
-crdb_internal  gossip_liveness            table
-crdb_internal  gossip_network             table
-crdb_internal  gossip_nodes               table
-crdb_internal  index_columns              table
-crdb_internal  jobs                       table
-crdb_internal  kv_node_status             table
-crdb_internal  kv_store_status            table
-crdb_internal  leases                     table
-crdb_internal  node_build_info            table
-crdb_internal  node_metrics               table
-crdb_internal  node_queries               table
-crdb_internal  node_runtime_info          table
-crdb_internal  node_sessions              table
-crdb_internal  node_statement_statistics  table
-crdb_internal  node_transactions          table
-crdb_internal  node_txn_stats             table
-crdb_internal  partitions                 table
-crdb_internal  predefined_comments        table
-crdb_internal  ranges                     view
-crdb_internal  ranges_no_leases           table
-crdb_internal  schema_changes             table
-crdb_internal  session_trace              table
-crdb_internal  session_variables          table
-crdb_internal  table_columns              table
-crdb_internal  table_indexes              table
-crdb_internal  tables                     table
-crdb_internal  zones                      table
+crdb_internal  backward_dependencies      table  0
+crdb_internal  builtin_functions          table  0
+crdb_internal  cluster_queries            table  0
+crdb_internal  cluster_sessions           table  0
+crdb_internal  cluster_settings           table  0
+crdb_internal  cluster_transactions       table  0
+crdb_internal  create_statements          table  0
+crdb_internal  create_type_statements     table  0
+crdb_internal  databases                  table  0
+crdb_internal  feature_usage              table  0
+crdb_internal  forward_dependencies       table  0
+crdb_internal  gossip_alerts              table  0
+crdb_internal  gossip_liveness            table  0
+crdb_internal  gossip_network             table  0
+crdb_internal  gossip_nodes               table  0
+crdb_internal  index_columns              table  0
+crdb_internal  jobs                       table  0
+crdb_internal  kv_node_status             table  0
+crdb_internal  kv_store_status            table  0
+crdb_internal  leases                     table  0
+crdb_internal  node_build_info            table  0
+crdb_internal  node_metrics               table  0
+crdb_internal  node_queries               table  0
+crdb_internal  node_runtime_info          table  0
+crdb_internal  node_sessions              table  0
+crdb_internal  node_statement_statistics  table  0
+crdb_internal  node_transactions          table  0
+crdb_internal  node_txn_stats             table  0
+crdb_internal  partitions                 table  0
+crdb_internal  predefined_comments        table  0
+crdb_internal  ranges                     view   0
+crdb_internal  ranges_no_leases           table  0
+crdb_internal  schema_changes             table  0
+crdb_internal  session_trace              table  0
+crdb_internal  session_variables          table  0
+crdb_internal  table_columns              table  0
+crdb_internal  table_indexes              table  0
+crdb_internal  table_row_statistics       table  0
+crdb_internal  tables                     table  0
+crdb_internal  zones                      table  0
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)

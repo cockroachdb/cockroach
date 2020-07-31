@@ -77,6 +77,7 @@ const (
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
 	CrdbInternalTablesTableID
+	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTxnStatsTableID
 	CrdbInternalZonesTableID
 	InformationSchemaID
