@@ -17,24 +17,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
-// SupportedAggFns contains all aggregate functions supported by the vectorized
-// engine.
-var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
-	execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-	execinfrapb.AggregatorSpec_AVG,
-	execinfrapb.AggregatorSpec_SUM,
-	execinfrapb.AggregatorSpec_SUM_INT,
-	execinfrapb.AggregatorSpec_CONCAT_AGG,
-	execinfrapb.AggregatorSpec_COUNT_ROWS,
-	execinfrapb.AggregatorSpec_COUNT,
-	execinfrapb.AggregatorSpec_MIN,
-	execinfrapb.AggregatorSpec_MAX,
-	execinfrapb.AggregatorSpec_BOOL_AND,
-	execinfrapb.AggregatorSpec_BOOL_OR,
+// isAggOptimized returns whether aggFn has an optimized implementation.
+func isAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
+	switch aggFn {
+	case execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+		execinfrapb.AggregatorSpec_AVG,
+		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_SUM_INT,
+		execinfrapb.AggregatorSpec_CONCAT_AGG,
+		execinfrapb.AggregatorSpec_COUNT_ROWS,
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_MIN,
+		execinfrapb.AggregatorSpec_MAX,
+		execinfrapb.AggregatorSpec_BOOL_AND,
+		execinfrapb.AggregatorSpec_BOOL_OR:
+		return true
+	default:
+		return false
+	}
 }
 
 // aggregateFunc is an aggregate function that performs computation on a batch
@@ -176,38 +180,61 @@ type aggregateFuncsAlloc struct {
 
 func newAggregateFuncsAlloc(
 	allocator *colmem.Allocator,
-	aggTyps [][]*types.T,
-	aggFns []execinfrapb.AggregatorSpec_Func,
+	inputTypes []*types.T,
+	spec *execinfrapb.AggregatorSpec,
+	evalCtx *tree.EvalContext,
+	constructors []execinfrapb.AggregateConstructor,
+	constArguments []tree.Datums,
+	outputTypes []*types.T,
 	allocSize int64,
 	isHashAgg bool,
-) (*aggregateFuncsAlloc, error) {
-	funcAllocs := make([]aggregateFuncAlloc, len(aggFns))
-	for i := range aggFns {
+) (*aggregateFuncsAlloc, *vecToDatumConverter, Closers, error) {
+	funcAllocs := make([]aggregateFuncAlloc, len(spec.Aggregations))
+	var toClose Closers
+	var vecIdxsToConvert []int
+	for _, aggFn := range spec.Aggregations {
+		if !isAggOptimized(aggFn.Func) {
+			for _, vecIdx := range aggFn.ColIdx {
+				found := false
+				for i := range vecIdxsToConvert {
+					if vecIdxsToConvert[i] == int(vecIdx) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					vecIdxsToConvert = append(vecIdxsToConvert, int(vecIdx))
+				}
+			}
+		}
+	}
+	inputArgsConverter := newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
+	for i, aggFn := range spec.Aggregations {
 		var err error
-		switch aggFns[i] {
+		switch aggFn.Func {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
 			if isHashAgg {
-				funcAllocs[i], err = newAnyNotNullHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newAnyNotNullHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_AVG:
 			if isHashAgg {
-				funcAllocs[i], err = newAvgHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newAvgHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newAvgOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newAvgOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_SUM:
 			if isHashAgg {
-				funcAllocs[i], err = newSumHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newSumHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newSumOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newSumOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_SUM_INT:
 			if isHashAgg {
-				funcAllocs[i], err = newSumIntHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newSumIntHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newSumIntOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i], err = newSumIntOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_CONCAT_AGG:
 			if isHashAgg {
@@ -229,15 +256,15 @@ func newAggregateFuncsAlloc(
 			}
 		case execinfrapb.AggregatorSpec_MIN:
 			if isHashAgg {
-				funcAllocs[i] = newMinHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i] = newMinHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i] = newMinOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i] = newMinOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_MAX:
 			if isHashAgg {
-				funcAllocs[i] = newMaxHashAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i] = newMaxHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i] = newMaxOrderedAggAlloc(allocator, aggTyps[i][0], allocSize)
+				funcAllocs[i] = newMaxOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_BOOL_AND:
 			if isHashAgg {
@@ -255,18 +282,29 @@ func newAggregateFuncsAlloc(
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
 		default:
-			return nil, errors.AssertionFailedf("didn't find aggregateFuncAlloc for %s", aggFns[i].String())
+			if isHashAgg {
+				funcAllocs[i] = newDefaultHashAggAlloc(
+					allocator, constructors[i], evalCtx, inputArgsConverter,
+					len(aggFn.ColIdx), constArguments[i], outputTypes[i], allocSize,
+				)
+			} else {
+				funcAllocs[i] = newDefaultOrderedAggAlloc(
+					allocator, constructors[i], evalCtx, inputArgsConverter,
+					len(aggFn.ColIdx), constArguments[i], outputTypes[i], allocSize,
+				)
+			}
+			toClose = append(toClose, funcAllocs[i].(Closer))
 		}
 
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 	}
 	return &aggregateFuncsAlloc{
 		allocator:     allocator,
 		allocSize:     allocSize,
 		aggFuncAllocs: funcAllocs,
-	}, nil
+	}, inputArgsConverter, toClose, nil
 }
 
 // sizeOfAggregateFunc is the size of some aggregateFunc implementation.
@@ -292,36 +330,34 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 	return funcs
 }
 
-// MakeAggregateFuncsOutputTypes produces the output types for a given set of
-// aggregates.
-func MakeAggregateFuncsOutputTypes(
-	aggTyps [][]*types.T, aggFns []execinfrapb.AggregatorSpec_Func,
-) ([]*types.T, error) {
-	var err error
-	outTyps := make([]*types.T, len(aggFns))
-	for i, aggFn := range aggFns {
-		_, outTyps[i], err = execinfrapb.GetAggregateInfo(aggFn, aggTyps[i]...)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return outTyps, nil
-}
-
-// extractAggTypes returns a nested array representing the input types
-// corresponding to each aggregation function.
-func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
-	aggTyps := make([][]*types.T, len(aggCols))
-	for aggIdx := range aggCols {
-		aggTyps[aggIdx] = make([]*types.T, len(aggCols[aggIdx]))
-		for i, colIdx := range aggCols[aggIdx] {
-			aggTyps[aggIdx][i] = typs[colIdx]
-		}
-	}
-	return aggTyps
-}
-
 type aggAllocBase struct {
 	allocator *colmem.Allocator
 	allocSize int64
+}
+
+// ProcessAggregations processes all aggregate functions specified in
+// aggregations.
+func ProcessAggregations(
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	aggregations []execinfrapb.AggregatorSpec_Aggregation,
+	inputTypes []*types.T,
+) (
+	constructors []execinfrapb.AggregateConstructor,
+	constArguments []tree.Datums,
+	outputTypes []*types.T,
+	err error,
+) {
+	constructors = make([]execinfrapb.AggregateConstructor, len(aggregations))
+	constArguments = make([]tree.Datums, len(aggregations))
+	outputTypes = make([]*types.T, len(aggregations))
+	for i, aggFn := range aggregations {
+		constructors[i], constArguments[i], outputTypes[i], err = execinfrapb.GetAggregateConstructor(
+			evalCtx, semaCtx, &aggFn, inputTypes,
+		)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
