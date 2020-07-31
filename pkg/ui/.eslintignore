@@ -1,0 +1,11 @@
+# .eslintignore
+
+*
+!*/
+!*.ts
+!*.tsx
+node_modules
+dist
+umd
+.cache
+*.d.ts 

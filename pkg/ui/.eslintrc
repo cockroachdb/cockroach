@@ -1,0 +1,17 @@
+{
+    "extends": "@cockroachlabs/eslint-config",
+    "rules": {
+      "camelcase": "off",
+      "@typescript-eslint/camelcase": "off",
+      "@typescript-eslint/no-use-before-define": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "react/jsx-key": "off",
+      "@typescript-eslint/no-empty-interface": "off",
+      "@typescript-eslint/interface-name-prefix": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "react/require-render-return": "off",
+      "@typescript-eslint/triple-slash-reference": "off",
+      "no-case-declarations": "off",
+      "@typescript-eslint/no-namespace": "off"
+    }
+  }
