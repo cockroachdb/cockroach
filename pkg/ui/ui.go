@@ -93,7 +93,31 @@ type indexHTMLArgs struct {
 	Tag                  string
 	Version              string
 	NodeID               string
+	PasswordLoginEnabled bool
+	OIDCLoginEnabled     bool
+	OIDCButtonText       string
 }
+
+// OIDCUIConf is a variable that stores data required by the
+// Admin UI to display and manage the OIDC login flow. It is
+// provided by the `oidcAuthenticationServer` at runtime
+// since that's where all the OIDC configuration is centralized.
+type OIDCUIConf struct {
+	ButtonText string
+	Enabled    bool
+}
+
+// OIDCUIConfGetter is an interface that our OIDC configuration must implement in order to be able
+// to pass relevant configuration info to the ui module. This is to pass through variables that
+// are necessary to render an appropriate user interface for OIDC support.
+type OIDCUIConfGetter interface {
+	GetOIDCConf() OIDCUIConf
+}
+
+// SetOIDCStateCookie is a hook for the `oidcccl` library to override with a function that sets
+// a state cookie on the domain. This cookie is used by the `oidcccl` library to prevent CSRF
+// attacks as part of the OAuth flow.
+var SetOIDCStateCookie = func(w http.ResponseWriter, r *http.Request) {}
 
 // bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
 // without the web UI.
@@ -109,6 +133,7 @@ type Config struct {
 	LoginEnabled         bool
 	NodeID               *base.NodeIDContainer
 	GetUser              func(ctx context.Context) *string
+	OIDC                 OIDCUIConfGetter
 }
 
 // Handler returns an http.Handler that serves the UI,
@@ -133,6 +158,12 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 
+		oidcConf := cfg.OIDC.GetOIDCConf()
+
+		if oidcConf.Enabled {
+			SetOIDCStateCookie(w, r)
+		}
+
 		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
 			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
 			LoginEnabled:         cfg.LoginEnabled,
@@ -140,6 +171,9 @@ func Handler(cfg Config) http.Handler {
 			Tag:                  buildInfo.Tag,
 			Version:              build.VersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
+			PasswordLoginEnabled: true,
+			OIDCLoginEnabled:     oidcConf.Enabled,
+			OIDCButtonText:       oidcConf.ButtonText,
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)
