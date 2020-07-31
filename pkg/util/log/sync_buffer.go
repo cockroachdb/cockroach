@@ -56,6 +56,28 @@ func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	return
 }
 
+// writeToFileLocked writes to the file and applies the synchronization policy.
+// Assumes that l.mu is held by the caller.
+func (l *loggerT) writeToFileLocked(data []byte) error {
+	if _, err := l.mu.file.Write(data); err != nil {
+		return err
+	}
+	if l.mu.syncWrites {
+		_ = l.mu.file.Flush()
+		_ = l.mu.file.Sync()
+	}
+	return nil
+}
+
+// ensureFileLocked ensures that l.file is set and valid.
+// Assumes that l.mu is held by the caller.
+func (l *loggerT) ensureFileLocked() error {
+	if l.mu.file == nil {
+		return l.createFileLocked()
+	}
+	return nil
+}
+
 // createFileLocked initializes the syncBuffer for a logger, and triggers
 // creation of the log file.
 // Assumes that l.mu is held by the caller.
@@ -71,6 +93,18 @@ func (l *loggerT) createFileLocked() error {
 		l.mu.file = sb
 	}
 	return nil
+}
+
+func (l *loggerT) closeFileLocked() error {
+	if l.mu.file != nil {
+		if sb, ok := l.mu.file.(*syncBuffer); ok {
+			if err := sb.file.Close(); err != nil {
+				return err
+			}
+		}
+		l.mu.file = nil
+	}
+	return restoreStderr()
 }
 
 // rotateFileLocked closes the syncBuffer's file and starts a new one.
