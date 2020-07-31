@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -781,9 +782,20 @@ func (mb *mutationBuilder) projectPartialIndexCols(colIDs opt.ColList, predScope
 			texpr := predScope.resolveAndRequireType(expr, types.Bool)
 			scopeCol := mb.b.addColumn(projectionScope, "", texpr)
 
-			mb.b.buildScalar(texpr, predScope, projectionScope, scopeCol, nil)
-			colIDs[ord] = scopeCol.id
+			var scalar opt.ScalarExpr
+			mb.b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				scalar = mb.b.buildScalar(texpr, predScope, projectionScope, scopeCol, nil)
+			})
 
+			// Expressions with non-immutable operators are not supported as
+			// partial index predicates.
+			var sharedProps props.Shared
+			memo.BuildSharedProps(scalar, &sharedProps)
+			if sharedProps.VolatilitySet.HasStable() || sharedProps.VolatilitySet.HasVolatile() {
+				panic(errors.AssertionFailedf("partial index predicate is not immutable"))
+			}
+
+			colIDs[ord] = scopeCol.id
 			ord++
 		}
 
