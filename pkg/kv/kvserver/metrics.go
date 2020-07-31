@@ -198,12 +198,6 @@ var (
 		Measurement: "Age",
 		Unit:        metric.Unit_SECONDS,
 	}
-	metaLastUpdateNanos = metric.Metadata{
-		Name:        "lastupdatenanos",
-		Help:        "Timestamp at which bytes/keys/intents metrics were last updated",
-		Measurement: "Last Update",
-		Unit:        metric.Unit_TIMESTAMP_NS,
-	}
 
 	// Contention and intent resolution metrics.
 	metaResolveCommit = metric.Metadata{
@@ -1199,20 +1193,19 @@ type StoreMetrics struct {
 // call acquire and release to properly reference count the metrics for
 // individual tenants.
 type TenantsStorageMetrics struct {
-	LiveBytes       *aggmetric.AggGauge
-	KeyBytes        *aggmetric.AggGauge
-	ValBytes        *aggmetric.AggGauge
-	TotalBytes      *aggmetric.AggGauge
-	IntentBytes     *aggmetric.AggGauge
-	LiveCount       *aggmetric.AggGauge
-	KeyCount        *aggmetric.AggGauge
-	ValCount        *aggmetric.AggGauge
-	IntentCount     *aggmetric.AggGauge
-	IntentAge       *aggmetric.AggGauge
-	GcBytesAge      *aggmetric.AggGauge
-	LastUpdateNanos *aggmetric.AggGauge
-	SysBytes        *aggmetric.AggGauge
-	SysCount        *aggmetric.AggGauge
+	LiveBytes   *aggmetric.AggGauge
+	KeyBytes    *aggmetric.AggGauge
+	ValBytes    *aggmetric.AggGauge
+	TotalBytes  *aggmetric.AggGauge
+	IntentBytes *aggmetric.AggGauge
+	LiveCount   *aggmetric.AggGauge
+	KeyCount    *aggmetric.AggGauge
+	ValCount    *aggmetric.AggGauge
+	IntentCount *aggmetric.AggGauge
+	IntentAge   *aggmetric.AggGauge
+	GcBytesAge  *aggmetric.AggGauge
+	SysBytes    *aggmetric.AggGauge
+	SysCount    *aggmetric.AggGauge
 
 	// This struct is invisible to the metric package.
 	tenants syncutil.IntMap // map[roachpb.TenantID]*tenantStorageMetrics
@@ -1273,7 +1266,6 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
 			m.IntentAge = sm.IntentAge.AddChild(tenantIDStr)
 			m.GcBytesAge = sm.GcBytesAge.AddChild(tenantIDStr)
 			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
-			m.LastUpdateNanos = sm.LastUpdateNanos.AddChild(tenantIDStr)
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
 			m.mu.Unlock()
 			return
@@ -1309,7 +1301,6 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, tenantID roa
 	m.IntentCount.Destroy()
 	m.IntentAge.Destroy()
 	m.GcBytesAge.Destroy()
-	m.LastUpdateNanos.Destroy()
 	m.SysBytes.Destroy()
 	m.SysCount.Destroy()
 	sm.tenants.Delete(int64(tenantID.ToUint64()))
@@ -1334,39 +1325,37 @@ type tenantStorageMetrics struct {
 		refCount int
 	}
 
-	LiveBytes       *aggmetric.Gauge
-	KeyBytes        *aggmetric.Gauge
-	ValBytes        *aggmetric.Gauge
-	TotalBytes      *aggmetric.Gauge
-	IntentBytes     *aggmetric.Gauge
-	LiveCount       *aggmetric.Gauge
-	KeyCount        *aggmetric.Gauge
-	ValCount        *aggmetric.Gauge
-	IntentCount     *aggmetric.Gauge
-	IntentAge       *aggmetric.Gauge
-	GcBytesAge      *aggmetric.Gauge
-	LastUpdateNanos *aggmetric.Gauge
-	SysBytes        *aggmetric.Gauge
-	SysCount        *aggmetric.Gauge
+	LiveBytes   *aggmetric.Gauge
+	KeyBytes    *aggmetric.Gauge
+	ValBytes    *aggmetric.Gauge
+	TotalBytes  *aggmetric.Gauge
+	IntentBytes *aggmetric.Gauge
+	LiveCount   *aggmetric.Gauge
+	KeyCount    *aggmetric.Gauge
+	ValCount    *aggmetric.Gauge
+	IntentCount *aggmetric.Gauge
+	IntentAge   *aggmetric.Gauge
+	GcBytesAge  *aggmetric.Gauge
+	SysBytes    *aggmetric.Gauge
+	SysCount    *aggmetric.Gauge
 }
 
 func newTenantsStorageMetrics() *TenantsStorageMetrics {
 	b := aggmetric.MakeBuilder(tenantrate.TenantIDLabel)
 	sm := &TenantsStorageMetrics{
-		LiveBytes:       b.Gauge(metaLiveBytes),
-		KeyBytes:        b.Gauge(metaKeyBytes),
-		ValBytes:        b.Gauge(metaValBytes),
-		TotalBytes:      b.Gauge(metaTotalBytes),
-		IntentBytes:     b.Gauge(metaIntentBytes),
-		LiveCount:       b.Gauge(metaLiveCount),
-		KeyCount:        b.Gauge(metaKeyCount),
-		ValCount:        b.Gauge(metaValCount),
-		IntentCount:     b.Gauge(metaIntentCount),
-		IntentAge:       b.Gauge(metaIntentAge),
-		GcBytesAge:      b.Gauge(metaGcBytesAge),
-		LastUpdateNanos: b.Gauge(metaLastUpdateNanos),
-		SysBytes:        b.Gauge(metaSysBytes),
-		SysCount:        b.Gauge(metaSysCount),
+		LiveBytes:   b.Gauge(metaLiveBytes),
+		KeyBytes:    b.Gauge(metaKeyBytes),
+		ValBytes:    b.Gauge(metaValBytes),
+		TotalBytes:  b.Gauge(metaTotalBytes),
+		IntentBytes: b.Gauge(metaIntentBytes),
+		LiveCount:   b.Gauge(metaLiveCount),
+		KeyCount:    b.Gauge(metaKeyCount),
+		ValCount:    b.Gauge(metaValCount),
+		IntentCount: b.Gauge(metaIntentCount),
+		IntentAge:   b.Gauge(metaIntentAge),
+		GcBytesAge:  b.Gauge(metaGcBytesAge),
+		SysBytes:    b.Gauge(metaSysBytes),
+		SysCount:    b.Gauge(metaSysCount),
 	}
 	return sm
 }
@@ -1587,7 +1576,6 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 	tm.IntentCount.Inc(delta.IntentCount)
 	tm.IntentAge.Inc(delta.IntentAge)
 	tm.GcBytesAge.Inc(delta.GCBytesAge)
-	tm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
 	tm.SysBytes.Inc(delta.SysBytes)
 	tm.SysCount.Inc(delta.SysCount)
 }
