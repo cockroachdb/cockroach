@@ -143,7 +143,8 @@ func (gd *GoroutineDumper) PreFilter(
 ) (preserved map[int]bool, _ error) {
 	preserved = make(map[int]bool)
 	for i := len(files) - 1; i >= 0; i-- {
-		if err := gd.CheckOwnsFile(ctx, files[i]); err == nil {
+		// Always preserve the last dump in chronological order.
+		if gd.CheckOwnsFile(ctx, files[i]) {
 			preserved[i] = true
 			break
 		}
@@ -152,11 +153,8 @@ func (gd *GoroutineDumper) PreFilter(
 }
 
 // CheckOwnsFile is part of the dumpstore.Dumper interface.
-func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) error {
-	if !strings.HasPrefix(fi.Name(), goroutineDumpPrefix) {
-		return errors.New("not a valid goroutine dump name")
-	}
-	return nil
+func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) bool {
+	return strings.HasPrefix(fi.Name(), goroutineDumpPrefix)
 }
 
 func takeGoroutineDump(path string) error {

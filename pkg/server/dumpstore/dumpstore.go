@@ -66,9 +66,8 @@ type Dumper interface {
 	// these should be ignored.
 	PreFilter(ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error) (preserved map[int]bool, err error)
 
-	// CheckOwnsFile returns nil if the dumper owns the given
-	// file, an error otherwise.
-	CheckOwnsFile(ctx context.Context, fi os.FileInfo) error
+	// CheckOwnsFile returns true iff the dumper owns the given file.
+	CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool
 }
 
 // NewStore creates a new DumpStore.
@@ -136,8 +135,8 @@ func removeOldAndTooBigExcept(
 	// Go from newest to latest: we want to prioritize keeping files that are newer.
 	for i := len(files) - 1; i >= 0; i-- {
 		fi := files[i]
-		if err := dumper.CheckOwnsFile(ctx, fi); err != nil {
-			log.Infof(ctx, "ignoring unknown file %s: %v", fi.Name(), err)
+		if !dumper.CheckOwnsFile(ctx, fi) {
+			// Not for this dumper. Ignore it silently.
 			continue
 		}
 
