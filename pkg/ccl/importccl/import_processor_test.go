@@ -880,7 +880,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 
 	// Initialize table descriptor for import. We need valid descriptor to run
 	// converters, even though we don't actually import anything in this test.
-	var descr *sqlbase.TableDescriptor
+	var descr *sqlbase.ImmutableTableDescriptor
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
 		descr = descForTable(t,
@@ -908,7 +908,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 	assert.True(t, numCols > 0)
 
 	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr, TargetCols: targetCols[0:numCols]},
+		"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
 	}
 
 	for id, path := range inputs {

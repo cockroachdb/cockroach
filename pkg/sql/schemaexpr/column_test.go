@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -27,7 +28,7 @@ func TestDequalifyColumnRefs(t *testing.T) {
 	table := tree.Name("bar")
 	tn := tree.MakeTableName(database, table)
 
-	cols := []sqlbase.ColumnDescriptor{
+	cols := []descpb.ColumnDescriptor{
 		{Name: "a", Type: types.Int},
 		{Name: "b", Type: types.String},
 	}
@@ -60,7 +61,7 @@ func TestDequalifyColumnRefs(t *testing.T) {
 
 			source := sqlbase.NewSourceInfoForSingleTable(
 				tn, sqlbase.ResultColumnsFromColDescs(
-					sqlbase.ID(1),
+					descpb.ID(1),
 					cols,
 				),
 			)

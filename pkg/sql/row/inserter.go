@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,8 +27,8 @@ import (
 // Inserter abstracts the key/value operations for inserting table rows.
 type Inserter struct {
 	Helper                rowHelper
-	InsertCols            []sqlbase.ColumnDescriptor
-	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
+	InsertCols            []descpb.ColumnDescriptor
+	InsertColIDtoRowIndex map[descpb.ColumnID]int
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -44,7 +45,7 @@ func MakeInserter(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	insertCols []sqlbase.ColumnDescriptor,
+	insertCols []descpb.ColumnDescriptor,
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{

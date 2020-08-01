@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -207,7 +208,7 @@ func newHashJoiner(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 
-	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {
+	if h.joinType == descpb.IntersectAllJoin || h.joinType == descpb.ExceptAllJoin {
 		h.nullEquality = true
 	}
 
@@ -315,9 +316,9 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 			// This side has been fully consumed, it is the shortest side.
 			// If storedSide is empty, we might be able to short-circuit.
 			if h.rows[side].Len() == 0 &&
-				(h.joinType == sqlbase.InnerJoin ||
-					(h.joinType == sqlbase.LeftOuterJoin && side == leftSide) ||
-					(h.joinType == sqlbase.RightOuterJoin && side == rightSide)) {
+				(h.joinType == descpb.InnerJoin ||
+					(h.joinType == descpb.LeftOuterJoin && side == leftSide) ||
+					(h.joinType == descpb.RightOuterJoin && side == rightSide)) {
 				h.MoveToDraining(nil /* err */)
 				return hjStateUnknown, nil, h.DrainHelper()
 			}
@@ -529,7 +530,7 @@ func (h *hashJoiner) probeRow() (
 	}
 
 	h.probingRowState.matched = true
-	shouldEmit := h.joinType != sqlbase.LeftAntiJoin && h.joinType != sqlbase.ExceptAllJoin
+	shouldEmit := h.joinType != descpb.LeftAntiJoin && h.joinType != descpb.ExceptAllJoin
 	if shouldMark(h.storedSide, h.joinType) {
 		// Matched rows are marked on the stored side for 2 reasons.
 		// 1: For outer joins, anti joins, and EXCEPT ALL to iterate through
@@ -543,11 +544,11 @@ func (h *hashJoiner) probeRow() (
 		// TODO(peter): figure out a way to reduce this special casing below.
 		if i.IsMarked(h.Ctx) {
 			switch h.joinType {
-			case sqlbase.LeftSemiJoin:
+			case descpb.LeftSemiJoin:
 				shouldEmit = false
-			case sqlbase.IntersectAllJoin:
+			case descpb.IntersectAllJoin:
 				shouldEmit = false
-			case sqlbase.ExceptAllJoin:
+			case descpb.ExceptAllJoin:
 				// We want to mark a stored row if possible, so move on to the next
 				// match. Reset h.probingRowState.matched in case we don't find any more
 				// matches and want to emit this row.
@@ -564,7 +565,7 @@ func (h *hashJoiner) probeRow() (
 		nextState = hjReadingProbeSide
 	}
 	if shouldEmit {
-		if h.joinType == sqlbase.IntersectAllJoin {
+		if h.joinType == descpb.IntersectAllJoin {
 			// We found a match, so we are done with this row.
 			return hjReadingProbeSide, renderedRow, nil
 		}
@@ -821,15 +822,15 @@ func (h *hashJoiner) outputStatsToTrace() {
 }
 
 // Some types of joins need to mark rows that matched.
-func shouldMark(storedSide joinSide, joinType sqlbase.JoinType) bool {
+func shouldMark(storedSide joinSide, joinType descpb.JoinType) bool {
 	switch {
-	case joinType == sqlbase.LeftSemiJoin && storedSide == leftSide:
+	case joinType == descpb.LeftSemiJoin && storedSide == leftSide:
 		return true
-	case joinType == sqlbase.LeftAntiJoin && storedSide == leftSide:
+	case joinType == descpb.LeftAntiJoin && storedSide == leftSide:
 		return true
-	case joinType == sqlbase.ExceptAllJoin:
+	case joinType == descpb.ExceptAllJoin:
 		return true
-	case joinType == sqlbase.IntersectAllJoin:
+	case joinType == descpb.IntersectAllJoin:
 		return true
 	case shouldEmitUnmatchedRow(storedSide, joinType):
 		return true
@@ -841,11 +842,11 @@ func shouldMark(storedSide joinSide, joinType sqlbase.JoinType) bool {
 // Some types of joins only need to know of the existence of a matching row in
 // the storedSide, depending on the storedSide, and don't need to know all the
 // rows. These can 'short circuit' to avoid iterating through them all.
-func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
+func shouldShortCircuit(storedSide joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		return storedSide == rightSide
-	case sqlbase.ExceptAllJoin:
+	case descpb.ExceptAllJoin:
 		return true
 	default:
 		return false

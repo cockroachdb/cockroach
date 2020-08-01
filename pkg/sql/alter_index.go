@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,7 +26,7 @@ import (
 type alterIndexNode struct {
 	n         *tree.AlterIndex
 	tableDesc *sqlbase.MutableTableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	indexDesc *descpb.IndexDescriptor
 }
 
 // AlterIndex applies a schema change on an index.
@@ -75,7 +76,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc.TableDesc(), n.indexDesc,
+				n.tableDesc, n.indexDesc,
 				&n.indexDesc.Partitioning, &partitioning,
 				params.extendedEvalCtx.ExecCfg,
 			)
@@ -98,7 +99,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		// Nothing to be done
 		return nil
 	}
-	mutationID := sqlbase.InvalidMutationID
+	mutationID := descpb.InvalidMutationID
 	if addedMutations {
 		mutationID = n.tableDesc.ClusterVersion.NextMutationID
 	}

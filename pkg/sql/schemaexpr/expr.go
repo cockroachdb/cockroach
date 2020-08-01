@@ -67,7 +67,7 @@ func DequalifyAndValidateExpr(
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(
 			desc.GetID(),
-			desc.TableDesc().AllNonDropColumns(),
+			desc.AllNonDropColumns(),
 		),
 	)
 	expr, err := DequalifyColumnRefs(ctx, sourceInfo, expr)

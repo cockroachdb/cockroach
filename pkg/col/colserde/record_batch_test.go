@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -198,7 +199,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 		)
 		for i := range data {
 			d := sqlbase.RandDatum(rng, t, false /* nullOk */)
-			data[i], err = sqlbase.EncodeTableValue(data[i], sqlbase.ColumnID(encoding.NoColumnID), d, scratch)
+			data[i], err = sqlbase.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
 			if err != nil {
 				panic(err)
 			}

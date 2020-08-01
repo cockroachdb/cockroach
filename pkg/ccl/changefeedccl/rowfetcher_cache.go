@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,8 +36,8 @@ type rowFetcherCache struct {
 }
 
 type idVersion struct {
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	id      descpb.ID
+	version descpb.DescriptorVersion
 }
 
 func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetcherCache {
@@ -102,7 +103,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.
-	colIdxMap := make(map[sqlbase.ColumnID]int)
+	colIdxMap := make(map[descpb.ColumnID]int)
 	var valNeededForCol util.FastIntSet
 	for colIdx := range tableDesc.Columns {
 		colIdxMap[tableDesc.Columns[colIdx].ID] = colIdx
@@ -113,7 +114,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	if err := rf.Init(
 		c.codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&c.a,
 		row.FetcherTableArgs{

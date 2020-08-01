@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -71,7 +71,7 @@ func performGC(
 		}
 
 		// Drop database zone config when all the tables have been GCed.
-		if details.ParentID != sqlbase.InvalidID && isDoneGC(progress) {
+		if details.ParentID != descpb.InvalidID && isDoneGC(progress) {
 			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, execCfg.Codec, details.ParentID); err != nil {
 				return false, errors.Wrap(err, "deleting database zone config")
 			}

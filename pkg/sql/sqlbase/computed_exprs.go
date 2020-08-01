@@ -11,6 +11,7 @@
 package sqlbase
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,8 +25,8 @@ type RowIndexedVarContainer struct {
 	// Because the rows we have might not be permuted in the same way as the
 	// original table, we need to store a mapping between them.
 
-	Cols    []ColumnDescriptor
-	Mapping map[ColumnID]int
+	Cols    []descpb.ColumnDescriptor
+	Mapping map[descpb.ColumnID]int
 }
 
 var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}

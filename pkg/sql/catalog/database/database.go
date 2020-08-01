@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ import (
 // which is naturally limited by the number of database descriptors in the
 // system the periodic reset whenever the system config is gossiped.
 type Cache struct {
-	// databases is really a map of string -> sqlbase.ID
+	// databases is really a map of string -> descpb.ID
 	databases sync.Map
 
 	// codec is used to encode and decode sql keys.
@@ -56,15 +57,15 @@ func NewCache(codec keys.SQLCodec, cfg *config.SystemConfig) *Cache {
 	}
 }
 
-func (dc *Cache) getID(name string) sqlbase.ID {
+func (dc *Cache) getID(name string) descpb.ID {
 	val, ok := dc.databases.Load(name)
 	if !ok {
-		return sqlbase.InvalidID
+		return descpb.InvalidID
 	}
-	return val.(sqlbase.ID)
+	return val.(descpb.ID)
 }
 
-func (dc *Cache) setID(name string, id sqlbase.ID) {
+func (dc *Cache) setID(name string, id descpb.ID) {
 	dc.databases.Store(name, id)
 }
 
@@ -73,7 +74,7 @@ func (dc *Cache) setID(name string, id sqlbase.ID) {
 // cache.
 func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	dbID, err := dc.GetCachedDatabaseID(name)
-	if dbID == sqlbase.InvalidID || err != nil {
+	if dbID == descpb.InvalidID || err != nil {
 		return nil, err
 	}
 
@@ -83,7 +84,7 @@ func (dc *Cache) getCachedDatabaseDesc(name string) (*sqlbase.ImmutableDatabaseD
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
 // given its ID.
 func (dc *Cache) getCachedDatabaseDescByID(
-	id sqlbase.ID,
+	id descpb.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	if id == keys.SystemDatabaseID {
 		// We can't return a direct reference to SystemDB, because the
@@ -98,7 +99,7 @@ func (dc *Cache) getCachedDatabaseDescByID(
 		return nil, nil
 	}
 
-	desc := &sqlbase.Descriptor{}
+	desc := &descpb.Descriptor{}
 	if err := descVal.GetProto(desc); err != nil {
 		return nil, err
 	}
@@ -164,7 +165,7 @@ func (dc *Cache) GetDatabaseDesc(
 // GetDatabaseDescByID returns the database descriptor given its ID
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *Cache) GetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if desc == nil || err != nil {
@@ -184,12 +185,12 @@ func (dc *Cache) GetDatabaseID(
 	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
-) (sqlbase.ID, error) {
+) (descpb.ID, error) {
 	dbID, err := dc.GetCachedDatabaseID(name)
 	if err != nil {
 		return dbID, err
 	}
-	if dbID == sqlbase.InvalidID {
+	if dbID == descpb.InvalidID {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Run the namespace read as high-priority, thereby pushing any intents out
 			// of its way. We don't want schema changes to prevent database acquisitions;
@@ -203,7 +204,7 @@ func (dc *Cache) GetDatabaseID(
 			dbID, err = catalogkv.GetDatabaseID(ctx, txn, dc.codec, name, required)
 			return err
 		}); err != nil {
-			return sqlbase.InvalidID, err
+			return descpb.InvalidID, err
 		}
 	}
 	dc.setID(name, dbID)
@@ -214,8 +215,8 @@ func (dc *Cache) GetDatabaseID(
 // from the cache. This method never goes to the store to resolve
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
-func (dc *Cache) GetCachedDatabaseID(name string) (sqlbase.ID, error) {
-	if id := dc.getID(name); id != sqlbase.InvalidID {
+func (dc *Cache) GetCachedDatabaseID(name string) (descpb.ID, error) {
+	if id := dc.getID(name); id != descpb.InvalidID {
 		return id, nil
 	}
 
@@ -231,12 +232,12 @@ func (dc *Cache) GetCachedDatabaseID(name string) (sqlbase.ID, error) {
 		nameKey = sqlbase.NewDeprecatedDatabaseKey(name)
 		nameVal = dc.systemConfig.GetValue(nameKey.Key(dc.codec))
 		if nameVal == nil {
-			return sqlbase.InvalidID, nil
+			return descpb.InvalidID, nil
 		}
 	}
 
 	id, err := nameVal.GetInt()
-	return sqlbase.ID(id), err
+	return descpb.ID(id), err
 }
 
 // Codec returns the cache's codec.
