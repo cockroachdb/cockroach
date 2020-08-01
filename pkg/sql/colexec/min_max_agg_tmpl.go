@@ -167,27 +167,35 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_ACCUMULATE_MINMAX(a, nulls, i, true)
-					}
-				} else {
-					col = execgen.SLICE(col, 0, inputLen)
+			// {{if eq "_AGGKIND" "Ordered"}}
+			groups := a.groups
+			// {{/*
+			// We don't need to check whether sel is non-nil when performing
+			// hash aggregation because the hash aggregator always uses non-nil
+			// sel to specify the tuples to be aggregated.
+			// */}}
+			if sel == nil {
+				_ = groups[inputLen-1]
+				col = execgen.SLICE(col, 0, inputLen)
+				if nulls.MaybeHasNulls() {
 					for i := 0; i < inputLen; i++ {
 						_ACCUMULATE_MINMAX(a, nulls, i, true)
 					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
+				} else {
+					for i := 0; i < inputLen; i++ {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
+				}
+			} else
+			// {{end}}
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
+					for _, i := range sel {
+						_ACCUMULATE_MINMAX(a, nulls, i, true)
+					}
 				} else {
-					col = execgen.SLICE(col, 0, inputLen)
-					for i := 0; i < inputLen; i++ {
+					for _, i := range sel {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
 				}
@@ -245,7 +253,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	// {{define "accumulateMinMax"}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
 		if !a.foundNonNullForCurrentGroup {

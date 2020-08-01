@@ -53,20 +53,15 @@ func (a *countRowsHashAgg) Compute(
 	var i int
 
 	{
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		} else {
-			for i = 0; i < inputLen; i++ {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
+		sel = sel[:inputLen]
+		{
+			// Remove unused warning.
+			_ = i
+			// We don't need to pay attention to nulls (either because it's a
+			// COUNT_ROWS aggregate or because there are no nulls), and we're
+			// performing a hash aggregation (meaning there is a single group),
+			// so all inputLen tuples contribute to the count.
+			a.curAgg += int64(inputLen)
 		}
 	}
 }
@@ -138,8 +133,9 @@ func (a *countHashAgg) Compute(
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i = range sel[:inputLen] {
 
 				var y int64
@@ -150,31 +146,13 @@ func (a *countHashAgg) Compute(
 				a.curAgg += y
 			}
 		} else {
-			for i = 0; i < inputLen; i++ {
-
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
-				}
-				a.curAgg += y
-			}
-		}
-	} else {
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		} else {
-			for i = 0; i < inputLen; i++ {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
+			// Remove unused warning.
+			_ = i
+			// We don't need to pay attention to nulls (either because it's a
+			// COUNT_ROWS aggregate or because there are no nulls), and we're
+			// performing a hash aggregation (meaning there is a single group),
+			// so all inputLen tuples contribute to the count.
+			a.curAgg += int64(inputLen)
 		}
 	}
 }
