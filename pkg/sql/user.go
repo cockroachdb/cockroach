@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -214,6 +215,6 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 	}
 
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "updating version for role membership table",
+		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
 	)
 }

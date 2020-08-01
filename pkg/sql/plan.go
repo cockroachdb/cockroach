@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -479,8 +480,8 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 
 // Mark transaction as operating on the system DB if the descriptor id
 // is within the SystemConfig range.
-func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
-	if !sqlbase.IsSystemConfigID(id) {
+func (p *planner) maybeSetSystemConfig(id descpb.ID) error {
+	if !descpb.IsSystemConfigID(id) {
 		return nil
 	}
 	// Mark transaction as operating on the system DB.

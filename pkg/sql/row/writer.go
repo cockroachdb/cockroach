@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -27,8 +28,8 @@ import (
 // ColIDtoRowIndexFromCols groups a slice of ColumnDescriptors by their ID
 // field, returning a map from ID to the index of the column in the input slice.
 // It assumes there are no duplicate descriptors in the input.
-func ColIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
+func ColIDtoRowIndexFromCols(cols []descpb.ColumnDescriptor) map[descpb.ColumnID]int {
+	colIDtoRowIndex := make(map[descpb.ColumnID]int, len(cols))
 	for i := range cols {
 		colIDtoRowIndex[cols[i].ID] = i
 	}
@@ -40,7 +41,7 @@ func ColIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.Column
 //
 //   result[i] = j such that fromCols[i].ID == toCols[j].ID, or
 //                -1 if the column is not part of toCols.
-func ColMapping(fromCols, toCols []sqlbase.ColumnDescriptor) []int {
+func ColMapping(fromCols, toCols []descpb.ColumnDescriptor) []int {
 	// colMap is a map from ColumnID to ordinal into fromCols.
 	var colMap util.FastIntMap
 	for i := range fromCols {
@@ -92,11 +93,11 @@ func prepareInsertOrUpdateBatch(
 	batch putter,
 	helper *rowHelper,
 	primaryIndexKey []byte,
-	fetchedCols []sqlbase.ColumnDescriptor,
+	fetchedCols []descpb.ColumnDescriptor,
 	values []tree.Datum,
-	valColIDMapping map[sqlbase.ColumnID]int,
+	valColIDMapping map[descpb.ColumnID]int,
 	marshaledValues []roachpb.Value,
-	marshaledColIDMapping map[sqlbase.ColumnID]int,
+	marshaledColIDMapping map[descpb.ColumnID]int,
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
@@ -159,7 +160,7 @@ func prepareInsertOrUpdateBatch(
 
 		rawValueBuf = rawValueBuf[:0]
 
-		var lastColID sqlbase.ColumnID
+		var lastColID descpb.ColumnID
 		familySortedColumnIDs, ok := helper.sortedColumnFamily(family.ID)
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")

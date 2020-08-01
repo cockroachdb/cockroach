@@ -24,6 +24,15 @@ const (
 	NodeUser = "node"
 	// RootUser is the default cluster administrator.
 	RootUser = "root"
+
+	// AdminRole is the default (and non-droppable) role with superuser privileges.
+	AdminRole = "admin"
+
+	// PublicRole is the special "public" pseudo-role.
+	// All users are implicit members of "public". The role cannot be created,
+	// dropped, assigned to another role, and is generally not listed.
+	// It can be granted privileges, implicitly granting them to all users (current and future).
+	PublicRole = "public"
 )
 
 var certPrincipalMap struct {

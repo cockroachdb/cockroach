@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -42,7 +44,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		targets:      n.Targets,
 		grantees:     n.Grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
 	}, nil
@@ -68,7 +70,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		targets:      n.Targets,
 		grantees:     n.Grantees,
 		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Revoke(grantee, n.Privileges)
 		},
 	}, nil
@@ -78,7 +80,7 @@ type changePrivilegesNode struct {
 	targets         tree.TargetList
 	grantees        tree.NameList
 	desiredprivs    privilege.List
-	changePrivilege func(*sqlbase.PrivilegeDescriptor, string)
+	changePrivilege func(*descpb.PrivilegeDescriptor, string)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -97,7 +99,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 	// We're allowed to grant/revoke privileges to/from the "public" role even though
 	// it does not exist: add it to the list of all users and roles.
-	users[sqlbase.PublicRole] = true // isRole
+	users[security.PublicRole] = true // isRole
 
 	for _, grantee := range n.grantees {
 		if _, ok := users[string(grantee)]; !ok {
@@ -105,7 +107,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	var descriptors []sqlbase.DescriptorInterface
+	var descriptors []sqlbase.Descriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -165,7 +167,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			if err := p.createOrUpdateSchemaChangeJob(
 				ctx, d,
 				fmt.Sprintf("updating privileges for table %d", d.ID),
-				sqlbase.InvalidMutationID,
+				descpb.InvalidMutationID,
 			); err != nil {
 				return err
 			}

@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "sqlbase";
+option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
 

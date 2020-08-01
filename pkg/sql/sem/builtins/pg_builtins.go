@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -1849,9 +1849,9 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 	switch catalogName {
 	case "pg_class":
-		return sqlbase.PgCatalogClassTableID, true
+		return catconstants.PgCatalogClassTableID, true
 	case "pg_database":
-		return sqlbase.PgCatalogDatabaseTableID, true
+		return catconstants.PgCatalogDatabaseTableID, true
 	default:
 		// We currently only support comments on pg_class objects
 		// (columns, tables) in this context.

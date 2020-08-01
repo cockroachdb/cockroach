@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -761,7 +762,7 @@ func (p *PhysicalPlan) emptyPlan() {
 		Columns: make([]execinfrapb.DatumInfo, len(p.ResultTypes)),
 	}
 	for i, t := range p.ResultTypes {
-		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 		s.Columns[i].Type = t
 	}
 

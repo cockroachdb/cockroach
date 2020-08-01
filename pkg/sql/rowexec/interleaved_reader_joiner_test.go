@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,8 +38,8 @@ import (
 
 // min and max are inclusive bounds on the root table's ID.
 // If min and/or max is -1, then no bound is used for that endpoint.
-func makeSpanWithRootBound(desc *sqlbase.TableDescriptor, min int, max int) roachpb.Span {
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+func makeSpanWithRootBound(desc sqlbase.TableDescriptor, min int, max int) roachpb.Span {
+	keyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndex().ID)
 
 	startKey := roachpb.Key(append([]byte(nil), keyPrefix...))
 	if min != -1 {
@@ -119,10 +121,10 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	(32, 32, '32')
 	`, sqlutils.TestDB))
 
-	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd1 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	cd2 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child2")
-	cd3 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child3")
+	pd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd1 := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	cd2 := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child2")
+	cd3 := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child3")
 
 	// InterleavedReaderJoiner specs for each parent-child combination used
 	// throughout the test cases.
@@ -132,17 +134,17 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	pdCd1Spec := execinfrapb.InterleavedReaderJoinerSpec{
 		Tables: []execinfrapb.InterleavedReaderJoinerSpec_Table{
 			{
-				Desc:     *pd,
+				Desc:     *pd.TableDesc(),
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			{
-				Desc:     *cd1,
+				Desc:     *cd1.TableDesc(),
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 				Spans:    []execinfrapb.TableReaderSpan{{Span: cd1.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 		},
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 	}
 
 	copySpec := func(spec execinfrapb.InterleavedReaderJoinerSpec) execinfrapb.InterleavedReaderJoinerSpec {
@@ -151,10 +153,10 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	}
 
 	pdCd2Spec := copySpec(pdCd1Spec)
-	pdCd2Spec.Tables[1].Desc = *cd2
+	pdCd2Spec.Tables[1].Desc = *cd2.TableDesc()
 	pdCd2Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd2.PrimaryIndexSpan(keys.SystemSQLCodec)}}
 	pdCd3Spec := copySpec(pdCd1Spec)
-	pdCd3Spec.Tables[1].Desc = *cd3
+	pdCd3Spec.Tables[1].Desc = *cd3.TableDesc()
 	pdCd3Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd3.PrimaryIndexSpan(keys.SystemSQLCodec)}}
 
 	testCases := []struct {
@@ -328,7 +330,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = sqlbase.FullOuterJoin
+				spec.Type = descpb.FullOuterJoin
 				return spec
 			}(),
 			post: execinfrapb.PostProcessSpec{
@@ -341,7 +343,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = sqlbase.FullOuterJoin
+				spec.Type = descpb.FullOuterJoin
 				return spec
 			}(),
 			post: execinfrapb.PostProcessSpec{
@@ -354,7 +356,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = sqlbase.LeftOuterJoin
+				spec.Type = descpb.LeftOuterJoin
 				return spec
 			}(),
 			post: execinfrapb.PostProcessSpec{
@@ -366,7 +368,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = sqlbase.LeftOuterJoin
+				spec.Type = descpb.LeftOuterJoin
 				return spec
 			}(),
 			expected: `[[-1 -101 '-101' NULL NULL] [-1 -1 '-1' NULL NULL] [0 0 '0' NULL NULL] [1 1 '1' 1 1] [3 3 '3' 3 3] [3 103 '103' 3 3] [5 5 '5' 5 5] [31 31 '31' NULL NULL] [31 131 '131' NULL NULL] [32 32 '32' NULL NULL]]`,
@@ -376,7 +378,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = sqlbase.RightOuterJoin
+				spec.Type = descpb.RightOuterJoin
 				return spec
 			}(),
 			expected: `[[NULL NULL -1 -101 '-101'] [NULL NULL -1 -1 '-1'] [NULL NULL 0 0 '0'] [1 1 1 1 '1'] [3 3 3 3 '3'] [3 3 3 103 '103'] [5 5 5 5 '5'] [NULL NULL 31 31 '31'] [NULL NULL 31 131 '131'] [NULL NULL 32 32 '32']]`,
@@ -385,7 +387,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() execinfrapb.InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = sqlbase.RightOuterJoin
+				spec.Type = descpb.RightOuterJoin
 				return spec
 			}(),
 			post: execinfrapb.PostProcessSpec{
@@ -466,9 +468,9 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(0, 0), sqlutils.RowModuloShiftedFn(0), sqlutils.RowIdxFn),
 	)
 
-	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
-	gcd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild")
+	pd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
+	gcd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild")
 
 	testCases := []struct {
 		spec     execinfrapb.InterleavedReaderJoinerSpec
@@ -479,17 +481,17 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			spec: execinfrapb.InterleavedReaderJoinerSpec{
 				Tables: []execinfrapb.InterleavedReaderJoinerSpec_Table{
 					{
-						Desc:     *pd,
+						Desc:     *pd.TableDesc(),
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 					{
-						Desc:     *cd,
+						Desc:     *cd.TableDesc(),
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_DESC}}},
 						Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 			},
 			expected: "internal error: unmatched column orderings",
 		},
@@ -498,12 +500,12 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			spec: execinfrapb.InterleavedReaderJoinerSpec{
 				Tables: []execinfrapb.InterleavedReaderJoinerSpec_Table{
 					{
-						Desc:     *pd,
+						Desc:     *pd.TableDesc(),
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 			},
 			expected: "internal error: interleavedReaderJoiner only reads from two tables in an interleaved hierarchy",
 		},
@@ -512,17 +514,17 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			spec: execinfrapb.InterleavedReaderJoinerSpec{
 				Tables: []execinfrapb.InterleavedReaderJoinerSpec_Table{
 					{
-						Desc:     *cd,
+						Desc:     *cd.TableDesc(),
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 					{
-						Desc:     *gcd,
+						Desc:     *gcd.TableDesc(),
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 						Spans:    []execinfrapb.TableReaderSpan{{Span: gcd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 			},
 			expected: "internal error: interleavedReaderJoiner only supports joins on the entire interleaved prefix",
 		},
@@ -576,8 +578,8 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		func(row int) []tree.Datum { return nil },
 	)
 
-	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
+	pd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
@@ -605,17 +607,17 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	innerJoinSpec := execinfrapb.InterleavedReaderJoinerSpec{
 		Tables: []execinfrapb.InterleavedReaderJoinerSpec_Table{
 			{
-				Desc:     *pd,
+				Desc:     *pd.TableDesc(),
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			{
-				Desc:     *cd,
+				Desc:     *cd.TableDesc(),
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 				Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 		},
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 	}
 
 	out := &distsqlutils.RowBuffer{}

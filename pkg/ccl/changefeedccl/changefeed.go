@@ -267,12 +267,12 @@ func emitEntries(
 			}
 		}
 		if err := sink.EmitRow(
-			ctx, row.tableDesc, keyCopy, valueCopy, row.updated,
+			ctx, row.tableDesc.TableDesc(), keyCopy, valueCopy, row.updated,
 		); err != nil {
 			return err
 		}
 		if log.V(3) {
-			log.Infof(ctx, `row %s: %s -> %s`, row.tableDesc.Name, keyCopy, valueCopy)
+			log.Infof(ctx, `row %s: %s -> %s`, row.tableDesc.GetName(), keyCopy, valueCopy)
 		}
 		return nil
 	}

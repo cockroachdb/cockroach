@@ -10,7 +10,10 @@
 
 package catalog
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
+)
 
 type inactiveDescriptorError struct {
 	cause error
@@ -50,7 +53,7 @@ func NewInactiveDescriptorError(err error) error {
 // FilterDescriptorState inspects the state of a given descriptor and returns an
 // error if the state is anything but public. The error describes the state of
 // the descriptor.
-func FilterDescriptorState(desc Descriptor) error {
+func FilterDescriptorState(desc sqlbase.Descriptor) error {
 	switch {
 	case desc.Dropped():
 		return NewInactiveDescriptorError(ErrDescriptorDropped)

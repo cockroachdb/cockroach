@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1264,7 +1265,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 			for _, p := range strings.Split(test.partitions, `,`) {
 				partNames = append(partNames, tree.Name(p))
 			}
-			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc.TableDesc(), partNames)
+			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -1275,7 +1276,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 	}
 	t.Run("error", func(t *testing.T) {
 		partNames := tree.NameList{`p33p44`, `nope`}
-		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc.TableDesc(), partNames)
+		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
 		if !testutils.IsError(err, `unknown partition`) {
 			t.Errorf(`expected "unknown partition" error got: %+v`, err)
 		}
@@ -1410,7 +1411,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 	}
 
 	// Get the zone config corresponding to the table.
-	table := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+	table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
 	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.ID)))
 	if err != nil {
 		t.Fatal(err)

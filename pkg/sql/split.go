@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -23,8 +24,8 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	tableDesc      *sqlbase.TableDescriptor
-	index          *sqlbase.IndexDescriptor
+	tableDesc      *sqlbase.ImmutableTableDescriptor
+	index          *descpb.IndexDescriptor
 	rows           planNode
 	run            splitRun
 	expirationTime hlc.Timestamp
@@ -84,11 +85,11 @@ func (n *splitNode) Close(ctx context.Context) {
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	tableDesc sqlbase.TableDescriptor,
+	index *descpb.IndexDescriptor,
 	values []tree.Datum,
 ) ([]byte, error) {
-	colMap := make(map[sqlbase.ColumnID]int)
+	colMap := make(map[descpb.ColumnID]int)
 	for i := range values {
 		colMap[index.ColumnIDs[i]] = i
 	}

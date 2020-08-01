@@ -11,33 +11,77 @@
 package sqlbase
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ TableDescriptorInterface = (*ImmutableTableDescriptor)(nil)
-var _ TableDescriptorInterface = (*MutableTableDescriptor)(nil)
+var _ TableDescriptor = (*ImmutableTableDescriptor)(nil)
+var _ TableDescriptor = (*MutableTableDescriptor)(nil)
 
-// TableDescriptorInterface is an interface around the table descriptor types.
+// TableDescriptor is an interface around the table descriptor types.
 //
 // TODO(ajwerner): This interface likely belongs in a catalog/tabledesc package
 // or perhaps in the catalog package directly. It's not clear how expansive this
 // interface should be. Perhaps very.
-type TableDescriptorInterface interface {
-	BaseDescriptorInterface
+type TableDescriptor interface {
+	Descriptor
 
-	TableDesc() *TableDescriptor
-	FindColumnByName(name tree.Name) (*ColumnDescriptor, bool, error)
+	TableDesc() *descpb.TableDescriptor
+
+	GetState() descpb.TableDescriptor_State
+
+	HasPrimaryKey() bool
+	GetPrimaryIndex() *descpb.IndexDescriptor
+	GetIndexes() []descpb.IndexDescriptor
+	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
+	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
+	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
+	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
+	AllNonDropIndexes() []*descpb.IndexDescriptor
+
+	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)
+	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
+	FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
+	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
+
+	ColumnIdxMap() map[descpb.ColumnID]int
+	GetPublicColumns() []descpb.ColumnDescriptor
+	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor
+	AllNonDropColumns() []descpb.ColumnDescriptor
+
+	GetFamilies() []descpb.ColumnFamilyDescriptor
+
+	IsTable() bool
+	IsView() bool
+	IsSequence() bool
+
+	GetMutationJobs() []descpb.TableDescriptor_MutationJob
+	GetDependedOnBy() []descpb.TableDescriptor_Reference
+
+	GetReplacementOf() descpb.TableDescriptor_Replacement
+	GetAllReferencedTypeIDs(
+		getType func(descpb.ID) (TypeDescriptor, error),
+	) (descpb.IDs, error)
+
+	Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error
+	IsVirtualTable() bool
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableTableDescriptor) Immutable() DescriptorInterface {
+func (desc *MutableTableDescriptor) Immutable() Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
+	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableTableDescriptor) SetDrainingNames(names []NameInfo) {
+func (desc *MutableTableDescriptor) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }

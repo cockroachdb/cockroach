@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -51,7 +52,7 @@ type Sink interface {
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
 		ctx context.Context,
-		table *sqlbase.TableDescriptor,
+		table *descpb.TableDescriptor,
 		key, value []byte,
 		updated hlc.Timestamp,
 	) error
@@ -235,7 +236,7 @@ type errorWrapperSink struct {
 }
 
 func (s errorWrapperSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, table, key, value, updated); err != nil {
 		return MarkRetryableError(err)
@@ -455,7 +456,7 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
 	if _, ok := s.topics[topic]; !ok {
@@ -689,7 +690,7 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	topic := table.Name
 	if _, ok := s.topics[topic]; !ok {
@@ -803,7 +804,7 @@ type bufferSink struct {
 
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
-	_ context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	_ context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)

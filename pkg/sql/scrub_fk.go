@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -22,12 +23,13 @@ import (
 
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
-	tableName  *tree.TableName
-	tableDesc  *sqlbase.ImmutableTableDescriptor
-	constraint *sqlbase.ConstraintDetail
-	asOf       hlc.Timestamp
+	tableName           *tree.TableName
+	tableDesc           *sqlbase.ImmutableTableDescriptor
+	referencedTableDesc *sqlbase.ImmutableTableDescriptor
+	constraint          *descpb.ConstraintDetail
+	asOf                hlc.Timestamp
 
-	colIDToRowIdx map[sqlbase.ColumnID]int
+	colIDToRowIdx map[descpb.ColumnID]int
 
 	run sqlForeignKeyConstraintCheckRun
 }
@@ -43,14 +45,15 @@ type sqlForeignKeyConstraintCheckRun struct {
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	constraint sqlbase.ConstraintDetail,
+	constraint descpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
 	return &sqlForeignKeyCheckOperation{
-		tableName:  tableName,
-		tableDesc:  tableDesc,
-		constraint: &constraint,
-		asOf:       asOf,
+		tableName:           tableName,
+		tableDesc:           tableDesc,
+		constraint:          &constraint,
+		referencedTableDesc: sqlbase.NewImmutableTableDescriptor(*constraint.ReferencedTable),
+		asOf:                asOf,
 	}
 }
 
@@ -61,9 +64,9 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
 	checkQuery, _, err := nonMatchingRowQuery(
-		&o.tableDesc.TableDescriptor,
+		o.tableDesc,
 		o.constraint.FK,
-		o.constraint.ReferencedTable,
+		o.referencedTableDesc,
 		false, /* limitResults */
 	)
 	if err != nil {
@@ -78,11 +81,11 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 
-	if len(o.constraint.FK.OriginColumnIDs) > 1 && o.constraint.FK.Match == sqlbase.ForeignKeyReference_FULL {
+	if len(o.constraint.FK.OriginColumnIDs) > 1 && o.constraint.FK.Match == descpb.ForeignKeyReference_FULL {
 		// Check if there are any disallowed references where some columns are NULL
 		// and some aren't.
 		checkNullsQuery, _, err := matchFullUnacceptableKeyQuery(
-			&o.tableDesc.TableDescriptor,
+			o.tableDesc,
 			o.constraint.FK,
 			false, /* limitResults */
 		)
@@ -102,13 +105,13 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	// columns and extra columns in the secondary index used for foreign
 	// key referencing. This also implicitly includes all primary index
 	// columns.
-	columnsByID := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor, len(o.tableDesc.Columns))
+	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.Columns))
 	for i := range o.tableDesc.Columns {
 		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
 	}
 
 	// Get primary key columns not included in the FK.
-	var colIDs []sqlbase.ColumnID
+	var colIDs []descpb.ColumnID
 	colIDs = append(colIDs, o.constraint.FK.OriginColumnIDs...)
 	for _, pkColID := range o.tableDesc.PrimaryIndex.ColumnIDs {
 		found := false
@@ -123,7 +126,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		}
 	}
 
-	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
+	o.colIDToRowIdx = make(map[descpb.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		o.colIDToRowIdx[id] = i
 	}

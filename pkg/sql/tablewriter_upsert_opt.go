@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,7 +57,7 @@ type optTableUpserter struct {
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
 	// collectRows is true.
-	colIDToReturnIndex map[sqlbase.ColumnID]int
+	colIDToReturnIndex map[descpb.ColumnID]int
 
 	// Do the result rows have a different order than insert rows. Only set if
 	// collectRows is true.
@@ -65,13 +66,13 @@ type optTableUpserter struct {
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
 	// existing values for updates.
-	fetchCols []sqlbase.ColumnDescriptor
+	fetchCols []descpb.ColumnDescriptor
 
 	// updateCols indicate which columns need an update during a conflict.
-	updateCols []sqlbase.ColumnDescriptor
+	updateCols []descpb.ColumnDescriptor
 
 	// returnCols indicate which columns need to be returned by the Upsert.
-	returnCols []sqlbase.ColumnDescriptor
+	returnCols []descpb.ColumnDescriptor
 
 	// canaryOrdinal is the ordinal position of the column within the input row
 	// that is used to decide whether to execute an insert or update operation.
@@ -116,7 +117,7 @@ func (tu *optTableUpserter) init(
 		// Note that this map will *not* contain any mutation columns - that's
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
-		tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
+		tu.colIDToReturnIndex = map[descpb.ColumnID]int{}
 		for i := range tu.tableDesc().Columns {
 			id := tu.tableDesc().Columns[i].ID
 			tu.colIDToReturnIndex[id] = i
@@ -169,7 +170,7 @@ func (tu *optTableUpserter) close(ctx context.Context) {
 // 1) A row may not contain values for nullable columns, so insert those NULLs.
 // 2) Don't return values we wrote into non-public mutation columns.
 func (tu *optTableUpserter) makeResultFromRow(
-	row tree.Datums, colIDToRowIndex map[sqlbase.ColumnID]int,
+	row tree.Datums, colIDToRowIndex map[descpb.ColumnID]int,
 ) tree.Datums {
 	resultRow := make(tree.Datums, len(tu.colIDToReturnIndex))
 	for colID, returnIndex := range tu.colIDToReturnIndex {

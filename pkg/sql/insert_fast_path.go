@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -93,9 +94,9 @@ type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
 	tabDesc     *sqlbase.ImmutableTableDescriptor
-	idxDesc     *sqlbase.IndexDescriptor
+	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
-	colMap      map[sqlbase.ColumnID]int
+	colMap      map[descpb.ColumnID]int
 	spanBuilder *span.Builder
 }
 
@@ -105,17 +106,17 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idxDesc = idx.desc
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, &c.tabDesc.TableDescriptor, c.idxDesc.ID)
-	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc.TableDesc(), c.idxDesc)
+	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, c.tabDesc, c.idxDesc.ID)
+	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc, c.idxDesc)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
 			"%d FK cols, only %d cols in index", len(c.InsertCols), idx.numLaxKeyCols,
 		)
 	}
-	c.colMap = make(map[sqlbase.ColumnID]int, len(c.InsertCols))
+	c.colMap = make(map[descpb.ColumnID]int, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
-		var colID sqlbase.ColumnID
+		var colID descpb.ColumnID
 		if i < len(c.idxDesc.ColumnIDs) {
 			colID = c.idxDesc.ColumnIDs[i]
 		} else {
@@ -346,7 +347,7 @@ func (n *insertFastPathNode) enableAutoCommit() {
 // for AlterColumnTypeInProgress, otherwise every column in insertCols will
 // be checked.
 func interceptAlterColumnTypeParseError(
-	insertCols []sqlbase.ColumnDescriptor, colNum int, err error,
+	insertCols []descpb.ColumnDescriptor, colNum int, err error,
 ) error {
 	// Only intercept the error if the column being inserted into
 	// is an actual column. This is to avoid checking on values that don't
@@ -354,13 +355,13 @@ func interceptAlterColumnTypeParseError(
 	if colNum >= len(insertCols) {
 		return err
 	}
-	var insertCol sqlbase.ColumnDescriptor
+	var insertCol descpb.ColumnDescriptor
 
 	// wrapParseError is a helper function that checks if an insertCol has the
 	// AlterColumnTypeInProgress flag and wraps the parse error msg stating
 	// that the error may be because the column is being altered.
 	// Returns if the error msg has been wrapped and the wrapped error msg.
-	wrapParseError := func(insertCol sqlbase.ColumnDescriptor, colNum int, err error) (bool, error) {
+	wrapParseError := func(insertCol descpb.ColumnDescriptor, colNum int, err error) (bool, error) {
 		if insertCol.AlterColumnTypeInProgress {
 			code := pgerror.GetPGCode(err)
 			if code == pgcode.InvalidTextRepresentation {
