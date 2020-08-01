@@ -2771,3 +2771,12 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 1  1
 2  0
+
+query T
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
+----
+system
+
+
+query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
