@@ -224,6 +224,8 @@ func TestGC(t *testing.T) {
 				"goroutine_dump.2019-01-01T00_00_00",
 				"goroutine_dump.2019-01-01T00_10_00",
 				"goroutine_dump.2019-01-01T00_20_00",
+				"unknown_file",
+				"unknown_file2",
 			},
 		},
 		{
@@ -238,6 +240,7 @@ func TestGC(t *testing.T) {
 			expected: []string{
 				"goroutine_dump.2019-01-01T00_10_00",
 				"goroutine_dump.2019-01-01T00_20_00",
+				"unknown_file",
 			},
 		},
 		{
@@ -251,6 +254,7 @@ func TestGC(t *testing.T) {
 			sizeLimit: 5,
 			expected: []string{
 				"goroutine_dump.2019-01-01T00_20_00",
+				"unknown_file",
 			},
 		},
 		{
@@ -259,7 +263,7 @@ func TestGC(t *testing.T) {
 				{name: "unknown_file", size: 1},
 			},
 			sizeLimit: 5,
-			expected:  nil,
+			expected:  []string{"unknown_file"},
 		},
 		{
 			name:      "no file in directory",

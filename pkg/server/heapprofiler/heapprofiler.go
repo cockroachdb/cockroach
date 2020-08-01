@@ -122,6 +122,9 @@ func (o *HeapProfiler) now() time.Time {
 // the profiles indicates score such that sorting the filenames corresponds to
 // ordering the profiles from least to max score.
 // Latest profile in the directory is not considered for GC.
+//
+// Files that don't match the output file prefix are ignored
+// (i.e. preserved).
 func (o *HeapProfiler) gcProfiles(ctx context.Context, dir, prefix string) {
 	maxCount := maxProfiles.Get(&o.st.SV)
 	files, err := ioutil.ReadDir(dir)
