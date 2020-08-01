@@ -230,8 +230,8 @@ func TestUnavailableZip(t *testing.T) {
 		t:          t,
 		TestServer: tc.Server(0).(*server.TestServer),
 	}
+	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
-	defer func() { stderr = log.OrigStderr }()
 
 	// Keep the timeout short so that the test doesn't take forever.
 	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
@@ -304,8 +304,8 @@ func TestPartialZip(t *testing.T) {
 		t:          t,
 		TestServer: tc.Server(0).(*server.TestServer),
 	}
+	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
-	defer func() { stderr = log.OrigStderr }()
 
 	// NB: we spend a second profiling here to make sure it actually tries the
 	// down nodes (and fails only there, succeeding on the available node).
