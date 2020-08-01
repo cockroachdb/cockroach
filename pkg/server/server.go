@@ -2174,7 +2174,9 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 }
 
 // startSampleEnvironment begins the heap profiler worker.
-func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) error {
+func (s *Server) startSampleEnvironment(
+	ctx context.Context, minSampleInterval time.Duration,
+) error {
 	// Immediately record summaries once on server startup.
 	ctx = s.AnnotateCtx(ctx)
 
@@ -2222,7 +2224,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
-		timer.Reset(frequency)
+		timer.Reset(minSampleInterval)
 
 		for {
 			select {
@@ -2230,7 +2232,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 				return
 			case <-timer.C:
 				timer.Read = true
-				timer.Reset(frequency)
+				timer.Reset(minSampleInterval)
 
 				// We read the heap stats on another goroutine and give up after 1s.
 				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
