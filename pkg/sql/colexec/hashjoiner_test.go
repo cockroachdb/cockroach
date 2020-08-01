@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,7 +72,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.FullOuterJoin,
+			joinType:          descpb.FullOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -103,7 +103,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:         sqlbase.FullOuterJoin,
+			joinType:         descpb.FullOuterJoin,
 			leftEqColsAreKey: true,
 
 			expected: tuples{
@@ -135,7 +135,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.LeftOuterJoin,
+			joinType:          descpb.LeftOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -167,7 +167,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.RightOuterJoin,
+			joinType:          descpb.RightOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -200,7 +200,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.RightOuterJoin,
+			joinType:          descpb.RightOuterJoin,
 			rightEqColsAreKey: true,
 
 			expected: tuples{
@@ -772,7 +772,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.LeftSemiJoin,
+			joinType: descpb.LeftSemiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -805,7 +805,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.LeftAntiJoin,
+			joinType: descpb.LeftAntiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -899,7 +899,7 @@ func init() {
 		},
 		{
 			description: "25",
-			joinType:    sqlbase.IntersectAllJoin,
+			joinType:    descpb.IntersectAllJoin,
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
@@ -911,7 +911,7 @@ func init() {
 		},
 		{
 			description: "26",
-			joinType:    sqlbase.ExceptAllJoin,
+			joinType:    descpb.ExceptAllJoin,
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
@@ -1074,9 +1074,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 									for i := 0; i < b.N; i++ {
 										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
-										joinType := sqlbase.InnerJoin
+										joinType := descpb.InnerJoin
 										if fullOuter {
-											joinType = sqlbase.FullOuterJoin
+											joinType = descpb.FullOuterJoin
 										}
 										hjSpec, err := MakeHashJoinerSpec(
 											joinType,

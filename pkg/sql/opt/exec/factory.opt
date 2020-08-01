@@ -75,7 +75,7 @@ define Render {
 #
 # onCond is the join condition.
 define ApplyJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     Left exec.Node
     RightColumns sqlbase.ResultColumns
     OnCond tree.TypedExpr
@@ -90,7 +90,7 @@ define ApplyJoin {
 # The extraOnCond expression can refer to columns from both inputs using
 # IndexedVars (first the left columns, then the right columns).
 define HashJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     Left exec.Node
     Right exec.Node
     LeftEqCols []exec.NodeColumnOrdinal
@@ -107,7 +107,7 @@ define HashJoin {
 # column in leftOrdering is constrained to equal the i-th column in
 # rightOrdering. The directions must match between the two orderings.
 define MergeJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     Left exec.Node
     Right exec.Node
     OnCond tree.TypedExpr
@@ -132,7 +132,7 @@ define MergeJoin {
 # Locking clause for the ancestor is used.
 #
 define InterleavedJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     LeftTable cat.Table
     LeftIndex cat.Index
     LeftParams exec.ScanParams
@@ -231,7 +231,7 @@ define IndexJoin {
 # LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
 # condition can refer to these using IndexedVars.
 define LookupJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     Input exec.Node
     Table cat.Table
     Index cat.Index
@@ -253,7 +253,7 @@ define LookupJoin {
 # condition can refer to these using IndexedVars. Note that lookupCols
 # includes the inverted column.
 define InvertedJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     InvertedExpr tree.TypedExpr
     Input exec.Node
     Table cat.Table

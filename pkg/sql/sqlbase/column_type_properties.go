@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -203,7 +204,7 @@ func AdjustValueToColumnType(
 // scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
+func CheckDatumTypeFitsColumnType(col *descpb.ColumnDescriptor, typ *types.T) error {
 	if typ.Family() == types.UnknownFamily {
 		return nil
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -146,7 +147,7 @@ func (p *planner) canRemoveAllTableOwnedSequences(
 func (p *planner) canRemoveAllColumnOwnedSequences(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, true /* isColumnDrop */)
@@ -155,7 +156,7 @@ func (p *planner) canRemoveAllColumnOwnedSequences(
 func (p *planner) canRemoveOwnedSequencesImpl(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 	isColumnDrop bool,
 ) error {

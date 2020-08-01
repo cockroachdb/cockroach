@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -71,7 +71,7 @@ func TestToBackup(t *testing.T) {
 
 				t.Run("NextKeyValues", func(t *testing.T) {
 					for _, requestedKVs := range []int{2, 3} {
-						newTableID := sqlbase.ID(keys.MaxReservedDescID + requestedKVs)
+						newTableID := descpb.ID(keys.MaxReservedDescID + requestedKVs)
 						newTablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(newTableID))
 
 						keys := make(map[string]struct{}, rows)

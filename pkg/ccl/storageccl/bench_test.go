@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -48,7 +49,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -106,7 +107,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 			var batch storage.RocksDBBatchBuilder
 
 			var totalLen int64
@@ -162,7 +163,7 @@ func BenchmarkImport(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -174,12 +175,12 @@ func BenchmarkImport(b *testing.B) {
 				{
 					// TODO(dan): The following should probably make it into
 					// dataccl.Backup somehow.
-					tableDesc := backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1].Table(hlc.Timestamp{})
+					tableDesc := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
 					oldStartKey = sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, tableDesc.PrimaryIndex.ID)
-					newDesc := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc)
+					newDesc := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc.TableDesc())
 					newDesc.ID = id
 					newDescBytes, err := protoutil.Marshal(newDesc.DescriptorProto())
 					if err != nil {

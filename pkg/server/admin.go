@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -569,7 +570,7 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	var tableID sqlbase.ID
+	var tableID descpb.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
 		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database, req.Table})
@@ -621,7 +622,7 @@ func (s *adminServer) TableDetails(
 //
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
-func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
+func generateTableSpan(tableID descpb.ID) roachpb.Span {
 	tableStartKey := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
@@ -2175,7 +2176,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = int64(s)
 
-	case *[]sqlbase.ID:
+	case *[]descpb.ID:
 		s, ok := tree.AsDArray(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
@@ -2185,7 +2186,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, sqlbase.ID(id))
+			*d = append(*d, descpb.ID(id))
 		}
 
 	case *time.Time:
@@ -2273,7 +2274,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, userName string, id sqlbase.ID,
+	ctx context.Context, userName string, id descpb.ID,
 ) (zonepb.ZoneConfig, bool, error) {
 	const query = `SELECT crdb_internal.get_zone_config($1)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
@@ -2316,8 +2317,8 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, userName string, path []sqlbase.ID,
-) (sqlbase.ID, zonepb.ZoneConfig, bool, error) {
+	ctx context.Context, userName string, path []descpb.ID,
+) (descpb.ID, zonepb.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
 		if err != nil || zoneExists {
@@ -2330,8 +2331,8 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, userName string, parentID sqlbase.ID, name string,
-) (sqlbase.ID, error) {
+	ctx context.Context, userName string, parentID descpb.ID, name string,
+) (descpb.ID, error) {
 	const query = `SELECT crdb_internal.get_namespace_id($1, $2)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-query-namespace-ID", nil, /* txn */
@@ -2359,7 +2360,7 @@ func (s *adminServer) queryNamespaceID(
 		return 0, err
 	}
 
-	return sqlbase.ID(id), nil
+	return descpb.ID(id), nil
 }
 
 // queryDescriptorIDPath converts a path of namespaces into a path of namespace
@@ -2368,8 +2369,8 @@ func (s *adminServer) queryNamespaceID(
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
 	ctx context.Context, userName string, names []string,
-) ([]sqlbase.ID, error) {
-	path := []sqlbase.ID{keys.RootNamespaceID}
+) ([]descpb.ID, error) {
+	path := []descpb.ID{keys.RootNamespaceID}
 	for _, name := range names {
 		id, err := s.queryNamespaceID(ctx, userName, path[len(path)-1], name)
 		if err != nil {

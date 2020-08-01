@@ -29,10 +29,7 @@ import (
 // DeserializeTableDescExpr performs this logic, but only returns a
 // tree.Expr to be clear that these returned expressions are not safe to Eval.
 func DeserializeTableDescExpr(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	desc sqlbase.TableDescriptorInterface,
-	exprStr string,
+	ctx context.Context, semaCtx *tree.SemaContext, desc sqlbase.TableDescriptor, exprStr string,
 ) (tree.Expr, error) {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
@@ -55,7 +52,7 @@ func DeserializeTableDescExpr(
 // Returns the type-checked and constant-folded expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
-	desc sqlbase.TableDescriptorInterface,
+	desc sqlbase.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
 	op string,
@@ -67,7 +64,7 @@ func DequalifyAndValidateExpr(
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(
 			desc.GetID(),
-			desc.TableDesc().AllNonDropColumns(),
+			desc.AllNonDropColumns(),
 		),
 	)
 	expr, err := DequalifyColumnRefs(ctx, sourceInfo, expr)
@@ -100,7 +97,7 @@ func DequalifyAndValidateExpr(
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
 func ExtractColumnIDs(
-	desc sqlbase.TableDescriptorInterface, rootExpr tree.Expr,
+	desc sqlbase.TableDescriptor, rootExpr tree.Expr,
 ) (sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 

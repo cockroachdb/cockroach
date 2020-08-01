@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -25,7 +25,7 @@ import (
 // markTableGCed updates the job payload details to indicate that the specified
 // table was GC'd.
 func markTableGCed(
-	ctx context.Context, tableID sqlbase.ID, progress *jobspb.SchemaChangeGCProgress,
+	ctx context.Context, tableID descpb.ID, progress *jobspb.SchemaChangeGCProgress,
 ) {
 	for i := range progress.Tables {
 		tableProgress := &progress.Tables[i]
@@ -41,7 +41,7 @@ func markTableGCed(
 // markIndexGCed marks the index as GC'd.
 func markIndexGCed(
 	ctx context.Context,
-	garbageCollectedIndexID sqlbase.IndexID,
+	garbageCollectedIndexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) {
 	// Update the job details to remove the dropped indexes.
@@ -136,8 +136,8 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 // need to be updated.
 func getAllTablesWaitingForGC(
 	details *jobspb.SchemaChangeGCDetails, progress *jobspb.SchemaChangeGCProgress,
-) []sqlbase.ID {
-	allRemainingTableIDs := make([]sqlbase.ID, 0, len(progress.Tables))
+) []descpb.ID {
+	allRemainingTableIDs := make([]descpb.ID, 0, len(progress.Tables))
 	if len(details.Indexes) > 0 {
 		allRemainingTableIDs = append(allRemainingTableIDs, details.ParentID)
 	}
@@ -154,7 +154,7 @@ func getAllTablesWaitingForGC(
 // described in the comment for SchemaChangeGCDetails.
 func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	if len(details.Indexes) > 0 {
-		if details.ParentID == sqlbase.InvalidID {
+		if details.ParentID == descpb.InvalidID {
 			return errors.Errorf("must provide a parentID when dropping an index")
 		}
 	}
@@ -186,12 +186,12 @@ func persistProgress(
 // getDropTimes returns the data stored in details as a map for convenience.
 func getDropTimes(
 	details *jobspb.SchemaChangeGCDetails,
-) (map[sqlbase.ID]int64, map[sqlbase.IndexID]int64) {
-	tableDropTimes := make(map[sqlbase.ID]int64)
+) (map[descpb.ID]int64, map[descpb.IndexID]int64) {
+	tableDropTimes := make(map[descpb.ID]int64)
 	for _, table := range details.Tables {
 		tableDropTimes[table.ID] = table.DropTime
 	}
-	indexDropTimes := make(map[sqlbase.IndexID]int64)
+	indexDropTimes := make(map[descpb.IndexID]int64)
 	for _, index := range details.Indexes {
 		indexDropTimes[index.IndexID] = index.DropTime
 	}

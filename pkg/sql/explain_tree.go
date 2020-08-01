@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -49,7 +50,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 			}
 			ob.AddField(fieldName, tree.AsStringWithFlags(expr, sampledLogicalPlanFmtFlags))
 		},
-		spans: func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool) {
+		spans: func(nodeName, fieldName string, index *descpb.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool) {
 			// TODO(jordan): it's expensive to serialize long span
 			// strings. It's unfortunate that we're still calling
 			// PrettySpans, just to check to see whether the output is - or

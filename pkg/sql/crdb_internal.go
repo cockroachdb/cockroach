@@ -37,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -68,46 +71,46 @@ const CrdbInternalName = sessiondata.CRDBInternalSchemaName
 // them to future additions.
 var crdbInternal = virtualSchema{
 	name: CrdbInternalName,
-	tableDefs: map[sqlbase.ID]virtualSchemaDef{
-		sqlbase.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
-		sqlbase.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
-		sqlbase.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
-		sqlbase.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
-		sqlbase.CrdbInternalClusterTransactionsTableID:  crdbInternalClusterTxnsTable,
-		sqlbase.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
-		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
-		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
-		sqlbase.CrdbInternalCreateTypeStmtsTableID:      crdbInternalCreateTypeStmtsTable,
-		sqlbase.CrdbInternalDatabasesTableID:            crdbInternalDatabasesTable,
-		sqlbase.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
-		sqlbase.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
-		sqlbase.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
-		sqlbase.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
-		sqlbase.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
-		sqlbase.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
-		sqlbase.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
-		sqlbase.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
-		sqlbase.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
-		sqlbase.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
-		sqlbase.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
-		sqlbase.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
-		sqlbase.CrdbInternalLocalTransactionsTableID:    crdbInternalLocalTxnsTable,
-		sqlbase.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
-		sqlbase.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
-		sqlbase.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
-		sqlbase.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
-		sqlbase.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
-		sqlbase.CrdbInternalRangesViewID:                crdbInternalRangesView,
-		sqlbase.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
-		sqlbase.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
-		sqlbase.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
-		sqlbase.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
-		sqlbase.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
-		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
-		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
-		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
-		sqlbase.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
-		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+	tableDefs: map[descpb.ID]virtualSchemaDef{
+		catconstants.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
+		catconstants.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
+		catconstants.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
+		catconstants.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
+		catconstants.CrdbInternalClusterTransactionsTableID:  crdbInternalClusterTxnsTable,
+		catconstants.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
+		catconstants.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
+		catconstants.CrdbInternalCreateTypeStmtsTableID:      crdbInternalCreateTypeStmtsTable,
+		catconstants.CrdbInternalDatabasesTableID:            crdbInternalDatabasesTable,
+		catconstants.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
+		catconstants.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
+		catconstants.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
+		catconstants.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
+		catconstants.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
+		catconstants.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
+		catconstants.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
+		catconstants.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
+		catconstants.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
+		catconstants.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
+		catconstants.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
+		catconstants.CrdbInternalLocalTransactionsTableID:    crdbInternalLocalTxnsTable,
+		catconstants.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
+		catconstants.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
+		catconstants.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
+		catconstants.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
+		catconstants.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
+		catconstants.CrdbInternalRangesViewID:                crdbInternalRangesView,
+		catconstants.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
+		catconstants.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
+		catconstants.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
+		catconstants.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
+		catconstants.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
+		catconstants.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
+		catconstants.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
+		catconstants.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
+		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -249,7 +252,7 @@ CREATE TABLE crdb_internal.tables (
 			if err != nil {
 				return err
 			}
-			dbNames := make(map[sqlbase.ID]string)
+			dbNames := make(map[descpb.ID]string)
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor); ok {
@@ -257,7 +260,7 @@ CREATE TABLE crdb_internal.tables (
 				}
 			}
 
-			addDesc := func(table *sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
+			addDesc := func(table *descpb.TableDescriptor, dbName tree.Datum, scName string) error {
 				leaseNodeDatum := tree.DNull
 				leaseExpDatum := tree.DNull
 				if table.Lease != nil {
@@ -371,15 +374,15 @@ CREATE TABLE crdb_internal.schema_changes (
 				targetID := tree.DNull
 				targetName := tree.DNull
 				switch d := mut.Descriptor_.(type) {
-				case *sqlbase.DescriptorMutation_Column:
+				case *descpb.DescriptorMutation_Column:
 					mutType = "COLUMN"
 					targetID = tree.NewDInt(tree.DInt(int64(d.Column.ID)))
 					targetName = tree.NewDString(d.Column.Name)
-				case *sqlbase.DescriptorMutation_Index:
+				case *descpb.DescriptorMutation_Index:
 					mutType = "INDEX"
 					targetID = tree.NewDInt(tree.DInt(int64(d.Index.ID)))
 					targetName = tree.NewDString(d.Index.Name)
-				case *sqlbase.DescriptorMutation_Constraint:
+				case *descpb.DescriptorMutation_Constraint:
 					mutType = "CONSTRAINT VALIDATION"
 					targetName = tree.NewDString(d.Constraint.Name)
 				}
@@ -1390,7 +1393,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typeDesc *sqlbase.ImmutableTypeDescriptor) error {
 			switch typeDesc.Kind {
-			case sqlbase.TypeDescriptor_ENUM:
+			case descpb.TypeDescriptor_ENUM:
 				var enumLabels []string
 				enumLabelsDatum := tree.NewDArray(types.String)
 				for i := range typeDesc.EnumMembers {
@@ -1420,7 +1423,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				); err != nil {
 					return err
 				}
-			case sqlbase.TypeDescriptor_ALIAS:
+			case descpb.TypeDescriptor_ALIAS:
 			// Alias types are created implicitly, so we don't have create
 			// statements for them.
 			default:
@@ -1536,7 +1539,7 @@ func showAlterStatementWithInterleave(
 	tn *tree.TableName,
 	contextName string,
 	lCtx simpleSchemaResolver,
-	allIdx []sqlbase.IndexDescriptor,
+	allIdx []descpb.IndexDescriptor,
 	table *sqlbase.ImmutableTableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
@@ -1590,7 +1593,7 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = getTableNameFromTableDescriptor(lCtx, table.TableDesc(), contextName)
+				tableName, err = getTableNameFromTableDescriptor(lCtx, table, contextName)
 				if err != nil {
 					return err
 				}
@@ -1615,7 +1618,7 @@ func showAlterStatementWithInterleave(
 
 func showCreateIndexWithInterleave(
 	f *tree.FmtCtx,
-	idx *sqlbase.IndexDescriptor,
+	idx *descpb.IndexDescriptor,
 	tableName tree.TableName,
 	parentName tree.TableName,
 	sharedPrefixLen int,
@@ -1726,7 +1729,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						tree.NewDString(table.PrimaryIndex.Name),
 						primary,
 						tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
-						tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
+						tree.MakeDBool(table.PrimaryIndex.Type == descpb.IndexDescriptor_INVERTED),
 					)
 					if err := pusher.pushRow(row...); err != nil {
 						return err
@@ -1740,7 +1743,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.NewDString(idx.Name),
 							secondary,
 							tree.MakeDBool(tree.DBool(idx.Unique)),
-							tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
+							tree.MakeDBool(idx.Type == descpb.IndexDescriptor_INVERTED),
 						)
 						if err := pusher.pushRow(row...); err != nil {
 							return err
@@ -1777,9 +1780,9 @@ CREATE TABLE crdb_internal.index_columns (
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
 		composite := tree.NewDString("composite")
-		idxDirMap := map[sqlbase.IndexDescriptor_Direction]tree.Datum{
-			sqlbase.IndexDescriptor_ASC:  tree.NewDString(sqlbase.IndexDescriptor_ASC.String()),
-			sqlbase.IndexDescriptor_DESC: tree.NewDString(sqlbase.IndexDescriptor_DESC.String()),
+		idxDirMap := map[descpb.IndexDescriptor_Direction]tree.Datum{
+			descpb.IndexDescriptor_ASC:  tree.NewDString(descpb.IndexDescriptor_ASC.String()),
+			descpb.IndexDescriptor_DESC: tree.NewDString(descpb.IndexDescriptor_DESC.String()),
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
@@ -1788,7 +1791,7 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.Name)
 
-				reportIndex := func(idx *sqlbase.IndexDescriptor) error {
+				reportIndex := func(idx *descpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					idxName := tree.NewDString(idx.Name)
 
@@ -1899,7 +1902,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
-				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
 					for _, interleaveParent := range idx.Interleave.Ancestors {
 						if err := addRow(
 							tableID, tableName,
@@ -2047,7 +2050,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
-				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
 					for _, interleaveRef := range idx.InterleavedBy {
 						if err := addRow(
 							tableID, tableName,
@@ -2319,23 +2322,23 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 // NamespaceKey represents a key from the namespace table.
 type NamespaceKey struct {
-	ParentID sqlbase.ID
+	ParentID descpb.ID
 	// ParentSchemaID is not populated for rows under system.deprecated_namespace.
 	// This table will no longer exist on 20.2 or later.
-	ParentSchemaID sqlbase.ID
+	ParentSchemaID descpb.ID
 	Name           string
 }
 
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]NamespaceKey, error) {
+func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]NamespaceKey, error) {
 	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[sqlbase.ID]NamespaceKey, error) {
+) (map[descpb.ID]NamespaceKey, error) {
 	return getAllNames(ctx, txn, executor)
 }
 
@@ -2343,8 +2346,8 @@ func TestingGetAllNames(
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[sqlbase.ID]NamespaceKey, error) {
-	namespace := map[sqlbase.ID]NamespaceKey{}
+) (map[descpb.ID]NamespaceKey, error) {
+	namespace := map[descpb.ID]NamespaceKey{}
 	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
 		rows, err := executor.Query(
 			ctx, "get-all-names", txn,
@@ -2355,9 +2358,9 @@ func getAllNames(
 		}
 		for _, r := range rows {
 			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-			namespace[sqlbase.ID(id)] = NamespaceKey{
-				ParentID:       sqlbase.ID(parentID),
-				ParentSchemaID: sqlbase.ID(parentSchemaID),
+			namespace[descpb.ID(id)] = NamespaceKey{
+				ParentID:       descpb.ID(parentID),
+				ParentSchemaID: descpb.ID(parentSchemaID),
 				Name:           string(name),
 			}
 		}
@@ -2376,9 +2379,9 @@ func getAllNames(
 	}
 	for _, r := range deprecatedRows {
 		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
-		if _, ok := namespace[sqlbase.ID(id)]; !ok {
-			namespace[sqlbase.ID(id)] = NamespaceKey{
-				ParentID: sqlbase.ID(parentID),
+		if _, ok := namespace[descpb.ID(id)]; !ok {
+			namespace[descpb.ID(id)] = NamespaceKey{
+				ParentID: descpb.ID(parentID),
 				Name:     string(name),
 			}
 		}
@@ -2423,7 +2426,7 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		resolveID := func(id uint32) (parentID uint32, name string, err error) {
-			if entry, ok := namespace[sqlbase.ID(id)]; ok {
+			if entry, ok := namespace[descpb.ID(id)]; ok {
 				return uint32(entry.ParentID), entry.Name, nil
 			}
 			return 0, "", errors.AssertionFailedf(
@@ -2472,9 +2475,9 @@ CREATE TABLE crdb_internal.zones (
 				return err
 			}
 
-			var table *TableDescriptor
+			var table *sqlbase.ImmutableTableDescriptor
 			if zs.Database != "" {
-				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
+				database, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -2482,13 +2485,14 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id))
+				tableEntry, err := p.LookupTableByID(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
-				if p.CheckAnyPrivilege(ctx, sqlbase.NewImmutableTableDescriptor(*table)) != nil {
+				if p.CheckAnyPrivilege(ctx, tableEntry.Desc) != nil {
 					continue
 				}
+				table = tableEntry.Desc
 			}
 
 			// Write down information about the zone in the table.
@@ -2526,7 +2530,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 
 				for i, s := range subzones {
-					index := table.FindActiveIndexByID(sqlbase.IndexID(s.IndexID))
+					index := table.FindActiveIndexByID(descpb.IndexID(s.IndexID))
 					if index == nil {
 						// If we can't find an active index that corresponds to this index
 						// ID then continue, as the index is being dropped, or is already
@@ -2934,9 +2938,9 @@ func addPartitioningRows(
 	ctx context.Context,
 	p *planner,
 	database string,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	partitioning *sqlbase.PartitioningDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
+	partitioning *descpb.PartitioningDescriptor,
 	parentName tree.Datum,
 	colOffset int,
 	addRow func(...tree.Datum) error,
@@ -3108,8 +3112,8 @@ CREATE TABLE crdb_internal.partitions (
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-					return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-						return addPartitioningRows(ctx, p, dbName, table.TableDesc(), index, &index.Partitioning,
+					return table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})

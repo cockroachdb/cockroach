@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -21,7 +22,7 @@ import (
 
 // PreferredEncoding is the encoding used for EncDatums that don't already have
 // an encoding available.
-const PreferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
+const PreferredEncoding = descpb.DatumEncoding_ASCENDING_KEY
 
 // StreamEncoder converts EncDatum rows into a sequence of ProducerMessage.
 //
@@ -106,10 +107,10 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 				enc = PreferredEncoding
 			}
 			sType := se.infos[i].Type
-			if enc != sqlbase.DatumEncoding_VALUE &&
+			if enc != descpb.DatumEncoding_VALUE &&
 				(sqlbase.HasCompositeKeyEncoding(sType) || sqlbase.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
-				enc = sqlbase.DatumEncoding_VALUE
+				enc = descpb.DatumEncoding_VALUE
 			}
 			se.infos[i].Encoding = enc
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +33,7 @@ type dropTableNode struct {
 	n *tree.DropTable
 	// td is a map from table descriptor to toDelete struct, indicating which
 	// tables this operation should delete.
-	td map[sqlbase.ID]toDelete
+	td map[descpb.ID]toDelete
 }
 
 type toDelete struct {
@@ -45,7 +46,7 @@ type toDelete struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
-	td := make(map[sqlbase.ID]toDelete, len(n.Names))
+	td := make(map[descpb.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, tree.ResolveRequireTableDesc)
@@ -189,7 +190,7 @@ func (p *planner) prepareDropWithTableDesc(
 // canRemoveFKBackReference returns an error if the input backreference isn't
 // allowed to be removed.
 func (p *planner) canRemoveFKBackreference(
-	ctx context.Context, from string, ref *sqlbase.ForeignKeyConstraint, behavior tree.DropBehavior,
+	ctx context.Context, from string, ref *descpb.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
 	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 	if err != nil {
@@ -204,7 +205,7 @@ func (p *planner) canRemoveFKBackreference(
 }
 
 func (p *planner) canRemoveInterleave(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
+	ctx context.Context, from string, ref descpb.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
 	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
@@ -223,7 +224,7 @@ func (p *planner) canRemoveInterleave(
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
-func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
+func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyReference) error {
 	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
@@ -238,7 +239,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 	}
 	idx.Interleave.Ancestors = nil
 	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "")
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
@@ -393,12 +394,12 @@ func (p *planner) initiateDropTable(
 		}
 	}
 
-	tableDesc.State = sqlbase.TableDescriptor_DROP
+	tableDesc.State = descpb.TableDescriptor_DROP
 	if drainName {
 		parentSchemaID := tableDesc.GetParentSchemaID()
 
 		// Queue up name for draining.
-		nameDetails := sqlbase.NameInfo{
+		nameDetails := descpb.NameInfo{
 			ParentID:       tableDesc.ParentID,
 			ParentSchemaID: parentSchemaID,
 			Name:           tableDesc.Name}
@@ -407,11 +408,11 @@ func (p *planner) initiateDropTable(
 
 	// Mark all jobs scheduled for schema changes as successful.
 	jobIDs := make(map[int64]struct{})
-	var id sqlbase.MutationID
+	var id descpb.MutationID
 	for _, m := range tableDesc.Mutations {
 		if id != m.MutationID {
 			id = m.MutationID
-			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc.TableDesc(), id)
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, id)
 			if err != nil {
 				return err
 			}
@@ -434,7 +435,7 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKForBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *descpb.ForeignKeyConstraint,
 ) error {
 	var originTableDesc *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
@@ -456,7 +457,7 @@ func (p *planner) removeFKForBackReference(
 		return err
 	}
 	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, originTableDesc, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, "")
 }
 
 // removeFKBackReferenceFromTable edits the supplied originTableDesc to
@@ -464,8 +465,8 @@ func (p *planner) removeFKForBackReference(
 // backreference, which is a member of the supplied referencedTableDesc.
 func removeFKForBackReferenceFromTable(
 	originTableDesc *sqlbase.MutableTableDescriptor,
-	backref *sqlbase.ForeignKeyConstraint,
-	referencedTableDesc *sqlbase.TableDescriptor,
+	backref *descpb.ForeignKeyConstraint,
+	referencedTableDesc *descpb.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, fk := range originTableDesc.OutboundFKs {
@@ -492,7 +493,7 @@ func removeFKForBackReferenceFromTable(
 // removeFKBackReference removes the FK back reference from the table that is
 // referenced by the input constraint.
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *descpb.ForeignKeyConstraint,
 ) error {
 	var referencedTableDesc *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
@@ -514,7 +515,7 @@ func (p *planner) removeFKBackReference(
 		return err
 	}
 	// No job description, since this is presumably part of some larger schema change.
-	return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID, "")
+	return p.writeSchemaChange(ctx, referencedTableDesc, descpb.InvalidMutationID, "")
 }
 
 // removeFKBackReferenceFromTable edits the supplied referencedTableDesc to
@@ -523,7 +524,7 @@ func (p *planner) removeFKBackReference(
 func removeFKBackReferenceFromTable(
 	referencedTableDesc *sqlbase.MutableTableDescriptor,
 	fkName string,
-	originTableDesc *sqlbase.TableDescriptor,
+	originTableDesc *descpb.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, backref := range referencedTableDesc.InboundFKs {
@@ -546,7 +547,7 @@ func removeFKBackReferenceFromTable(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *descpb.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
@@ -583,7 +584,7 @@ func (p *planner) removeInterleaveBackReference(
 	}
 	if t != tableDesc {
 		return p.writeSchemaChange(
-			ctx, t, sqlbase.InvalidMutationID,
+			ctx, t, descpb.InvalidMutationID,
 			fmt.Sprintf("removing reference for interleaved table %s(%d)",
 				t.Name, t.ID,
 			),
@@ -595,8 +596,8 @@ func (p *planner) removeInterleaveBackReference(
 // removeMatchingReferences removes all refs from the provided slice that
 // match the provided ID, returning the modified slice.
 func removeMatchingReferences(
-	refs []sqlbase.TableDescriptor_Reference, id sqlbase.ID,
-) []sqlbase.TableDescriptor_Reference {
+	refs []descpb.TableDescriptor_Reference, id descpb.ID,
+) []descpb.TableDescriptor_Reference {
 	updatedRefs := refs[:0]
 	for _, ref := range refs {
 		if ref.ID != id {

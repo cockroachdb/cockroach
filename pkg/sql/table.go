@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -35,7 +36,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 // createDropDatabaseJob queues a job for dropping a database.
 func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
-	databaseID sqlbase.ID,
+	databaseID descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*sqlbase.MutableTypeDescriptor,
 	jobDesc string,
@@ -47,11 +48,11 @@ func (p *planner) createDropDatabaseJob(
 	}
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
-	tableIDs := make([]sqlbase.ID, 0, len(tableDropDetails))
+	tableIDs := make([]descpb.ID, 0, len(tableDropDetails))
 	for _, d := range tableDropDetails {
 		tableIDs = append(tableIDs, d.ID)
 	}
-	typeIDs := make([]sqlbase.ID, 0, len(typesToDrop))
+	typeIDs := make([]descpb.ID, 0, len(typesToDrop))
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
 	}
@@ -78,7 +79,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	jobDesc string,
-	mutationID sqlbase.MutationID,
+	mutationID descpb.MutationID,
 ) error {
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
 		if descs.MigrationSchemaChangeRequiredFromContext(ctx) {
@@ -113,7 +114,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		jobRecord := jobs.Record{
 			Description:   jobDesc,
 			Username:      p.User(),
-			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
 				TableID:        tableDesc.ID,
 				MutationID:     mutationID,
@@ -129,8 +130,8 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID] = newJob
 		// Only add a MutationJob if there's an associated mutation.
 		// TODO (lucy): get rid of this when we get rid of MutationJobs.
-		if mutationID != sqlbase.InvalidMutationID {
-			tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+		if mutationID != descpb.InvalidMutationID {
+			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: *newJob.ID()})
 		}
 		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
@@ -144,22 +145,22 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			ResumeSpanList: spanList,
 			FormatVersion:  jobspb.JobResumerFormatVersion,
 		}
-		if oldDetails.MutationID != sqlbase.InvalidMutationID {
+		if oldDetails.MutationID != descpb.InvalidMutationID {
 			// The previous queued schema change job was associated with a mutation,
 			// which must have the same mutation ID as this schema change, so just
 			// check for consistency.
-			if mutationID != sqlbase.InvalidMutationID && mutationID != oldDetails.MutationID {
+			if mutationID != descpb.InvalidMutationID && mutationID != oldDetails.MutationID {
 				return errors.AssertionFailedf(
 					"attempted to update job for mutation %d, but job already exists with mutation %d",
 					mutationID, oldDetails.MutationID)
 			}
 		} else {
 			// The previous queued schema change job didn't have a mutation.
-			if mutationID != sqlbase.InvalidMutationID {
+			if mutationID != descpb.InvalidMutationID {
 				newDetails.MutationID = mutationID
 				// Also add a MutationJob on the table descriptor.
 				// TODO (lucy): get rid of this when we get rid of MutationJobs.
-				tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+				tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 					MutationID: mutationID, JobID: *job.ID()})
 			}
 		}
@@ -195,7 +196,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 func (p *planner) writeSchemaChange(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	mutationID sqlbase.MutationID,
+	mutationID descpb.MutationID,
 	jobDesc string,
 ) error {
 	if !p.EvalContext().TxnImplicit {
@@ -230,7 +231,7 @@ func (p *planner) writeDropTable(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, queueJob bool, jobDesc string,
 ) error {
 	if queueJob {
-		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, sqlbase.InvalidMutationID); err != nil {
+		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, descpb.InvalidMutationID); err != nil {
 			return err
 		}
 	}

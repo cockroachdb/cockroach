@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -33,8 +34,8 @@ import (
 )
 
 func descForTable(
-	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
-) *sqlbase.TableDescriptor {
+	t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
+) *sqlbase.ImmutableTableDescriptor {
 	t.Helper()
 	parsed, err := parser.Parse(create)
 	if err != nil {
@@ -51,7 +52,7 @@ func descForTable(
 		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		priv := descpb.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
 			name,
 			tree.SequenceOptions{},
@@ -78,7 +79,7 @@ func descForTable(
 	if err := fixDescriptorFKState(table.TableDesc()); err != nil {
 		t.Fatal(err)
 	}
-	return table.TableDesc()
+	return table.Immutable().(*sqlbase.ImmutableTableDescriptor)
 }
 
 var testEvalCtx = &tree.EvalContext{

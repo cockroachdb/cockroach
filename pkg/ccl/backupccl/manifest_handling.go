@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -711,13 +713,46 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 	return backupManifestIndex, nil
 }
 
+// unwrapDescriptor takes a descriptor retrieved from a backup manifest and
+// constructs the appropriate MutableDescriptor object implied by that object.
+// It assumes and will panic if the ModificationTime for the descriptors are
+// not set.
+//
+// TODO(ajwerner): This may prove problematic for backups of database
+// descriptors without modification time.
+func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.MutableDescriptor {
+	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
+	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	switch {
+	case table != nil:
+		return sqlbase.NewMutableExistingTableDescriptor(*table)
+	case database != nil:
+		return sqlbase.NewMutableExistingDatabaseDescriptor(*database)
+	case typ != nil:
+		return sqlbase.NewMutableExistingTypeDescriptor(*typ)
+	case schema != nil:
+		return sqlbase.NewMutableExistingSchemaDescriptor(*schema)
+	default:
+		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
+		return nil // unreachable
+	}
+}
+
 func loadSQLDescsFromBackupsAtTime(
 	backupManifests []BackupManifest, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, BackupManifest) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
+	unwrapDescriptors := func(raw []descpb.Descriptor) []sqlbase.Descriptor {
+		ret := make([]sqlbase.Descriptor, 0, len(raw))
+		for i := range raw {
+			ret = append(ret, unwrapDescriptor(context.TODO(), &raw[i]))
+		}
+		return ret
+	}
 	if asOf.IsEmpty() {
-		return lastBackupManifest.Descriptors, lastBackupManifest
+		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
 	}
 
 	for _, b := range backupManifests {
@@ -727,10 +762,10 @@ func loadSQLDescsFromBackupsAtTime(
 		lastBackupManifest = b
 	}
 	if len(lastBackupManifest.DescriptorChanges) == 0 {
-		return lastBackupManifest.Descriptors, lastBackupManifest
+		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
 	}
 
-	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupManifest.Descriptors))
+	byID := make(map[descpb.ID]*descpb.Descriptor, len(lastBackupManifest.Descriptors))
 	for _, rev := range lastBackupManifest.DescriptorChanges {
 		if asOf.Less(rev.Time) {
 			break
@@ -743,21 +778,19 @@ func loadSQLDescsFromBackupsAtTime(
 	}
 
 	allDescs := make([]sqlbase.Descriptor, 0, len(byID))
-	for _, desc := range byID {
-		if t := desc.Table(hlc.Timestamp{}); t != nil {
-			// A table revisions may have been captured before it was in a DB that is
-			// backed up -- if the DB is missing, filter the table.
-			if byID[t.ParentID] == nil {
-				continue
-			}
+	for _, raw := range byID {
+		// A revision may have been captured before it was in a DB that is
+		// backed up -- if the DB is missing, filter the object.
+		desc := unwrapDescriptor(context.TODO(), raw)
+		var isObject bool
+		switch desc.(type) {
+		case sqlbase.TableDescriptor, sqlbase.TypeDescriptor:
+			isObject = true
 		}
-		if t := desc.GetType(); t != nil {
-			// We apply the same filter for types as well.
-			if byID[t.ParentID] == nil {
-				continue
-			}
+		if isObject && byID[desc.GetParentID()] == nil {
+			continue
 		}
-		allDescs = append(allDescs, *desc)
+		allDescs = append(allDescs, desc)
 	}
 	return allDescs, lastBackupManifest
 }

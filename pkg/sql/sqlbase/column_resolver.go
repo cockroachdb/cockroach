@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,7 +29,7 @@ import (
 // mutations are added.
 func ProcessTargetColumns(
 	tableDesc *ImmutableTableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
-) ([]ColumnDescriptor, error) {
+) ([]descpb.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
 			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -40,10 +41,10 @@ func ProcessTargetColumns(
 		return nil, nil
 	}
 
-	cols := make([]ColumnDescriptor, len(nameList))
-	colIDSet := make(map[ColumnID]struct{}, len(nameList))
+	cols := make([]descpb.ColumnDescriptor, len(nameList))
+	colIDSet := make(map[descpb.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		var col *ColumnDescriptor
+		var col *descpb.ColumnDescriptor
 		var err error
 		if allowMutations {
 			col, _, err = tableDesc.FindColumnByName(colName)
@@ -204,7 +205,7 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 }
 
 // NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*TableDescriptor) NameResolutionResult() {}
+func (*ImmutableTableDescriptor) NameResolutionResult() {}
 
 // SchemaMeta implements the tree.SchemaMeta interface.
 // TODO (rohany): I don't want to keep this here, but it seems to be used
@@ -212,10 +213,4 @@ func (*TableDescriptor) NameResolutionResult() {}
 //  to have this implementation only visible there? Maybe by creating a type
 //  alias for database descriptor in the backupccl package, and then defining
 //  SchemaMeta on it?
-func (*DatabaseDescriptor) SchemaMeta() {}
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-func (Descriptor) SchemaMeta() {}
-
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (Descriptor) NameResolutionResult() {}
+func (*ImmutableDatabaseDescriptor) SchemaMeta() {}

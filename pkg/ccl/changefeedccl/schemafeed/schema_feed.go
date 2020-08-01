@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -38,7 +40,7 @@ import (
 
 // TableEvent represents a change to a table descriptor.
 type TableEvent struct {
-	Before, After *sqlbase.TableDescriptor
+	Before, After *sqlbase.ImmutableTableDescriptor
 }
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
@@ -117,7 +119,7 @@ type SchemaFeed struct {
 		// of the table descriptor seen by the poller. This is needed to determine
 		// when a backilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
-		previousTableVersion map[sqlbase.ID]*sqlbase.TableDescriptor
+		previousTableVersion map[descpb.ID]*sqlbase.ImmutableTableDescriptor
 	}
 }
 
@@ -137,7 +139,7 @@ func New(cfg Config) *SchemaFeed {
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
 	}
-	m.mu.previousTableVersion = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	m.mu.previousTableVersion = make(map[descpb.ID]*sqlbase.ImmutableTableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
 	return m
 }
@@ -184,13 +186,13 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Lock()
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
-	var initialDescs []*sqlbase.TableDescriptor
+	var initialDescs []*sqlbase.ImmutableTableDescriptor
 	initialTableDescsFn := func(ctx context.Context, txn *kv.Txn) error {
 		initialDescs = initialDescs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
+			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
 			if err != nil {
 				return err
 			}
@@ -320,9 +322,9 @@ func (tf *SchemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	}
 }
 
-func descLess(a, b *sqlbase.TableDescriptor) bool {
+func descLess(a, b *sqlbase.ImmutableTableDescriptor) bool {
 	if a.ModificationTime.Equal(b.ModificationTime) {
-		return a.ID < b.ID
+		return a.GetID() < b.GetID()
 	}
 	return a.ModificationTime.Less(b.ModificationTime)
 }
@@ -336,8 +338,8 @@ func descLess(a, b *sqlbase.TableDescriptor) bool {
 func (tf *SchemaFeed) ingestDescriptors(
 	ctx context.Context,
 	startTS, endTS hlc.Timestamp,
-	descs []*sqlbase.TableDescriptor,
-	validateFn func(ctx context.Context, desc *sqlbase.TableDescriptor) error,
+	descs []*sqlbase.ImmutableTableDescriptor,
+	validateFn func(ctx context.Context, desc *sqlbase.ImmutableTableDescriptor) error,
 ) error {
 	sort.Slice(descs, func(i, j int) bool { return descLess(descs[i], descs[j]) })
 	var validateErr error
@@ -393,7 +395,7 @@ func (e TableEvent) String() string {
 	return formatEvent(e)
 }
 
-func formatDesc(desc *sqlbase.TableDescriptor) string {
+func formatDesc(desc *sqlbase.ImmutableTableDescriptor) string {
 	return fmt.Sprintf("%d:%d@%v", desc.ID, desc.Version, desc.ModificationTime)
 }
 
@@ -401,7 +403,9 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
-func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
+func (tf *SchemaFeed) validateTable(
+	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor,
+) error {
 	if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 		return err
 	}
@@ -447,7 +451,7 @@ func (tf *SchemaFeed) validateTable(ctx context.Context, desc *sqlbase.TableDesc
 
 func fetchTableDescriptorVersions(
 	ctx context.Context, db *kv.DB, startTS, endTS hlc.Timestamp, targets jobspb.ChangefeedTargets,
-) ([]*sqlbase.TableDescriptor, error) {
+) ([]*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
@@ -471,7 +475,7 @@ func fetchTableDescriptorVersions(
 		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
 	}
 
-	var tableDescs []*sqlbase.TableDescriptor
+	var tableDescs []*sqlbase.ImmutableTableDescriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -494,7 +498,7 @@ func fetchTableDescriptorVersions(
 				if err != nil {
 					return err
 				}
-				origName, ok := targets[sqlbase.ID(tableID)]
+				origName, ok := targets[descpb.ID(tableID)]
 				if !ok {
 					// Uninteresting table.
 					continue
@@ -504,12 +508,12 @@ func fetchTableDescriptorVersions(
 					return errors.Errorf(`"%v" was dropped or truncated`, origName)
 				}
 				value := roachpb.Value{RawBytes: unsafeValue}
-				var desc sqlbase.Descriptor
+				var desc descpb.Descriptor
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}
-				if tableDesc := desc.Table(k.Timestamp); tableDesc != nil {
-					tableDescs = append(tableDescs, tableDesc)
+				if tableDesc := sqlbase.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
+					tableDescs = append(tableDescs, sqlbase.NewImmutableTableDescriptor(*tableDesc))
 				}
 			}
 		}(); err != nil {

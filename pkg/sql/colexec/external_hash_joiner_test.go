@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -142,7 +142,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
-		joinType:     sqlbase.InnerJoin,
+		joinType:     descpb.InnerJoin,
 		leftTypes:    sourceTypes,
 		leftOutCols:  []uint32{0},
 		leftEqCols:   []uint32{0},
@@ -241,9 +241,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					name := fmt.Sprintf(
 						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
 						hasNulls, fullOuter, nBatches, spillForced)
-					joinType := sqlbase.InnerJoin
+					joinType := descpb.InnerJoin
 					if fullOuter {
-						joinType = sqlbase.FullOuterJoin
+						joinType = descpb.FullOuterJoin
 					}
 					tc := &joinTestCase{
 						joinType:     joinType,

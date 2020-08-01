@@ -25,7 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -222,7 +223,7 @@ func (w featureAllowlist) Match(feature string) bool {
 	return false
 }
 
-func formatTableDescriptor(desc *sqlbase.TableDescriptor) string {
+func formatTableDescriptor(desc *descpb.TableDescriptor) string {
 	tp := treeprinter.New()
 	n := tp.Childf("table:%s", desc.Name)
 	cols := n.Child("columns")
@@ -251,7 +252,7 @@ func formatSQLStats(stats []roachpb.CollectedStatementStatistics) string {
 	for i := range stats {
 		s := &stats[i]
 
-		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App, catconstants.InternalAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}

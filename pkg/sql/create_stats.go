@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -163,11 +164,11 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 			AvoidCached: n.p.avoidCachedDescriptors,
 		}}
-		tableDesc, err = n.p.Descriptors().GetTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
+		tableDesc, err = n.p.Descriptors().GetTableVersionByID(ctx, n.p.txn, descpb.ID(t.TableID), flags)
 		if err != nil {
 			return nil, err
 		}
-		fqName, err := n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
+		fqName, err := n.p.getQualifiedTableName(ctx, tableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +204,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, err
 		}
 
-		columnIDs := make([]sqlbase.ColumnID, len(columns))
+		columnIDs := make([]descpb.ColumnID, len(columns))
 		for i := range columns {
 			columnIDs[i] = columns[i].ID
 		}
@@ -330,7 +331,7 @@ func createStatsDefaultColumns(
 			// Only generate a histogram for forward indexes.
 			colStat := jobspb.CreateStatsDetails_ColStat{
 				ColumnIDs:    colIDs,
-				HasHistogram: j == 0 && desc.Indexes[i].Type == sqlbase.IndexDescriptor_FORWARD,
+				HasHistogram: j == 0 && desc.Indexes[i].Type == descpb.IndexDescriptor_FORWARD,
 			}
 			colStats = append(colStats, colStat)
 			// Generate histograms for inverted indexes. The above
@@ -338,7 +339,7 @@ func createStatsDefaultColumns(
 			// the column. The following colStat is needed for the
 			// sampling and sketch of the inverted index keys of
 			// the column.
-			if desc.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
+			if desc.Indexes[i].Type == descpb.IndexDescriptor_INVERTED {
 				colStat.Inverted = true
 				colStat.HasHistogram = true
 				colStats = append(colStats, colStat)
@@ -350,7 +351,7 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
-		colList := []sqlbase.ColumnID{col.ID}
+		colList := []descpb.ColumnID{col.ID}
 		key := makeColStatKey(colList)
 		if _, ok := requestedStats[key]; !ok {
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
@@ -366,7 +367,7 @@ func createStatsDefaultColumns(
 
 // makeColStatKey constructs a unique key representing cols that can be used
 // as the key in a map.
-func makeColStatKey(cols []sqlbase.ColumnID) string {
+func makeColStatKey(cols []descpb.ColumnID) string {
 	var colSet util.FastIntSet
 	for _, c := range cols {
 		colSet.Add(int(c))
@@ -392,7 +393,7 @@ func (n *createStatsNode) newPlanForExplainDistSQL(
 // jobs. A new instance is created for each job.
 type createStatsResumer struct {
 	job     *jobs.Job
-	tableID sqlbase.ID
+	tableID descpb.ID
 }
 
 var _ jobs.Resumer = &createStatsResumer{}

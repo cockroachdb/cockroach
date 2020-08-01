@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -31,7 +32,7 @@ import (
 // to do and is not meant to be the exact same description/SQL that was used in
 // the original job.
 func jobDescriptionFromMutationID(
-	tableDesc *sqlbase.TableDescriptor, id sqlbase.MutationID,
+	tableDesc *descpb.TableDescriptor, id descpb.MutationID,
 ) (string, int, error) {
 	var jobDescBuilder strings.Builder
 	mutationCount := 0
@@ -42,7 +43,7 @@ func jobDescriptionFromMutationID(
 			// Note that for primary key swaps, we want the last mutation in this list.
 			isPrimaryKeySwap := false
 			switch m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap:
 				isPrimaryKeySwap = true
 			}
 
@@ -63,9 +64,9 @@ func jobDescriptionFromMutationID(
 
 			if !isPrimaryKeySwap {
 				switch m.Direction {
-				case sqlbase.DescriptorMutation_ADD:
+				case descpb.DescriptorMutation_ADD:
 					jobDescBuilder.WriteString("adding ")
-				case sqlbase.DescriptorMutation_DROP:
+				case descpb.DescriptorMutation_DROP:
 					jobDescBuilder.WriteString("dropping ")
 				default:
 					return "", 0, errors.Newf("unsupported mutation %+v, while restoring table %+v", m, tableDesc)
@@ -73,30 +74,30 @@ func jobDescriptionFromMutationID(
 			}
 
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *descpb.DescriptorMutation_Column:
 				jobDescBuilder.WriteString("column ")
 				jobDescBuilder.WriteString(t.Column.Name)
-				if m.Direction == sqlbase.DescriptorMutation_ADD {
+				if m.Direction == descpb.DescriptorMutation_ADD {
 					jobDescBuilder.WriteString(" " + t.Column.Type.String())
 				}
-			case *sqlbase.DescriptorMutation_Index:
+			case *descpb.DescriptorMutation_Index:
 				jobDescBuilder.WriteString("index ")
 				jobDescBuilder.WriteString(t.Index.Name + " for " + tableDesc.Name + " (")
 				jobDescBuilder.WriteString(strings.Join(t.Index.ColumnNames, ", "))
 				jobDescBuilder.WriteString(")")
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *descpb.DescriptorMutation_Constraint:
 				jobDescBuilder.WriteString("constraint ")
 				jobDescBuilder.WriteString(t.Constraint.Name)
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap:
 				jobDescBuilder.WriteString("changing primary key to (")
 				newIndexID := t.PrimaryKeySwap.NewPrimaryIndexId
 				// Find the ADD INDEX mutation with the same mutation ID that is adding
 				// the new index.
 				for _, otherMut := range tableDesc.Mutations {
-					if indexMut, ok := otherMut.Descriptor_.(*sqlbase.DescriptorMutation_Index); ok &&
+					if indexMut, ok := otherMut.Descriptor_.(*descpb.DescriptorMutation_Index); ok &&
 						indexMut.Index.ID == newIndexID &&
 						otherMut.MutationID == m.MutationID &&
-						m.Direction == sqlbase.DescriptorMutation_ADD {
+						m.Direction == descpb.DescriptorMutation_ADD {
 						jobDescBuilder.WriteString(strings.Join(indexMut.Index.ColumnNames, ", "))
 					}
 				}
@@ -120,12 +121,12 @@ func createTypeChangeJobFromDesc(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	username string,
-	typ sqlbase.TypeDescriptorInterface,
+	typ sqlbase.TypeDescriptor,
 ) (*jobs.StartableJob, error) {
 	record := jobs.Record{
 		Description:   fmt.Sprintf("RESTORING: type %d", typ.GetID()),
 		Username:      username,
-		DescriptorIDs: sqlbase.IDs{typ.GetID()},
+		DescriptorIDs: descpb.IDs{typ.GetID()},
 		Details: jobspb.TypeSchemaChangeDetails{
 			TypeID: typ.GetID(),
 		},
@@ -150,11 +151,11 @@ func createSchemaChangeJobsFromMutations(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	username string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 ) ([]*jobs.StartableJob, error) {
-	mutationJobs := make([]sqlbase.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
+	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
 	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.Mutations))
-	seenMutations := make(map[sqlbase.MutationID]bool)
+	seenMutations := make(map[descpb.MutationID]bool)
 	for _, mutation := range tableDesc.Mutations {
 		if seenMutations[mutation.MutationID] {
 			// We've already seen a mutation with this ID, so a job that handles all
@@ -163,7 +164,7 @@ func createSchemaChangeJobsFromMutations(
 		}
 		mutationID := mutation.MutationID
 		seenMutations[mutationID] = true
-		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc, mutationID)
+		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc.TableDesc(), mutationID)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +178,7 @@ func createSchemaChangeJobsFromMutations(
 			// the schema change.
 			Description:   "RESTORING: " + jobDesc,
 			Username:      username,
-			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
 				TableID:        tableDesc.ID,
 				MutationID:     mutationID,
@@ -190,7 +191,7 @@ func createSchemaChangeJobsFromMutations(
 		if err != nil {
 			return nil, err
 		}
-		newMutationJob := sqlbase.TableDescriptor_MutationJob{
+		newMutationJob := descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
 			JobID:      *newJob.ID(),
 		}

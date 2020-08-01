@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
@@ -78,10 +79,10 @@ func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 	return !dropMutationExists(e.Before) && dropMutationExists(e.After)
 }
 
-func dropMutationExists(desc *sqlbase.TableDescriptor) bool {
+func dropMutationExists(desc *sqlbase.ImmutableTableDescriptor) bool {
 	for _, m := range desc.Mutations {
-		if m.Direction == sqlbase.DescriptorMutation_DROP &&
-			m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+		if m.Direction == descpb.DescriptorMutation_DROP &&
+			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 			return true
 		}
 	}
