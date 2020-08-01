@@ -1224,7 +1224,7 @@ func setupAndInitializeLoggingAndProfiling(
 	log.Infof(ctx, info.Short())
 
 	initMemProfile(ctx, outputDirectory)
-	initCPUProfile(ctx, outputDirectory)
+	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()
 
