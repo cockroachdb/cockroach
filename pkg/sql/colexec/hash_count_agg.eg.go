@@ -51,17 +51,13 @@ func (a *countRowsHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 	var i int
+	// Remove unused warning.
+	_ = i
 
 	{
-		if sel != nil {
+		sel = sel[:inputLen]
+		{
 			for _, i = range sel[:inputLen] {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		} else {
-			for i = 0; i < inputLen; i++ {
 
 				var y int64
 				y = int64(1)
@@ -133,13 +129,16 @@ func (a *countHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
 	var i int
+	// Remove unused warning.
+	_ = i
 
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i = range sel[:inputLen] {
 
 				var y int64
@@ -150,26 +149,7 @@ func (a *countHashAgg) Compute(
 				a.curAgg += y
 			}
 		} else {
-			for i = 0; i < inputLen; i++ {
-
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
-				}
-				a.curAgg += y
-			}
-		}
-	} else {
-		if sel != nil {
 			for _, i = range sel[:inputLen] {
-
-				var y int64
-				y = int64(1)
-				a.curAgg += y
-			}
-		} else {
-			for i = 0; i < inputLen; i++ {
 
 				var y int64
 				y = int64(1)
