@@ -209,8 +209,8 @@ func TestRandomComparisons(t *testing.T) {
 				},
 			)
 		}
-		PhysicalTypeColVecToDatum(lDatums, lVec, numTuples, nil /* sel */, &da)
-		PhysicalTypeColVecToDatum(rDatums, rVec, numTuples, nil /* sel */, &da)
+		ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
+		ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
 		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 		if typ.Family() == types.JsonFamily {
 			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}
