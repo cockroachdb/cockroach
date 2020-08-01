@@ -94,16 +94,19 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_HAS_NULLS", "$.HasNulls",
 		"_HAS_SEL", "$.HasSel",
+		"_DESELECT", "$.Deselect",
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_VEC_METHOD", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 
-	setTupleIdx := makeFunctionRegex("_SET_TUPLE_IDX", 4)
-	s = setTupleIdx.ReplaceAllString(s, `{{template "setTupleIdx" buildDict "HasSel" $4}}`)
-	vecToDatum := makeFunctionRegex("_VEC_TO_DATUM", 7)
-	s = vecToDatum.ReplaceAllString(s, `{{template "vecToDatum" buildDict "Global" . "HasNulls" $6 "HasSel" $7}}`)
+	setDestIdx := makeFunctionRegex("_SET_DEST_IDX", 5)
+	s = setDestIdx.ReplaceAllString(s, `{{template "setDestIdx" buildDict "HasSel" $4 "Deselect" $5}}`)
+	setSrcIdx := makeFunctionRegex("_SET_SRC_IDX", 4)
+	s = setSrcIdx.ReplaceAllString(s, `{{template "setSrcIdx" buildDict "HasSel" $4}}`)
+	vecToDatum := makeFunctionRegex("_VEC_TO_DATUM", 8)
+	s = vecToDatum.ReplaceAllString(s, `{{template "vecToDatum" buildDict "Global" . "HasNulls" $6 "HasSel" $7 "Deselect" $8}}`)
 
 	assignConvertedRe := makeFunctionRegex("_ASSIGN_CONVERTED", 4)
 	s = assignConvertedRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignConverted", 4))

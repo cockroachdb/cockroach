@@ -939,7 +939,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 	res := []tree.Datum{nil}
-	colexec.PhysicalTypeColVecToDatum(res, rf.machine.colvecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
+	colexec.ColVecToDatumAndDeselect(res, rf.machine.colvecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
 	return res[0]
 }
 
