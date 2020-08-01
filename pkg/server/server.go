@@ -1999,7 +1999,7 @@ func (s *Server) startSampleEnvironment(
 		if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
 			return errors.Wrap(err, "creating goroutine dump dir")
 		}
-		goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+		goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName, s.ClusterSettings())
 		if err != nil {
 			return errors.Wrap(err, "starting goroutine dumper worker")
 		}
