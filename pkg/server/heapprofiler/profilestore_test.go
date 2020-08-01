@@ -50,10 +50,12 @@ func TestParseFileName(t *testing.T) {
 		{"memprof.2020-06-15T13_19_19.543.123456", time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC), 123456, false},
 	}
 
+	s := &profileStore{}
+
 	for _, tc := range testData {
-		ts, heapUsage, err := parseFileName(tc.f)
-		if (err != nil) != tc.expError {
-			t.Fatalf("%s: expected error %v, got %v", tc.f, tc.expError, err)
+		ok, ts, heapUsage := s.parseFileName(context.Background(), tc.f)
+		if ok != !tc.expError {
+			t.Fatalf("%s: expected error %v, got %v", tc.f, tc.expError, !ok)
 		}
 
 		assert.Equal(t, tc.ts, ts)
@@ -179,6 +181,8 @@ func TestCleanupLastRampup(t *testing.T) {
 		},
 	}
 
+	s := &profileStore{}
+
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			path, err := ioutil.TempDir("", "cleanup")
@@ -195,7 +199,7 @@ func TestCleanupLastRampup(t *testing.T) {
 				return nil
 			}
 
-			preserved := cleanupLastRampup(context.Background(), files, tc.maxP, cleanupFn)
+			preserved := s.cleanupLastRampup(context.Background(), files, tc.maxP, cleanupFn)
 			assert.EqualValues(t, tc.cleaned, cleaned)
 			assert.EqualValues(t, tc.preserved, preserved)
 		})
