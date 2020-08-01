@@ -2644,7 +2644,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 // first expression of the memo group is used for construction of the join
 // graph. For more information, see the comment in join_order_builder.go.
 func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr) memo.RelExpr {
-	c.e.o.JoinOrderBuilder().Init(c.e.f)
+	c.e.o.JoinOrderBuilder().Init(c.e.f, c.e.evalCtx)
 	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
 	return grp
 }
