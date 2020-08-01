@@ -28,36 +28,44 @@ import (
 
 var (
 	maxProfiles = settings.RegisterIntSetting(
-		"server.heap_profile.max_profiles",
+		"server.mem_profile.max_profiles",
 		"maximum number of profiles to be kept per ramp-up of memory usage. "+
-			"A ramp-up is defined as a sequence of profiles with increasing heap usage.",
+			"A ramp-up is defined as a sequence of profiles with increasing usage.",
 		5,
 	)
 
 	maxCombinedFileSize = settings.RegisterByteSizeSetting(
-		"server.heap_profile.total_dump_size_limit",
-		"maximum combined disk size of preserved profiles",
+		"server.mem_profile.total_dump_size_limit",
+		"maximum combined disk size of preserved memory profiles",
 		128<<20, // 128MiB
 	)
 )
+
+func init() {
+	s := settings.RegisterIntSetting(
+		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5)
+	s.SetRetired()
+
+	b := settings.RegisterByteSizeSetting(
+		"server.heap_profile.total_dump_size_limit",
+		"use server.mem_profile.total_dump_size_limit instead",
+		128<<20, // 128MiB
+	)
+	b.SetRetired()
+}
 
 // profileStore represents the directory where heap profiles are stored.
 // It supports automatic garbage collection of old profiles.
 type profileStore struct {
 	*dumpstore.DumpStore
-	st *cluster.Settings
+	prefix string
+	st     *cluster.Settings
 }
 
-const fileNamePrefix = "memprof"
-
-// timestampFormat is chosen to mimix that used by the log
-// package. This is not a hard requirement thought; the profiles are
-// stored in a separate directory.
-const timestampFormat = "2006-01-02T15_04_05.999"
-
-func newProfileStore(dir string, st *cluster.Settings) *profileStore {
-	s := &profileStore{st: st}
-	s.DumpStore = dumpstore.NewStore(dir, maxCombinedFileSize, st)
+func newProfileStore(
+	store *dumpstore.DumpStore, prefix string, st *cluster.Settings,
+) *profileStore {
+	s := &profileStore{DumpStore: store, prefix: prefix, st: st}
 	return s
 }
 
@@ -70,7 +78,7 @@ func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) strin
 	// prefix to ensure that a directory listing sort also sorts the
 	// profiles in timestamp order.
 	fileName := fmt.Sprintf("%s.%s.%d",
-		fileNamePrefix, timestamp.Format(timestampFormat), curHeap)
+		s.prefix, timestamp.Format(timestampFormat), curHeap)
 	return s.GetFullPath(fileName)
 }
 
@@ -143,7 +151,7 @@ func (s *profileStore) parseFileName(
 ) (ok bool, timestamp time.Time, heapUsage uint64) {
 	parts := strings.Split(fileName, ".")
 	const numParts = 4 /* prefix, date/time, milliseconds,  heap usage */
-	if len(parts) != numParts || parts[0] != fileNamePrefix {
+	if len(parts) != numParts || parts[0] != s.prefix {
 		// Not for us. Silently ignore.
 		return
 	}
