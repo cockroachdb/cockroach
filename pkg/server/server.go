@@ -1991,40 +1991,30 @@ func (s *Server) startSampleEnvironment(
 	// Immediately record summaries once on server startup.
 	ctx = s.AnnotateCtx(ctx)
 
-	// We're not going to take heap profiles or goroutine dumps if
-	// running only with in-memory stores.  This helps some tests that
-	// can't write any files.
-	allStoresInMem := true
-	for _, storeSpec := range s.cfg.Stores.Specs {
-		if !storeSpec.InMemory {
-			allStoresInMem = false
-			break
+	// Initialize a goroutine dumper if we have an output directory
+	// specified.
+	var err error
+	var goroutineDumper *goroutinedumper.GoroutineDumper
+	if s.cfg.GoroutineDumpDirName != "" {
+		if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
+			return errors.Wrap(err, "creating goroutine dump dir")
+		}
+		goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+		if err != nil {
+			return errors.Wrap(err, "starting goroutine dumper worker")
 		}
 	}
 
-	var goroutineDumper *goroutinedumper.GoroutineDumper
+	// Initialize a heap profiler if we have an output directory
+	// specified.
 	var heapProfiler *heapprofiler.HeapProfiler
-
-	if !allStoresInMem {
-		var err error
-		if s.cfg.GoroutineDumpDirName != "" {
-			if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
-				return errors.Wrap(err, "creating goroutine dump dir")
-			}
-			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
-			if err != nil {
-				return errors.Wrap(err, "starting goroutine dumper worker")
-			}
+	if s.cfg.HeapProfileDirName != "" {
+		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
+			return errors.Wrap(err, "creating heap profiles dir")
 		}
-
-		if s.cfg.HeapProfileDirName != "" {
-			if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
-				return errors.Wrap(err, "creating heap profiles dir")
-			}
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
-			if err != nil {
-				return errors.Wrap(err, "starting heap profiler worker")
-			}
+		heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
+		if err != nil {
+			return errors.Wrap(err, "starting heap profiler worker")
 		}
 	}
 
