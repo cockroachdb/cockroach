@@ -131,6 +131,10 @@ func NewGoroutineDumper(dir string) (*GoroutineDumper, error) {
 // than sizeLimit. Requires that the name of the dumps indicates dump time
 // such that sorting the filenames corresponds to ordering the dumps
 // from oldest to newest.
+//
+// Files that don't match the output file prefix are ignored
+// (i.e. preserved).
+//
 // Newest dump in the directory is not considered for GC.
 func gc(ctx context.Context, dir string, sizeLimit int64) {
 	// ReadDir returns a list of directory entries sorted by filename, which means
@@ -145,23 +149,25 @@ func gc(ctx context.Context, dir string, sizeLimit int64) {
 	isLatestDump := true
 	for i := len(files) - 1; i >= 0; i-- {
 		f := files[i]
-		path := filepath.Join(dir, f.Name())
-		if strings.HasPrefix(f.Name(), goroutineDumpPrefix) {
-			totalSize += f.Size()
-			// Skipping the latest dump in gc
-			if isLatestDump {
-				isLatestDump = false
-				continue
-			}
-			if totalSize > sizeLimit {
-				if err := os.Remove(path); err != nil {
-					log.Warningf(ctx, "Cannot remove dump file %s, err: %s", path, err)
-				}
-			}
-		} else {
-			log.Infof(ctx, "Removing unknown file %s in goroutine dump dir %s", f.Name(), dir)
+		if !strings.HasPrefix(f.Name(), goroutineDumpPrefix) {
+			log.Infof(ctx, "ignoring unknown file %s in goroutine dump dir %s", f.Name(), dir)
+			continue
+		}
+
+		// Note: we are counting preserved files against the maximum.
+		totalSize += f.Size()
+
+		// Skipping the latest dump in gc - the first file encountered when looking
+		// from last to first.
+		if isLatestDump {
+			isLatestDump = false
+			continue
+		}
+
+		if totalSize > sizeLimit {
+			path := filepath.Join(dir, f.Name())
 			if err := os.Remove(path); err != nil {
-				log.Warningf(ctx, "Cannot remove file %s, err: %s", path, err)
+				log.Warningf(ctx, "cannot remove dump file %s: %v", path, err)
 			}
 		}
 	}
