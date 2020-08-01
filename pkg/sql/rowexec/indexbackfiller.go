@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -153,7 +154,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 
 func (ib *indexBackfiller) runChunk(
 	tctx context.Context,
-	mutations []sqlbase.DescriptorMutation,
+	mutations []descpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,

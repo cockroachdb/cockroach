@@ -111,8 +111,8 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		return err
 	}
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.
-	if normalizedUsername == sqlbase.PublicRole {
-		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", sqlbase.PublicRole)
+	if normalizedUsername == security.PublicRole {
+		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", security.PublicRole)
 	}
 
 	var hashedPassword []byte

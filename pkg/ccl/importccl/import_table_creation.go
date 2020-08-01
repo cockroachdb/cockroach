@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,8 +35,8 @@ const (
 	// We need to choose arbitrary database and table IDs. These aren't important,
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
-	defaultCSVParentID sqlbase.ID = keys.MinNonPredefinedUserDescID
-	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
+	defaultCSVParentID descpb.ID = keys.MinNonPredefinedUserDescID
+	defaultCSVTableID  descpb.ID = defaultCSVParentID + 1
 )
 
 func readCreateTableFromStore(
@@ -94,7 +95,7 @@ func MakeSimpleTableDescriptor(
 	semaCtx *tree.SemaContext,
 	st *cluster.Settings,
 	create *tree.CreateTable,
-	parentID, parentSchemaID, tableID sqlbase.ID,
+	parentID, parentSchemaID, tableID descpb.ID,
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.MutableTableDescriptor, error) {
@@ -150,7 +151,7 @@ func MakeSimpleTableDescriptor(
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},
 	}
-	affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+	affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
@@ -162,7 +163,7 @@ func MakeSimpleTableDescriptor(
 		parentSchemaID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
-		sqlbase.NewDefaultPrivilegeDescriptor(),
+		descpb.NewDefaultPrivilegeDescriptor(),
 		affected,
 		semaCtx,
 		&evalCtx,
@@ -183,10 +184,10 @@ func MakeSimpleTableDescriptor(
 // creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
-func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
-	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+func fixDescriptorFKState(tableDesc *descpb.TableDescriptor) error {
+	tableDesc.State = descpb.TableDescriptor_PUBLIC
 	for i := range tableDesc.OutboundFKs {
-		tableDesc.OutboundFKs[i].Validity = sqlbase.ConstraintValidity_Unvalidated
+		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
 	}
 	return nil
 }
@@ -309,8 +310,6 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(
-	ctx context.Context, id sqlbase.ID,
-) (catalog.TableEntry, error) {
+func (r fkResolver) LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableEntry, error) {
 	return catalog.TableEntry{}, errSchemaResolver
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -273,8 +274,8 @@ func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
-	tables []sqlbase.TableDescriptorInterface,
-	types []sqlbase.TypeDescriptorInterface,
+	tables []sqlbase.TableDescriptor,
+	types []sqlbase.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
@@ -283,13 +284,13 @@ func WriteDescriptors(
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
-		wroteDBs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
+		wroteDBs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		for _, desc := range databases {
 			// If the restore is not a full cluster restore we cannot know that
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
+				desc.Privileges = descpb.NewDefaultPrivilegeDescriptor()
 			}
 			wroteDBs[desc.GetID()] = desc
 			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
@@ -302,19 +303,20 @@ func WriteDescriptors(
 			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
 		}
 		for i := range tables {
-			table := tables[i].TableDesc()
+			table := tables[i]
 			// For full cluster restore, keep privileges as they were.
-			if wrote, ok := wroteDBs[table.ParentID]; ok {
+			var updatedPrivileges *descpb.PrivilegeDescriptor
+			if wrote, ok := wroteDBs[table.GetParentID()]; ok {
 				// Leave the privileges of the temp system tables as
 				// the default.
 				if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
-					table.Privileges = wrote.GetPrivileges()
+					updatedPrivileges = wrote.GetPrivileges()
 				}
 			} else {
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, keys.SystemSQLCodec, table.ParentID)
+				parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, table.GetParentID())
 				if err != nil {
 					return errors.Wrapf(err,
-						"failed to lookup parent DB %d", errors.Safe(table.ParentID))
+						"failed to lookup parent DB %d", errors.Safe(table.GetParentID()))
 				}
 				// We don't check priv's here since we checked them during job planning.
 
@@ -322,10 +324,20 @@ func WriteDescriptors(
 				if descCoverage != tree.AllDescriptors {
 					// Default is to copy privs from restoring parent db, like CREATE TABLE.
 					// TODO(dt): Make this more configurable.
-					table.Privileges = parentDB.GetPrivileges()
+					updatedPrivileges = parentDB.GetPrivileges()
 				}
 			}
-			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, table.ID, tables[i]); err != nil {
+			if updatedPrivileges != nil {
+				if mut, ok := table.(*sqlbase.MutableTableDescriptor); ok {
+					mut.Privileges = updatedPrivileges
+				} else {
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+						table.GetID(), table)
+				}
+			}
+			if err := catalogkv.WriteNewDescToBatch(
+				ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, table.GetID(), tables[i],
+			); err != nil {
 				return err
 			}
 			// Depending on which cluster version we are restoring to, we decide which
@@ -334,11 +346,11 @@ func WriteDescriptors(
 			tkey := sqlbase.MakeObjectNameKey(
 				ctx,
 				settings,
-				table.ParentID,
+				table.GetParentID(),
 				table.GetParentSchemaID(),
-				table.Name,
+				table.GetName(),
 			)
-			b.CPut(tkey.Key(keys.SystemSQLCodec), table.ID, nil)
+			b.CPut(tkey.Key(keys.SystemSQLCodec), table.GetID(), nil)
 		}
 
 		// Write all type descriptors -- create namespace entries and write to
@@ -371,7 +383,7 @@ func WriteDescriptors(
 		}
 
 		for _, table := range tables {
-			if err := table.TableDesc().Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
+			if err := table.Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.GetID()))
 			}
@@ -438,8 +450,8 @@ func restore(
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-	tables []sqlbase.TableDescriptorInterface,
-	oldTableIDs []sqlbase.ID,
+	tables []sqlbase.TableDescriptor,
+	oldTableIDs []descpb.ID,
 	spans []roachpb.Span,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -618,7 +630,9 @@ func loadBackupSQLDescs(
 	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, p.ExecCfg().Codec, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(
+		ctx, backupManifests, p.ExecCfg().Codec, true, /* skipFKsWithNoMatchingTable */
+	); err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
 
@@ -626,7 +640,8 @@ func loadBackupSQLDescs(
 
 	var sqlDescs []sqlbase.Descriptor
 	for _, desc := range allDescs {
-		if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
+		id := desc.GetID()
+		if _, ok := details.DescriptorRewrites[id]; ok {
 			sqlDescs = append(sqlDescs, desc)
 		}
 	}
@@ -637,11 +652,11 @@ type restoreResumer struct {
 	job       *jobs.Job
 	settings  *cluster.Settings
 	databases []*sqlbase.ImmutableDatabaseDescriptor
-	tables    []sqlbase.TableDescriptorInterface
+	tables    []sqlbase.TableDescriptor
 	// writtenTypes is the set of types that are restored from the backup into
 	// the database. Note that this is not always the set of types within the
 	// backup, as some types might be remapped to existing types in the database.
-	writtenTypes       []sqlbase.TypeDescriptorInterface
+	writtenTypes       []sqlbase.TypeDescriptor
 	descriptorCoverage tree.DescriptorCoverage
 	latestStats        []*stats.TableStatisticProto
 	execCfg            *sql.ExecutorConfig
@@ -720,27 +735,25 @@ func isDatabaseEmpty(
 	ctx context.Context,
 	db *kv.DB,
 	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
-	ignoredTables map[sqlbase.ID]struct{},
+	ignoredTables map[descpb.ID]struct{},
 ) (bool, error) {
 	var allDescs []sqlbase.Descriptor
 	if err := db.Txn(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			var err error
-			allDescs, err = allSQLDescriptors(ctx, txn)
+			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
 			return err
 		}); err != nil {
 		return false, err
 	}
 
 	for _, desc := range allDescs {
-		if t := desc.Table(hlc.Timestamp{}); t != nil {
-			if _, ok := ignoredTables[t.GetID()]; ok {
-				continue
-			}
-			if t.GetParentID() == dbDesc.GetID() {
-				return false, nil
-			}
+		if _, ok := ignoredTables[desc.GetID()]; ok {
+			continue
+		}
+		if desc.GetParentID() == dbDesc.GetID() {
+			return false, nil
 		}
 	}
 	return true, nil
@@ -752,30 +765,36 @@ func createImportingDescriptors(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
 ) (
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
-	tables []sqlbase.TableDescriptorInterface,
-	oldTableIDs []sqlbase.ID,
-	writtenTypes []sqlbase.TypeDescriptorInterface,
+	tables []sqlbase.TableDescriptor,
+	oldTableIDs []descpb.ID,
+	writtenTypes []sqlbase.TypeDescriptor,
 	spans []roachpb.Span,
 	err error,
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var types []sqlbase.TypeDescriptorInterface
+	var types []*sqlbase.MutableTypeDescriptor
+	// Store the tables as both the concrete mutable structs and the interface
+	// to deal with the lack of slice covariance in go. We want the slice of
+	// mutable descriptors for rewriting but ultimately want to return the
+	// tables as the slice of interfaces.
+	var mutableTables []*sqlbase.MutableTableDescriptor
+
 	for _, desc := range sqlDescs {
-		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-			table := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc)
-			tables = append(tables, table)
-			oldTableIDs = append(oldTableIDs, tableDesc.ID)
-		}
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if rewrite, ok := details.DescriptorRewrites[dbDesc.GetID()]; ok {
+		switch desc := desc.(type) {
+		case sqlbase.TableDescriptor:
+			mut := sqlbase.NewMutableCreatedTableDescriptor(*desc.TableDesc())
+			tables = append(tables, mut)
+			mutableTables = append(mutableTables, mut)
+			oldTableIDs = append(oldTableIDs, mut.GetID())
+		case sqlbase.DatabaseDescriptor:
+			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
 				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
-					rewrite.ID, dbDesc.GetName(), dbDesc.Privileges)
+					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
-		}
-		if typDesc := desc.GetType(); typDesc != nil {
-			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*typDesc))
+		case sqlbase.TypeDescriptor:
+			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -786,30 +805,30 @@ func createImportingDescriptors(
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
-			sqlbase.ID(tempSystemDBID), restoreTempSystemDB))
+			descpb.ID(tempSystemDBID), restoreTempSystemDB))
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
 	spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
 
-	log.Eventf(ctx, "starting restore for %d tables", len(tables))
+	log.Eventf(ctx, "starting restore for %d mutableTables", len(mutableTables))
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	tableDescs := make([]*sqlbase.TableDescriptor, len(tables))
-	for i, table := range tables {
+	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
+	for i, table := range mutableTables {
 		tableDescs[i] = table.TableDesc()
 	}
-	if err := RewriteTableDescs(tableDescs, details.DescriptorRewrites, details.OverrideDB); err != nil {
+	if err := RewriteTableDescs(mutableTables, details.DescriptorRewrites, details.OverrideDB); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
 	// For each type, we might be writing the type in the backup, or we could be
 	// remapping to an existing type descriptor. Split up the descriptors into
 	// these two groups.
-	var typesToWrite []sqlbase.TypeDescriptorInterface
-	existingTypeIDs := make(map[sqlbase.ID]struct{})
+	var typesToWrite []*sqlbase.MutableTypeDescriptor
+	existingTypeIDs := make(map[descpb.ID]struct{})
 	for i := range types {
 		typ := types[i]
 		rewrite := details.DescriptorRewrites[typ.GetID()]
@@ -817,35 +836,31 @@ func createImportingDescriptors(
 			existingTypeIDs[rewrite.ID] = struct{}{}
 		} else {
 			typesToWrite = append(typesToWrite, typ)
+			writtenTypes = append(writtenTypes, typ)
 		}
 	}
 
 	// Assign new IDs to all of the type descriptors that need to be written.
-	typDescs := make([]*sqlbase.TypeDescriptor, len(typesToWrite))
-	for i, typ := range typesToWrite {
-		typDescs[i] = typ.TypeDesc()
-	}
-	if err := rewriteTypeDescs(typDescs, details.DescriptorRewrites); err != nil {
+	if err := rewriteTypeDescs(typesToWrite, details.DescriptorRewrites); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
 	for _, desc := range tableDescs {
 		desc.Version++
-		desc.State = sqlbase.TableDescriptor_OFFLINE
+		desc.State = descpb.TableDescriptor_OFFLINE
 		desc.OfflineReason = "restoring"
 	}
 
 	// Collect all types after they have had their ID's rewritten.
-	typesByID := make(map[sqlbase.ID]*sqlbase.TypeDescriptor)
+	typesByID := make(map[descpb.ID]sqlbase.TypeDescriptor)
 	for i := range types {
-		typ := types[i].TypeDesc()
-		typesByID[typ.ID] = typ
+		typesByID[types[i].GetID()] = types[i]
 	}
 
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteDescriptors(ctx, txn, databases, tables, typesToWrite, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
+			if err := WriteDescriptors(ctx, txn, databases, tables, writtenTypes, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
@@ -853,9 +868,9 @@ func createImportingDescriptors(
 			// ensure that those existing types are updated with back references pointing
 			// to the new tables being restored.
 			b := txn.NewBatch()
-			for _, table := range tables {
+			for _, table := range mutableTables {
 				// Collect all types used by this table.
-				typeIDs, err := table.TableDesc().GetAllReferencedTypeIDs(func(id sqlbase.ID) (*sqlbase.TypeDescriptor, error) {
+				typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
 					return typesByID[id], nil
 				})
 				if err != nil {
@@ -869,7 +884,8 @@ func createImportingDescriptors(
 						continue
 					}
 					// Otherwise, add a backreference to this table.
-					desc, err := catalogkv.GetMutableDescriptorByID(ctx, txn, keys.SystemSQLCodec, id)
+					desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
+						id, catalogkv.Mutable, catalogkv.TypeDescriptorKind, true /* required */)
 					if err != nil {
 						return err
 					}
@@ -919,7 +935,7 @@ func createImportingDescriptors(
 		}
 	}
 
-	return databases, tables, oldTableIDs, typesToWrite, spans, nil
+	return databases, tables, oldTableIDs, writtenTypes, spans, nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -1083,20 +1099,21 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
 		b := txn.NewBatch()
-		newTables := make([]*sqlbase.TableDescriptor, 0, len(details.TableDescs))
+		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
 			newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.TableDesc())
 			newTableDesc.Version++
-			newTableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
-			newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc.TableDesc())
+			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
+				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc)
 			if err != nil {
 				return err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl.TableDesc())
+			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
@@ -1207,17 +1224,18 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 
 	b := txn.NewBatch()
 	// Drop the table descriptors that were created at the start of the restore.
-	tablesToGC := make([]sqlbase.ID, 0, len(details.TableDescs))
+	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
 		tableToDrop := sqlbase.NewMutableExistingTableDescriptor(*tbl)
+		prev := tableToDrop.Immutable().(sqlbase.TableDescriptor)
 		tableToDrop.Version++
-		tableToDrop.State = sqlbase.TableDescriptor_DROP
+		tableToDrop.State = descpb.TableDescriptor_DROP
 		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
+		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
@@ -1256,7 +1274,7 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 	// database during the restore).
 	var isDBEmpty bool
 	var err error
-	ignoredTables := make(map[sqlbase.ID]struct{})
+	ignoredTables := make(map[descpb.ID]struct{})
 	for _, table := range details.TableDescs {
 		ignoredTables[table.ID] = struct{}{}
 	}

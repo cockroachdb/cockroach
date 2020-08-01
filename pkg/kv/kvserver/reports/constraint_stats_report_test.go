@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -332,7 +333,7 @@ type partition struct {
 	zone *zone
 }
 
-func (p partition) toPartitionDescriptor() sqlbase.PartitioningDescriptor_Range {
+func (p partition) toPartitionDescriptor() descpb.PartitioningDescriptor_Range {
 	var startKey roachpb.Key
 	for _, val := range p.start {
 		startKey = encoding.EncodeIntValue(startKey, encoding.NoColumnID, int64(val))
@@ -341,7 +342,7 @@ func (p partition) toPartitionDescriptor() sqlbase.PartitioningDescriptor_Range 
 	for _, val := range p.end {
 		endKey = encoding.EncodeIntValue(endKey, encoding.NoColumnID, int64(val))
 	}
-	return sqlbase.PartitioningDescriptor_Range{
+	return descpb.PartitioningDescriptor_Range{
 		Name:          p.name,
 		FromInclusive: startKey,
 		ToExclusive:   endKey,
@@ -380,16 +381,16 @@ type index struct {
 	partitions partitioning
 }
 
-func (idx index) toIndexDescriptor(id int) sqlbase.IndexDescriptor {
-	var idxDesc sqlbase.IndexDescriptor
-	idxDesc.ID = sqlbase.IndexID(id)
+func (idx index) toIndexDescriptor(id int) descpb.IndexDescriptor {
+	var idxDesc descpb.IndexDescriptor
+	idxDesc.ID = descpb.IndexID(id)
 	idxDesc.Name = idx.name
 	if len(idx.partitions) > 0 {
 		neededCols := idx.partitions.numCols()
 		for i := 0; i < neededCols; i++ {
-			idxDesc.ColumnIDs = append(idxDesc.ColumnIDs, sqlbase.ColumnID(i))
+			idxDesc.ColumnIDs = append(idxDesc.ColumnIDs, descpb.ColumnID(i))
 			idxDesc.ColumnNames = append(idxDesc.ColumnNames, fmt.Sprintf("col%d", i))
-			idxDesc.ColumnDirections = append(idxDesc.ColumnDirections, sqlbase.IndexDescriptor_ASC)
+			idxDesc.ColumnDirections = append(idxDesc.ColumnDirections, descpb.IndexDescriptor_ASC)
 		}
 		idxDesc.Partitioning.NumColumns = uint32(len(idx.partitions[0].start))
 		for _, p := range idx.partitions {
@@ -758,7 +759,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			sqlbase.NewInitialDatabaseDescriptor(sqlbase.ID(dbID), db.name))
+			sqlbase.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name))
 
 		for _, table := range db.tables {
 			tableID := objectCounter
@@ -840,7 +841,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	}, nil
 }
 
-func generateTableZone(t table, tableDesc sqlbase.TableDescriptor) (*zonepb.ZoneConfig, error) {
+func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneConfig, error) {
 	// Create the table's zone config.
 	var tableZone *zonepb.ZoneConfig
 	if t.zone != nil {
@@ -859,7 +860,7 @@ func generateTableZone(t table, tableDesc sqlbase.TableDescriptor) (*zonepb.Zone
 		var err error
 		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
 			nil, uuid.UUID{} /* clusterID */, keys.SystemSQLCodec,
-			&tableDesc, tableZone.Subzones, false /* hasNewSubzones */)
+			sqlbase.NewImmutableTableDescriptor(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")
 		}
@@ -907,15 +908,15 @@ func processSplits(
 	return ranges, nil
 }
 
-func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, error) {
+func makeTableDesc(t table, tableID int, dbID int) (descpb.TableDescriptor, error) {
 	if err := t.validate(); err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return descpb.TableDescriptor{}, err
 	}
 
-	desc := sqlbase.TableDescriptor{
-		ID:       sqlbase.ID(tableID),
+	desc := descpb.TableDescriptor{
+		ID:       descpb.ID(tableID),
 		Name:     t.name,
-		ParentID: sqlbase.ID(dbID),
+		ParentID: descpb.ID(dbID),
 	}
 
 	for i, idx := range t.indexes {
@@ -930,9 +931,9 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 		}
 	}
 	for i := 0; i < numCols; i++ {
-		desc.Columns = append(desc.Columns, sqlbase.ColumnDescriptor{
+		desc.Columns = append(desc.Columns, descpb.ColumnDescriptor{
 			Name: fmt.Sprintf("col%d", i),
-			ID:   sqlbase.ColumnID(i),
+			ID:   descpb.ColumnID(i),
 			Type: types.Int,
 		})
 	}
@@ -1025,7 +1026,7 @@ func (b *systemConfigBuilder) addDatabaseZone(name string, id int, cfg zonepb.Zo
 	return b.addZoneInner(name, id, cfg)
 }
 
-func (b *systemConfigBuilder) addTableZone(t sqlbase.TableDescriptor, cfg zonepb.ZoneConfig) error {
+func (b *systemConfigBuilder) addTableZone(t descpb.TableDescriptor, cfg zonepb.ZoneConfig) error {
 	if err := b.addZoneInner(t.Name, int(t.ID), cfg); err != nil {
 		return err
 	}
@@ -1069,20 +1070,20 @@ func (b *systemConfigBuilder) build() (*config.SystemConfig, map[ZoneKey]string)
 }
 
 // addTableDesc adds a table descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescriptor) {
+func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescriptor) {
 	if tableDesc.ParentID == 0 {
 		panic(fmt.Sprintf("parent not set for table %q", tableDesc.Name))
 	}
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))
-	desc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Table{
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
+	desc := &descpb.Descriptor{
+		Union: &descpb.Descriptor_Table{
 			Table: &tableDesc,
 		},
 	}
 	// Use a bogus timestamp for the descriptor modification time.
 	ts := hlc.Timestamp{WallTime: 123}
-	desc.Table(ts)
+	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), desc, ts)
 	var v roachpb.Value
 	if err := v.SetProto(desc); err != nil {
 		panic(err)
@@ -1093,7 +1094,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescri
 // addTableDesc adds a database descriptor to the SystemConfig.
 func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *sqlbase.ImmutableDatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(id))
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value
 	if err := v.SetProto(dbDesc.DescriptorProto()); err != nil {
 		panic(err)

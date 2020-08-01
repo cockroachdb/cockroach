@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -62,8 +63,9 @@ func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 }
 
 func descriptor(descID uint64) roachpb.KeyValue {
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(descID))
-	v := sqlbase.TableDescriptor{}
+	id := descpb.ID(descID)
+	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+	v := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
 	kv := roachpb.KeyValue{Key: k}
 	if err := kv.Value.SetProto(v.DescriptorProto()); err != nil {
 		panic(err)

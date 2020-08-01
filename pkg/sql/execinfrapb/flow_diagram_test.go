@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -46,9 +46,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	flows := make(map[roachpb.NodeID]*FlowSpec)
 
-	desc := &sqlbase.TableDescriptor{
+	desc := &descpb.TableDescriptor{
 		Name:    "Table",
-		Indexes: []sqlbase.IndexDescriptor{{Name: "SomeIndex"}},
+		Indexes: []descpb.IndexDescriptor{{Name: "SomeIndex"}},
 	}
 	tr := TableReaderSpec{
 		Table:    *desc,
@@ -174,8 +174,8 @@ func TestPlanDiagramJoin(t *testing.T) {
 
 	flows := make(map[roachpb.NodeID]*FlowSpec)
 
-	descA := &sqlbase.TableDescriptor{Name: "TableA"}
-	descB := &sqlbase.TableDescriptor{Name: "TableB"}
+	descA := &descpb.TableDescriptor{Name: "TableA"}
+	descB := &descpb.TableDescriptor{Name: "TableB"}
 
 	trA := TableReaderSpec{Table: *descA}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -115,7 +116,7 @@ func checkDistAggregationInfo(
 	ctx context.Context,
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
@@ -125,7 +126,7 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc,
+			Table: *tableDesc.TableDesc(),
 			Spans: make([]execinfrapb.TableReaderSpan, 1),
 		}
 
@@ -439,7 +440,7 @@ func TestDistAggregationTable(t *testing.T) {
 	)
 
 	kvDB := tc.Server(0).DB()
-	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	for fn, info := range DistAggregationTable {
 		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {

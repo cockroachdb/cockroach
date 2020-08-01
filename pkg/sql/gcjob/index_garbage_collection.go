@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,7 +30,7 @@ import (
 func gcIndexes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	parentID sqlbase.ID,
+	parentID descpb.ID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (bool, error) {
 	didGC := false
@@ -37,10 +39,9 @@ func gcIndexes(
 		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
 
-	var parentTable *sqlbase.TableDescriptor
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		parentTable, err = sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, parentID)
+	var parentTable *sqlbase.ImmutableTableDescriptor
+	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		parentTable, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
 		return err
 	}); err != nil {
 		return false, errors.Wrapf(err, "fetching parent table %d", parentID)
@@ -51,7 +52,7 @@ func gcIndexes(
 			continue
 		}
 
-		indexDesc := sqlbase.IndexDescriptor{ID: index.IndexID}
+		indexDesc := descpb.IndexDescriptor{ID: index.IndexID}
 		if err := clearIndex(ctx, execCfg, parentTable, indexDesc); err != nil {
 			return false, errors.Wrapf(err, "clearing index %d", indexDesc.ID)
 		}
@@ -59,7 +60,7 @@ func gcIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, parentTable.GetID(), []sqlbase.IndexDescriptor{indexDesc})
+			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, parentTable.GetID(), []descpb.IndexDescriptor{indexDesc})
 		}); err != nil {
 			return false, errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
 		}
@@ -78,8 +79,8 @@ func gcIndexes(
 func clearIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	tableDesc *sqlbase.TableDescriptor,
-	index sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	index descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.ID)
 	if index.IsInterleaved() {
@@ -105,8 +106,8 @@ func clearIndex(
 func completeDroppedIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	table *sqlbase.TableDescriptor,
-	indexID sqlbase.IndexID,
+	table *sqlbase.ImmutableTableDescriptor,
+	indexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if err := updateDescriptorGCMutations(ctx, execCfg, table, indexID); err != nil {

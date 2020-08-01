@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -26,7 +27,7 @@ type interleavedJoinNode struct {
 
 	leftIsAncestor bool
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// columns are the produced columns, namely the columns in the left scanNode
 	// and (unless the join type is semi or anti join) the columns in the right

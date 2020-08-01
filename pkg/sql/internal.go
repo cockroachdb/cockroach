@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -130,8 +131,8 @@ func (ie *InternalExecutor) initConnEx(
 	// their respective "pressure" on internal queries. Hence the choice here to
 	// add the delegate prefix to the current app name.
 	var appStatsBucketName string
-	if !strings.HasPrefix(sd.ApplicationName, sqlbase.InternalAppNamePrefix) {
-		appStatsBucketName = sqlbase.DelegatedAppNamePrefix + sd.ApplicationName
+	if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+		appStatsBucketName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
 	} else {
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
@@ -344,7 +345,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	if ie.sessionData == nil {
 		return sqlbase.InternalExecutorSessionDataOverride{
 			User:            security.RootUser,
-			ApplicationName: sqlbase.InternalAppNamePrefix + "-" + opName,
+			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sqlbase.InternalExecutorSessionDataOverride{}
@@ -352,7 +353,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 		o.User = security.RootUser
 	}
 	if ie.sessionData.ApplicationName == "" {
-		o.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
 }
@@ -385,7 +386,7 @@ func (ie *InternalExecutor) execInternal(
 		return result{}, errors.AssertionFailedf("no user specified for internal query")
 	}
 	if sd.ApplicationName == "" {
-		sd.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 
 	defer func() {

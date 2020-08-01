@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -26,7 +27,7 @@ var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 type renameIndexNode struct {
 	n         *tree.RenameIndex
 	tableDesc *sqlbase.MutableTableDescriptor
-	idx       *sqlbase.IndexDescriptor
+	idx       *descpb.IndexDescriptor
 }
 
 // RenameIndex renames the index.
@@ -102,7 +103,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	}
 
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
+		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 func (n *renameIndexNode) Next(runParams) (bool, error) { return false, nil }

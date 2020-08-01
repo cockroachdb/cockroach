@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -111,7 +112,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
 		// control whether we perform locking implicitly during DELETEs.
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		params.p.alloc,
 		allTables...,

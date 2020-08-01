@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -1642,11 +1644,10 @@ func TestImportCSVStmt(t *testing.T) {
 		// to the failed import will be one higher than the ID of the empty database
 		// it was created in.
 		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
-		tableID := sqlbase.ID(dbID + 1)
-		var td *sqlbase.TableDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			td, err = sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
+		tableID := descpb.ID(dbID + 1)
+		var td *sqlbase.ImmutableTableDescriptor
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -1667,7 +1668,7 @@ func TestImportCSVStmt(t *testing.T) {
 		tests.CheckKeyCount(t, kvDB, td.TableSpan(keys.SystemSQLCodec), 0)
 		// Expect that the table descriptor is deleted.
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			_, err := sqlbase.GetTableDescFromID(ctx, txn, keys.SystemSQLCodec, tableID)
+			_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
 			if !testutils.IsError(err, "descriptor not found") {
 				return err
 			}
@@ -2916,7 +2917,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -2928,10 +2929,9 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 		}
 	}()
 
-	descr := tableDesc.TableDesc()
 	importCtx := &parallelImportContext{
 		evalCtx:   &evalCtx,
-		tableDesc: descr,
+		tableDesc: tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
 		kvCh:      kvCh,
 	}
 
@@ -3356,7 +3356,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3368,15 +3368,15 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		}
 	}()
 
-	descr := tableDesc.TableDesc()
-	cols := make(tree.NameList, len(descr.Columns))
-	for i, col := range descr.Columns {
+	cols := make(tree.NameList, len(tableDesc.Columns))
+	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
 	r, err := newMysqloutfileReader(roachpb.MySQLOutfileOptions{
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
-	}, kvCh, 0, 0, descr, &evalCtx)
+	}, kvCh, 0, 0,
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3457,8 +3457,8 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID,
-		sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID,
+		descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -3470,16 +3470,16 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		}
 	}()
 
-	descr := tableDesc.TableDesc()
-	cols := make(tree.NameList, len(descr.Columns))
-	for i, col := range descr.Columns {
+	cols := make(tree.NameList, len(tableDesc.Columns))
+	for i, col := range tableDesc.Columns {
 		cols[i] = tree.Name(col.Name)
 	}
 	r, err := newPgCopyReader(roachpb.PgCopyOptions{
 		Delimiter:  '\t',
 		Null:       `\N`,
 		MaxRowSize: 4096,
-	}, kvCh, 0, 0, descr, &evalCtx)
+	}, kvCh, 0, 0,
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

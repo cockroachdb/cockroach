@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -250,7 +251,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 
 		s.matched[inputRowIdx] = true
 		if !s.joinType.ShouldIncludeRightColsInOutput() {
-			if s.joinType == sqlbase.LeftAntiJoin {
+			if s.joinType == descpb.LeftAntiJoin {
 				// Skip emitting row.
 				continue
 			}
@@ -478,13 +479,13 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		s.emitCursor.seenMatch = false
 		if !seenMatch {
 			switch s.joinType {
-			case sqlbase.LeftOuterJoin:
+			case descpb.LeftOuterJoin:
 				// An outer-join non-match means we emit the input row with NULLs for
 				// the right side (if it passes the ON-condition).
 				if renderedRow := s.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
 					return renderedRow, jrEmittingRows, nil
 				}
-			case sqlbase.LeftAntiJoin:
+			case descpb.LeftAntiJoin:
 				// An anti-join non-match means we emit the input row.
 				return inputRow, jrEmittingRows, nil
 			}
@@ -495,11 +496,11 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	lookedUpRowIdx := lookedUpRows[s.emitCursor.outputRowIdx]
 	s.emitCursor.outputRowIdx++
 	switch s.joinType {
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		// A semi-join match means we emit our input row.
 		s.emitCursor.seenMatch = true
 		return inputRow, jrEmittingRows, nil
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		// An anti-join match means we emit nothing.
 		s.emitCursor.seenMatch = true
 		return nil, jrEmittingRows, nil

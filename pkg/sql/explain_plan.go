@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -280,7 +281,7 @@ func getAttrForSpansAll(hardLimitSet bool) string {
 // spans implements the planObserver interface.
 func (e *explainer) spans(
 	nodeName, fieldName string,
-	index *sqlbase.IndexDescriptor,
+	index *descpb.IndexDescriptor,
 	spans []roachpb.Span,
 	hardLimitSet bool,
 ) {

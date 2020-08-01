@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +35,7 @@ func (n *createSchemaNode) startExec(params runParams) error {
 }
 
 func (p *planner) schemaExists(
-	ctx context.Context, parentID sqlbase.ID, schema string,
+	ctx context.Context, parentID descpb.ID, schema string,
 ) (bool, error) {
 	// Check statically known schemas.
 	if schema == tree.PublicSchema {
@@ -111,7 +112,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Create the SchemaDescriptor.
-	desc := sqlbase.NewMutableCreatedSchemaDescriptor(sqlbase.SchemaDescriptor{
+	desc := sqlbase.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
 		ParentID: db.ID,
 		Name:     n.Schema,
 		ID:       id,
@@ -122,9 +123,9 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Update the parent database with this schema information.
 	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
 	if mutDB.Schemas == nil {
-		mutDB.Schemas = make(map[string]sqlbase.DatabaseDescriptor_SchemaInfo)
+		mutDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
-	mutDB.Schemas[desc.Name] = sqlbase.DatabaseDescriptor_SchemaInfo{
+	mutDB.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
 		ID:      desc.ID,
 		Dropped: false,
 	}

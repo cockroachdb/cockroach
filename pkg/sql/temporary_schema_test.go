@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -354,11 +355,11 @@ func ensureTemporaryObjectsAreDeleted(
 // all objects in system.namespace along with the temp schemas.
 func constructNameToIDMapping(
 	ctx context.Context, t *testing.T, conn *gosql.Conn,
-) (map[string]sqlbase.ID, []string) {
+) (map[string]descpb.ID, []string) {
 	rows, err := conn.QueryContext(ctx, `SELECT id, name FROM system.namespace`)
 	require.NoError(t, err)
 
-	namesToID := make(map[string]sqlbase.ID)
+	namesToID := make(map[string]descpb.ID)
 	tempSchemaNames := make([]string, 0)
 	for rows.Next() {
 		var id int64
@@ -366,7 +367,7 @@ func constructNameToIDMapping(
 		err := rows.Scan(&id, &name)
 		require.NoError(t, err)
 
-		namesToID[name] = sqlbase.ID(id)
+		namesToID[name] = descpb.ID(id)
 		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
 			tempSchemaNames = append(tempSchemaNames, name)
 		}

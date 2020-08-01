@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,11 +33,11 @@ func RevertTables(
 	ctx context.Context,
 	db *kv.DB,
 	execCfg *ExecutorConfig,
-	tables []*sqlbase.TableDescriptor,
+	tables []*sqlbase.ImmutableTableDescriptor,
 	targetTime hlc.Timestamp,
 	batchSize int64,
 ) error {
-	reverting := make(map[sqlbase.ID]bool, len(tables))
+	reverting := make(map[descpb.ID]bool, len(tables))
 	for i := range tables {
 		reverting[tables[i].ID] = true
 	}
@@ -46,7 +47,7 @@ func RevertTables(
 	// Check that all the tables are revertable -- i.e. offline and that their
 	// full interleave hierarchy is being reverted.
 	for i := range tables {
-		if tables[i].State != sqlbase.TableDescriptor_OFFLINE {
+		if tables[i].State != descpb.TableDescriptor_OFFLINE {
 			return errors.New("only offline tables can be reverted")
 		}
 

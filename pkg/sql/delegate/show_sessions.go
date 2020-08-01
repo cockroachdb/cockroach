@@ -11,8 +11,8 @@
 package delegate
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (d *delegator) delegateShowSessions(n *tree.ShowSessions) (tree.Statement, error) {
@@ -23,7 +23,7 @@ func (d *delegator) delegateShowSessions(n *tree.ShowSessions) (tree.Statement, 
 	}
 	var filter string
 	if !n.All {
-		filter = " WHERE application_name NOT LIKE '" + sqlbase.InternalAppNamePrefix + "%'"
+		filter = " WHERE application_name NOT LIKE '" + catconstants.InternalAppNamePrefix + "%'"
 	}
 	return parse(query + table + filter)
 }

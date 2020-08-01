@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,7 +56,7 @@ type txnKVFetcher struct {
 	useBatchLimit   bool
 	reverse         bool
 	// lockStr represents the locking mode to use when fetching KVs.
-	lockStr sqlbase.ScanLockingStrength
+	lockStr descpb.ScanLockingStrength
 
 	fetchEnd bool
 	batchIdx int
@@ -123,21 +124,21 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 // for key-value scans.
 func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
 	switch f.lockStr {
-	case sqlbase.ScanLockingStrength_FOR_NONE:
+	case descpb.ScanLockingStrength_FOR_NONE:
 		return lock.None
 
-	case sqlbase.ScanLockingStrength_FOR_KEY_SHARE:
+	case descpb.ScanLockingStrength_FOR_KEY_SHARE:
 		// Promote to FOR_SHARE.
 		fallthrough
-	case sqlbase.ScanLockingStrength_FOR_SHARE:
+	case descpb.ScanLockingStrength_FOR_SHARE:
 		// We currently perform no per-key locking when FOR_SHARE is used
 		// because Shared locks have not yet been implemented.
 		return lock.None
 
-	case sqlbase.ScanLockingStrength_FOR_NO_KEY_UPDATE:
+	case descpb.ScanLockingStrength_FOR_NO_KEY_UPDATE:
 		// Promote to FOR_UPDATE.
 		fallthrough
-	case sqlbase.ScanLockingStrength_FOR_UPDATE:
+	case descpb.ScanLockingStrength_FOR_UPDATE:
 		// We currently perform exclusive per-key locking when FOR_UPDATE is
 		// used because Upgrade locks have not yet been implemented.
 		return lock.Exclusive
@@ -160,7 +161,7 @@ func makeKVBatchFetcher(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
-	lockStr sqlbase.ScanLockingStrength,
+	lockStr descpb.ScanLockingStrength,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -182,7 +183,7 @@ func makeKVBatchFetcherWithSendFunc(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
-	lockStr sqlbase.ScanLockingStrength,
+	lockStr descpb.ScanLockingStrength,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",

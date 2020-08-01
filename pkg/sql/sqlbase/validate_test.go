@@ -13,6 +13,8 @@ package sqlbase
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 type validateStatus int
@@ -54,7 +56,7 @@ var validationMap = []struct {
 	fieldMap map[string]validationStatusInfo
 }{
 	{
-		obj: TableDescriptor{},
+		obj: descpb.TableDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
 			"Name":             {status: thisFieldReferencesNoObjects},
 			"ID":               {status: thisFieldReferencesNoObjects},
@@ -111,7 +113,7 @@ var validationMap = []struct {
 		},
 	},
 	{
-		obj: IndexDescriptor{},
+		obj: descpb.IndexDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
 			"Name":             {status: thisFieldReferencesNoObjects},
 			"ID":               {status: thisFieldReferencesNoObjects},
@@ -151,7 +153,7 @@ var validationMap = []struct {
 		},
 	},
 	{
-		obj: ColumnDescriptor{},
+		obj: descpb.ColumnDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
 			"Name":     {status: thisFieldReferencesNoObjects},
 			"ID":       {status: thisFieldReferencesNoObjects},
@@ -178,7 +180,7 @@ var validationMap = []struct {
 		},
 	},
 	{
-		obj: ForeignKeyConstraint{},
+		obj: descpb.ForeignKeyConstraint{},
 		fieldMap: map[string]validationStatusInfo{
 			"OriginTableID": {status: iSolemnlySwearThisFieldIsValidated},
 			"OriginColumnIDs": {
@@ -196,7 +198,7 @@ var validationMap = []struct {
 		},
 	},
 	{
-		obj: TypeDescriptor{},
+		obj: descpb.TypeDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
 			"Name":                     {status: iSolemnlySwearThisFieldIsValidated},
 			"ID":                       {status: iSolemnlySwearThisFieldIsValidated},

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
@@ -461,21 +462,21 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 	s.sqlServer.pgServer.SQLServer.ResetReportedStats(ctx)
 }
 
-func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
+func (s *Server) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescriptor, error) {
 	startKey := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 	kvs, err := s.db.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]sqlbase.TableDescriptor, 0, len(kvs))
+	tables := make([]descpb.TableDescriptor, 0, len(kvs))
 	redactor := stringRedactor{}
 	for _, kv := range kvs {
-		var desc sqlbase.Descriptor
+		var desc descpb.Descriptor
 		if err := kv.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}
-		if t := desc.Table(kv.Value.Timestamp); t != nil && t.ID > keys.MaxReservedDescID {
+		if t := sqlbase.TableFromDescriptor(&desc, kv.Value.Timestamp); t != nil && t.ID > keys.MaxReservedDescID {
 			if err := reflectwalk.Walk(t, redactor); err != nil {
 				panic(err) // stringRedactor never returns a non-nil err
 			}

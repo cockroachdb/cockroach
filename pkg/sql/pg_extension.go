@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,10 +30,10 @@ import (
 // our own defined virtual table / schema.
 var pgExtension = virtualSchema{
 	name: sessiondata.PgExtensionSchemaName,
-	tableDefs: map[sqlbase.ID]virtualSchemaDef{
-		sqlbase.PgExtensionGeographyColumnsTableID: pgExtensionGeographyColumnsTable,
-		sqlbase.PgExtensionGeometryColumnsTableID:  pgExtensionGeometryColumnsTable,
-		sqlbase.PgExtensionSpatialRefSysTableID:    pgExtensionSpatialRefSysTable,
+	tableDefs: map[descpb.ID]virtualSchemaDef{
+		catconstants.PgExtensionGeographyColumnsTableID: pgExtensionGeographyColumnsTable,
+		catconstants.PgExtensionGeometryColumnsTableID:  pgExtensionGeometryColumnsTable,
+		catconstants.PgExtensionSpatialRefSysTableID:    pgExtensionSpatialRefSysTable,
 	},
 	validWithNoDatabaseContext: false,
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,7 +56,7 @@ type updateRun struct {
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []sqlbase.ColumnDescriptor
+	computedCols []descpb.ColumnDescriptor
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
@@ -101,7 +102,7 @@ type updateRun struct {
 	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
 	// This provides the inverse mapping of sourceSlots.
 	//
-	updateColsIdx map[sqlbase.ColumnID]int
+	updateColsIdx map[descpb.ColumnID]int
 
 	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
 	// columns in the resultRowBuffer. A value of -1 is used to indicate
@@ -393,7 +394,7 @@ type sourceSlot interface {
 }
 
 type scalarSlot struct {
-	column      sqlbase.ColumnDescriptor
+	column      descpb.ColumnDescriptor
 	sourceIndex int
 }
 
@@ -419,7 +420,7 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescriptor) error {
+func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescriptor) error {
 	for i := range cols {
 		col := &cols[i]
 		if !col.Nullable && row[i] == tree.DNull {

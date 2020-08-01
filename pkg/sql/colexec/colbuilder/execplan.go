@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -191,7 +191,7 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 		return nil
 
 	case core.HashJoiner != nil:
-		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
+		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
@@ -207,7 +207,7 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 
 	case core.MergeJoiner != nil:
 		if !core.MergeJoiner.OnExpr.Empty() &&
-			core.MergeJoiner.Type != sqlbase.InnerJoin {
+			core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return nil
@@ -853,7 +853,7 @@ func NewColOperator(
 				copy(result.ColumnTypes[len(leftTypes):], rightTypes)
 			}
 
-			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.InnerJoin {
+			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err =
 					result.planAndMaybeWrapOnExprAsFilter(
 						ctx, flowCtx, args, core.HashJoiner.OnExpr, factory,
@@ -878,7 +878,7 @@ func NewColOperator(
 			joinType := core.MergeJoiner.Type
 			var onExpr *execinfrapb.Expression
 			if !core.MergeJoiner.OnExpr.Empty() {
-				if joinType != sqlbase.InnerJoin {
+				if joinType != descpb.InnerJoin {
 					return r, errors.AssertionFailedf(
 						"ON expression (%s) was unexpectedly planned for merge joiner with join type %s",
 						core.MergeJoiner.OnExpr.String(), core.MergeJoiner.Type.String(),

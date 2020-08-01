@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -31,7 +32,7 @@ import (
 )
 
 type requestedStat struct {
-	columns             []sqlbase.ColumnID
+	columns             []descpb.ColumnID
 	histogram           bool
 	histogramMaxBuckets int
 	name                string
@@ -83,7 +84,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return nil, err
 	}
-	sb := span.MakeBuilder(planCtx.planner.ExecCfg().Codec, desc.TableDesc(), scan.index)
+	sb := span.MakeBuilder(planCtx.planner.ExecCfg().Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	var sketchSpecs, invSketchSpecs []execinfrapb.SketchSpec
-	sampledColumnIDs := make([]sqlbase.ColumnID, len(scan.cols))
+	sampledColumnIDs := make([]descpb.ColumnID, len(scan.cols))
 	for _, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
 			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,

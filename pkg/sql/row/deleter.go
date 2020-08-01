@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,8 +25,8 @@ import (
 // Deleter abstracts the key/value operations for deleting table rows.
 type Deleter struct {
 	Helper               rowHelper
-	FetchCols            []sqlbase.ColumnDescriptor
-	FetchColIDtoRowIndex map[sqlbase.ColumnID]int
+	FetchCols            []descpb.ColumnDescriptor
+	FetchColIDtoRowIndex map[descpb.ColumnID]int
 	// For allocation avoidance.
 	key roachpb.Key
 }
@@ -40,7 +41,7 @@ func MakeDeleter(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	requestedCols []sqlbase.ColumnDescriptor,
+	requestedCols []descpb.ColumnDescriptor,
 	alloc *sqlbase.DatumAlloc,
 ) (Deleter, error) {
 	indexes := tableDesc.DeletableIndexes()
@@ -48,7 +49,7 @@ func MakeDeleter(
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
 	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
 
-	maybeAddCol := func(colID sqlbase.ColumnID) error {
+	maybeAddCol := func(colID descpb.ColumnID) error {
 		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
 			col, err := tableDesc.FindColumnByID(colID)
 			if err != nil {
@@ -106,7 +107,7 @@ func (rd *Deleter) DeleteRow(
 		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 		entries, err := sqlbase.EncodeSecondaryIndex(
 			rd.Helper.Codec,
-			rd.Helper.TableDesc.TableDesc(),
+			rd.Helper.TableDesc,
 			&rd.Helper.Indexes[i],
 			rd.FetchColIDtoRowIndex,
 			values,
@@ -151,7 +152,7 @@ func (rd *Deleter) DeleteRow(
 // DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
 func (rd *Deleter) DeleteIndexRow(
-	ctx context.Context, b *kv.Batch, idx *sqlbase.IndexDescriptor, values []tree.Datum, traceKV bool,
+	ctx context.Context, b *kv.Batch, idx *descpb.IndexDescriptor, values []tree.Datum, traceKV bool,
 ) error {
 	// We want to include empty k/v pairs because we want
 	// to delete all k/v's for this row. By setting includeEmpty
@@ -159,7 +160,7 @@ func (rd *Deleter) DeleteIndexRow(
 	// which will guarantee that we delete all the k/v's in this row.
 	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
 		rd.Helper.Codec,
-		rd.Helper.TableDesc.TableDesc(),
+		rd.Helper.TableDesc,
 		idx,
 		rd.FetchColIDtoRowIndex,
 		values,

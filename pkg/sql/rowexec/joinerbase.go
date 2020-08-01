@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,7 +24,7 @@ import (
 type joinerBase struct {
 	execinfra.ProcessorBase
 
-	joinType    sqlbase.JoinType
+	joinType    descpb.JoinType
 	onCond      execinfra.ExprHelper
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
@@ -50,7 +51,7 @@ func (jb *joinerBase) init(
 	processorID int32,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
-	jType sqlbase.JoinType,
+	jType descpb.JoinType,
 	onExpr execinfrapb.Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
@@ -162,19 +163,19 @@ func (jb *joinerBase) renderUnmatchedRow(
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
-func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
+func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case sqlbase.LeftSemiJoin, sqlbase.InnerJoin, sqlbase.IntersectAllJoin:
+	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin:
 		return false
-	case sqlbase.RightOuterJoin:
+	case descpb.RightOuterJoin:
 		return side == rightSide
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		return side == leftSide
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		return side == leftSide
-	case sqlbase.ExceptAllJoin:
+	case descpb.ExceptAllJoin:
 		return side == leftSide
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		return true
 	default:
 		return true

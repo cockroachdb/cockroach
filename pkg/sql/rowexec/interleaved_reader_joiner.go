@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -39,8 +40,8 @@ const (
 )
 
 type tableInfo struct {
-	tableID  sqlbase.ID
-	indexID  sqlbase.IndexID
+	tableID  descpb.ID
+	indexID  descpb.IndexID
 	post     execinfra.ProcOutputHelper
 	ordering sqlbase.ColumnOrdering
 }
@@ -127,11 +128,11 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.Pr
 // ancestor table in this join. err is non-nil if the table was missing from the
 // list.
 func (irj *interleavedReaderJoiner) findTable(
-	table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	table sqlbase.TableDescriptor, index *descpb.IndexDescriptor,
 ) (tInfo *tableInfo, isAncestorRow bool, err error) {
 	for i := range irj.tables {
 		tInfo = &irj.tables[i]
-		if table.ID == tInfo.tableID && index.ID == tInfo.indexID {
+		if table.GetID() == tInfo.tableID && index.ID == tInfo.indexID {
 			if i == irj.ancestorTablePos {
 				isAncestorRow = true
 			}
@@ -141,7 +142,7 @@ func (irj *interleavedReaderJoiner) findTable(
 	return nil,
 		false,
 		errors.Errorf("index %q.%q missing from interleaved join",
-			table.Name, index.Name)
+			table.GetName(), index.Name)
 }
 
 // nextRow implements the steady state of the interleavedReaderJoiner. It
@@ -304,7 +305,10 @@ func newInterleavedReaderJoiner(
 			}
 		}
 	}
-
+	tableDescs := make([]*sqlbase.ImmutableTableDescriptor, len(spec.Tables))
+	for i, raw := range spec.Tables {
+		tableDescs[i] = sqlbase.NewImmutableTableDescriptor(raw.Desc)
+	}
 	tables := make([]tableInfo, len(spec.Tables))
 	// We need to take spans from all tables and merge them together
 	// for Fetcher.
@@ -315,7 +319,7 @@ func newInterleavedReaderJoiner(
 	var numAncestorPKCols int
 	minAncestors := -1
 	for i, table := range spec.Tables {
-		index, _, err := table.Desc.FindIndexByIndexIdx(int(table.IndexIdx))
+		index, _, err := tableDescs[i].FindIndexByIndexIdx(int(table.IndexIdx))
 		if err != nil {
 			return nil, err
 		}
@@ -335,7 +339,7 @@ func newInterleavedReaderJoiner(
 		evalCtx := flowCtx.NewEvalCtx()
 		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		if err := tables[i].post.Init(
-			&table.Post, table.Desc.ColumnTypes(), semaCtx, evalCtx, nil, /*output*/
+			&table.Post, tableDescs[i].ColumnTypes(), semaCtx, evalCtx, nil, /*output*/
 		); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to initialize post-processing helper")
@@ -409,7 +413,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
 	tableInfos []tableInfo,
 	reverseScan bool,
-	lockStr sqlbase.ScanLockingStrength,
+	lockStr descpb.ScanLockingStrength,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))

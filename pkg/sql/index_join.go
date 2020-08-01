@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -32,7 +33,7 @@ type indexJoinNode struct {
 	// The columns returned by this node. While these are not ever different from
 	// the table scanNode in the heuristic planner, the optimizer plans them to
 	// be different in some cases.
-	cols []sqlbase.ColumnDescriptor
+	cols []descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 

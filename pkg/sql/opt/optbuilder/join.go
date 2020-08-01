@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -51,7 +52,7 @@ func (b *Builder) buildJoin(
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
 
-	joinType := sqlbase.JoinTypeFromAstString(join.JoinType)
+	joinType := descpb.JoinTypeFromAstString(join.JoinType)
 	var flags memo.JoinFlags
 	switch join.Hint {
 	case "":
@@ -62,7 +63,7 @@ func (b *Builder) buildJoin(
 	case tree.AstLookup:
 		telemetry.Inc(sqltelemetry.LookupJoinHintUseCounter)
 		flags = memo.AllowLookupJoinIntoRight
-		if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
+		if joinType != descpb.InnerJoin && joinType != descpb.LeftOuterJoin {
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s can only be used with INNER or LEFT joins", tree.AstLookup,
 			))
@@ -184,29 +185,29 @@ func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
 var invalidLateralJoin = pgerror.New(pgcode.Syntax, "The combining JOIN type must be INNER or LEFT for a LATERAL reference")
 
 func (b *Builder) constructJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right memo.RelExpr,
 	on memo.FiltersExpr,
 	private *memo.JoinPrivate,
 	isLateral bool,
 ) memo.RelExpr {
 	switch joinType {
-	case sqlbase.InnerJoin:
+	case descpb.InnerJoin:
 		if isLateral {
 			return b.factory.ConstructInnerJoinApply(left, right, on, private)
 		}
 		return b.factory.ConstructInnerJoin(left, right, on, private)
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		if isLateral {
 			return b.factory.ConstructLeftJoinApply(left, right, on, private)
 		}
 		return b.factory.ConstructLeftJoin(left, right, on, private)
-	case sqlbase.RightOuterJoin:
+	case descpb.RightOuterJoin:
 		if isLateral {
 			panic(invalidLateralJoin)
 		}
 		return b.factory.ConstructRightJoin(left, right, on, private)
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		if isLateral {
 			panic(invalidLateralJoin)
 		}
@@ -280,7 +281,7 @@ func (b *Builder) constructJoin(
 //
 type usingJoinBuilder struct {
 	b          *Builder
-	joinType   sqlbase.JoinType
+	joinType   descpb.JoinType
 	joinFlags  memo.JoinFlags
 	filters    memo.FiltersExpr
 	leftScope  *scope
@@ -304,7 +305,7 @@ type usingJoinBuilder struct {
 
 func (jb *usingJoinBuilder) init(
 	b *Builder,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	flags memo.JoinFlags,
 	leftScope, rightScope, outScope *scope,
 ) {
@@ -474,13 +475,13 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	jb.filters = append(jb.filters, jb.b.factory.ConstructFiltersItem(eq))
 
 	// Add the merged column to the scope, constructing a new column if needed.
-	if jb.joinType == sqlbase.InnerJoin || jb.joinType == sqlbase.LeftOuterJoin {
+	if jb.joinType == descpb.InnerJoin || jb.joinType == descpb.LeftOuterJoin {
 		// The merged column is the same as the corresponding column from the
 		// left side.
 		jb.outScope.cols = append(jb.outScope.cols, *leftCol)
 		jb.showCols[leftCol] = struct{}{}
 		jb.hideCols[rightCol] = struct{}{}
-	} else if jb.joinType == sqlbase.RightOuterJoin &&
+	} else if jb.joinType == descpb.RightOuterJoin &&
 		!sqlbase.HasCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.

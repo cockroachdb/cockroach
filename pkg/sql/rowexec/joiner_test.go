@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -21,7 +22,7 @@ import (
 type joinerTestCase struct {
 	leftEqCols  []uint32
 	rightEqCols []uint32
-	joinType    sqlbase.JoinType
+	joinType    descpb.JoinType
 	onExpr      execinfrapb.Expression
 	outCols     []uint32
 	leftTypes   []*types.T
@@ -43,7 +44,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -70,7 +71,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
 			leftTypes: sqlbase.TwoIntCols,
@@ -103,7 +104,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@4 >= 4"},
 			// Implicit AND @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
@@ -145,7 +146,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -175,7 +176,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.RightOuterJoin,
+			joinType:    descpb.RightOuterJoin,
 			// Implicit @1 = @4 constraint.
 			outCols:   []uint32{3, 1, 2},
 			leftTypes: sqlbase.ThreeIntCols,
@@ -205,7 +206,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.FullOuterJoin,
+			joinType:    descpb.FullOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -235,7 +236,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -261,7 +262,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@3 = 9"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
@@ -305,7 +306,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.RightOuterJoin,
+			joinType:    descpb.RightOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
@@ -330,7 +331,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.FullOuterJoin,
+			joinType:    descpb.FullOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
 			leftTypes:   sqlbase.OneIntCol,
@@ -358,7 +359,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0, 1},
 			rightEqCols: []uint32{0, 1},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -383,7 +384,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0, 1},
 			rightEqCols: []uint32{0, 1},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -411,7 +412,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0, 1},
 			rightEqCols: []uint32{0, 1},
-			joinType:    sqlbase.RightOuterJoin,
+			joinType:    descpb.RightOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -439,7 +440,7 @@ func joinerTestCases() []joinerTestCase {
 		{
 			leftEqCols:  []uint32{0, 1},
 			rightEqCols: []uint32{0, 1},
-			joinType:    sqlbase.FullOuterJoin,
+			joinType:    descpb.FullOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
 			leftTypes: sqlbase.TwoIntCols,
@@ -472,7 +473,7 @@ func joinerTestCases() []joinerTestCase {
 			// rightInput and the rightInput is smaller.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
 			leftTypes: sqlbase.TwoIntCols,
@@ -503,7 +504,7 @@ func joinerTestCases() []joinerTestCase {
 			// rightInput and the leftInput is smaller
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
 			leftTypes: sqlbase.TwoIntCols,
@@ -533,7 +534,7 @@ func joinerTestCases() []joinerTestCase {
 			// for semi joins.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
 			leftTypes: sqlbase.TwoIntCols,
@@ -561,7 +562,7 @@ func joinerTestCases() []joinerTestCase {
 			// with nulls for semiJoins
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
 			leftTypes: sqlbase.TwoIntCols,
@@ -587,7 +588,7 @@ func joinerTestCases() []joinerTestCase {
 			// Ensure that semi joins respect OnExprs.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@1 > 1"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
@@ -615,7 +616,7 @@ func joinerTestCases() []joinerTestCase {
 			// Ensure that semi joins respect OnExprs on both inputs.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
@@ -643,7 +644,7 @@ func joinerTestCases() []joinerTestCase {
 			// side is smaller.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -668,7 +669,7 @@ func joinerTestCases() []joinerTestCase {
 			// side is smaller.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -696,7 +697,7 @@ func joinerTestCases() []joinerTestCase {
 			// Ensure nulls aren't equal in anti-joins.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -724,7 +725,7 @@ func joinerTestCases() []joinerTestCase {
 			// Ensure nulls don't match to anything in anti-joins.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -753,7 +754,7 @@ func joinerTestCases() []joinerTestCase {
 			// from both inputs.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
@@ -782,7 +783,7 @@ func joinerTestCases() []joinerTestCase {
 			// from both inputs when left input is smaller.
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
@@ -820,7 +821,7 @@ type joinerErrorTestCase struct {
 	description string
 	leftEqCols  []uint32
 	rightEqCols []uint32
-	joinType    sqlbase.JoinType
+	joinType    descpb.JoinType
 	onExpr      execinfrapb.Expression
 	outCols     []uint32
 	leftTypes   []*types.T
@@ -842,7 +843,7 @@ func joinerErrorTestCases() []joinerErrorTestCase {
 			description: "Ensure that columns from the right input cannot be in semi-join output.",
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
 			leftTypes: sqlbase.TwoIntCols,
@@ -866,7 +867,7 @@ func joinerErrorTestCases() []joinerErrorTestCase {
 			description: "Ensure that columns from the right input cannot be in anti-join output.",
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
 			leftTypes: sqlbase.TwoIntCols,

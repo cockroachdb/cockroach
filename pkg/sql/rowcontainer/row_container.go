@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -369,7 +370,7 @@ type DiskBackedRowContainer struct {
 	// Encoding helpers for de-duplication:
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
-	encodings  []sqlbase.DatumEncoding
+	encodings  []descpb.DatumEncoding
 	datumAlloc sqlbase.DatumAlloc
 	scratchKey []byte
 
@@ -413,7 +414,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
-	f.encodings = make([]sqlbase.DatumEncoding, len(ordering))
+	f.encodings = make([]descpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
 		f.encodings[i] = sqlbase.EncodingDirToDatumEncoding(orderInfo.Direction)
 	}

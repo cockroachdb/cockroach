@@ -17,6 +17,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -771,7 +772,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	}
 
 	var outputCols opt.ColMap
-	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
 		// For semi and anti join, only the left columns are output.
 		outputCols = leftPlan.outputCols
 	} else {
@@ -1068,7 +1069,7 @@ func (b *Builder) initJoinBuild(
 	leftChild memo.RelExpr,
 	rightChild memo.RelExpr,
 	filters memo.FiltersExpr,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 ) (leftPlan, rightPlan execPlan, onExpr tree.TypedExpr, outputCols opt.ColMap, _ error) {
 	leftPlan, err := b.buildRelational(leftChild)
 	if err != nil {
@@ -1088,7 +1089,7 @@ func (b *Builder) initJoinBuild(
 		}
 	}
 
-	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+	if joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin {
 		// For semi and anti join, only the left columns are output.
 		return leftPlan, rightPlan, onExpr, leftPlan.outputCols, nil
 	}
@@ -1107,25 +1108,25 @@ func joinOutputMap(left, right opt.ColMap) opt.ColMap {
 	return res
 }
 
-func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
+func joinOpToJoinType(op opt.Operator) descpb.JoinType {
 	switch op {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		return sqlbase.InnerJoin
+		return descpb.InnerJoin
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return sqlbase.LeftOuterJoin
+		return descpb.LeftOuterJoin
 
 	case opt.RightJoinOp:
-		return sqlbase.RightOuterJoin
+		return descpb.RightOuterJoin
 
 	case opt.FullJoinOp:
-		return sqlbase.FullOuterJoin
+		return descpb.FullOuterJoin
 
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		return sqlbase.LeftSemiJoin
+		return descpb.LeftSemiJoin
 
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		return sqlbase.LeftAntiJoin
+		return descpb.LeftAntiJoin
 
 	default:
 		panic(errors.AssertionFailedf("not a join op %s", log.Safe(op)))

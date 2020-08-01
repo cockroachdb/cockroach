@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -293,7 +293,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			clusterID := uuid.MakeV4()
 			hasNewSubzones := false
 			spans, err := sql.GenerateSubzoneSpans(
-				cluster.NoSettings, clusterID, keys.SystemSQLCodec, test.parsed.tableDesc.TableDesc(), test.parsed.subzones, hasNewSubzones)
+				cluster.NoSettings, clusterID, keys.SystemSQLCodec, test.parsed.tableDesc, test.parsed.subzones, hasNewSubzones)
 			if err != nil {
 				t.Fatalf("generating subzone spans: %+v", err)
 			}
@@ -301,7 +301,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			var actual []string
 			for _, span := range spans {
 				subzone := test.parsed.subzones[span.SubzoneIndex]
-				idxDesc, err := test.parsed.tableDesc.FindIndexByID(sqlbase.IndexID(subzone.IndexID))
+				idxDesc, err := test.parsed.tableDesc.FindIndexByID(descpb.IndexID(subzone.IndexID))
 				if err != nil {
 					t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
 				}

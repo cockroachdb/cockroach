@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
@@ -43,12 +43,12 @@ func TestCloneProto(t *testing.T) {
 		{&zonepb.ZoneConfig{}, false},
 		{&gossip.Info{}, false},
 		{&gossip.BootstrapInfo{}, false},
-		{&sqlbase.IndexDescriptor{}, false},
+		{&descpb.IndexDescriptor{}, false},
 		{&roachpb.SplitTrigger{}, false},
 		{&roachpb.Value{}, false},
 		{&kvserverpb.ReplicaState{}, false},
 		{&roachpb.RangeDescriptor{}, false},
-		{&sqlbase.PartitioningDescriptor{}, false},
+		{&descpb.PartitioningDescriptor{}, false},
 	}
 	for _, tc := range testCases {
 		var clone protoutil.Message

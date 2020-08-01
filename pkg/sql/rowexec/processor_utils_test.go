@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,7 +78,7 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 	if err != nil {
 		panic(err)
 	}
-	encodedDatum := sqlbase.EncDatumFromEncoded(sqlbase.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
 	encodedDatum.Datum = d
 	return encodedDatum
 }

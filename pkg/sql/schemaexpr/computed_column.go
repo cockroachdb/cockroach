@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -69,7 +70,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 
 	var depColIDs sqlbase.TableColSet
 	// First, check that no column in the expression is a computed column.
-	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
+	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *descpb.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
@@ -92,14 +93,14 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 				// We don't depend on this column.
 				continue
 			}
-			for _, action := range []sqlbase.ForeignKeyReference_Action{
+			for _, action := range []descpb.ForeignKeyReference_Action{
 				fk.OnDelete,
 				fk.OnUpdate,
 			} {
 				switch action {
-				case sqlbase.ForeignKeyReference_CASCADE,
-					sqlbase.ForeignKeyReference_SET_NULL,
-					sqlbase.ForeignKeyReference_SET_DEFAULT:
+				case descpb.ForeignKeyReference_CASCADE,
+					descpb.ForeignKeyReference_SET_NULL,
+					descpb.ForeignKeyReference_SET_DEFAULT:
 					return pgerror.New(pgcode.InvalidTableDefinition,
 						"computed columns cannot reference non-restricted FK columns")
 				}
@@ -147,8 +148,8 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 // computed column. The function errs if any existing computed columns or
 // computed columns being added reference the given column.
 // TODO(mgartner): Add unit tests for ValidateNoDependents.
-func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescriptor) error {
-	checkComputed := func(c *sqlbase.ColumnDescriptor) error {
+func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescriptor) error {
+	checkComputed := func(c *descpb.ColumnDescriptor) error {
 		if !c.IsComputed() {
 			return nil
 		}
@@ -159,7 +160,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescri
 			return errors.WithAssertionFailure(err)
 		}
 
-		return iterColDescriptors(v.desc, expr, func(colVar *sqlbase.ColumnDescriptor) error {
+		return iterColDescriptors(v.desc, expr, func(colVar *descpb.ColumnDescriptor) error {
 			if colVar.ID == col.ID {
 				return pgerror.Newf(
 					pgcode.InvalidColumnReference,
@@ -181,7 +182,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescri
 	for i := range v.desc.Mutations {
 		mut := &v.desc.Mutations[i]
 		mutCol := mut.GetColumn()
-		if mut.Direction == sqlbase.DescriptorMutation_ADD && mutCol != nil {
+		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
 			if err := checkComputed(mutCol); err != nil {
 				return err
 			}
@@ -194,7 +195,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *sqlbase.ColumnDescri
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
 // is used to type check computed columns and does not support evaluation.
 type descContainer struct {
-	cols []sqlbase.ColumnDescriptor
+	cols []descpb.ColumnDescriptor
 }
 
 func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
@@ -220,7 +221,7 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // input columns earlier in the slice.
 func MakeComputedExprs(
 	ctx context.Context,
-	cols []sqlbase.ColumnDescriptor,
+	cols []descpb.ColumnDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
@@ -266,10 +267,10 @@ func MakeComputedExprs(
 	source := sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
 	semaCtx.IVarContainer = iv
 
-	addColumnInfo := func(col *sqlbase.ColumnDescriptor) {
+	addColumnInfo := func(col *descpb.ColumnDescriptor) {
 		ivarHelper.AppendSlot()
 		iv.cols = append(iv.cols, *col)
-		newCols := sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), []sqlbase.ColumnDescriptor{*col})
+		newCols := sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), []descpb.ColumnDescriptor{*col})
 		source.SourceColumns = append(source.SourceColumns, newCols...)
 	}
 

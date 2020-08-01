@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,7 +70,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc sqlbase.DatabaseDescriptorInterface, err error) {
+) (desc sqlbase.DatabaseDescriptor, err error) {
 	isSystemDB := name == sqlbase.SystemDatabaseName
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
@@ -77,7 +78,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 			return nil, err
 		}
 
-		if dbID != sqlbase.InvalidID {
+		if dbID != descpb.InvalidID {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
 			desc, err := a.tc.DatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
@@ -106,7 +107,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 // GetSchema implements the Accessor interface.
 func (a *CachedPhysicalAccessor) GetSchema(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (bool, sqlbase.ResolvedSchema, error) {
 	return a.tc.ResolveSchema(ctx, txn, dbID, scName)
 }

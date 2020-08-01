@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -43,21 +45,21 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tableKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.PrimaryIndex.Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p1",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
-	tableDesc.Indexes[0].Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.Indexes[0].Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p2",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),

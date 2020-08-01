@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -1445,7 +1445,7 @@ func (c *chunkingBatchSource) reset() {
 // called.
 type joinTestCase struct {
 	description           string
-	joinType              sqlbase.JoinType
+	joinType              descpb.JoinType
 	leftTuples            tuples
 	leftTypes             []*types.T
 	leftOutCols           []uint32

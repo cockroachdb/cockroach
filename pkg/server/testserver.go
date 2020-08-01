@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -722,8 +723,8 @@ func ExpectedInitialRangeCount(
 			maxSystemDescriptorID = descID
 		}
 	}
-	if maxSystemDescriptorID < sqlbase.ID(keys.MaxPseudoTableID) {
-		maxSystemDescriptorID = sqlbase.ID(keys.MaxPseudoTableID)
+	if maxSystemDescriptorID < descpb.ID(keys.MaxPseudoTableID) {
+		maxSystemDescriptorID = descpb.ID(keys.MaxPseudoTableID)
 	}
 	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
 

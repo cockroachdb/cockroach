@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -192,11 +193,11 @@ func readOnlyError(s string) error {
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func assignSequenceOptions(
-	opts *sqlbase.TableDescriptor_SequenceOpts,
+	opts *descpb.TableDescriptor_SequenceOpts,
 	optsNode tree.SequenceOptions,
 	setDefaults bool,
 	params *runParams,
-	sequenceID sqlbase.ID,
+	sequenceID descpb.ID,
 ) error {
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
@@ -327,10 +328,7 @@ func assignSequenceOptions(
 }
 
 func removeSequenceOwnerIfExists(
-	ctx context.Context,
-	p *planner,
-	sequenceID sqlbase.ID,
-	opts *sqlbase.TableDescriptor_SequenceOpts,
+	ctx context.Context, p *planner, sequenceID descpb.ID, opts *descpb.TableDescriptor_SequenceOpts,
 ) error {
 	if !opts.HasOwner() {
 		return nil
@@ -366,7 +364,7 @@ func removeSequenceOwnerIfExists(
 	}
 	col.OwnsSequenceIds = append(col.OwnsSequenceIds[:refIdx], col.OwnsSequenceIds[refIdx+1:]...)
 	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID,
+		ctx, tableDesc, descpb.InvalidMutationID,
 		fmt.Sprintf("removing sequence owner %s(%d) for sequence %d",
 			tableDesc.Name, tableDesc.ID, sequenceID,
 		),
@@ -380,7 +378,7 @@ func removeSequenceOwnerIfExists(
 
 func resolveColumnItemToDescriptors(
 	ctx context.Context, p *planner, columnItem *tree.ColumnItem,
-) (*MutableTableDescriptor, *sqlbase.ColumnDescriptor, error) {
+) (*MutableTableDescriptor, *descpb.ColumnDescriptor, error) {
 	var tableName tree.TableName
 	if columnItem.TableName != nil {
 		tableName = columnItem.TableName.ToTableName()
@@ -401,8 +399,8 @@ func addSequenceOwner(
 	ctx context.Context,
 	p *planner,
 	columnItemVal *tree.ColumnItem,
-	sequenceID sqlbase.ID,
-	opts *sqlbase.TableDescriptor_SequenceOpts,
+	sequenceID descpb.ID,
+	opts *descpb.TableDescriptor_SequenceOpts,
 ) error {
 	tableDesc, col, err := resolveColumnItemToDescriptors(ctx, p, columnItemVal)
 	if err != nil {
@@ -414,7 +412,7 @@ func addSequenceOwner(
 	opts.SequenceOwner.OwnerColumnID = col.ID
 	opts.SequenceOwner.OwnerTableID = tableDesc.GetID()
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, fmt.Sprintf(
+		ctx, tableDesc, descpb.InvalidMutationID, fmt.Sprintf(
 			"adding sequence owner %s(%d) for sequence %d",
 			tableDesc.Name, tableDesc.ID, sequenceID),
 	)
@@ -428,9 +426,9 @@ func maybeAddSequenceDependencies(
 	ctx context.Context,
 	sc resolver.SchemaResolver,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
-	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descpb.ID]*sqlbase.MutableTableDescriptor,
 ) ([]*MutableTableDescriptor, error) {
 	seqNames, err := sequence.GetUsedSequenceNames(expr)
 	if err != nil {
@@ -473,9 +471,9 @@ func maybeAddSequenceDependencies(
 			}
 		}
 		if refIdx == -1 {
-			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
+			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
 				ID:        tableDesc.ID,
-				ColumnIDs: []sqlbase.ColumnID{col.ID},
+				ColumnIDs: []descpb.ColumnID{col.ID},
 			})
 		} else {
 			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
@@ -488,7 +486,7 @@ func maybeAddSequenceDependencies(
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
 // Called when the respective column (or the whole table) is being dropped.
 func (p *planner) dropSequencesOwnedByCol(
-	ctx context.Context, col *sqlbase.ColumnDescriptor, queueJob bool,
+	ctx context.Context, col *descpb.ColumnDescriptor, queueJob bool,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
@@ -522,7 +520,7 @@ func (p *planner) dropSequencesOwnedByCol(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func (p *planner) removeSequenceDependencies(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, col *descpb.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
@@ -582,12 +580,12 @@ func (p *planner) removeSequenceDependencies(
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
 		if err := p.writeSchemaChange(
-			ctx, seqDesc, sqlbase.InvalidMutationID, jobDesc,
+			ctx, seqDesc, descpb.InvalidMutationID, jobDesc,
 		); err != nil {
 			return err
 		}
 	}
 	// Remove the reference from the column descriptor to the sequence descriptor.
-	col.UsesSequenceIds = []sqlbase.ID{}
+	col.UsesSequenceIds = []descpb.ID{}
 	return nil
 }

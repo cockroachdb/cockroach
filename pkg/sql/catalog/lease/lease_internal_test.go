@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -34,14 +36,14 @@ func TestTableSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type data struct {
-		version    sqlbase.DescriptorVersion
+		version    descpb.DescriptorVersion
 		expiration int64
 	}
 	type insert data
 	type remove data
 
 	type newest struct {
-		version sqlbase.DescriptorVersion
+		version descpb.DescriptorVersion
 	}
 
 	testData := []struct {
@@ -81,7 +83,7 @@ func TestTableSet(t *testing.T) {
 		case insert:
 			s := &descriptorVersionState{
 				Descriptor: sqlbase.NewImmutableTableDescriptor(
-					sqlbase.TableDescriptor{Version: op.version},
+					descpb.TableDescriptor{Version: op.version},
 				),
 			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
@@ -90,7 +92,7 @@ func TestTableSet(t *testing.T) {
 		case remove:
 			s := &descriptorVersionState{
 				Descriptor: sqlbase.NewImmutableTableDescriptor(
-					sqlbase.TableDescriptor{Version: op.version},
+					descpb.TableDescriptor{Version: op.version},
 				),
 			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
@@ -130,7 +132,7 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &ManagerTestingKnobs{
-				TestingDescriptorUpdateEvent: func(_ *sqlbase.Descriptor) error {
+				TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
 					return nil
@@ -156,7 +158,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var tables []sqlbase.ImmutableTableDescriptor
 	var expiration hlc.Timestamp
@@ -279,10 +281,10 @@ CREATE TEMP TABLE t2 (temp int);
 	}
 
 	for _, tableName := range []string{"t", "t2"} {
-		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 		lease := leaseManager.names.get(
 			tableDesc.ParentID,
-			sqlbase.ID(keys.PublicSchemaID),
+			descpb.ID(keys.PublicSchemaID),
 			tableName,
 			s.Clock().Now(),
 		)
@@ -312,7 +314,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Rename.
 	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
@@ -341,7 +343,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Re-read the descriptor, to get the new ParentID.
-	newTableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
+	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
 	if tableDesc.ParentID == newTableDesc.ParentID {
 		t.Fatalf("database didn't change")
 	}
@@ -384,7 +386,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
@@ -429,7 +431,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Populate the name cache.
 	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
@@ -491,7 +493,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Check that we cannot get the table by a different name.
 	if leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "tEsT", s.Clock().Now()) != nil {
@@ -527,7 +529,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Populate the name cache.
 	ctx := context.Background()
@@ -639,7 +641,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -691,7 +693,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -745,7 +747,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		err   error
 	}
 
-	descID := sqlbase.ID(keys.LeaseTableID)
+	descID := descpb.ID(keys.LeaseTableID)
 
 	// acquireBlock calls Acquire.
 	acquireBlock := func(

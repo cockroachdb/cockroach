@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -217,8 +218,8 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		defer s.Stopper().Stop(context.Background())
 
 		testInternalExecutorAppNameInitialization(t, sem,
-			sqlbase.InternalAppNamePrefix+"-test-query", // app name in SHOW
-			sqlbase.InternalAppNamePrefix+"-test-query", // app name in stats
+			catconstants.InternalAppNamePrefix+"-test-query", // app name in SHOW
+			catconstants.InternalAppNamePrefix+"-test-query", // app name in stats
 			s.InternalExecutor().(*sql.InternalExecutor))
 	})
 
@@ -244,7 +245,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		testInternalExecutorAppNameInitialization(
 			t, sem,
 			"appname_findme", // app name in SHOW
-			sqlbase.DelegatedAppNamePrefix+"appname_findme", // app name in stats
+			catconstants.DelegatedAppNamePrefix+"appname_findme", // app name in stats
 			&ie,
 		)
 	})

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -55,7 +56,7 @@ var errReadOlderVersion = errors.New("read older descriptor version from store")
 
 // A lease stored in system.lease.
 type storedLease struct {
-	id         sqlbase.ID
+	id         descpb.ID
 	version    int
 	expiration tree.DTimestamp
 }
@@ -71,7 +72,7 @@ type descriptorVersionState struct {
 
 	// The expiration time for the descriptor version. A transaction with
 	// timestamp T can use this descriptor version iff
-	// Descriptor.GetModificationTime() <= T < expiration
+	// Descriptor.GetDescriptorModificationTime() <= T < expiration
 	//
 	// The expiration time is either the expiration time of the lease when a lease
 	// is associated with the version, or the ModificationTime of the next version
@@ -184,7 +185,7 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 // or offline (currently only applicable to tables), the error will be of type
 // inactiveTableError. The expiration time set for the lease > minExpiration.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id sqlbase.ID,
+	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
 ) (*descriptorVersionState, error) {
 	var descVersionState *descriptorVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -205,16 +206,14 @@ func (s storage) acquire(
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
 
-		// TODO (lucy): Previously this called GetTableDescFromID followed by a call
+		// TODO (lucy): Previously this called getTableDescFromID followed by a call
 		// to ValidateTable() instead of Validate(), to avoid the cross-table
 		// checks. Does this actually matter? We already potentially do cross-table
 		// checks when populating pre-19.2 foreign keys.
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id)
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id, catalogkv.Immutable,
+			catalogkv.AnyDescriptorKind, true /* required */)
 		if err != nil {
 			return err
-		}
-		if desc == nil {
-			return sqlbase.ErrDescriptorNotFound
 		}
 		if err := catalog.FilterDescriptorState(desc); err != nil {
 			return err
@@ -301,7 +300,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 
 		if s.testingKnobs.LeaseReleasedEvent != nil {
 			s.testingKnobs.LeaseReleasedEvent(
-				lease.id, sqlbase.DescriptorVersion(lease.version), err)
+				lease.id, descpb.DescriptorVersion(lease.version), err)
 		}
 		break
 	}
@@ -314,29 +313,24 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
 func (m *Manager) WaitForOneVersion(
-	ctx context.Context, id sqlbase.ID, retryOpts retry.Options,
-) (sqlbase.DescriptorVersion, error) {
-	var version sqlbase.DescriptorVersion
+	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+) (descpb.DescriptorVersion, error) {
+	var version descpb.DescriptorVersion
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		// Get the current version of the descriptor non-transactionally.
-		//
-		// TODO(pmattis): Do an inconsistent read here?
-		descKey := sqlbase.MakeDescMetadataKey(m.Codec(), id)
-		desc := &sqlbase.Descriptor{}
-		ts, err := m.DB().GetProtoTs(ctx, descKey, desc)
-		if err != nil {
+		var desc catalog.Descriptor
+		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			desc, err = catalogkv.GetDescriptorByID(ctx, txn, m.Codec(), id, catalogkv.Immutable,
+				catalogkv.AnyDescriptorKind, true /* required */)
+			return err
+		}); err != nil {
 			return 0, err
 		}
-		if desc.Union == nil {
-			return 0, sqlbase.ErrDescriptorNotFound
-		}
-		desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
-		version = desc.GetVersion()
 
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
+		version = desc.GetVersion()
 		count, err := CountLeases(ctx, m.storage.internalExecutor, descs, now)
 		if err != nil {
 			return 0, err
@@ -378,16 +372,16 @@ var ErrDidntUpdateDescriptor = errors.New("didn't update the descriptor")
 // is not ideal. There must be a better API for this.
 func (m *Manager) PublishMultiple(
 	ctx context.Context,
-	ids []sqlbase.ID,
-	update func(*kv.Txn, map[sqlbase.ID]catalog.MutableDescriptor) error,
+	ids []descpb.ID,
+	update func(*kv.Txn, map[descpb.ID]catalog.MutableDescriptor) error,
 	logEvent func(*kv.Txn) error,
-) (map[sqlbase.ID]catalog.Descriptor, error) {
+) (map[descpb.ID]catalog.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous versions
 		// of the descriptors.
-		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
+		expectedVersions := make(map[descpb.ID]descpb.DescriptorVersion)
 		for _, id := range ids {
 			expected, err := m.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
 			if err != nil {
@@ -396,31 +390,28 @@ func (m *Manager) PublishMultiple(
 			expectedVersions[id] = expected
 		}
 
-		descs := make(map[sqlbase.ID]catalog.MutableDescriptor)
+		descs := make(map[descpb.ID]catalog.MutableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			versions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
-			descsToUpdate := make(map[sqlbase.ID]catalog.MutableDescriptor)
+			versions := make(map[descpb.ID]descpb.DescriptorVersion)
+			descsToUpdate := make(map[descpb.ID]catalog.MutableDescriptor)
 			for _, id := range ids {
 				// Re-read the current versions of the descriptor, this time
 				// transactionally.
-				var err error
-				descsToUpdate[id], err = catalogkv.GetMutableDescriptorByID(ctx, txn, m.storage.codec, id)
+				desc, err := catalogkv.GetDescriptorByID(ctx, txn, m.storage.codec, id, catalogkv.Mutable,
+					catalogkv.AnyDescriptorKind, true /* required */)
+				// Due to details in #51417, it is possible for a user to request a
+				// descriptor which no longer exists. In that case, just return an error.
 				if err != nil {
 					return err
 				}
-				// Due to details in #51417, it is possible for a user to request a
-				// descriptor which no longer exists. In that case, just return an error.
-				if descsToUpdate[id] == nil {
-					return sqlbase.ErrDescriptorNotFound
-				}
-
-				if expectedVersions[id] != descsToUpdate[id].GetVersion() {
+				descsToUpdate[id] = desc.(catalog.MutableDescriptor)
+				if expectedVersions[id] != desc.GetVersion() {
 					// The version changed out from under us. Someone else must be
 					// performing a schema change operation.
 					if log.V(3) {
-						log.Infof(ctx, "publish (version changed): %d != %d", expectedVersions[id], descsToUpdate[id].GetVersion())
+						log.Infof(ctx, "publish %d (version changed): %d != %d", id, expectedVersions[id], desc.GetVersion())
 					}
 					return errLeaseVersionChanged
 				}
@@ -473,7 +464,7 @@ func (m *Manager) PublishMultiple(
 
 		switch {
 		case err == nil || errors.Is(err, ErrDidntUpdateDescriptor):
-			immutDescs := make(map[sqlbase.ID]catalog.Descriptor)
+			immutDescs := make(map[descpb.ID]catalog.Descriptor)
 			for id, desc := range descs {
 				immutDescs[id] = desc.Immutable()
 			}
@@ -505,12 +496,12 @@ func (m *Manager) PublishMultiple(
 // PublishMultiple.
 func (m *Manager) Publish(
 	ctx context.Context,
-	id sqlbase.ID,
+	id descpb.ID,
 	update func(catalog.MutableDescriptor) error,
 	logEvent func(*kv.Txn) error,
 ) (catalog.Descriptor, error) {
-	ids := []sqlbase.ID{id}
-	updates := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+	ids := []descpb.ID{id}
+	updates := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
 		desc, ok := descs[id]
 		if !ok {
 			return errors.AssertionFailedf("required descriptor with ID %d not provided to update closure", id)
@@ -530,13 +521,13 @@ func (m *Manager) Publish(
 type IDVersion struct {
 	// Name is only provided for pretty printing.
 	Name    string
-	ID      sqlbase.ID
-	Version sqlbase.DescriptorVersion
+	ID      descpb.ID
+	Version descpb.DescriptorVersion
 }
 
 // NewIDVersionPrev returns an initialized IDVersion with the
 // previous version of the descriptor.
-func NewIDVersionPrev(name string, id sqlbase.ID, currVersion sqlbase.DescriptorVersion) IDVersion {
+func NewIDVersionPrev(name string, id descpb.ID, currVersion descpb.DescriptorVersion) IDVersion {
 	return IDVersion{Name: name, ID: id, Version: currVersion - 1}
 }
 
@@ -577,18 +568,16 @@ func CountLeases(
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
 func (s storage) getForExpiration(
-	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
+	ctx context.Context, expiration hlc.Timestamp, id descpb.ID,
 ) (*descriptorVersionState, error) {
 	var descVersionState *descriptorVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id)
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id, catalogkv.Immutable,
+			catalogkv.AnyDescriptorKind, true /* required */)
 		if err != nil {
 			return err
-		}
-		if desc == nil {
-			return sqlbase.ErrDescriptorNotFound
 		}
 		if prevTimestamp.LessEq(desc.GetModificationTime()) {
 			return errors.AssertionFailedf("unable to read descriptor (%d, %s)", id, expiration)
@@ -655,14 +644,14 @@ func (l *descriptorSet) remove(s *descriptorVersionState) {
 	l.data = append(l.data[:i], l.data[i+1:]...)
 }
 
-func (l *descriptorSet) find(version sqlbase.DescriptorVersion) *descriptorVersionState {
+func (l *descriptorSet) find(version descpb.DescriptorVersion) *descriptorVersionState {
 	if i, match := l.findIndex(version); match {
 		return l.data[i]
 	}
 	return nil
 }
 
-func (l *descriptorSet) findIndex(version sqlbase.DescriptorVersion) (int, bool) {
+func (l *descriptorSet) findIndex(version descpb.DescriptorVersion) (int, bool) {
 	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
 		return s.GetVersion() >= version
@@ -683,7 +672,7 @@ func (l *descriptorSet) findNewest() *descriptorVersionState {
 	return l.data[len(l.data)-1]
 }
 
-func (l *descriptorSet) findVersion(version sqlbase.DescriptorVersion) *descriptorVersionState {
+func (l *descriptorSet) findVersion(version descpb.DescriptorVersion) *descriptorVersionState {
 	if len(l.data) == 0 {
 		return nil
 	}
@@ -704,7 +693,7 @@ func (l *descriptorSet) findVersion(version sqlbase.DescriptorVersion) *descript
 }
 
 type descriptorState struct {
-	id      sqlbase.ID
+	id      descpb.ID
 	stopper *stop.Stopper
 
 	// renewalInProgress is an atomic indicator for when a renewal for a
@@ -743,7 +732,7 @@ type descriptorState struct {
 // acquire a lease at the latest version with the hope that it meets
 // the criterion.
 func ensureVersion(
-	ctx context.Context, id sqlbase.ID, minVersion sqlbase.DescriptorVersion, m *Manager,
+	ctx context.Context, id descpb.ID, minVersion descpb.DescriptorVersion, m *Manager,
 ) error {
 	if s := m.findNewest(id); s != nil && minVersion <= s.GetVersion() {
 		return nil
@@ -825,7 +814,7 @@ func (t *descriptorState) findForTimestamp(
 // 3. Figure out a sane policy on when these descriptors should be purged.
 //    They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
-	ctx context.Context, id sqlbase.ID, timestamp hlc.Timestamp,
+	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]*descriptorVersionState, error) {
 	expiration, done := func() (hlc.Timestamp, bool) {
 		t := m.findDescriptorState(id, false /* create */)
@@ -884,7 +873,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
-func (m *Manager) insertDescriptorVersions(id sqlbase.ID, versions []*descriptorVersionState) {
+func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []*descriptorVersionState) {
 	t := m.findDescriptorState(id, false /* create */)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -903,7 +892,7 @@ func (m *Manager) insertDescriptorVersions(id sqlbase.ID, versions []*descriptor
 // inserts it into the active set. It guarantees that the lease returned is
 // the one acquired after the call is made. Use this if the lease we want to
 // get needs to see some descriptor updates that we know happened recently.
-func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id sqlbase.ID) error {
+func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error {
 	// Create descriptorState if needed.
 	_ = m.findDescriptorState(id, true /* create */)
 	// We need to acquire a lease on a "fresh" descriptor, meaning that joining
@@ -1015,7 +1004,7 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 // being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
-func acquireNodeLease(ctx context.Context, m *Manager, id sqlbase.ID) (bool, error) {
+func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, error) {
 	var toRelease *storedLease
 	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
 		// Note that we use a new `context` here to avoid a situation where a cancellation
@@ -1139,9 +1128,9 @@ func releaseLease(lease *storedLease, m *Manager) {
 func purgeOldVersions(
 	ctx context.Context,
 	db *kv.DB,
-	id sqlbase.ID,
+	id descpb.ID,
 	takenOffline bool,
-	minVersion sqlbase.DescriptorVersion,
+	minVersion descpb.DescriptorVersion,
 	m *Manager,
 ) error {
 	t := m.findDescriptorState(id, false /*create*/)
@@ -1200,7 +1189,7 @@ func purgeOldVersions(
 // maybeQueueLeaseRenewal queues a lease renewal if there is not already a lease
 // renewal in progress.
 func (t *descriptorState) maybeQueueLeaseRenewal(
-	ctx context.Context, m *Manager, id sqlbase.ID, name string,
+	ctx context.Context, m *Manager, id descpb.ID, name string,
 ) error {
 	if !atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
 		return nil
@@ -1220,7 +1209,7 @@ func (t *descriptorState) maybeQueueLeaseRenewal(
 // This function blocks until lease acquisition completes.
 // t.renewalInProgress must be set to 1 before calling.
 func (t *descriptorState) startLeaseRenewal(
-	ctx context.Context, m *Manager, id sqlbase.ID, name string,
+	ctx context.Context, m *Manager, id descpb.ID, name string,
 ) {
 	log.VEventf(ctx, 1,
 		"background lease renewal beginning for id=%d name=%q",
@@ -1268,7 +1257,7 @@ const (
 type StorageTestingKnobs struct {
 	// Called after a lease is removed from the store, with any operation error.
 	// See LeaseRemovalTracker.
-	LeaseReleasedEvent func(id sqlbase.ID, version sqlbase.DescriptorVersion, err error)
+	LeaseReleasedEvent func(id descpb.ID, version descpb.DescriptorVersion, err error)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(desc catalog.Descriptor, err error)
 	// Called before waiting on a results from a DoChan call of acquireNodeLease
@@ -1288,12 +1277,12 @@ var _ base.ModuleTestingKnobs = &StorageTestingKnobs{}
 type ManagerTestingKnobs struct {
 
 	// A callback called after the leases are refreshed as a result of a gossip update.
-	TestingDescriptorRefreshedEvent func(descriptor *sqlbase.Descriptor)
+	TestingDescriptorRefreshedEvent func(descriptor *descpb.Descriptor)
 
 	// TestingDescriptorUpdateEvent is a callback when an update is received, before
 	// the leases are refreshed. If a non-nil error is returned, the update is
 	// ignored.
-	TestingDescriptorUpdateEvent func(descriptor *sqlbase.Descriptor) error
+	TestingDescriptorUpdateEvent func(descriptor *descpb.Descriptor) error
 
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
@@ -1322,8 +1311,8 @@ func (*ManagerTestingKnobs) ModuleTestingKnobs() {}
 // populated for schemas, descriptors, and types; and parentSchemaID is
 // populated for descriptors and types.
 type nameCacheKey struct {
-	parentID       sqlbase.ID
-	parentSchemaID sqlbase.ID
+	parentID       descpb.ID
+	parentSchemaID descpb.ID
 	name           string
 }
 
@@ -1344,7 +1333,7 @@ type nameCache struct {
 // The descriptor's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
 func (c *nameCache) get(
-	parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string, timestamp hlc.Timestamp,
+	parentID descpb.ID, parentSchemaID descpb.ID, name string, timestamp hlc.Timestamp,
 ) *descriptorVersionState {
 	c.mu.Lock()
 	desc, ok := c.descriptors[makeNameCacheKey(parentID, parentSchemaID, name)]
@@ -1421,7 +1410,7 @@ func (c *nameCache) remove(desc *descriptorVersionState) {
 	}
 }
 
-func makeNameCacheKey(parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string) nameCacheKey {
+func makeNameCacheKey(parentID descpb.ID, parentSchemaID descpb.ID, name string) nameCacheKey {
 	return nameCacheKey{parentID, parentSchemaID, name}
 }
 
@@ -1441,7 +1430,7 @@ type Manager struct {
 	storage storage
 	mu      struct {
 		syncutil.Mutex
-		descriptors map[sqlbase.ID]*descriptorState
+		descriptors map[descpb.ID]*descriptorState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
@@ -1504,7 +1493,7 @@ func NewLeaseManager(
 		sem:        quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 	}
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
-	lm.mu.descriptors = make(map[sqlbase.ID]*descriptorState)
+	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
 
 	lm.draining.Store(false)
@@ -1514,7 +1503,7 @@ func NewLeaseManager(
 // NameMatchesDescriptor returns true if the provided name and IDs match this
 // descriptor.
 func NameMatchesDescriptor(
-	desc catalog.Descriptor, parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string,
+	desc catalog.Descriptor, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) bool {
 	return desc.GetParentID() == parentID &&
 		desc.GetParentSchemaID() == parentSchemaID &&
@@ -1522,7 +1511,7 @@ func NameMatchesDescriptor(
 }
 
 // findNewest returns the newest descriptor version state for the ID.
-func (m *Manager) findNewest(id sqlbase.ID) *descriptorVersionState {
+func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
 	t := m.findDescriptorState(id, false /* create */)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1550,8 +1539,8 @@ func (m *Manager) findNewest(id sqlbase.ID) *descriptorVersionState {
 func (m *Manager) AcquireByName(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
-	parentID sqlbase.ID,
-	parentSchemaID sqlbase.ID,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
 	name string,
 ) (catalog.Descriptor, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
@@ -1656,11 +1645,11 @@ func (m *Manager) AcquireByName(
 func (m *Manager) resolveName(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
-	parentID sqlbase.ID,
-	parentSchemaID sqlbase.ID,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
 	name string,
-) (sqlbase.ID, error) {
-	id := sqlbase.InvalidID
+) (descpb.ID, error) {
+	id := descpb.InvalidID
 	if err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Run the name lookup as high-priority, thereby pushing any intents out of
 		// its way. We don't want schema changes to prevent name resolution/lease
@@ -1684,7 +1673,7 @@ func (m *Manager) resolveName(
 	}); err != nil {
 		return id, err
 	}
-	if id == sqlbase.InvalidID {
+	if id == descpb.InvalidID {
 		return id, sqlbase.ErrDescriptorNotFound
 	}
 	return id, nil
@@ -1702,7 +1691,7 @@ func (m *Manager) resolveName(
 // can only return an older version of a descriptor if the latest version
 // can be leased; as it stands a dropped descriptor cannot be leased.
 func (m *Manager) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id sqlbase.ID,
+	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (catalog.Descriptor, hlc.Timestamp, error) {
 	for {
 		t := m.findDescriptorState(id, true /*create*/)
@@ -1813,7 +1802,7 @@ func (m *Manager) SetDraining(drain bool, reporter func(int, string)) {
 }
 
 // If create is set, cache and stopper need to be set as well.
-func (m *Manager) findDescriptorState(id sqlbase.ID, create bool) *descriptorState {
+func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.mu.descriptors[id]
@@ -1839,7 +1828,7 @@ func (m *Manager) RefreshLeases(
 func (m *Manager) refreshLeases(
 	ctx context.Context, g gossip.OptionalGossip, db *kv.DB, s *stop.Stopper,
 ) {
-	descUpdateCh := make(chan *sqlbase.Descriptor)
+	descUpdateCh := make(chan *descpb.Descriptor)
 	m.watchForUpdates(ctx, s, db, g, descUpdateCh)
 	s.RunWorker(ctx, func(ctx context.Context) {
 		for {
@@ -1858,14 +1847,15 @@ func (m *Manager) refreshLeases(
 					}
 				}
 
-				goingOffline := desc.Offline() || desc.Dropped()
+				id, version, name, dropped, offline := sqlbase.GetDescriptorMetadata(desc)
+				goingOffline := offline || dropped
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
-					desc.GetID(), desc.GetVersion(), goingOffline)
+					id, version, goingOffline)
 				if err := purgeOldVersions(
-					ctx, db, desc.GetID(), goingOffline, desc.GetVersion(), m); err != nil {
+					ctx, db, id, goingOffline, version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
-						desc.GetID(), desc.GetName(), err)
+						id, name, err)
 				}
 
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
@@ -1888,7 +1878,7 @@ func (m *Manager) watchForUpdates(
 	s *stop.Stopper,
 	db *kv.DB,
 	g gossip.OptionalGossip,
-	descUpdateCh chan *sqlbase.Descriptor,
+	descUpdateCh chan *descpb.Descriptor,
 ) {
 	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
 		m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
@@ -1930,7 +1920,7 @@ func (m *Manager) watchForGossipUpdates(
 	ctx context.Context,
 	s *stop.Stopper,
 	g gossip.OptionalGossip,
-	descUpdateCh chan<- *sqlbase.Descriptor,
+	descUpdateCh chan<- *descpb.Descriptor,
 ) {
 	rawG, err := g.OptionalErr(47150)
 	if err != nil {
@@ -1962,7 +1952,7 @@ func (m *Manager) watchForGossipUpdates(
 }
 
 func (m *Manager) watchForRangefeedUpdates(
-	ctx context.Context, s *stop.Stopper, db *kv.DB, descUpdateCh chan<- *sqlbase.Descriptor,
+	ctx context.Context, s *stop.Stopper, db *kv.DB, descUpdateCh chan<- *descpb.Descriptor,
 ) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
@@ -2018,7 +2008,7 @@ func (m *Manager) watchForRangefeedUpdates(
 		if len(ev.Value.RawBytes) == 0 {
 			return
 		}
-		var descriptor sqlbase.Descriptor
+		var descriptor descpb.Descriptor
 		if err := ev.Value.GetProto(&descriptor); err != nil {
 			log.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
@@ -2027,10 +2017,11 @@ func (m *Manager) watchForRangefeedUpdates(
 		if descriptor.Union == nil {
 			return
 		}
-		descriptor.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ev.Value.Timestamp)
+		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, ev.Value.Timestamp)
+		id, version, name, _, _ := sqlbase.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
-				ev.Key, descriptor.GetID(), descriptor.GetName(), descriptor.GetVersion())
+				ev.Key, id, name, version)
 		}
 		select {
 		case <-ctx.Done():
@@ -2064,7 +2055,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	ctx context.Context,
 	rawG *gossip.Gossip,
 	cfgFilter *gossip.SystemConfigDeltaFilter,
-	descUpdateCh chan<- *sqlbase.Descriptor,
+	descUpdateCh chan<- *descpb.Descriptor,
 ) {
 	cfg := rawG.GetSystemConfig()
 	// Read all descriptors and their versions
@@ -2074,7 +2065,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	var latestTimestamp hlc.Timestamp
 	cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 		// Attempt to unmarshal config into a descriptor.
-		var descriptor sqlbase.Descriptor
+		var descriptor descpb.Descriptor
 		if latestTimestamp.Less(kv.Value.Timestamp) {
 			latestTimestamp = kv.Value.Timestamp
 		}
@@ -2085,10 +2076,11 @@ func (m *Manager) handleUpdatedSystemCfg(
 		if descriptor.Union == nil {
 			return
 		}
-		descriptor.MaybeSetModificationTimeFromMVCCTimestamp(ctx, kv.Value.Timestamp)
+		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, kv.Value.Timestamp)
+		id, version, name, _, _ := sqlbase.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
-			log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d",
-				kv.Key, descriptor.GetID(), descriptor.GetName(), descriptor.GetVersion())
+			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
+				kv.Key, id, name, version)
 		}
 		select {
 		case <-ctx.Done():
@@ -2201,7 +2193,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 	}
 	// Construct a list of descriptors needing their leases to be reacquired.
 	m.mu.Lock()
-	ids := make([]sqlbase.ID, 0, len(m.mu.descriptors))
+	ids := make([]descpb.ID, 0, len(m.mu.descriptors))
 	var i int64
 	for k, desc := range m.mu.descriptors {
 		if i++; i > limit {
@@ -2279,7 +2271,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			row := rows[i]
 			wg.Add(1)
 			lease := storedLease{
-				id:         sqlbase.ID(tree.MustBeDInt(row[0])),
+				id:         descpb.ID(tree.MustBeDInt(row[0])),
 				version:    int(tree.MustBeDInt(row[1])),
 				expiration: tree.MustBeDTimestamp(row[2]),
 			}
@@ -2350,7 +2342,7 @@ func (m *Manager) VisitLeases(
 // This method is useful for testing and is only intended to be used in that
 // context.
 func (m *Manager) TestingAcquireAndAssertMinVersion(
-	ctx context.Context, timestamp hlc.Timestamp, id sqlbase.ID, minVersion sqlbase.DescriptorVersion,
+	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID, minVersion descpb.DescriptorVersion,
 ) (catalog.Descriptor, hlc.Timestamp, error) {
 	t := m.findDescriptorState(id, true)
 	if err := ensureVersion(ctx, id, minVersion, m); err != nil {

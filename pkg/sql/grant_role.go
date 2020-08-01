@@ -63,11 +63,11 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		// If the user is an admin, don't check if the user is allowed to add/drop
 		// roles in the role. However, if the role being modified is the admin role, then
 		// make sure the user is an admin with the admin option.
-		if hasAdminRole && string(r) != sqlbase.AdminRole {
+		if hasAdminRole && string(r) != security.AdminRole {
 			continue
 		}
 		if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-			if string(r) == sqlbase.AdminRole {
+			if string(r) == security.AdminRole {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s is not a role admin for role %s", p.User(), r)
 			}

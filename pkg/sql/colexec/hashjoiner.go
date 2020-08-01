@@ -14,10 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -51,7 +51,7 @@ const (
 // joiner performs a join on the left and right's equal columns and returns
 // combined left and right output columns.
 type HashJoinerSpec struct {
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 	// left and right are the specifications of the two input table sources to
 	// the hash joiner.
 	left  hashJoinerSourceSpec
@@ -252,10 +252,10 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 				// The build side is empty, so we can short-circuit probing
 				// phase altogether for INNER, RIGHT OUTER, LEFT SEMI, and
 				// INTERSECT ALL joins.
-				if hj.spec.joinType == sqlbase.InnerJoin ||
-					hj.spec.joinType == sqlbase.RightOuterJoin ||
-					hj.spec.joinType == sqlbase.LeftSemiJoin ||
-					hj.spec.joinType == sqlbase.IntersectAllJoin {
+				if hj.spec.joinType == descpb.InnerJoin ||
+					hj.spec.joinType == descpb.RightOuterJoin ||
+					hj.spec.joinType == descpb.LeftSemiJoin ||
+					hj.spec.joinType == descpb.IntersectAllJoin {
 					hj.state = hjDone
 					continue
 				}
@@ -399,7 +399,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 
 			var nToCheck uint64
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// The setup of probing for LEFT ANTI and EXCEPT ALL joins
 				// needs a special treatment in order to reuse the same "check"
 				// functions below.
@@ -625,7 +625,7 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 // specify the input column types of the two sources. rightDistinct indicates
 // whether the equality columns of the right source form a key.
 func MakeHashJoinerSpec(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
 	leftTypes []*types.T,
@@ -637,15 +637,15 @@ func MakeHashJoinerSpec(
 		leftOuter, rightOuter bool
 	)
 	switch joinType {
-	case sqlbase.InnerJoin:
-	case sqlbase.RightOuterJoin:
+	case descpb.InnerJoin:
+	case descpb.RightOuterJoin:
 		rightOuter = true
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		leftOuter = true
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		rightOuter = true
 		leftOuter = true
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		// In a semi-join, we don't need to store anything but a single row per
 		// build row, since all we care about is whether a row on the left matches
 		// any row on the right.
@@ -654,9 +654,9 @@ func MakeHashJoinerSpec(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-	case sqlbase.LeftAntiJoin:
-	case sqlbase.IntersectAllJoin:
-	case sqlbase.ExceptAllJoin:
+	case descpb.LeftAntiJoin:
+	case descpb.IntersectAllJoin:
+	case descpb.ExceptAllJoin:
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}

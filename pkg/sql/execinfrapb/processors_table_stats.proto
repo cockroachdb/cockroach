@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
-import "sql/sqlbase/structured.proto";
+import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
 
 enum SketchType {
@@ -139,13 +139,13 @@ message SampleAggregatorSpec {
   // These are necessary for writing out the statistic data.
   repeated uint32 sampled_column_ids = 3 [
     (gogoproto.customname) = "SampledColumnIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"
   ];
 
   optional uint32 table_id = 4 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TableID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
   reserved 5;

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,13 +33,13 @@ import (
 type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.ImmutableTableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	indexDesc *descpb.IndexDescriptor
 	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
 	// twice this.
-	columns []*sqlbase.ColumnDescriptor
+	columns []*descpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -57,7 +58,7 @@ type indexCheckRun struct {
 func newIndexCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *descpb.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
@@ -73,13 +74,13 @@ func newIndexCheckOperation(
 func (o *indexCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	colToIdx := make(map[sqlbase.ColumnID]int)
+	colToIdx := make(map[descpb.ColumnID]int)
 	for i := range o.tableDesc.Columns {
 		id := o.tableDesc.Columns[i].ID
 		colToIdx[id] = i
 	}
 
-	var pkColumns, otherColumns []*sqlbase.ColumnDescriptor
+	var pkColumns, otherColumns []*descpb.ColumnDescriptor
 
 	for _, colID := range o.tableDesc.PrimaryIndex.ColumnIDs {
 		col := &o.tableDesc.Columns[colToIdx[colID]]
@@ -87,7 +88,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colToIdx[colID] = -1
 	}
 
-	maybeAddOtherCol := func(colID sqlbase.ColumnID) {
+	maybeAddOtherCol := func(colID descpb.ColumnID) {
 		pos := colToIdx[colID]
 		if pos == -1 {
 			// Skip PK column.
@@ -110,7 +111,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		maybeAddOtherCol(colID)
 	}
 
-	colNames := func(cols []*sqlbase.ColumnDescriptor) []string {
+	colNames := func(cols []*descpb.ColumnDescriptor) []string {
 		res := make([]string, len(cols))
 		for i := range cols {
 			res[i] = cols[i].Name
@@ -284,7 +285,7 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //         side row from the primary key had no match in the secondary index.
 //
 func createIndexCheckQuery(
-	pkColumns []string, otherColumns []string, tableID sqlbase.ID, indexID sqlbase.IndexID,
+	pkColumns []string, otherColumns []string, tableID descpb.ID, indexID descpb.IndexID,
 ) string {
 	allColumns := append(pkColumns, otherColumns...)
 	// We need to make sure we can handle the non-public column `rowid`

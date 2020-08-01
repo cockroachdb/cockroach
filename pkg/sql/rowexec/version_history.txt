@@ -29,7 +29,7 @@
       (lookup_columns, on_expr, and index_map) to enable the JoinReader to perform
       lookup joins enabling more efficient joins for certain queries. Old server
       versions would not recognize these new properties.
-    - Two new join types (INTERSECT_ALL, EXCEPT_ALL) were added to the sqlbase.JoinType
+    - Two new join types (INTERSECT_ALL, EXCEPT_ALL) were added to the descpb.JoinType
       enum to support INTERSECT and EXCEPT queries. These "set operation" queries
       can now be planned by DistSQL, and older versions will not be capable of
       supporting these queries.

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -336,16 +337,16 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 }
 
 func staticIDs(
-	ids ...sqlbase.ID,
-) func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) { return ids, nil }
+	ids ...descpb.ID,
+) func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) { return ids, nil }
 }
 
 func databaseIDs(
 	names ...string,
-) func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error) {
-		var ids []sqlbase.ID
+) func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
+	return func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error) {
+		var ids []descpb.ID
 		for _, name := range names {
 			// This runs as part of an older migration (introduced in 2.1). We use
 			// the DeprecatedDatabaseKey, and let the 20.1 migration handle moving
@@ -354,7 +355,7 @@ func databaseIDs(
 			if err != nil {
 				return nil, err
 			}
-			ids = append(ids, sqlbase.ID(kv.ValueInt()))
+			ids = append(ids, descpb.ID(kv.ValueInt()))
 		}
 		return ids, nil
 	}
@@ -395,7 +396,7 @@ type migrationDescriptor struct {
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
 	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db db, codec keys.SQLCodec) ([]sqlbase.ID, error)
+	newDescriptorIDs func(ctx context.Context, db db, codec keys.SQLCodec) ([]descpb.ID, error)
 }
 
 func init() {
@@ -515,7 +516,7 @@ func ExpectedDescriptorIDs(
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (sqlbase.IDs, error) {
+) (descpb.IDs, error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db, codec)
 	if err != nil {
 		return nil, err
@@ -712,7 +713,7 @@ func systemNamespaceMigrationKey(codec keys.SQLCodec) roachpb.Key {
 // schemaChangeJobMigrationKey for a specific table, to store the completion
 // status for adding a new job if the table was being added or needed to drain
 // names.
-func schemaChangeJobMigrationKeyForTable(codec keys.SQLCodec, tableID sqlbase.ID) roachpb.Key {
+func schemaChangeJobMigrationKeyForTable(codec keys.SQLCodec, tableID descpb.ID) roachpb.Key {
 	return encoding.EncodeUint32Ascending(schemaChangeJobMigrationKey(codec), uint32(tableID))
 }
 
@@ -931,9 +932,9 @@ func (m *Manager) migrateSystemNamespace(
 					// Just process 1000 rows at a time.
 					break
 				}
-				parentID := sqlbase.ID(tree.MustBeDInt(row[0]))
+				parentID := descpb.ID(tree.MustBeDInt(row[0]))
 				name := string(tree.MustBeDString(row[1]))
-				id := sqlbase.ID(tree.MustBeDInt(row[2]))
+				id := descpb.ID(tree.MustBeDInt(row[2]))
 				if parentID == keys.RootNamespaceID {
 					// This row represents a database. Add it to the new namespace table.
 					databaseKey := sqlbase.NewDatabaseKey(name)
@@ -1045,11 +1046,11 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 					"job %d: could not be migrated due to unexpected descriptor IDs %v", *job.ID(), descIDs)
 			}
 			descID := descIDs[0]
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, r.codec, descID)
+			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, r.codec, descID)
 			if err != nil {
 				return err
 			}
-			return migrateMutationJobForTable(ctx, txn, registry, job, tableDesc)
+			return migrateMutationJobForTable(ctx, txn, registry, job, tableDesc.TableDesc())
 		}); err != nil {
 			return err
 		}
@@ -1077,9 +1078,9 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 	//
 	// There are probably more efficient ways to do this part of the migration,
 	// but the current approach seemed like the most straightforward.
-	var allDescs []sqlbase.DescriptorInterface
-	schemaChangeJobsForDesc := make(map[sqlbase.ID][]int64)
-	gcJobsForDesc := make(map[sqlbase.ID][]int64)
+	var allDescs []sqlbase.Descriptor
+	schemaChangeJobsForDesc := make(map[descpb.ID][]int64)
+	gcJobsForDesc := make(map[descpb.ID][]int64)
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, r.codec)
 		if err != nil {
@@ -1106,7 +1107,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 				if details.FormatVersion < jobspb.JobResumerFormatVersion {
 					continue
 				}
-				if details.TableID != sqlbase.InvalidID {
+				if details.TableID != descpb.InvalidID {
 					schemaChangeJobsForDesc[details.TableID] = append(schemaChangeJobsForDesc[details.TableID], jobID)
 				} else {
 					for _, t := range details.DroppedTables {
@@ -1124,7 +1125,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		return err
 	}
 
-	createSchemaChangeJobForTable := func(txn *kv.Txn, desc *sqlbase.TableDescriptor) error {
+	createSchemaChangeJobForTable := func(txn *kv.Txn, desc *sqlbase.ImmutableTableDescriptor) error {
 		var description string
 		if desc.Adding() {
 			description = fmt.Sprintf("adding table %d", desc.ID)
@@ -1143,7 +1144,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		record := jobs.Record{
 			Description:   description,
 			Username:      security.NodeUser,
-			DescriptorIDs: sqlbase.IDs{desc.ID},
+			DescriptorIDs: descpb.IDs{desc.ID},
 			Details: jobspb.SchemaChangeDetails{
 				TableID:       desc.ID,
 				FormatVersion: jobspb.JobResumerFormatVersion,
@@ -1159,7 +1160,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		return nil
 	}
 
-	createGCJobForTable := func(txn *kv.Txn, desc *sqlbase.TableDescriptor) error {
+	createGCJobForTable := func(txn *kv.Txn, desc *descpb.TableDescriptor) error {
 		record := sql.CreateGCJobRecord(
 			fmt.Sprintf("table %d", desc.ID),
 			security.NodeUser,
@@ -1202,7 +1203,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 					return nil
 				}
 				if tableDesc.Adding() || tableDesc.HasDrainingNames() {
-					if err := createSchemaChangeJobForTable(txn, tableDesc.TableDesc()); err != nil {
+					if err := createSchemaChangeJobForTable(txn, tableDesc); err != nil {
 						return err
 					}
 				} else if tableDesc.Dropped() {
@@ -1255,7 +1256,7 @@ func migrateMutationJobForTable(
 			ctx, 2, "job %d: found corresponding MutationJob %d on table %d",
 			*job.ID(), mutationJob.MutationID, tableDesc.ID,
 		)
-		var mutation *sqlbase.DescriptorMutation
+		var mutation *descpb.DescriptorMutation
 		for i := range tableDesc.Mutations {
 			if tableDesc.Mutations[i].MutationID == mutationJob.MutationID {
 				mutation = &tableDesc.Mutations[i]
@@ -1428,7 +1429,7 @@ func migrateDropTablesOrDatabaseJob(
 	for i := range details.DroppedTables {
 		tableID := details.DroppedTables[i].ID
 		tablesToDrop[i].ID = details.DroppedTables[i].ID
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
+		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
 		if err != nil {
 			return err
 		}
@@ -1480,7 +1481,7 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
 }
 
-func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptorInterface) error {
+func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -1549,12 +1550,12 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		// in 20.1 betas. The old namespace table cannot be edited without breaking
 		// explicit selects from system.namespace in 19.2.
 		deprecatedKey := sqlbase.MakeDescMetadataKey(r.codec, keys.DeprecatedNamespaceTableID)
-		deprecatedDesc := &sqlbase.Descriptor{}
+		deprecatedDesc := &descpb.Descriptor{}
 		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
 		if err != nil {
 			return err
 		}
-		deprecatedDesc.Table(ts).Name = sqlbase.DeprecatedNamespaceTable.Name
+		sqlbase.TableFromDescriptor(deprecatedDesc, ts).Name = sqlbase.DeprecatedNamespaceTable.Name
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to
@@ -1596,7 +1597,7 @@ func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
 	err := r.execAsRootWithRetry(ctx,
 		"add role options table and upsert admin with CREATEROLE",
 		upsertCreateRoleStmt,
-		sqlbase.AdminRole)
+		security.AdminRole)
 
 	if err != nil {
 		return err
@@ -1701,7 +1702,7 @@ func addAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
           `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
+	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, security.AdminRole)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
@@ -1710,7 +1711,7 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
 	return r.execAsRootWithRetry(
-		ctx, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+		ctx, "addRootToAdminRole", upsertAdminStmt, security.AdminRole, security.RootUser)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
@@ -1725,7 +1726,7 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 			sqlbase.InternalExecutorSessionDataOverride{
 				User: security.RootUser,
 			},
-			selectPublicStmt, sqlbase.PublicRole,
+			selectPublicStmt, security.PublicRole,
 		)
 		if err != nil {
 			continue
@@ -1743,11 +1744,11 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		if isRole {
 			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
 				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
-				sqlbase.PublicRole, sqlbase.PublicRole)
+				security.PublicRole, security.PublicRole)
 		}
 		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
 			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			sqlbase.PublicRole, sqlbase.PublicRole)
+			security.PublicRole, security.PublicRole)
 	}
 	return nil
 }

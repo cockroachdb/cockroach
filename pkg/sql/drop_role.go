@@ -118,7 +118,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		if !tableIsVisible(table.TableDesc(), true /*allowAdding*/) {
+		if !tableIsVisible(table, true /*allowAdding*/) {
 			continue
 		}
 		for _, u := range table.GetPrivileges().Users {
@@ -126,7 +126,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				if f.Len() > 0 {
 					f.WriteString(", ")
 				}
-				parentName := lCtx.getParentName(table.TableDesc())
+				parentName := lCtx.getParentName(table)
 				tn := tree.MakeTableName(tree.Name(parentName), tree.Name(table.GetName()))
 				f.FormatNode(&tn)
 				break
@@ -156,7 +156,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
-		if normalizedUsername == sqlbase.AdminRole || normalizedUsername == sqlbase.PublicRole {
+		if normalizedUsername == security.AdminRole || normalizedUsername == security.PublicRole {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue, "cannot drop special role %s", normalizedUsername)
 		}

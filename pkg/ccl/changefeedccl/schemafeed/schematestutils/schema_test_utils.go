@@ -13,6 +13,7 @@ package schematestutils
 import (
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -21,9 +22,9 @@ import (
 
 // MakeTableDesc makes a generic table descriptor with the provided properties.
 func MakeTableDesc(
-	tableID sqlbase.ID, version sqlbase.DescriptorVersion, modTime hlc.Timestamp, cols int,
-) *sqlbase.TableDescriptor {
-	td := &sqlbase.TableDescriptor{
+	tableID descpb.ID, version descpb.DescriptorVersion, modTime hlc.Timestamp, cols int,
+) *sqlbase.ImmutableTableDescriptor {
+	td := descpb.TableDescriptor{
 		Name:             "foo",
 		ID:               tableID,
 		Version:          version,
@@ -34,12 +35,12 @@ func MakeTableDesc(
 		td.Columns = append(td.Columns, *MakeColumnDesc(td.NextColumnID))
 		td.NextColumnID++
 	}
-	return td
+	return sqlbase.NewImmutableTableDescriptor(td)
 }
 
 // MakeColumnDesc makes a generic column descriptor with the provided id.
-func MakeColumnDesc(id sqlbase.ColumnID) *sqlbase.ColumnDescriptor {
-	return &sqlbase.ColumnDescriptor{
+func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
+	return &descpb.ColumnDescriptor{
 		Name:        "c" + strconv.Itoa(int(id)),
 		ID:          id,
 		Type:        types.Bool,
@@ -48,20 +49,26 @@ func MakeColumnDesc(id sqlbase.ColumnID) *sqlbase.ColumnDescriptor {
 }
 
 // AddColumnDropBackfillMutation adds a mutation to desc to drop a column.
-func AddColumnDropBackfillMutation(desc *sqlbase.TableDescriptor) *sqlbase.TableDescriptor {
-	desc.Mutations = append(desc.Mutations, sqlbase.DescriptorMutation{
-		State:     sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		Direction: sqlbase.DescriptorMutation_DROP,
+// Yes, this does modify an ImmutableTableDescriptor.
+func AddColumnDropBackfillMutation(
+	desc *sqlbase.ImmutableTableDescriptor,
+) *sqlbase.ImmutableTableDescriptor {
+	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
+		State:     descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction: descpb.DescriptorMutation_DROP,
 	})
 	return desc
 }
 
 // AddNewColumnBackfillMutation adds a mutation to desc to add a column.
-func AddNewColumnBackfillMutation(desc *sqlbase.TableDescriptor) *sqlbase.TableDescriptor {
-	desc.Mutations = append(desc.Mutations, sqlbase.DescriptorMutation{
-		Descriptor_: &sqlbase.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID)},
-		State:       sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		Direction:   sqlbase.DescriptorMutation_ADD,
+// Yes, this does modify an ImmutableTableDescriptor.
+func AddNewColumnBackfillMutation(
+	desc *sqlbase.ImmutableTableDescriptor,
+) *sqlbase.ImmutableTableDescriptor {
+	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID)},
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_ADD,
 		MutationID:  0,
 		Rollback:    false,
 	})

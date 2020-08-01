@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -22,7 +23,7 @@ type invertedJoinNode struct {
 	table *scanNode
 
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// The inverted expression to evaluate.
 	invertedExpr tree.TypedExpr

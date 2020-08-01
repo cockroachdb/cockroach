@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -1071,7 +1072,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 		}
 	}
 
-	b, err = sqlbase.EncodeTableValue(b, sqlbase.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = sqlbase.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

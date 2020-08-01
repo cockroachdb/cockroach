@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,13 +57,13 @@ func TestInitialKeys(t *testing.T) {
 		}
 
 		// Add an additional table.
-		sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
+		descpb.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 		desc, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
 			keys.MaxReservedDescID,
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			sqlbase.NewDefaultPrivilegeDescriptor(),
+			descpb.NewDefaultPrivilegeDescriptor(),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -156,7 +157,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	type testcase struct {
-		id     sqlbase.ID
+		id     descpb.ID
 		schema string
 		pkg    *sqlbase.ImmutableTableDescriptor
 	}

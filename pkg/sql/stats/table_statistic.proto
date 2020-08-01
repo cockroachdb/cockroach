@@ -28,7 +28,7 @@ import "sql/stats/histogram.proto";
 message TableStatisticProto {
   // The ID of the table.
   uint32 table_id = 1 [(gogoproto.customname) = "TableID",
-                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   // The ID for this statistic.  It need not be globally unique,
   // but must be unique for this table.
   uint64 statistic_id = 2 [(gogoproto.customname) = "StatisticID"];
@@ -36,7 +36,7 @@ message TableStatisticProto {
   string name = 3;
   // The column ID(s) for which this statistic is generated.
   repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs",
-                                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"];
+                                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
   // The time at which the statistic was created.
   google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
   // The total number of rows in the table.

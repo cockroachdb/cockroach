@@ -14,7 +14,7 @@ import "build/info.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "sql/stats/table_statistic.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catalog/descpb/structured.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -57,7 +57,7 @@ message BackupManifest {
 
   message DescriptorRevision {
     util.hlc.Timestamp time = 1 [(gogoproto.nullable) = false];
-    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
     sql.sqlbase.Descriptor desc = 3;
   }
 
@@ -98,7 +98,7 @@ message BackupManifest {
   repeated Tenant tenants = 24 [(gogoproto.nullable) = false];
   // databases in descriptors that have all tables also in descriptors.
   repeated uint32 complete_dbs = 14 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   reserved 6;
   RowCount entry_counts = 12 [(gogoproto.nullable) = false];
 
@@ -124,7 +124,7 @@ message BackupManifest {
   // indicated in the table_statistic_files field.
   repeated sql.stats.TableStatisticProto deprecated_statistics = 21;
   map<uint32, string> statistics_filenames = 23 [
-      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];

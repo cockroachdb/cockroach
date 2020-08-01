@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +33,7 @@ import (
 // semantics. This node doesn't support right or full outer joins, or set
 // operations.
 type applyJoinNode struct {
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// The data source with no outer columns.
 	input planDataSource
@@ -74,16 +75,16 @@ type applyJoinNode struct {
 
 // Set to true to enable ultra verbose debug logging.
 func newApplyJoinNode(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left planDataSource,
 	rightCols sqlbase.ResultColumns,
 	pred *joinPredicate,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (planNode, error) {
 	switch joinType {
-	case sqlbase.RightOuterJoin, sqlbase.FullOuterJoin:
+	case descpb.RightOuterJoin, descpb.FullOuterJoin:
 		return nil, errors.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
-	case sqlbase.ExceptAllJoin, sqlbase.IntersectAllJoin:
+	case descpb.ExceptAllJoin, descpb.IntersectAllJoin:
 		return nil, errors.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
 	}
 
@@ -100,7 +101,7 @@ func newApplyJoinNode(
 func (a *applyJoinNode) startExec(params runParams) error {
 	// If needed, pre-allocate a right row of NULL tuples for when the
 	// join predicate fails to match.
-	if a.joinType == sqlbase.LeftOuterJoin {
+	if a.joinType == descpb.LeftOuterJoin {
 		a.run.emptyRight = make(tree.Datums, len(a.rightCols))
 		for i := range a.run.emptyRight {
 			a.run.emptyRight[i] = tree.DNull
@@ -137,8 +138,8 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			}
 
 			a.run.leftRowFoundAMatch = true
-			if a.joinType == sqlbase.LeftAntiJoin ||
-				a.joinType == sqlbase.LeftSemiJoin {
+			if a.joinType == descpb.LeftAntiJoin ||
+				a.joinType == descpb.LeftSemiJoin {
 				// We found a match, but we're doing an anti or semi join, so we're
 				// done with this left row.
 				break
@@ -157,7 +158,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			// If we have a left row already, we have to check to see if we need to
 			// emit rows for semi, outer, or anti joins.
 			if foundAMatch {
-				if a.joinType == sqlbase.LeftSemiJoin {
+				if a.joinType == descpb.LeftSemiJoin {
 					// We found a match, and we're doing an semi-join, so we're done
 					// with this left row after we output it.
 					a.pred.prepareRow(a.run.out, a.run.leftRow, nil)
@@ -167,11 +168,11 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			} else {
 				// We found no match. Output LEFT OUTER or ANTI match if necessary.
 				switch a.joinType {
-				case sqlbase.LeftOuterJoin:
+				case descpb.LeftOuterJoin:
 					a.pred.prepareRow(a.run.out, a.run.leftRow, a.run.emptyRight)
 					a.run.leftRow = nil
 					return true, nil
-				case sqlbase.LeftAntiJoin:
+				case descpb.LeftAntiJoin:
 					a.pred.prepareRow(a.run.out, a.run.leftRow, nil)
 					a.run.leftRow = nil
 					return true, nil

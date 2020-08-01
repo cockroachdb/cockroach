@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -84,7 +85,7 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
+	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -126,8 +127,8 @@ func (ef *execFactory) ConstructScan(
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
 	if params.Locking != nil {
-		scan.lockingStrength = sqlbase.ToScanLockingStrength(params.Locking.Strength)
-		scan.lockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+		scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	return scan, nil
 }
@@ -300,7 +301,7 @@ func (ef *execFactory) ConstructRender(
 
 // ConstructHashJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructHashJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right exec.Node,
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
@@ -332,7 +333,7 @@ func (ef *execFactory) ConstructHashJoin(
 
 // ConstructApplyJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructApplyJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left exec.Node,
 	rightColumns sqlbase.ResultColumns,
 	onCond tree.TypedExpr,
@@ -346,7 +347,7 @@ func (ef *execFactory) ConstructApplyJoin(
 
 // ConstructMergeJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMergeJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right exec.Node,
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
@@ -385,7 +386,7 @@ func (ef *execFactory) ConstructMergeJoin(
 
 // ConstructInterleavedJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructInterleavedJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	leftTable cat.Table,
 	leftIndex cat.Index,
 	leftParams exec.ScanParams,
@@ -588,7 +589,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	}
 
 	primaryIndex := tabDesc.GetPrimaryIndex()
-	tableScan.index = &primaryIndex
+	tableScan.index = primaryIndex
 	tableScan.disableBatchLimit()
 
 	n := &indexJoinNode{
@@ -609,7 +610,7 @@ func (ef *execFactory) ConstructIndexJoin(
 
 // ConstructLookupJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructLookupJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
@@ -654,7 +655,7 @@ func (ef *execFactory) ConstructLookupJoin(
 }
 
 func (ef *execFactory) constructVirtualTableLookupJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
@@ -704,7 +705,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		joinType:          joinType,
 		virtualTableEntry: virtual,
 		dbName:            tn.Catalog(),
-		table:             tableDesc.TableDesc(),
+		table:             tableDesc,
 		index:             indexDesc,
 		eqCol:             int(eqCols[0]),
 		inputCols:         inputCols,
@@ -717,7 +718,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 }
 
 func (ef *execFactory) ConstructInvertedJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	invertedExpr tree.TypedExpr,
 	input exec.Node,
 	table cat.Table,
@@ -757,7 +758,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
 	var scanCols sqlbase.ResultColumns
-	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
+	if joinType != descpb.LeftSemiJoin && joinType != descpb.LeftAntiJoin {
 		scanCols = planColumns(tableScan)
 	}
 	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
@@ -769,7 +770,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 // Helper function to create a scanNode from just a table / index descriptor
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *descpb.IndexDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
@@ -1371,7 +1372,7 @@ func (ef *execFactory) ConstructUpdate(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
 	for i := range ru.UpdateCols {
 		id := ru.UpdateCols[i].ID
 		updateColsIdx[id] = i
@@ -1488,7 +1489,7 @@ func (ef *execFactory) ConstructUpsert(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
 	for i := range ru.UpdateCols {
 		id := ru.UpdateCols[i].ID
 		updateColsIdx[id] = i
@@ -1625,7 +1626,7 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
-	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
+	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1702,13 +1703,13 @@ func (ef *execFactory) ConstructCreateView(
 		if err != nil {
 			return nil, err
 		}
-		var ref sqlbase.TableDescriptor_Reference
+		var ref descpb.TableDescriptor_Reference
 		if d.SpecificIndex {
 			idx := d.DataSource.(cat.Table).Index(d.Index)
 			ref.IndexID = idx.(*optIndex).desc.ID
 		}
 		if !d.ColumnOrdinals.Empty() {
-			ref.ColumnIDs = make([]sqlbase.ColumnID, 0, d.ColumnOrdinals.Len())
+			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
 				ref.ColumnIDs = append(ref.ColumnIDs, desc.Columns[ord].ID)
 			})
@@ -1772,7 +1773,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	}
 
 	return &splitNode{
-		tableDesc:      &index.Table().(*optTable).desc.TableDescriptor,
+		tableDesc:      index.Table().(*optTable).desc,
 		index:          index.(*optIndex).desc,
 		rows:           input.(planNode),
 		expirationTime: expirationTime,
@@ -1784,7 +1785,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	return &unsplitNode{
-		tableDesc: &index.Table().(*optTable).desc.TableDescriptor,
+		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).desc,
 		rows:      input.(planNode),
 	}, nil
@@ -1804,7 +1805,7 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 ) (exec.Node, error) {
 	return &relocateNode{
 		relocateLease: relocateLease,
-		tableDesc:     &index.Table().(*optTable).desc.TableDescriptor,
+		tableDesc:     index.Table().(*optTable).desc,
 		index:         index.(*optIndex).desc,
 		rows:          input.(planNode),
 	}, nil
@@ -1881,13 +1882,13 @@ func (rb *renderBuilder) setOutput(exprs tree.TypedExprs, columns sqlbase.Result
 
 // makeColDescList returns a list of table column descriptors. Columns are
 // included if their ordinal position in the table schema is in the cols set.
-func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []sqlbase.ColumnDescriptor {
-	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
+func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []descpb.ColumnDescriptor {
+	colDescs := make([]descpb.ColumnDescriptor, 0, cols.Len())
 	for i, n := 0, table.ColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
+		colDescs = append(colDescs, *table.Column(i).(*descpb.ColumnDescriptor))
 	}
 	return colDescs
 }
