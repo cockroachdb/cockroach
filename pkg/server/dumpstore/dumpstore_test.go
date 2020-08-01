@@ -12,7 +12,6 @@ package dumpstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -173,11 +172,8 @@ func (myDumper) PreFilter(
 	panic("unimplemented")
 }
 
-func (myDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) error {
-	if !strings.HasPrefix(fi.Name(), "memprof") {
-		return errors.New("not a valid heap profile filename")
-	}
-	return nil
+func (myDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) bool {
+	return strings.HasPrefix(fi.Name(), "memprof")
 }
 
 func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) []os.FileInfo {
