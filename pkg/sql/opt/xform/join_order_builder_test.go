@@ -28,6 +28,10 @@ type testEdge struct {
 	left  string
 	right string
 
+	// notNull is a string of the form "AB" which represents the set of base
+	// relations on which nulls are rejected by the edge's predicate.
+	notNull string
+
 	// ses is a string of the form "AB" which represents the set of base relations
 	// referenced by the edge's predicate.
 	ses string
@@ -272,6 +276,74 @@ func TestJoinOrderBuilder_CalcTES(t *testing.T) {
 			expectedTES:   "ABCD",
 			expectedRules: "",
 		},
+		{ // 15
+			// SELECT * FROM
+			// (
+			//   SELECT * FROM A
+			//   FULL JOIN B
+			//   ON (A.x = B.x OR A.x IS NULL OR B.x IS NULL)
+			// )
+			// FULL JOIN
+			// (
+			//   SELECT * FROM C
+			//   FULL JOIN D
+			//   ON (C.x = D.x OR C.x IS NULL OR D.x IS NULL)
+			// )
+			// ON (A.y = D.y OR A.y IS NULL OR D.y IS NULL)
+			rootEdge: testEdge{joinOp: opt.FullJoinOp, left: "AB", right: "CD", ses: "AD"},
+			leftChildEdges: []testEdge{
+				{joinOp: opt.FullJoinOp, left: "A", right: "B", ses: "AB"},
+			},
+			rightChildEdges: []testEdge{
+				{joinOp: opt.FullJoinOp, left: "C", right: "D", ses: "CD"},
+			},
+			expectedTES:   "ABCD",
+			expectedRules: "",
+		},
+		{ // 16
+			// SELECT * FROM
+			// (
+			//   SELECT * FROM A
+			//   FULL JOIN B ON A.x = B.x
+			// )
+			// FULL JOIN
+			// (
+			//   SELECT * FROM C
+			//   FULL JOIN D ON C.x = D.x
+			// )
+			// ON A.y = C.y
+			rootEdge: testEdge{joinOp: opt.FullJoinOp, left: "AB", right: "CD", ses: "AD", notNull: "AD"},
+			leftChildEdges: []testEdge{
+				{joinOp: opt.FullJoinOp, left: "A", right: "B", ses: "AB", notNull: "AB"},
+			},
+			rightChildEdges: []testEdge{
+				{joinOp: opt.FullJoinOp, left: "C", right: "D", ses: "CD", notNull: "CD"},
+			},
+			expectedTES:   "AD",
+			expectedRules: "",
+		},
+		{ // 17
+			// SELECT * FROM
+			// (
+			//   SELECT * FROM A
+			//   LEFT JOIN B ON A.x = B.x
+			// )
+			// LEFT JOIN
+			// (
+			//   SELECT * FROM C
+			//   LEFT JOIN D ON C.x = D.x
+			// )
+			// ON A.y = C.y
+			rootEdge: testEdge{joinOp: opt.LeftJoinOp, left: "AB", right: "CD", ses: "AD", notNull: "AD"},
+			leftChildEdges: []testEdge{
+				{joinOp: opt.LeftJoinOp, left: "A", right: "B", ses: "AB", notNull: "AB"},
+			},
+			rightChildEdges: []testEdge{
+				{joinOp: opt.LeftJoinOp, left: "C", right: "D", ses: "CD", notNull: "CD"},
+			},
+			expectedTES:   "ACD",
+			expectedRules: "",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -316,8 +388,9 @@ func makeEdge(e testEdge) *edge {
 		rightVertexes: parseVertexSet(e.right),
 	}
 	return &edge{
-		op:  operator,
-		ses: parseVertexSet(e.ses),
+		op:               operator,
+		nullRejectedRels: parseVertexSet(e.notNull),
+		ses:              parseVertexSet(e.ses),
 	}
 }
 

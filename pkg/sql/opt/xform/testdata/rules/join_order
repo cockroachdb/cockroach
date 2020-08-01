@@ -1326,7 +1326,9 @@ left-join (hash)
 ----
 
 # Left-asscom property does not apply when the upper left join references the
-# right side of the lower.
+# right side of the lower. However, associative property does apply when the
+# predicate of the upper join rejects nulls on the right input of the lower
+# join.
 reorderjoins format=hide-all
 SELECT *
 FROM bx
@@ -1362,10 +1364,13 @@ y = z [left]
 
 ----Joining AB----
 A B    refs [AB] [left]
+----Joining BC----
+B C    refs [BC] [left]
 ----Joining ABC----
+A BC    refs [AB] [left]
 AB C    refs [BC] [left]
 
-Joins Considered: 2
+Joins Considered: 4
 --------------------------------------------------------------------------------
 ----Final Plan----
 left-join (hash)
@@ -1633,6 +1638,62 @@ inner-join (cross)
  │    └── filters (true)
  ├── scan dz
  └── filters (true)
+--------------------------------------------------------------------------------
+----
+----
+
+reorderjoins format=hide-all
+SELECT *
+FROM bx
+FULL JOIN cy ON b = c
+FULL JOIN dz ON y = z
+----
+----
+--------------------------------------------------------------------------------
+----Join Tree #1----
+full-join (hash)
+ ├── full-join (hash)
+ │    ├── scan bx
+ │    ├── scan cy
+ │    └── filters
+ │         └── b = c
+ ├── scan dz
+ └── filters
+      └── y = z
+
+----Vertexes----
+A:
+scan bx
+
+B:
+scan cy
+
+C:
+scan dz
+
+----Edges----
+b = c [full]
+y = z [full]
+
+----Joining AB----
+A B    refs [AB] [full]
+----Joining BC----
+B C    refs [BC] [full]
+----Joining ABC----
+A BC    refs [AB] [full]
+AB C    refs [BC] [full]
+
+Joins Considered: 4
+--------------------------------------------------------------------------------
+----Final Plan----
+full-join (hash)
+ ├── full-join (merge)
+ │    ├── scan bx
+ │    ├── scan cy
+ │    └── filters (true)
+ ├── scan dz
+ └── filters
+      └── y = z
 --------------------------------------------------------------------------------
 ----
 ----
