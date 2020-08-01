@@ -14,13 +14,12 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"runtime/pprof"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,9 +71,9 @@ type GoroutineDumper struct {
 	maxGoroutinesDumped int64
 	heuristics          []heuristic
 	currentTime         func() time.Time
-	takeGoroutineDump   func(dir string, filename string) error
-	gc                  func(ctx context.Context, dir string, sizeLimit int64)
-	dir                 string
+	takeGoroutineDump   func(path string) error
+	store               *dumpstore.DumpStore
+	st                  *cluster.Settings
 }
 
 // MaybeDump takes a goroutine dump only when at least one heuristic in
@@ -88,19 +87,21 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 	}
 	for _, h := range gd.heuristics {
 		if h.isTrue(gd) {
+			now := gd.currentTime()
 			filename := fmt.Sprintf(
 				"%s.%s.%s.%09d",
 				goroutineDumpPrefix,
-				gd.currentTime().Format(timeFormat),
+				now.Format(timeFormat),
 				h.name,
 				goroutines,
 			)
-			if err := gd.takeGoroutineDump(gd.dir, filename); err != nil {
-				log.Errorf(ctx, "error dumping goroutines: %s", err)
+			path := gd.store.GetFullPath(filename)
+			if err := gd.takeGoroutineDump(path); err != nil {
+				log.Warningf(ctx, "error dumping goroutines: %s", err)
 				continue
 			}
 			gd.maxGoroutinesDumped = goroutines
-			gd.gc(ctx, gd.dir, totalDumpSizeLimit.Get(&st.SV))
+			gd.gcDumps(ctx, now)
 			break
 		}
 	}
@@ -109,10 +110,15 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 // NewGoroutineDumper returns a GoroutineDumper which enables
 // doubleSinceLastDumpHeuristic.
 // dir is the directory in which dumps are stored.
-func NewGoroutineDumper(dir string) (*GoroutineDumper, error) {
+func NewGoroutineDumper(
+	ctx context.Context, dir string, st *cluster.Settings,
+) (*GoroutineDumper, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
+
+	log.Infof(ctx, "writing goroutine dumps to %s", dir)
+
 	gd := &GoroutineDumper{
 		heuristics: []heuristic{
 			doubleSinceLastDumpHeuristic,
@@ -121,61 +127,40 @@ func NewGoroutineDumper(dir string) (*GoroutineDumper, error) {
 		maxGoroutinesDumped: 0,
 		currentTime:         timeutil.Now,
 		takeGoroutineDump:   takeGoroutineDump,
-		gc:                  gc,
-		dir:                 dir,
+		store:               dumpstore.NewStore(dir, totalDumpSizeLimit, st),
+		st:                  st,
 	}
 	return gd, nil
 }
 
-// gc removes oldest dumps when the total size of all dumps is larger
-// than sizeLimit. Requires that the name of the dumps indicates dump time
-// such that sorting the filenames corresponds to ordering the dumps
-// from oldest to newest.
-//
-// Files that don't match the output file prefix are ignored
-// (i.e. preserved).
-//
-// Newest dump in the directory is not considered for GC.
-func gc(ctx context.Context, dir string, sizeLimit int64) {
-	// ReadDir returns a list of directory entries sorted by filename, which means
-	// it is sorted by dump time.
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Errorf(ctx, "cannot read directory %s, err: %s", dir, err)
-		return
-	}
-
-	var totalSize int64
-	isLatestDump := true
-	for i := len(files) - 1; i >= 0; i-- {
-		f := files[i]
-		if !strings.HasPrefix(f.Name(), goroutineDumpPrefix) {
-			log.Infof(ctx, "ignoring unknown file %s in goroutine dump dir %s", f.Name(), dir)
-			continue
-		}
-
-		// Note: we are counting preserved files against the maximum.
-		totalSize += f.Size()
-
-		// Skipping the latest dump in gc - the first file encountered when looking
-		// from last to first.
-		if isLatestDump {
-			isLatestDump = false
-			continue
-		}
-
-		if totalSize > sizeLimit {
-			path := filepath.Join(dir, f.Name())
-			if err := os.Remove(path); err != nil {
-				log.Warningf(ctx, "cannot remove dump file %s: %v", path, err)
-			}
-		}
-	}
+func (gd *GoroutineDumper) gcDumps(ctx context.Context, now time.Time) {
+	gd.store.GC(ctx, now, gd)
 }
 
-func takeGoroutineDump(dir string, filename string) error {
-	filename = filename + ".txt.gz"
-	path := filepath.Join(dir, filename)
+// PreFilter is part of the dumpstore.Dumper interface.
+func (gd *GoroutineDumper) PreFilter(
+	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
+) (preserved map[int]bool, _ error) {
+	preserved = make(map[int]bool)
+	for i := len(files) - 1; i >= 0; i-- {
+		if err := gd.CheckOwnsFile(ctx, files[i]); err == nil {
+			preserved[i] = true
+			break
+		}
+	}
+	return
+}
+
+// CheckOwnsFile is part of the dumpstore.Dumper interface.
+func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) error {
+	if !strings.HasPrefix(fi.Name(), goroutineDumpPrefix) {
+		return errors.New("not a valid goroutine dump name")
+	}
+	return nil
+}
+
+func takeGoroutineDump(path string) error {
+	path += ".txt.gz"
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "error creating file %s for goroutine dump", path)
