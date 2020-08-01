@@ -102,6 +102,11 @@ type hashAggregator struct {
 	hashAlloc   hashAggFuncsAlloc
 }
 
+// Remove unused warning.
+// TODO(yuzefovich): remove this once it is used by the hash aggregator.
+var c vecToDatumConverter
+var _ = c.convertBatch
+
 var _ colexecbase.Operator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
