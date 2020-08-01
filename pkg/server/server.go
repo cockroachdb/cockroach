@@ -2019,6 +2019,7 @@ func (s *Server) startSampleEnvironment(
 	// Initialize a heap profiler if we have an output directory
 	// specified.
 	var heapProfiler *heapprofiler.HeapProfiler
+	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	if s.cfg.HeapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
@@ -2031,9 +2032,13 @@ func (s *Server) startSampleEnvironment(
 			hasValidDumpDir = false
 		}
 		if hasValidDumpDir {
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
+			heapProfiler, err = heapprofiler.NewHeapProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
+			}
+			nonGoAllocProfiler, err = heapprofiler.NewNonGoAllocProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
+			if err != nil {
+				return errors.Wrap(err, "starting non-go alloc profiler worker")
 			}
 		}
 	}
@@ -2090,9 +2095,9 @@ func (s *Server) startSampleEnvironment(
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, curStats.MemStats)
+					heapProfiler.MaybeTakeProfile(ctx, s.runtime.GoAllocBytes.Value())
+					nonGoAllocProfiler.MaybeTakeProfile(ctx, s.runtime.CgoTotalBytes.Value())
 				}
-
 			}
 		}
 	})

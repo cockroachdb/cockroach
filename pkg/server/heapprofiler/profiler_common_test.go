@@ -12,19 +12,17 @@ package heapprofiler
 
 import (
 	"context"
-	"runtime"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHeapProfiler(t *testing.T) {
+func TestProfiler(t *testing.T) {
 	ctx := context.Background()
 	type test struct {
 		secs      int // The measurement's timestamp.
-		heapBytes uint64
+		heapBytes int64
 
 		expProfile bool
 	}
@@ -40,26 +38,19 @@ func TestHeapProfiler(t *testing.T) {
 	}
 
 	var tookProfile bool
-	hp, err := NewHeapProfiler("dummy_dir", cluster.MakeTestingClusterSettings())
-	if err != nil {
-		t.Fatal(err)
-	}
-	hp.knobs = testingKnobs{
-		now:               now,
-		dontWriteProfiles: true,
-		maybeTakeProfileHook: func(willTakeProfile bool) {
-			tookProfile = willTakeProfile
-		},
-	}
+	hp := profiler{
+		knobs: testingKnobs{
+			now:               now,
+			dontWriteProfiles: true,
+			maybeTakeProfileHook: func(willTakeProfile bool) {
+				tookProfile = willTakeProfile
+			},
+		}}
 
 	for i, r := range tests {
 		currentTime = (time.Time{}).Add(time.Second * time.Duration(r.secs))
 
-		// Initialize enough of ms for the purposes of the HeapProfiler.
-		var ms runtime.MemStats
-		ms.HeapAlloc = r.heapBytes
-
-		hp.MaybeTakeProfile(ctx, ms)
+		hp.maybeTakeProfile(ctx, r.heapBytes, nil)
 		assert.Equal(t, r.expProfile, tookProfile, i)
 	}
 }
