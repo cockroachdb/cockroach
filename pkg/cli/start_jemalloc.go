@@ -51,14 +51,13 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 )
 
 func init() {
 	if C.is_profiling_enabled() {
-		if jemallocHeapDump != nil {
-			panic("jemallocHeapDump is already set")
-		}
-		jemallocHeapDump = writeJemallocProfile
+		heapprofiler.SetJemallocHeapDumpFn(writeJemallocProfile)
 	}
 }
 
