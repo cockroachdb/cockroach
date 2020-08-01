@@ -12,19 +12,20 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// SchemaDescriptorInterface will eventually be called schemadesc.Descriptor.
+// SchemaDescriptor will eventually be called schemadesc.Descriptor.
 // It is implemented by ImmutableSchemaDescriptor.
-type SchemaDescriptorInterface interface {
-	BaseDescriptorInterface
-	SchemaDesc() *SchemaDescriptor
+type SchemaDescriptor interface {
+	Descriptor
+	SchemaDesc() *descpb.SchemaDescriptor
 }
 
-var _ SchemaDescriptorInterface = (*ImmutableSchemaDescriptor)(nil)
-var _ SchemaDescriptorInterface = (*MutableSchemaDescriptor)(nil)
+var _ SchemaDescriptor = (*ImmutableSchemaDescriptor)(nil)
+var _ SchemaDescriptor = (*MutableSchemaDescriptor)(nil)
 
 // ResolvedSchemaKind is an enum that represents what kind of schema
 // has been resolved.
@@ -50,7 +51,7 @@ type ResolvedSchema struct {
 	Kind ResolvedSchemaKind
 	// The ID of the resolved schema. This field is only set for schema kinds
 	// SchemaPublic, SchemaUserDefined and SchemaTemporary.
-	ID ID
+	ID descpb.ID
 	// The descriptor backing the resolved schema. It is only set for
 	// SchemaUserDefined.
 	Desc *ImmutableSchemaDescriptor
@@ -59,7 +60,7 @@ type ResolvedSchema struct {
 // ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
 // on it.
 type ImmutableSchemaDescriptor struct {
-	SchemaDescriptor
+	descpb.SchemaDescriptor
 }
 
 // MutableSchemaDescriptor is a mutable reference to a SchemaDescriptor.
@@ -79,20 +80,20 @@ type MutableSchemaDescriptor struct {
 // NewMutableExistingSchemaDescriptor returns a MutableSchemaDescriptor from the
 // given schema descriptor with the cluster version also set to the descriptor.
 // This is for schemas that already exist.
-func NewMutableExistingSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDescriptor {
+func NewMutableExistingSchemaDescriptor(desc descpb.SchemaDescriptor) *MutableSchemaDescriptor {
 	return &MutableSchemaDescriptor{
-		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(*protoutil.Clone(&desc).(*SchemaDescriptor)),
+		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(*protoutil.Clone(&desc).(*descpb.SchemaDescriptor)),
 		ClusterVersion:            NewImmutableSchemaDescriptor(desc),
 	}
 }
 
 // NewImmutableSchemaDescriptor makes a new Schema descriptor.
-func NewImmutableSchemaDescriptor(desc SchemaDescriptor) *ImmutableSchemaDescriptor {
+func NewImmutableSchemaDescriptor(desc descpb.SchemaDescriptor) *ImmutableSchemaDescriptor {
 	m := makeImmutableSchemaDescriptor(desc)
 	return &m
 }
 
-func makeImmutableSchemaDescriptor(desc SchemaDescriptor) ImmutableSchemaDescriptor {
+func makeImmutableSchemaDescriptor(desc descpb.SchemaDescriptor) ImmutableSchemaDescriptor {
 	return ImmutableSchemaDescriptor{SchemaDescriptor: desc}
 }
 
@@ -104,25 +105,25 @@ var (
 // NewMutableCreatedSchemaDescriptor returns a MutableSchemaDescriptor from the
 // given SchemaDescriptor with the cluster version being the zero schema. This
 // is for a schema that is created within the current transaction.
-func NewMutableCreatedSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDescriptor {
+func NewMutableCreatedSchemaDescriptor(desc descpb.SchemaDescriptor) *MutableSchemaDescriptor {
 	return &MutableSchemaDescriptor{
 		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(desc),
 	}
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) SetDrainingNames(names []NameInfo) {
+func (desc *MutableSchemaDescriptor) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
-// GetParentSchemaID implements the BaseDescriptorInterface interface.
-func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() ID {
+// GetParentSchemaID implements the Descriptor interface.
+func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *ImmutableSchemaDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
+func (desc *ImmutableSchemaDescriptor) GetAuditMode() descpb.TableDescriptor_AuditMode {
+	return descpb.TableDescriptor_DISABLED
 }
 
 // TypeName implements the DescriptorProto interface.
@@ -130,50 +131,35 @@ func (desc *ImmutableSchemaDescriptor) TypeName() string {
 	return "schema"
 }
 
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableSchemaDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return nil
-}
-
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableSchemaDescriptor) SchemaDesc() *SchemaDescriptor {
+// SchemaDesc implements the Descriptor interface.
+func (desc *ImmutableSchemaDescriptor) SchemaDesc() *descpb.SchemaDescriptor {
 	return &desc.SchemaDescriptor
 }
 
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableSchemaDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableSchemaDescriptor) TypeDesc() *TypeDescriptor {
-	return nil
-}
-
-// Adding implements the BaseDescriptorInterface interface.
+// Adding implements the Descriptor interface.
 func (desc *ImmutableSchemaDescriptor) Adding() bool {
 	return false
 }
 
-// Dropped implements the BaseDescriptorInterface interface.
+// Dropped implements the Descriptor interface.
 func (desc *ImmutableSchemaDescriptor) Dropped() bool {
 	return false
 }
 
-// Offline implements the BaseDescriptorInterface interface.
+// Offline implements the Descriptor interface.
 func (desc *ImmutableSchemaDescriptor) Offline() bool {
 	return false
 }
 
-// GetOfflineReason implements the BaseDescriptorInterface interface.
+// GetOfflineReason implements the Descriptor interface.
 func (desc *ImmutableSchemaDescriptor) GetOfflineReason() string {
 	return ""
 }
 
 // DescriptorProto wraps a SchemaDescriptor in a Descriptor.
-func (desc *ImmutableSchemaDescriptor) DescriptorProto() *Descriptor {
-	return &Descriptor{
-		Union: &Descriptor_Schema{
+func (desc *ImmutableSchemaDescriptor) DescriptorProto() *descpb.Descriptor {
+	return &descpb.Descriptor{
+		Union: &descpb.Descriptor_Schema{
 			Schema: &desc.SchemaDescriptor,
 		},
 	}
@@ -201,15 +187,15 @@ func (desc *MutableSchemaDescriptor) OriginalName() string {
 }
 
 // OriginalID implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) OriginalID() ID {
+func (desc *MutableSchemaDescriptor) OriginalID() descpb.ID {
 	if desc.ClusterVersion == nil {
-		return InvalidID
+		return descpb.InvalidID
 	}
 	return desc.ClusterVersion.ID
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) OriginalVersion() DescriptorVersion {
+func (desc *MutableSchemaDescriptor) OriginalVersion() descpb.DescriptorVersion {
 	if desc.ClusterVersion == nil {
 		return 0
 	}
@@ -217,10 +203,10 @@ func (desc *MutableSchemaDescriptor) OriginalVersion() DescriptorVersion {
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) Immutable() DescriptorInterface {
+func (desc *MutableSchemaDescriptor) Immutable() Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*SchemaDescriptor))
+	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))
 }
 
 // IsNew implements the MutableDescriptor interface.

@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -76,7 +78,7 @@ type extendedEvalContext struct {
 	Jobs *jobsCollection
 
 	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
-	SchemaChangeJobCache map[sqlbase.ID]*jobs.Job
+	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
 	schemaAccessors *schemaInterface
 
@@ -212,7 +214,7 @@ type planner struct {
 	// resolution processes to disallow cross database references. In particular,
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
-	contextDatabaseID sqlbase.ID
+	contextDatabaseID descpb.ID
 }
 
 func (ctx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
@@ -253,7 +255,7 @@ func newInternalPlanner(
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
-		SearchPath:    sqlbase.DefaultSearchPath,
+		SearchPath:    catconstants.DefaultSearchPath,
 		User:          user,
 		Database:      "system",
 		SequenceState: sessiondata.NewSequenceState(),
@@ -481,7 +483,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 // TODO (SQLSchema): This should call into the set of SchemaAccessors instead
 //  of having its own logic for lookups.
 func (p *planner) LookupTableByID(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
 		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil

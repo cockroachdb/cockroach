@@ -635,6 +635,7 @@ type ObjectLookupFlags struct {
 	// return a MutableTableDescriptor
 	RequireMutable         bool
 	IncludeOffline         bool
+	IncludeDropped         bool
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind

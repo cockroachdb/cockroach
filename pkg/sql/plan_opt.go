@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -139,11 +140,11 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		if colMeta.Table != opt.TableID(0) {
 			// Get the cat.Table that this column references.
 			tab := md.Table(colMeta.Table)
-			resultCols[i].TableID = sqlbase.ID(tab.ID())
+			resultCols[i].TableID = descpb.ID(tab.ID())
 			// Convert the metadata opt.ColumnID to its ordinal position in the table.
 			colOrdinal := colMeta.Table.ColumnOrdinal(col.ID)
 			// Use that ordinal position to retrieve the column's stable ID.
-			resultCols[i].PGAttributeNum = sqlbase.ColumnID(tab.Column(colOrdinal).ColID())
+			resultCols[i].PGAttributeNum = descpb.ColumnID(tab.Column(colOrdinal).ColID())
 		}
 	}
 

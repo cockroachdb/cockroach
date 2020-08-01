@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -39,17 +40,17 @@ var MVCCTimestampColumnType = types.Decimal
 const MVCCTimestampColumnID = math.MaxUint32
 
 // MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
-var MVCCTimestampColumnDesc = ColumnDescriptor{
+var MVCCTimestampColumnDesc = descpb.ColumnDescriptor{
 	Name:             MVCCTimestampColumnName,
 	Type:             MVCCTimestampColumnType,
 	Hidden:           true,
 	Nullable:         true,
-	SystemColumnKind: SystemColumnKind_MVCCTIMESTAMP,
+	SystemColumnKind: descpb.SystemColumnKind_MVCCTIMESTAMP,
 	ID:               MVCCTimestampColumnID,
 }
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
-func IsColIDSystemColumn(colID ColumnID) bool {
+func IsColIDSystemColumn(colID descpb.ColumnID) bool {
 	switch colID {
 	case MVCCTimestampColumnID:
 		return true
@@ -60,7 +61,7 @@ func IsColIDSystemColumn(colID ColumnID) bool {
 
 // GetSystemColumnDescriptorFromID returns a column descriptor corresponding
 // to the system column referred to by the input column ID.
-func GetSystemColumnDescriptorFromID(colID ColumnID) (*ColumnDescriptor, error) {
+func GetSystemColumnDescriptorFromID(colID descpb.ColumnID) (*descpb.ColumnDescriptor, error) {
 	switch colID {
 	case MVCCTimestampColumnID:
 		return &MVCCTimestampColumnDesc, nil
@@ -71,19 +72,19 @@ func GetSystemColumnDescriptorFromID(colID ColumnID) (*ColumnDescriptor, error) 
 
 // GetSystemColumnKindFromColumnID returns the kind of system column that colID
 // refers to.
-func GetSystemColumnKindFromColumnID(colID ColumnID) SystemColumnKind {
+func GetSystemColumnKindFromColumnID(colID descpb.ColumnID) descpb.SystemColumnKind {
 	switch colID {
 	case MVCCTimestampColumnID:
-		return SystemColumnKind_MVCCTIMESTAMP
+		return descpb.SystemColumnKind_MVCCTIMESTAMP
 	default:
-		return SystemColumnKind_NONE
+		return descpb.SystemColumnKind_NONE
 	}
 }
 
 // GetSystemColumnIDByKind returns the column ID of the desired system column.
-func GetSystemColumnIDByKind(kind SystemColumnKind) (ColumnID, error) {
+func GetSystemColumnIDByKind(kind descpb.SystemColumnKind) (descpb.ColumnID, error) {
 	switch kind {
-	case SystemColumnKind_MVCCTIMESTAMP:
+	case descpb.SystemColumnKind_MVCCTIMESTAMP:
 		return MVCCTimestampColumnID, nil
 	default:
 		return 0, errors.Newf("invalid system column kind %s", kind.String())
@@ -91,9 +92,9 @@ func GetSystemColumnIDByKind(kind SystemColumnKind) (ColumnID, error) {
 }
 
 // GetSystemColumnTypeForKind returns the types.T of the input system column.
-func GetSystemColumnTypeForKind(kind SystemColumnKind) *types.T {
+func GetSystemColumnTypeForKind(kind descpb.SystemColumnKind) *types.T {
 	switch kind {
-	case SystemColumnKind_MVCCTIMESTAMP:
+	case descpb.SystemColumnKind_MVCCTIMESTAMP:
 		return MVCCTimestampColumnType
 	default:
 		return nil
@@ -114,10 +115,10 @@ func IsSystemColumnName(name string) bool {
 // GetSystemColumnTypesAndDescriptors is a utility method to construct a set of
 // types and column descriptors from an input list of system column kinds.
 func GetSystemColumnTypesAndDescriptors(
-	desc *TableDescriptor, kinds []SystemColumnKind,
-) ([]*types.T, []ColumnDescriptor, error) {
+	desc *descpb.TableDescriptor, kinds []descpb.SystemColumnKind,
+) ([]*types.T, []descpb.ColumnDescriptor, error) {
 	resTypes := make([]*types.T, len(kinds))
-	resDescs := make([]ColumnDescriptor, len(kinds))
+	resDescs := make([]descpb.ColumnDescriptor, len(kinds))
 	for i, k := range kinds {
 		resTypes[i] = GetSystemColumnTypeForKind(k)
 		colID, err := GetSystemColumnIDByKind(k)

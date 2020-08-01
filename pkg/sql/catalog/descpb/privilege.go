@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package descpb
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
@@ -80,7 +81,7 @@ func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List) *PrivilegeDescri
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
 			{
-				User:       AdminRole,
+				User:       security.AdminRole,
 				Privileges: priv.ToBitField(),
 			},
 			{
@@ -181,7 +182,7 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // perhaps it was intended only for the 2.0 release but then somehow we got
 // bad descriptors with bad initial permissions into later versions or we didn't
 // properly bake this migration in.
-func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
+func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 	allowedPrivilegesBits := privilege.ALL.Mask()
 	if IsReservedID(id) {
 		// System databases and tables have custom maximum allowed privileges.
@@ -200,7 +201,7 @@ func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
 
 	// Check "root" user and "admin" role.
 	fixSuperUser(security.RootUser)
-	fixSuperUser(AdminRole)
+	fixSuperUser(security.AdminRole)
 
 	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
 		// ALL privileges allowed, we can skip regular users.
@@ -210,7 +211,7 @@ func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
 	for i := range p.Users {
 		// Users is a slice of values, we need pointers to make them mutable.
 		u := &p.Users[i]
-		if u.User == security.RootUser || u.User == AdminRole {
+		if u.User == security.RootUser || u.User == security.AdminRole {
 			// we've already checked super users.
 			continue
 		}
@@ -245,7 +246,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	}
 
 	// We expect an "admin" role. Check that it has desired superuser permissions.
-	if err := p.validateRequiredSuperuser(id, allowedPrivileges, AdminRole); err != nil {
+	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.AdminRole); err != nil {
 		return err
 	}
 
@@ -257,7 +258,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 
 	// For all non-super users, privileges must not exceed the allowed privileges.
 	for _, u := range p.Users {
-		if u.User == security.RootUser || u.User == AdminRole {
+		if u.User == security.RootUser || u.User == security.AdminRole {
 			// We've already checked super users.
 			continue
 		}
@@ -334,4 +335,47 @@ func (p PrivilegeDescriptor) AnyPrivilege(user string) bool {
 		return false
 	}
 	return userPriv.Privileges != 0
+}
+
+// SystemAllowedPrivileges describes the allowable privilege list for each
+// system object. Super users (root and admin) must have exactly the specified privileges,
+// other users must not exceed the specified privileges.
+var SystemAllowedPrivileges = map[ID]privilege.List{
+	keys.SystemDatabaseID:           privilege.ReadData,
+	keys.NamespaceTableID:           privilege.ReadData,
+	keys.DeprecatedNamespaceTableID: privilege.ReadData,
+	keys.DescriptorTableID:          privilege.ReadData,
+	keys.UsersTableID:               privilege.ReadWriteData,
+	keys.RoleOptionsTableID:         privilege.ReadWriteData,
+	keys.ZonesTableID:               privilege.ReadWriteData,
+	// We eventually want to migrate the table to appear read-only to force the
+	// the use of a validating, logging accessor, so we'll go ahead and tolerate
+	// read-only privs to make that migration possible later.
+	keys.SettingsTableID:   privilege.ReadWriteData,
+	keys.DescIDSequenceID:  privilege.ReadData,
+	keys.TenantsTableID:    privilege.ReadData,
+	keys.LeaseTableID:      privilege.ReadWriteData,
+	keys.EventLogTableID:   privilege.ReadWriteData,
+	keys.RangeEventTableID: privilege.ReadWriteData,
+	keys.UITableID:         privilege.ReadWriteData,
+	// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
+	// users will be able to modify system tables' schemas at will. CREATE and
+	// DROP privileges are allowed on the above system tables for backwards
+	// compatibility reasons only!
+	keys.JobsTableID:                          privilege.ReadWriteData,
+	keys.WebSessionsTableID:                   privilege.ReadWriteData,
+	keys.TableStatisticsTableID:               privilege.ReadWriteData,
+	keys.LocationsTableID:                     privilege.ReadWriteData,
+	keys.RoleMembersTableID:                   privilege.ReadWriteData,
+	keys.CommentsTableID:                      privilege.ReadWriteData,
+	keys.ReplicationConstraintStatsTableID:    privilege.ReadWriteData,
+	keys.ReplicationCriticalLocalitiesTableID: privilege.ReadWriteData,
+	keys.ReplicationStatsTableID:              privilege.ReadWriteData,
+	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
+	keys.ProtectedTimestampsMetaTableID:       privilege.ReadData,
+	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadData,
+	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
+	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
+	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
+	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
 }

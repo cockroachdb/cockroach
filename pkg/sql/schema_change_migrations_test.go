@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -287,7 +289,7 @@ func setupServerAndStartSchemaChange(
 		return nil
 	})
 	// TODO(pbardea): Remove this magic 53.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, sqlbase.ID(53)); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descpb.ID(53)); err != nil {
 		t.Fatal(err)
 	}
 	return runner, sqlDB, tc
@@ -301,9 +303,9 @@ func migrateJobToOldFormat(
 ) error {
 	ctx := context.Background()
 
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if schemaChangeType == CreateTable {
-		tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
+		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
 	}
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -347,7 +349,7 @@ func migrateJobToOldFormat(
 	}
 
 	// Update the table descriptor.
-	tableDesc.Lease = &sqlbase.TableDescriptor_SchemaChangeLease{
+	tableDesc.Lease = &descpb.TableDescriptor_SchemaChangeLease{
 		ExpirationTime: timeutil.Now().UnixNano(),
 		NodeID:         roachpb.NodeID(0),
 	}
@@ -427,13 +429,13 @@ func migrateGCJobToOldFormat(
 		return nil
 
 	case DropIndex:
-		tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if l := len(tableDesc.GCMutations); l != 1 {
 			return errors.AssertionFailedf("expected exactly 1 GCMutation, found %d", l)
 		}
 
 		// Update the table descriptor.
-		tableDesc.Lease = &sqlbase.TableDescriptor_SchemaChangeLease{
+		tableDesc.Lease = &descpb.TableDescriptor_SchemaChangeLease{
 			ExpirationTime: timeutil.Now().UnixNano(),
 			NodeID:         roachpb.NodeID(0),
 		}
@@ -733,12 +735,12 @@ func verifySchemaChangeJobRan(
 	}
 }
 
-func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
-	tableID := sqlbase.ID(53)
+func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []descpb.ID {
+	tableID := descpb.ID(53)
 	if schemaChangeType == CreateTable {
-		tableID = sqlbase.ID(54)
+		tableID = descpb.ID(54)
 	}
-	return []sqlbase.ID{tableID}
+	return []descpb.ID{tableID}
 }
 
 // Helpers used to determine valid test cases.
@@ -877,8 +879,8 @@ func TestGCJobCreated(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test();`); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	tableDesc.State = sqlbase.TableDescriptor_DROP
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc.State = descpb.TableDescriptor_DROP
 	tableDesc.Version++
 	tableDesc.DropTime = 1
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -961,7 +963,7 @@ func TestMissingMutation(t *testing.T) {
 
 	// To get the table descriptor into the (invalid) state we're trying to test,
 	// clear the mutations on the table descriptor.
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tableDesc.Mutations = nil
 	require.NoError(
 		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

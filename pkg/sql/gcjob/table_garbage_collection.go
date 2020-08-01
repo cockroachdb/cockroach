@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,10 +43,10 @@ func gcTables(
 			continue
 		}
 
-		var table *sqlbase.TableDescriptor
+		var table *sqlbase.ImmutableTableDescriptor
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
-			table, err = sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, droppedTable.ID)
+			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
@@ -88,7 +89,7 @@ func clearTableData(
 	db *kv.DB,
 	distSender *kvcoord.DistSender,
 	codec keys.SQLCodec,
-	table *sqlbase.TableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.

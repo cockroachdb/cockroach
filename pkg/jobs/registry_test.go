@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -219,8 +221,8 @@ func TestRegistryGC(t *testing.T) {
 	earlier := ts.Add(-1 * time.Hour)
 	muchEarlier := ts.Add(-2 * time.Hour)
 
-	setMutations := func(mutations []sqlbase.DescriptorMutation) sqlbase.ID {
-		desc := sqlbase.TestingGetMutableExistingTableDescriptor(
+	setMutations := func(mutations []descpb.DescriptorMutation) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.Mutations = mutations
 		if err := kvDB.Put(
@@ -233,8 +235,8 @@ func TestRegistryGC(t *testing.T) {
 		return desc.GetID()
 	}
 
-	setGCMutations := func(gcMutations []sqlbase.TableDescriptor_GCDescriptorMutation) sqlbase.ID {
-		desc := sqlbase.TestingGetMutableExistingTableDescriptor(
+	setGCMutations := func(gcMutations []descpb.TableDescriptor_GCDescriptorMutation) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.GCMutations = gcMutations
 		if err := kvDB.Put(
@@ -247,8 +249,8 @@ func TestRegistryGC(t *testing.T) {
 		return desc.GetID()
 	}
 
-	setDropJob := func(shouldDrop bool) sqlbase.ID {
-		desc := sqlbase.TestingGetMutableExistingTableDescriptor(
+	setDropJob := func(shouldDrop bool) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		if shouldDrop {
 			desc.DropJobID = 123
@@ -273,10 +275,10 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 		}
 		descriptorID := setDropJob(mutOptions.hasDropJob)
 		if mutOptions.hasMutation {
-			descriptorID = setMutations([]sqlbase.DescriptorMutation{{}})
+			descriptorID = setMutations([]descpb.DescriptorMutation{{}})
 		}
 		if mutOptions.hasGCMutation {
-			descriptorID = setGCMutations([]sqlbase.TableDescriptor_GCDescriptorMutation{{}})
+			descriptorID = setGCMutations([]descpb.TableDescriptor_GCDescriptorMutation{{}})
 		}
 
 		payload, err := protoutil.Marshal(&jobspb.Payload{
@@ -284,9 +286,9 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
 			// register a mutation on the table so that jobs that reference
 			// the table are not considered orphaned
-			DescriptorIDs: []sqlbase.ID{
+			DescriptorIDs: []descpb.ID{
 				descriptorID,
-				sqlbase.InvalidID, // invalid id to test handling of missing descriptors.
+				descpb.InvalidID, // invalid id to test handling of missing descriptors.
 			},
 			Details:        jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
 			StartedMicros:  timeutil.ToUnixMicros(created),

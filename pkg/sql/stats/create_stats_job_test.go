@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -680,7 +680,7 @@ func createStatsRequestFilter(allowProgressIota *chan struct{}) kvserverbase.Rep
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
 			// Ensure that the tableID is within the expected range for a table,
 			// but is not a system table.
-			if tableID > 0 && tableID < 100 && !sqlbase.IsReservedID(sqlbase.ID(tableID)) {
+			if tableID > 0 && tableID < 100 && !descpb.IsReservedID(descpb.ID(tableID)) {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota

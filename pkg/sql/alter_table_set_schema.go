@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -139,7 +140,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	renameDetails := sqlbase.NameInfo{
+	renameDetails := descpb.NameInfo{
 		ParentID:       databaseID,
 		ParentSchemaID: schemaID,
 		Name:           tableDesc.Name,
@@ -150,7 +151,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	n.tableDesc.SetParentSchemaID(desiredSchemaID)
 
 	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}

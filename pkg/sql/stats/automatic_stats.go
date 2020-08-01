@@ -19,10 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -205,13 +205,13 @@ type Refresher struct {
 
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
-	mutationCounts map[sqlbase.ID]int64
+	mutationCounts map[descpb.ID]int64
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
 // the background refresher thread to (possibly) trigger a statistics refresh.
 type mutation struct {
-	tableID      sqlbase.ID
+	tableID      descpb.ID
 	rowsAffected int
 }
 
@@ -232,7 +232,7 @@ func MakeRefresher(
 		mutations:      make(chan mutation, refreshChanBufferLen),
 		asOfTime:       asOfTime,
 		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts: make(map[sqlbase.ID]int64, 16),
+		mutationCounts: make(map[descpb.ID]int64, 16),
 	}
 }
 
@@ -299,7 +299,7 @@ func (r *Refresher) Start(
 					}); err != nil {
 					log.Errorf(ctx, "failed to refresh stats: %v", err)
 				}
-				r.mutationCounts = make(map[sqlbase.ID]int64, len(r.mutationCounts))
+				r.mutationCounts = make(map[descpb.ID]int64, len(r.mutationCounts))
 
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
@@ -342,11 +342,11 @@ AND drop_time IS NULL
 		return
 	}
 	for _, row := range rows {
-		tableID := sqlbase.ID(*row[0].(*tree.DInt))
+		tableID := descpb.ID(*row[0].(*tree.DInt))
 		// Don't create statistics for system tables or virtual tables.
 		// TODO(rytaft): Don't add views here either. Unfortunately views are not
 		// identified differently from tables in crdb_internal.tables.
-		if !sqlbase.IsReservedID(tableID) && !sqlbase.IsVirtualTable(tableID) {
+		if !descpb.IsReservedID(tableID) && !descpb.IsVirtualTable(tableID) {
 			r.mutationCounts[tableID] += 0
 		}
 	}
@@ -356,18 +356,18 @@ AND drop_time IS NULL
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(tableID sqlbase.ID, rowsAffected int) {
+func (r *Refresher) NotifyMutation(tableID descpb.ID, rowsAffected int) {
 	if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
 		// Automatic stats are disabled.
 		return
 	}
 
-	if sqlbase.IsReservedID(tableID) {
+	if descpb.IsReservedID(tableID) {
 		// Don't try to create statistics for system tables (most importantly,
 		// for table_statistics itself).
 		return
 	}
-	if sqlbase.IsVirtualTable(tableID) {
+	if descpb.IsVirtualTable(tableID) {
 		// Don't try to create statistics for virtual tables.
 		return
 	}
@@ -391,7 +391,7 @@ func (r *Refresher) NotifyMutation(tableID sqlbase.ID, rowsAffected int) {
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	tableID sqlbase.ID,
+	tableID descpb.ID,
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
@@ -468,9 +468,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 }
 
-func (r *Refresher) refreshStats(
-	ctx context.Context, tableID sqlbase.ID, asOf time.Duration,
-) error {
+func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf time.Duration) error {
 	// Create statistics for all default column sets on the given table.
 	_ /* rows */, err := r.ex.Exec(
 		ctx,
@@ -534,7 +532,7 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	return sum / time.Duration(count)
 }
 
-func areEqual(a, b []sqlbase.ColumnID) bool {
+func areEqual(a, b []descpb.ColumnID) bool {
 	if len(a) != len(b) {
 		return false
 	}

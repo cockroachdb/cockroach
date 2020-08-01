@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -413,34 +414,34 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	type hjTestSpec struct {
-		joinType        sqlbase.JoinType
+		joinType        descpb.JoinType
 		onExprSupported bool
 	}
 	testSpecs := []hjTestSpec{
 		{
-			joinType:        sqlbase.InnerJoin,
+			joinType:        descpb.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.LeftOuterJoin,
+			joinType: descpb.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.RightOuterJoin,
+			joinType: descpb.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.FullOuterJoin,
+			joinType: descpb.FullOuterJoin,
 		},
 		{
-			joinType: sqlbase.LeftSemiJoin,
+			joinType: descpb.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.LeftAntiJoin,
+			joinType: descpb.LeftAntiJoin,
 		},
 		{
-			joinType: sqlbase.IntersectAllJoin,
+			joinType: descpb.IntersectAllJoin,
 		},
 		{
-			joinType: sqlbase.ExceptAllJoin,
+			joinType: descpb.ExceptAllJoin,
 		},
 	}
 
@@ -609,38 +610,38 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	type mjTestSpec struct {
-		joinType        sqlbase.JoinType
+		joinType        descpb.JoinType
 		anyOrder        bool
 		onExprSupported bool
 	}
 	testSpecs := []mjTestSpec{
 		{
-			joinType:        sqlbase.InnerJoin,
+			joinType:        descpb.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.LeftOuterJoin,
+			joinType: descpb.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.RightOuterJoin,
+			joinType: descpb.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.FullOuterJoin,
+			joinType: descpb.FullOuterJoin,
 			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
 			// is ambiguous), so we're comparing the outputs as sets.
 			anyOrder: true,
 		},
 		{
-			joinType: sqlbase.LeftSemiJoin,
+			joinType: descpb.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.LeftAntiJoin,
+			joinType: descpb.LeftAntiJoin,
 		},
 		{
-			joinType: sqlbase.IntersectAllJoin,
+			joinType: descpb.IntersectAllJoin,
 		},
 		{
-			joinType: sqlbase.ExceptAllJoin,
+			joinType: descpb.ExceptAllJoin,
 		},
 	}
 
@@ -812,7 +813,7 @@ func generateColumnOrdering(
 	return orderingCols
 }
 
-func getAddFilterOptions(joinType sqlbase.JoinType, nonEqualityColsPresent bool) []bool {
+func getAddFilterOptions(joinType descpb.JoinType, nonEqualityColsPresent bool) []bool {
 	if joinType.IsSetOpJoin() && nonEqualityColsPresent {
 		// Output of set operation join when rows have non equality columns is
 		// not deterministic, so applying a filter on top of it can produce

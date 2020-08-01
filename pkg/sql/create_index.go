@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -61,7 +62,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 func (p *planner) setupFamilyAndConstraintForShard(
 	ctx context.Context,
 	tableDesc *MutableTableDescriptor,
-	shardCol *sqlbase.ColumnDescriptor,
+	shardCol *descpb.ColumnDescriptor,
 	idxColumns []string,
 	buckets int32,
 ) error {
@@ -106,8 +107,8 @@ func (p *planner) setupFamilyAndConstraintForShard(
 		if err != nil {
 			return err
 		}
-		ck.Validity = sqlbase.ConstraintValidity_Validating
-		tableDesc.AddCheckMutation(ck, sqlbase.DescriptorMutation_ADD)
+		ck.Validity = descpb.ConstraintValidity_Validating
+		tableDesc.AddCheckMutation(ck, descpb.DescriptorMutation_ADD)
 	}
 	return nil
 }
@@ -118,7 +119,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 // a hash sharded index.
 func MakeIndexDescriptor(
 	params runParams, n *tree.CreateIndex, tableDesc *sqlbase.MutableTableDescriptor,
-) (*sqlbase.IndexDescriptor, error) {
+) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
 	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
@@ -129,7 +130,7 @@ func MakeIndexDescriptor(
 	if err := tableDesc.ValidateIndexNameIsUnique(string(n.Name)); err != nil {
 		return nil, err
 	}
-	indexDesc := sqlbase.IndexDescriptor{
+	indexDesc := descpb.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
 		StoreColumnNames:  n.Storing.ToStrings(),
@@ -156,7 +157,7 @@ func MakeIndexDescriptor(
 		if n.Unique {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
-		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+		indexDesc.Type = descpb.IndexDescriptor_INVERTED
 		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[0].Column)
 		if err != nil {
 			return nil, err
@@ -263,9 +264,9 @@ func setupShardedIndex(
 	columns *tree.IndexElemList,
 	bucketsExpr tree.Expr,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
-) (shard *sqlbase.ColumnDescriptor, newColumn bool, err error) {
+) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
 	st := evalCtx.Settings
 	if !st.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
 		return nil, false, invalidClusterForShardedIndexError
@@ -292,7 +293,7 @@ func setupShardedIndex(
 		Direction: tree.Ascending,
 	}
 	*columns = append(tree.IndexElemList{shardIdxElem}, *columns...)
-	indexDesc.Sharded = sqlbase.ShardedDescriptor{
+	indexDesc.Sharded = descpb.ShardedDescriptor{
 		IsSharded:    true,
 		Name:         shardCol.Name,
 		ShardBuckets: buckets,
@@ -306,7 +307,7 @@ func setupShardedIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string, isNewTable bool,
-) (col *sqlbase.ColumnDescriptor, created bool, err error) {
+) (col *descpb.ColumnDescriptor, created bool, err error) {
 	shardCol, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {
 		return nil, false, err
@@ -332,7 +333,7 @@ func maybeCreateAndAddShardCol(
 		if isNewTable {
 			desc.AddColumn(shardCol)
 		} else {
-			desc.AddColumnMutation(shardCol, sqlbase.DescriptorMutation_ADD)
+			desc.AddColumnMutation(shardCol, descpb.DescriptorMutation_ADD)
 		}
 		created = true
 	}
@@ -383,9 +384,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
 	// write the new version into the index descriptor.
-	encodingVersion := sqlbase.BaseIndexFormatVersion
+	encodingVersion := descpb.BaseIndexFormatVersion
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionSecondaryIndexColumnFamilies) {
-		encodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
+		encodingVersion = descpb.SecondaryIndexFamilyFormatVersion
 	}
 	indexDesc.Version = encodingVersion
 
@@ -399,7 +400,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {

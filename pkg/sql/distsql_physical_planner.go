@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -418,8 +419,8 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		if n.left.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE ||
-			n.right.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+		if n.left.lockingStrength != descpb.ScanLockingStrength_FOR_NONE ||
+			n.right.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Scans that are performing row-level locking cannot currently be
 			// distributed because their locks would not be propagated back to
 			// the root transaction coordinator.
@@ -460,7 +461,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForPlanNode(n.source.plan)
 
 	case *scanNode:
-		if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Scans that are performing row-level locking cannot currently be
 			// distributed because their locks would not be propagated back to
 			// the root transaction coordinator.
@@ -915,7 +916,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 }
 
 func getIndexIdx(
-	index *sqlbase.IndexDescriptor, desc *sqlbase.ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor, desc *sqlbase.ImmutableTableDescriptor,
 ) (uint32, error) {
 	if index.ID == desc.PrimaryIndex.ID {
 		return 0, nil
@@ -972,7 +973,7 @@ func initTableReaderSpec(
 // scanNodeOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
 	desc *sqlbase.ImmutableTableDescriptor,
-	colID sqlbase.ColumnID,
+	colID descpb.ColumnID,
 	visibility execinfrapb.ScanVisibility,
 ) int {
 	for i := range desc.Columns {
@@ -1001,7 +1002,7 @@ func tableOrdinal(
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
 func toTableOrdinals(
-	cols []*sqlbase.ColumnDescriptor,
+	cols []*descpb.ColumnDescriptor,
 	desc *sqlbase.ImmutableTableDescriptor,
 	visibility execinfrapb.ScanVisibility,
 ) []int {
@@ -1015,7 +1016,7 @@ func toTableOrdinals(
 // getOutputColumnsFromColsForScan returns the indices of the columns that are
 // returned by a scanNode or a tableReader.
 // If remap is not nil, the column ordinals are remapped accordingly.
-func getOutputColumnsFromColsForScan(cols []*sqlbase.ColumnDescriptor, remap []int) []uint32 {
+func getOutputColumnsFromColsForScan(cols []*descpb.ColumnDescriptor, remap []int) []uint32 {
 	outputColumns := make([]uint32, len(cols))
 	// TODO(radu): if we have a scan with a filter, cols will include the
 	// columns needed for the filter, even if they aren't needed for the next
@@ -1168,9 +1169,9 @@ type tableReaderPlanningInfo struct {
 	parallelize           bool
 	estimatedRowCount     uint64
 	reqOrdering           ReqOrdering
-	cols                  []*sqlbase.ColumnDescriptor
+	cols                  []*descpb.ColumnDescriptor
 	colsToTableOrdinalMap []int
-	systemColumns         []sqlbase.SystemColumnKind
+	systemColumns         []descpb.SystemColumnKind
 	systemColumnOrdinals  []int
 }
 
@@ -1259,7 +1260,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
-	descColumnIDs := make([]sqlbase.ColumnID, 0, len(info.desc.Columns))
+	descColumnIDs := make([]descpb.ColumnID, 0, len(info.desc.Columns))
 	for i := range info.desc.Columns {
 		descColumnIDs = append(descColumnIDs, info.desc.Columns[i].ID)
 	}
@@ -2032,7 +2033,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 	}
 
-	if n.joinType == sqlbase.LeftSemiJoin || n.joinType == sqlbase.LeftAntiJoin {
+	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
 		// For anti/semi join, we only produce the input columns.
 		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
@@ -2153,7 +2154,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		}
 	}
 
-	if n.joinType == sqlbase.LeftSemiJoin || n.joinType == sqlbase.LeftAntiJoin {
+	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
 		// For anti/semi join, we only produce the input columns.
 		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
@@ -2177,7 +2178,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	p := MakePhysicalPlan(dsp.gatewayNodeID)
 	plan = &p
 
-	tables := make([]sqlbase.TableDescriptor, len(n.sides))
+	tables := make([]descpb.TableDescriptor, len(n.sides))
 	indexOrdinals := make([]uint32, len(n.sides))
 	cols := make([]execinfrapb.Columns, len(n.sides))
 	numStreamCols := 0
@@ -2202,7 +2203,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		Tables:        tables,
 		IndexOrdinals: indexOrdinals,
 		EqColumns:     cols,
-		Type:          sqlbase.InnerJoin,
+		Type:          descpb.InnerJoin,
 	}
 	zigzagJoinerSpec.FixedValues = make([]*execinfrapb.ValuesCoreSpec, len(n.sides))
 
@@ -2786,7 +2787,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 	}
 
 	for i, t := range resultTypes {
-		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 		s.Columns[i].Type = t
 	}
 
@@ -2834,7 +2835,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForTuples(
 				return nil, err
 			}
 			encDatum := sqlbase.DatumToEncDatum(typs[colIdx], datum)
-			buf, err = encDatum.Encode(typs[colIdx], &a, sqlbase.DatumEncoding_VALUE, buf)
+			buf, err = encDatum.Encode(typs[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err
 			}
