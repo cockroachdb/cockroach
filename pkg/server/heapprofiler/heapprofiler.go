@@ -42,7 +42,7 @@ type testingKnobs struct {
 // Profiles are also GCed periodically. The latest is always kept, and a couple
 // of the ones with the largest heap are also kept.
 type HeapProfiler struct {
-	dir profileStore
+	dir *profileStore
 	// lastProfileTime marks the time when we took the last profile.
 	lastProfileTime time.Time
 	// highwaterMarkBytes represents the maximum heap size that we've seen since
@@ -58,8 +58,9 @@ func NewHeapProfiler(dir string, st *cluster.Settings) (*HeapProfiler, error) {
 	if dir == "" {
 		return nil, errors.Errorf("need to specify dir for NewHeapProfiler")
 	}
+	profileStore := newProfileStore(dir, st)
 	hp := &HeapProfiler{
-		dir: profileStore{dir: dir, st: st},
+		dir: profileStore,
 	}
 	return hp, nil
 }
@@ -87,7 +88,7 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, ms runtime.MemStats
 	if o.knobs.dontWriteProfiles {
 		return
 	}
-	path := o.dir.makeNewFileName(now, curHeap)
+	path := o.dir.makeNewFileName(now, int64(curHeap))
 	success := takeHeapProfile(ctx, path)
 	if success {
 		// We only remove old files if the current heap dump was

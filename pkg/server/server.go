@@ -2000,25 +2000,16 @@ func (s *Server) startSampleEnvironment(
 	if s.cfg.GoroutineDumpDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
-			if errors.Is(err, os.ErrPermission) ||
-				// NB: in Go 1.14, MkdirAll does not properly return
-				// os.ErrPermission when the parent directory is not
-				// writable. This is because under the hood the mkdir()
-				// syscall returns EACCES in that case instead of EPERM.
-				strings.HasSuffix(err.Error(), ": permission denied") {
-				// This is possible when running with only in-memory stores;
-				// in that case the start-up code sets the output directory
-				// to the current directory (.). If wrunning the process
-				// from a directory which is not writable, we won't
-				// be able to create a sub-directory here.
-				log.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
-				hasValidDumpDir = false
-			} else {
-				return errors.Wrap(err, "creating goroutine dump dir")
-			}
+			// This is possible when running with only in-memory stores;
+			// in that case the start-up code sets the output directory
+			// to the current directory (.). If wrunning the process
+			// from a directory which is not writable, we won't
+			// be able to create a sub-directory here.
+			log.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
+			hasValidDumpDir = false
 		}
 		if hasValidDumpDir {
-			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(ctx, s.cfg.GoroutineDumpDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting goroutine dumper worker")
 			}
@@ -2031,19 +2022,13 @@ func (s *Server) startSampleEnvironment(
 	if s.cfg.HeapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
-			if errors.Is(err, os.ErrPermission) ||
-				// See acomment above about why we use string.HasSuffix here.
-				strings.HasSuffix(err.Error(), ": permission denied") {
-				// This is possible when running with only in-memory stores;
-				// in that case the start-up code sets the output directory
-				// to the current directory (.). If wrunning the process
-				// from a directory which is not writable, we won't
-				// be able to create a sub-directory here.
-				log.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
-				hasValidDumpDir = false
-			} else {
-				return errors.Wrap(err, "creating heap profiles dir")
-			}
+			// This is possible when running with only in-memory stores;
+			// in that case the start-up code sets the output directory
+			// to the current directory (.). If wrunning the process
+			// from a directory which is not writable, we won't
+			// be able to create a sub-directory here.
+			log.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
+			hasValidDumpDir = false
 		}
 		if hasValidDumpDir {
 			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
