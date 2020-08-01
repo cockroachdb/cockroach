@@ -284,6 +284,11 @@ type JoinOrderBuilder struct {
 	// The group for a single base relation is simply the base relation itself.
 	plans map[vertexSet]memo.RelExpr
 
+	// joinCount counts the number of joins that have been added to the join
+	// graph. It is used to ensure that the number of joins that are reordered at
+	// once does not exceed the session limit.
+	joinCount int
+
 	onReorderFunc OnReorderFunc
 
 	onAddJoinFunc OnAddJoinFunc
@@ -301,6 +306,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 	jb.nonInnerEdges = edgeSet{}
 	jb.innerEdges = edgeSet{}
 	jb.plans = map[vertexSet]memo.RelExpr{}
+	jb.joinCount = 0
 }
 
 // Reorder adds all valid (non-commutative) orderings of the given join to the
@@ -335,12 +341,10 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 	}
 }
 
-// populateGraph traverses the given subtree and initializes the vertexes and
-// edges of the join hypergraph. populateGraph returns the sets of vertexes and
-// edges that were added to the graph during traversal of the subtree.
-//
-// TODO(drewk): Rather than only matching at or below the join order limit,
-//  iteratively optimize shallow sub-sections of the tree using the limit.
+// populateGraph traverses the given subtree up to ReorderJoinsLimit and
+// initializes the vertexes and edges of the join hypergraph. populateGraph
+// returns the sets of vertexes and edges that were added to the graph during
+// traversal of the subtree.
 func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet) {
 	// Remember starting set of vertexes and edges so that the vertexes and
 	// edges added during the traversal of the tree rooted at this node can be
@@ -351,10 +355,12 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 	switch t := rel.(type) {
 	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
 		*memo.LeftJoinExpr, *memo.FullJoinExpr:
+		jb.joinCount++
+
 		flags := t.Private().(*memo.JoinPrivate).Flags
-		if !flags.Empty() {
-			// If the join has flags, we can't reorder it. Simply treat it as a base
-			// relation.
+		if !flags.Empty() || jb.joinCount > jb.evalCtx.SessionData.ReorderJoinsLimit {
+			// If the join has flags or the join limit has been reached, we can't
+			// reorder. Simply treat the join as a base relation.
 			jb.addBaseRelation(t)
 			break
 		}
@@ -395,11 +401,6 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 
 	default:
 		jb.addBaseRelation(t)
-
-		// Initialize the plan for this vertex.
-		idx := vertexIndex(len(jb.vertexes) - 1)
-		relSet := vertexSet(0).add(idx)
-		jb.plans[relSet] = t
 	}
 
 	// Use set difference operations to return all vertexes and edges added to the
@@ -834,6 +835,11 @@ func (jb *JoinOrderBuilder) allEdges() edgeSet {
 func (jb *JoinOrderBuilder) addBaseRelation(rel memo.RelExpr) {
 	jb.checkSize()
 	jb.vertexes = append(jb.vertexes, rel)
+
+	// Initialize the plan for this vertex.
+	idx := vertexIndex(len(jb.vertexes) - 1)
+	relSet := vertexSet(0).add(idx)
+	jb.plans[relSet] = rel
 }
 
 // checkSize panics if the number of relations is greater than or equal to
