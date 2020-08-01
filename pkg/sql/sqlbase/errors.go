@@ -12,6 +12,7 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -143,15 +144,15 @@ func WrapErrorWhileConstructingObjectAlreadyExistsErr(err error) error {
 
 // MakeObjectAlreadyExistsError creates an error for a namespace collision
 // with an arbitrary descriptor type.
-func MakeObjectAlreadyExistsError(collidingObject *Descriptor, name string) error {
+func MakeObjectAlreadyExistsError(collidingObject *descpb.Descriptor, name string) error {
 	switch collidingObject.Union.(type) {
-	case *Descriptor_Table:
+	case *descpb.Descriptor_Table:
 		return NewRelationAlreadyExistsError(name)
-	case *Descriptor_Type:
+	case *descpb.Descriptor_Type:
 		return NewTypeAlreadyExistsError(name)
-	case *Descriptor_Database:
+	case *descpb.Descriptor_Database:
 		return NewDatabaseAlreadyExistsError(name)
-	case *Descriptor_Schema:
+	case *descpb.Descriptor_Schema:
 		// TODO(ajwerner): Add a case for an existing schema object.
 		return errors.AssertionFailedf("schema exists with name %v", name)
 	default:

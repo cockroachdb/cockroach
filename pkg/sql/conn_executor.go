@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -528,7 +530,7 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 		}
 	}
 	if len(sd.SearchPath.GetPathArray()) == 0 {
-		sd.SearchPath = sqlbase.DefaultSearchPath
+		sd.SearchPath = catconstants.DefaultSearchPath
 	}
 }
 
@@ -641,7 +643,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
 		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache)
 	ex.extraTxnState.txnRewindPos = -1
-	ex.extraTxnState.schemaChangeJobsCache = make(map[sqlbase.ID]*jobs.Job)
+	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -950,7 +952,7 @@ type connExecutor struct {
 		// schemaChangeJobsCache is a map of descriptor IDs to Jobs.
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
 		// queued up for the given ID.
-		schemaChangeJobsCache map[sqlbase.ID]*jobs.Job
+		schemaChangeJobsCache map[descpb.ID]*jobs.Job
 
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not

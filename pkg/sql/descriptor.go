@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -101,7 +102,7 @@ func (p *planner) createDatabase(
 func (p *planner) createDescriptorWithID(
 	ctx context.Context,
 	idKey roachpb.Key,
-	id sqlbase.ID,
+	id descpb.ID,
 	descriptor sqlbase.DescriptorInterface,
 	st *cluster.Settings,
 	jobDesc string,
@@ -169,7 +170,7 @@ func (p *planner) createDescriptorWithID(
 			ctx,
 			mutDesc,
 			jobDesc,
-			sqlbase.InvalidMutationID); err != nil {
+			descpb.InvalidMutationID); err != nil {
 			return err
 		}
 	}

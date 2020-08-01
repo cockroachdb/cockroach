@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -81,8 +82,8 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
-	insertCols []sqlbase.ColumnDescriptor,
-	computedCols []sqlbase.ColumnDescriptor,
+	insertCols []descpb.ColumnDescriptor,
+	computedCols []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
@@ -199,8 +200,8 @@ type DatumRowConverter struct {
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                    Inserter
 	EvalCtx               *tree.EvalContext
-	cols                  []sqlbase.ColumnDescriptor
-	VisibleCols           []sqlbase.ColumnDescriptor
+	cols                  []descpb.ColumnDescriptor
+	VisibleCols           []descpb.ColumnDescriptor
 	VisibleColTypes       []*types.T
 	defaultCache          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
@@ -224,33 +225,32 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
-	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &DatumRowConverter{
-		tableDesc: immutDesc,
+		tableDesc: tableDesc,
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx.Copy(),
 	}
 
-	var targetColDescriptors []sqlbase.ColumnDescriptor
+	var targetColDescriptors []descpb.ColumnDescriptor
 	var err error
 	// IMPORT INTO allows specifying target columns which could be a subset of
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(immutDesc, targetColNames,
+		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
 	} else {
-		targetColDescriptors = immutDesc.VisibleColumns()
+		targetColDescriptors = tableDesc.VisibleColumns()
 	}
 
-	isTargetColID := make(map[sqlbase.ColumnID]struct{})
+	isTargetColID := make(map[descpb.ColumnID]struct{})
 	for _, col := range targetColDescriptors {
 		isTargetColID[col.ID] = struct{}{}
 	}
@@ -265,7 +265,8 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx, &semaCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(
+		ctx, targetColDescriptors, tableDesc, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
@@ -274,7 +275,7 @@ func NewDatumRowConverter(
 		ctx,
 		nil, /* txn */
 		evalCtx.Codec,
-		immutDesc,
+		tableDesc,
 		cols,
 		&sqlbase.DatumAlloc{},
 	)
@@ -298,7 +299,7 @@ func NewDatumRowConverter(
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
 	// If the DEFAULT expression is immutable, we can store it in the cache so that it
 	// doesn't have to be reevaluated for every row.
-	isTargetCol := func(col *sqlbase.ColumnDescriptor) bool {
+	isTargetCol := func(col *descpb.ColumnDescriptor) bool {
 		_, ok := isTargetColID[col.ID]
 		return ok
 	}
@@ -340,13 +341,13 @@ func NewDatumRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
+	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    immutDesc.Columns,
+		Cols:    tableDesc.Columns,
 	}
 	return c, nil
 }
@@ -375,7 +376,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 
 	// TODO(justin): we currently disallow computed columns in import statements.
 	var computeExprs []tree.TypedExpr
-	var computedCols []sqlbase.ColumnDescriptor
+	var computedCols []descpb.ColumnDescriptor
 
 	insertRow, err := GenerateInsertRow(
 		c.defaultCache, computeExprs, c.cols, computedCols, c.EvalCtx,

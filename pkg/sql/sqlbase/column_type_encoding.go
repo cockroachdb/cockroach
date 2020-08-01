@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -414,7 +415,7 @@ func DecodeTableKey(
 //
 // See also: docs/tech-notes/encoding.md, EncodeTableKey().
 func EncodeTableValue(
-	appendTo []byte, colID ColumnID, val tree.Datum, scratch []byte,
+	appendTo []byte, colID descpb.ColumnID, val tree.Datum, scratch []byte,
 ) ([]byte, error) {
 	if val == tree.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
@@ -645,7 +646,7 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 //
 // If val's type is incompatible with col, or if col's type is not yet
 // implemented by this function, an error is returned.
-func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
+func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == tree.DNull {
@@ -968,7 +969,7 @@ func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) 
 
 	var err error
 	for _, dd := range t.D {
-		appendTo, err = EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), dd, scratch)
+		appendTo, err = EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), dd, scratch)
 		if err != nil {
 			return nil, err
 		}

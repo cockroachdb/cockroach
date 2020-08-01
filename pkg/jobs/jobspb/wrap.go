@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 )
 
@@ -190,7 +190,7 @@ func WrapPayloadDetails(details Details) interface {
 }
 
 // ChangefeedTargets is a set of id targets with metadata.
-type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget
+type ChangefeedTargets map[descpb.ID]ChangefeedTarget
 
 // SchemaChangeDetailsFormatVersion is the format version for
 // SchemaChangeDetails.

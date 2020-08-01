@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -54,8 +55,8 @@ type sampleAggregator struct {
 	// and released before the sampleAggregator is finished.
 	tempMemAcc mon.BoundAccount
 
-	tableID     sqlbase.ID
-	sampledCols []sqlbase.ColumnID
+	tableID     descpb.ID
+	sampledCols []descpb.ColumnID
 	sketches    []sketchInfo
 
 	// Input column indices for special columns.
@@ -446,7 +447,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram = &h
 			}
 
-			columnIDs := make([]sqlbase.ColumnID, len(si.spec.Columns))
+			columnIDs := make([]descpb.ColumnID, len(si.spec.Columns))
 			for i, c := range si.spec.Columns {
 				columnIDs[i] = s.sampledCols[c]
 			}

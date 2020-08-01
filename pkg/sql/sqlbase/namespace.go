@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -62,8 +63,8 @@ func RemoveObjectNamespaceEntry(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	parentID ID,
-	parentSchemaID ID,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
 	name string,
 	KVTrace bool,
 ) error {
@@ -95,7 +96,7 @@ func RemoveObjectNamespaceEntry(
 // RemovePublicTableNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for public tables.
 func RemovePublicTableNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
 ) error {
 	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
 }
@@ -103,7 +104,7 @@ func RemovePublicTableNamespaceEntry(
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for schemas.
 func RemoveSchemaNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
 ) error {
 	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.RootNamespaceID, name, false /* KVTrace */)
 }
@@ -122,7 +123,11 @@ func RemoveDatabaseNamespaceEntry(
 // - If cluster version < 20.1, the key is in the deprecated system.namespace table.
 // - The parentSchemaID field is ignored in < 20.1 clusters.
 func MakeObjectNameKey(
-	ctx context.Context, settings *cluster.Settings, parentID ID, parentSchemaID ID, name string,
+	ctx context.Context,
+	settings *cluster.Settings,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
+	name string,
 ) DescriptorKey {
 	// TODO(solon): This if condition can be removed in 20.2
 	if !settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
@@ -141,7 +146,7 @@ func MakeObjectNameKey(
 
 // MakePublicTableNameKey is a wrapper around MakeObjectNameKey for public tables.
 func MakePublicTableNameKey(
-	ctx context.Context, settings *cluster.Settings, parentID ID, name string,
+	ctx context.Context, settings *cluster.Settings, parentID descpb.ID, name string,
 ) DescriptorKey {
 	return MakeObjectNameKey(ctx, settings, parentID, keys.PublicSchemaID, name)
 }
@@ -160,10 +165,10 @@ func LookupObjectID(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	parentID ID,
-	parentSchemaID ID,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
 	name string,
-) (bool, ID, error) {
+) (bool, descpb.ID, error) {
 	var key DescriptorKey
 	if parentID == keys.RootNamespaceID {
 		key = NewDatabaseKey(name)
@@ -175,10 +180,10 @@ func LookupObjectID(
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key.Key(codec))
 	res, err := txn.Get(ctx, key.Key(codec))
 	if err != nil {
-		return false, InvalidID, err
+		return false, descpb.InvalidID, err
 	}
 	if res.Exists() {
-		return true, ID(res.ValueInt()), nil
+		return true, descpb.ID(res.ValueInt()), nil
 	}
 	// If the key wasn't found in the new system.namespace table, it may still
 	// exist in the deprecated system.namespace in the case of mixed version clusters.
@@ -194,7 +199,7 @@ func LookupObjectID(
 	// - If this session explicitly accesses `pg_temp.t`, it should fail -- but
 	// without this check, `pg_temp.t` will return the permanent table instead.
 	if parentSchemaID != keys.PublicSchemaID && parentSchemaID != keys.RootNamespaceID {
-		return false, InvalidID, nil
+		return false, descpb.InvalidID, nil
 	}
 
 	var dKey DescriptorKey
@@ -206,24 +211,24 @@ func LookupObjectID(
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", dKey.Key(codec))
 	res, err = txn.Get(ctx, dKey.Key(codec))
 	if err != nil {
-		return false, InvalidID, err
+		return false, descpb.InvalidID, err
 	}
 	if res.Exists() {
-		return true, ID(res.ValueInt()), nil
+		return true, descpb.ID(res.ValueInt()), nil
 	}
-	return false, InvalidID, nil
+	return false, descpb.InvalidID, nil
 }
 
 // LookupPublicTableID is a wrapper around LookupObjectID for public tables.
 func LookupPublicTableID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID ID, name string,
-) (bool, ID, error) {
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
+) (bool, descpb.ID, error) {
 	return LookupObjectID(ctx, txn, codec, parentID, keys.PublicSchemaID, name)
 }
 
 // LookupDatabaseID is  a wrapper around LookupObjectID for databases.
 func LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
-) (bool, ID, error) {
+) (bool, descpb.ID, error) {
 	return LookupObjectID(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, name)
 }

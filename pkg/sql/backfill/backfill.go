@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -29,18 +30,18 @@ import (
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
-type MutationFilter func(sqlbase.DescriptorMutation) bool
+type MutationFilter func(descpb.DescriptorMutation) bool
 
 // ColumnMutationFilter is a filter that allows mutations that add or drop
 // columns.
-func ColumnMutationFilter(m sqlbase.DescriptorMutation) bool {
+func ColumnMutationFilter(m descpb.DescriptorMutation) bool {
 	return m.GetColumn() != nil &&
-		(m.Direction == sqlbase.DescriptorMutation_ADD || m.Direction == sqlbase.DescriptorMutation_DROP)
+		(m.Direction == descpb.DescriptorMutation_ADD || m.Direction == descpb.DescriptorMutation_DROP)
 }
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
-func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
-	return m.GetIndex() != nil && m.Direction == sqlbase.DescriptorMutation_ADD
+func IndexMutationFilter(m descpb.DescriptorMutation) bool {
+	return m.GetIndex() != nil && m.Direction == descpb.DescriptorMutation_ADD
 }
 
 // backfiller is common to a ColumnBackfiller or an IndexBackfiller.
@@ -54,9 +55,9 @@ type backfiller struct {
 type ColumnBackfiller struct {
 	backfiller
 
-	added []sqlbase.ColumnDescriptor
+	added []descpb.ColumnDescriptor
 	// updateCols is a slice of all column descriptors that are being modified.
-	updateCols  []sqlbase.ColumnDescriptor
+	updateCols  []descpb.ColumnDescriptor
 	updateExprs []tree.TypedExpr
 	evalCtx     *tree.EvalContext
 }
@@ -67,17 +68,17 @@ func (cb *ColumnBackfiller) Init(
 ) error {
 	cols := desc.Columns
 	cb.evalCtx = evalCtx
-	var dropped []sqlbase.ColumnDescriptor
+	var dropped []descpb.ColumnDescriptor
 	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+		cols = make([]descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
 				desc := *m.GetColumn()
 				switch m.Direction {
-				case sqlbase.DescriptorMutation_ADD:
+				case descpb.DescriptorMutation_ADD:
 					cb.added = append(cb.added, desc)
-				case sqlbase.DescriptorMutation_DROP:
+				case descpb.DescriptorMutation_DROP:
 					dropped = append(dropped, desc)
 				}
 				cols = append(cols, desc)
@@ -174,7 +175,7 @@ func (cb *ColumnBackfiller) Init(
 	return cb.fetcher.Init(
 		evalCtx.Codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&cb.alloc,
 		tableArgs,
@@ -194,7 +195,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
 	requestedCols = append(requestedCols, tableDesc.Columns...)
 	requestedCols = append(requestedCols, cb.added...)
 	ru, err := row.MakeUpdater(
@@ -319,9 +320,9 @@ func ConvertBackfillError(
 type IndexBackfiller struct {
 	backfiller
 
-	added []sqlbase.IndexDescriptor
+	added []descpb.IndexDescriptor
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap map[descpb.ColumnID]int
 
 	types   []*types.T
 	rowVals tree.Datums
@@ -331,7 +332,7 @@ type IndexBackfiller struct {
 // ContainsInvertedIndex returns true if backfilling an inverted index.
 func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	for _, idx := range ib.added {
-		if idx.Type == sqlbase.IndexDescriptor_INVERTED {
+		if idx.Type == descpb.IndexDescriptor_INVERTED {
 			return true
 		}
 	}
@@ -346,12 +347,12 @@ func (ib *IndexBackfiller) Init(
 	numCols := len(desc.Columns)
 	cols := desc.Columns
 	if len(desc.Mutations) > 0 {
-		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
+		cols = make([]descpb.ColumnDescriptor, 0, numCols+len(desc.Mutations))
 		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
 			if column := m.GetColumn(); column != nil &&
-				m.Direction == sqlbase.DescriptorMutation_ADD &&
-				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				m.Direction == descpb.DescriptorMutation_ADD &&
+				m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				cols = append(cols, *column)
 			}
 		}
@@ -369,7 +370,7 @@ func (ib *IndexBackfiller) Init(
 			for i := range cols {
 				id := cols[i].ID
 				if idx.ContainsColumnID(id) ||
-					idx.GetEncodingType(desc.PrimaryIndex.ID) == sqlbase.PrimaryIndexEncoding {
+					idx.GetEncodingType(desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}
@@ -400,7 +401,7 @@ func (ib *IndexBackfiller) Init(
 		}
 	}
 
-	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
+	ib.colIdxMap = make(map[descpb.ColumnID]int, len(cols))
 	for i := range cols {
 		ib.colIdxMap[cols[i].ID] = i
 	}
@@ -415,7 +416,7 @@ func (ib *IndexBackfiller) Init(
 	return ib.fetcher.Init(
 		evalCtx.Codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&ib.alloc,
 		tableArgs,
@@ -476,7 +477,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		buffer = buffer[:0]
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
 			ib.evalCtx.Codec,
-			tableDesc.TableDesc(),
+			tableDesc,
 			ib.added,
 			ib.colIdxMap,
 			ib.rowVals,

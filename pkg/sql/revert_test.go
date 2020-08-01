@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -76,9 +78,9 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
-		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
-		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc.State = descpb.TableDescriptor_OFFLINE // bypass the offline check.
+		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc}, targetTime, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -102,19 +104,19 @@ func TestRevertTable(t *testing.T) {
 		db.Exec(t, `DELETE FROM child WHERE a % 7 = 0`)
 
 		// Revert the table to ts.
-		desc := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
-		desc.State = sqlbase.TableDescriptor_OFFLINE
-		child := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
-		child.State = sqlbase.TableDescriptor_OFFLINE
+		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc.State = descpb.TableDescriptor_OFFLINE
+		child := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
+		child.State = descpb.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc}, targetTime, 10))
 		})
 		t.Run("reject only child", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{child}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{child}, targetTime, 10))
 		})
 
 		t.Run("rollback parent and child", func(t *testing.T) {
-			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc, child}, targetTime, sql.RevertTableDefaultBatchSize))
+			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc, child}, targetTime, sql.RevertTableDefaultBatchSize))
 
 			var reverted, revertedChild int
 			db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)

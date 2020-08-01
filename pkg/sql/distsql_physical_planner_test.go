@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -64,7 +65,7 @@ import (
 func SplitTable(
 	t *testing.T,
 	tc serverutils.TestClusterInterface,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	sps []SplitPoint,
 ) {
 	if tc.ReplicationMode() != base.ReplicationManual {
@@ -161,11 +162,22 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				desc := sqlbase.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "t")
+				var tableDesc *sqlbase.ImmutableTableDescriptor
+				require.NoError(t, cdb.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					desc, err := catalogkv.UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
+						txn, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec,
+						"test", "public", "t",
+						tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind))
+					if err != nil {
+						return err
+					}
+					tableDesc = desc.(*sqlbase.ImmutableTableDescriptor)
+					return nil
+				}))
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)
-				pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, val)
+				pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 				if err != nil {
 					panic(err)
 				}

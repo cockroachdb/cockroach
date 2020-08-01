@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -73,9 +74,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := sqlbase.ID(keys.MinUserDescID + 2)
-			myTableID := sqlbase.ID(keys.MinUserDescID + 3)
-			myOtherTableID := sqlbase.ID(keys.MinUserDescID + 4)
+			myDBID := descpb.ID(keys.MinUserDescID + 2)
+			myTableID := descpb.ID(keys.MinUserDescID + 3)
+			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
 
 			var myTableDesc *sqlbase.MutableTableDescriptor
 			var myOtherTableDesc *sqlbase.MutableTableDescriptor
@@ -102,15 +103,15 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				details = jobspb.SchemaChangeGCDetails{
 					Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
 						{
-							IndexID:  sqlbase.IndexID(2),
+							IndexID:  descpb.IndexID(2),
 							DropTime: dropTime,
 						},
 					},
 					ParentID: myTableID,
 				}
 				myTableDesc.Indexes = myTableDesc.Indexes[:0]
-				myTableDesc.GCMutations = append(myTableDesc.GCMutations, sqlbase.TableDescriptor_GCDescriptorMutation{
-					IndexID: sqlbase.IndexID(2),
+				myTableDesc.GCMutations = append(myTableDesc.GCMutations, descpb.TableDescriptor_GCDescriptorMutation{
+					IndexID: descpb.IndexID(2),
 				})
 			case TABLE:
 				details = jobspb.SchemaChangeGCDetails{
@@ -121,7 +122,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 						},
 					},
 				}
-				myTableDesc.State = sqlbase.TableDescriptor_DROP
+				myTableDesc.State = descpb.TableDescriptor_DROP
 				myTableDesc.DropTime = dropTime
 			case DATABASE:
 				details = jobspb.SchemaChangeGCDetails{
@@ -137,9 +138,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myDBID,
 				}
-				myTableDesc.State = sqlbase.TableDescriptor_DROP
+				myTableDesc.State = descpb.TableDescriptor_DROP
 				myTableDesc.DropTime = dropTime
-				myOtherTableDesc.State = sqlbase.TableDescriptor_DROP
+				myOtherTableDesc.State = descpb.TableDescriptor_DROP
 				myOtherTableDesc.DropTime = dropTime
 			}
 
@@ -159,7 +160,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			jobRecord := jobs.Record{
 				Description:   fmt.Sprintf("GC test"),
 				Username:      "user",
-				DescriptorIDs: sqlbase.IDs{myTableID},
+				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
 				NonCancelable: true,
@@ -169,7 +170,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			lookupJR := jobs.Record{
 				Description:   fmt.Sprintf("GC test"),
 				Username:      "user",
-				DescriptorIDs: sqlbase.IDs{myTableID},
+				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 			}
 

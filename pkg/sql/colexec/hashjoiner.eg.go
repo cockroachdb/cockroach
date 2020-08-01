@@ -11,13 +11,14 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 const _ = "template_collectProbeOuter"
 
 func collectProbeOuter_false(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
@@ -62,7 +63,8 @@ func collectProbeOuter_false(
 }
 
 func collectProbeOuter_true(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	_ = sel[batchSize-1]
@@ -110,7 +112,8 @@ func collectProbeOuter_true(
 const _ = "template_collectProbeNoOuter"
 
 func collectProbeNoOuter_false(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
@@ -141,7 +144,8 @@ func collectProbeNoOuter_false(
 }
 
 func collectProbeNoOuter_true(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	_ = sel[batchSize-1]
@@ -178,7 +182,8 @@ func collectProbeNoOuter_true(
 const _ = "template_collectAnti"
 
 func collectAnti_false(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	for i := int(0); i < batchSize; i++ {
@@ -202,7 +207,8 @@ func collectAnti_false(
 }
 
 func collectAnti_true(
-	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
+	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int,
+) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	_ = sel[batchSize-1]
@@ -283,8 +289,7 @@ func distinctCollectProbeOuter_true(hj *hashJoiner, batchSize int, sel []int) {
 
 const _ = "template_distinctCollectProbeNoOuter"
 
-func distinctCollectProbeNoOuter_false(
-	hj *hashJoiner, batchSize int, nResults int, sel []int) int {
+func distinctCollectProbeNoOuter_false(hj *hashJoiner, batchSize int, nResults int, sel []int) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
@@ -308,8 +313,7 @@ func distinctCollectProbeNoOuter_false(
 	return nResults
 }
 
-func distinctCollectProbeNoOuter_true(
-	hj *hashJoiner, batchSize int, nResults int, sel []int) int {
+func distinctCollectProbeNoOuter_true(hj *hashJoiner, batchSize int, nResults int, sel []int) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
@@ -349,14 +353,14 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				nResults = collectAnti_true(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = collectProbeNoOuter_true(hj, batchSize, nResults, batch, sel)
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				nResults = collectAnti_false(hj, batchSize, nResults, batch, sel)
 			default:
 				nResults = collectProbeNoOuter_false(hj, batchSize, nResults, batch, sel)
@@ -384,7 +388,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
@@ -394,7 +398,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.

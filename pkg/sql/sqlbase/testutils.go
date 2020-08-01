@@ -12,7 +12,6 @@ package sqlbase
 
 import (
 	"bytes"
-	"context"
 	gosql "database/sql"
 	"fmt"
 	"math"
@@ -29,16 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,85 +47,6 @@ import (
 )
 
 // This file contains utility functions for tests (in other packages).
-
-// TestingGetMutableExistingTableDescriptor retrieves a MutableTableDescriptor
-// directly from the KV layer.
-func TestingGetMutableExistingTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *MutableTableDescriptor {
-	return NewMutableExistingTableDescriptor(*TestingGetTableDescriptor(kvDB, codec, database, table))
-}
-
-func testingGetDescriptor(
-	ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) (hlc.Timestamp, *Descriptor) {
-	dKey := NewDatabaseKey(database)
-	gr, err := kvDB.Get(ctx, dKey.Key(codec))
-	if err != nil {
-		panic(err)
-	}
-	if !gr.Exists() {
-		panic("database missing")
-	}
-	dbDescID := ID(gr.ValueInt())
-
-	tKey := NewPublicTableKey(dbDescID, object)
-	gr, err = kvDB.Get(ctx, tKey.Key(codec))
-	if err != nil {
-		panic(err)
-	}
-	if !gr.Exists() {
-		panic("object missing")
-	}
-
-	descKey := MakeDescMetadataKey(codec, ID(gr.ValueInt()))
-	desc := &Descriptor{}
-	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
-	if err != nil || desc.Equal(Descriptor{}) {
-		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
-	}
-	return ts, desc
-}
-
-// TestingGetTypeDescriptor retrieves a type descriptor directly from the kv layer.
-//
-// This function should be moved wherever TestingGetTableDescriptor is moved.
-func TestingGetTypeDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) *TypeDescriptor {
-	_, desc := testingGetDescriptor(context.TODO(), kvDB, codec, database, object)
-	return desc.GetType()
-}
-
-// TestingGetTableDescriptor retrieves a table descriptor directly from the KV
-// layer.
-//
-// TODO(ajwerner): Move this to catalogkv and/or question the very existence of
-// this function. Consider renaming to TestingGetTableDescriptorByName or
-// removing it altogether.
-func TestingGetTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *TableDescriptor {
-	ctx := context.TODO()
-	ts, desc := testingGetDescriptor(ctx, kvDB, codec, database, table)
-	tableDesc := desc.Table(ts)
-	if tableDesc == nil {
-		return nil
-	}
-	err := tableDesc.MaybeFillInDescriptor(ctx, kvDB, codec)
-	if err != nil {
-		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
-	}
-	return tableDesc
-}
-
-// TestingGetImmutableTableDescriptor retrieves an immutable table descriptor
-// directly from the KV layer.
-func TestingGetImmutableTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *ImmutableTableDescriptor {
-	return NewImmutableTableDescriptor(*TestingGetTableDescriptor(kvDB, codec, database, table))
-}
 
 // RandDatum generates a random Datum of the given type.
 // If nullOk is true, the datum can be DNull.
@@ -925,8 +843,8 @@ func RandSortingTypes(rng *rand.Rand, numCols int) []*types.T {
 }
 
 // RandDatumEncoding returns a random DatumEncoding value.
-func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
-	return DatumEncoding(rng.Intn(len(DatumEncoding_value)))
+func RandDatumEncoding(rng *rand.Rand) descpb.DatumEncoding {
+	return descpb.DatumEncoding(rng.Intn(len(descpb.DatumEncoding_value)))
 }
 
 // RandEncodableType wraps RandType in order to workaround #36736, which fails
@@ -1053,7 +971,9 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) EncD
 //  - bool (converts to DBool)
 //  - int (converts to DInt)
 //  - string (converts to DString)
-func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Key, error) {
+func TestingMakePrimaryIndexKey(
+	desc *ImmutableTableDescriptor, vals ...interface{},
+) (roachpb.Key, error) {
 	index := &desc.PrimaryIndex
 	if len(vals) > len(index.ColumnIDs) {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
@@ -1087,7 +1007,7 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[ColumnID]int)
+	colIDToRowIndex := make(map[descpb.ColumnID]int)
 	for i := range vals {
 		colIDToRowIndex[index.ColumnIDs[i]] = i
 	}

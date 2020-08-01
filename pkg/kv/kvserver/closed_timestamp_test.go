@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -328,7 +329,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 		respFuncs(retryOnRangeKeyMismatch, expectRows(2))))
 }
 
-func getTableID(db *gosql.DB, dbName, tableName string) (tableID sqlbase.ID, err error) {
+func getTableID(db *gosql.DB, dbName, tableName string) (tableID descpb.ID, err error) {
 	err = db.QueryRow(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $1 AND name = $2`,
 		dbName, tableName).Scan(&tableID)
 	return

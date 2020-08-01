@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -77,7 +78,7 @@ func doCreateSequence(
 	params runParams,
 	context string,
 	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
-	schemaID sqlbase.ID,
+	schemaID descpb.ID,
 	name *TableName,
 	isTemporary bool,
 	opts tree.SequenceOptions,
@@ -168,11 +169,11 @@ func (*createSequenceNode) Close(context.Context)        {}
 func MakeSequenceTableDesc(
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
-	parentID sqlbase.ID,
-	schemaID sqlbase.ID,
-	id sqlbase.ID,
+	parentID descpb.ID,
+	schemaID descpb.ID,
+	id descpb.ID,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *descpb.PrivilegeDescriptor,
 	isTemporary bool,
 	params *runParams,
 ) (sqlbase.MutableTableDescriptor, error) {
@@ -187,24 +188,24 @@ func MakeSequenceTableDesc(
 	)
 
 	// Mimic a table with one column, "value".
-	desc.Columns = []sqlbase.ColumnDescriptor{
+	desc.Columns = []descpb.ColumnDescriptor{
 		{
 			ID:   sqlbase.SequenceColumnID,
 			Name: sqlbase.SequenceColumnName,
 			Type: types.Int,
 		},
 	}
-	desc.PrimaryIndex = sqlbase.IndexDescriptor{
+	desc.PrimaryIndex = descpb.IndexDescriptor{
 		ID:               keys.SequenceIndexID,
 		Name:             sqlbase.PrimaryKeyIndexName,
-		ColumnIDs:        []sqlbase.ColumnID{sqlbase.SequenceColumnID},
+		ColumnIDs:        []descpb.ColumnID{sqlbase.SequenceColumnID},
 		ColumnNames:      []string{sqlbase.SequenceColumnName},
-		ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 	}
-	desc.Families = []sqlbase.ColumnFamilyDescriptor{
+	desc.Families = []descpb.ColumnFamilyDescriptor{
 		{
 			ID:              keys.SequenceColumnFamilyID,
-			ColumnIDs:       []sqlbase.ColumnID{sqlbase.SequenceColumnID},
+			ColumnIDs:       []descpb.ColumnID{sqlbase.SequenceColumnID},
 			ColumnNames:     []string{sqlbase.SequenceColumnName},
 			Name:            "primary",
 			DefaultColumnID: sqlbase.SequenceColumnID,
@@ -212,7 +213,7 @@ func MakeSequenceTableDesc(
 	}
 
 	// Fill in options, starting with defaults then overriding.
-	opts := &sqlbase.TableDescriptor_SequenceOpts{
+	opts := &descpb.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
 	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */, params, id)
@@ -223,7 +224,7 @@ func MakeSequenceTableDesc(
 
 	// A sequence doesn't have dependencies and thus can be made public
 	// immediately.
-	desc.State = sqlbase.TableDescriptor_PUBLIC
+	desc.State = descpb.TableDescriptor_PUBLIC
 
 	return desc, desc.ValidateTable()
 }
