@@ -130,9 +130,9 @@ func (a *anyNotNullBoolHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -151,46 +151,7 @@ func (a *anyNotNullBoolHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -291,9 +252,9 @@ func (a *anyNotNullBytesHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -312,46 +273,7 @@ func (a *anyNotNullBytesHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = append(a.curAgg[:0], val...)
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -452,9 +374,9 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -473,46 +395,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg.Set(&val)
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -613,9 +496,9 @@ func (a *anyNotNullInt16HashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -634,46 +517,7 @@ func (a *anyNotNullInt16HashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -774,9 +618,9 @@ func (a *anyNotNullInt32HashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -795,46 +639,7 @@ func (a *anyNotNullInt32HashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -935,9 +740,9 @@ func (a *anyNotNullInt64HashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -956,46 +761,7 @@ func (a *anyNotNullInt64HashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1096,9 +862,9 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1117,46 +883,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1257,9 +984,9 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1278,46 +1005,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1418,9 +1106,9 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1439,46 +1127,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1579,9 +1228,9 @@ func (a *anyNotNullDatumHashAgg) Compute(
 			// https://github.com/golang/go/issues/39756
 			col := col
 			_ = col.Get(inputLen - 1)
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1600,46 +1249,7 @@ func (a *anyNotNullDatumHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !a.foundNonNullForCurrentGroup && !isNull {
-							// If we haven't seen any non-nulls for the current group yet, and the
-							// current value is non-null, then we can pick the current value to be
-							// the output.
-							val := col.Get(i)
-							a.curAgg = val
-							a.foundNonNullForCurrentGroup = true
-							// We have already seen non-null for the current group, and since there
-							// is at most a single group when performing hash aggregation, we can
-							// finish computing.
-							return
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false

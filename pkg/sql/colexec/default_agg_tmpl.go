@@ -99,8 +99,6 @@ func (a *default_AGGKINDAgg) Compute(
 		// aggregator always uses non-nil sel to specify the tuples to be
 		// aggregated. Also, the hash aggregator converts the batch "sparsely",
 		// so converted values are at the same positions as the original ones.
-		// TODO(yuzefovich): remove sel==nil case from all other hash aggregate
-		// functions.
 		var convertedTupleIdx int
 		for _, origTupleIdx := range sel[:inputLen] {
 			convertedTupleIdx = origTupleIdx

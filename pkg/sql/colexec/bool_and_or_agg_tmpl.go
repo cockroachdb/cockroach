@@ -93,15 +93,37 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			_ACCUMULATE_BOOLEAN(a, nulls, i)
-		}
-	} else {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	groups := a.groups
+	// {{/*
+	// We don't need to check whether sel is non-nil when performing
+	// hash aggregation because the hash aggregator always uses non-nil
+	// sel to specify the tuples to be aggregated.
+	// */}}
+	if sel == nil {
+		_ = groups[inputLen-1]
 		col = col[:inputLen]
-		for i := range col {
-			_ACCUMULATE_BOOLEAN(a, nulls, i)
+		if nulls.MaybeHasNulls() {
+			for i := range col {
+				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+			}
+		} else {
+			for i := range col {
+				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+			}
+		}
+	} else
+	// {{end}}
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
+				_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+			}
+		} else {
+			for _, i := range sel {
+				_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+			}
 		}
 	}
 }
@@ -141,11 +163,11 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 
 // {{/*
 // _ACCUMULATE_BOOLEAN aggregates the boolean value at index i into the boolean aggregate.
-func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int) { // */}}
+func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 	// {{define "accumulateBoolean" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		if !a.sawNonNull {
 			a.nulls.SetNull(a.curIdx)
 		} else {
@@ -159,8 +181,12 @@ func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	}
 	// {{end}}
 
-	// TODO(yuzefovich): template out has nulls vs no nulls cases.
-	isNull := nulls.NullAt(i)
+	var isNull bool
+	// {{if .HasNulls}}
+	isNull = nulls.NullAt(i)
+	// {{else}}
+	isNull = false
+	// {{end}}
 	if !isNull {
 		// {{with .Global}}
 		_ASSIGN_BOOL_OP(a.curAgg, a.curAgg, col[i])

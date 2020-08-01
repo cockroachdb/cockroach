@@ -38,12 +38,13 @@ func (a *concatOrderedAgg) Compute(
 		[]coldata.Vec{a.vec},
 		func() {
 			previousAggValMemoryUsage := a.aggValMemoryUsage()
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
+			groups := a.groups
+			if sel == nil {
+				_ = groups[inputLen-1]
+				if nulls.MaybeHasNulls() {
+					for i := 0; i < inputLen; i++ {
 
-						if a.groups[i] {
+						if groups[i] {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
 							if !a.foundNonNullForCurrentGroup {
@@ -67,34 +68,7 @@ func (a *concatOrderedAgg) Compute(
 				} else {
 					for i := 0; i < inputLen; i++ {
 
-						if a.groups[i] {
-							// If we encounter a new group, and we haven't found any non-nulls for the
-							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
-								a.nulls.SetNull(a.curIdx)
-							} else {
-								a.col.Set(a.curIdx, a.curAgg)
-							}
-							a.curIdx++
-							a.curAgg = zeroBytesValue
-
-							a.foundNonNullForCurrentGroup = false
-						}
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-
-						if a.groups[i] {
+						if groups[i] {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
 							if !a.foundNonNullForCurrentGroup {
@@ -114,10 +88,37 @@ func (a *concatOrderedAgg) Compute(
 							a.foundNonNullForCurrentGroup = true
 						}
 					}
-				} else {
-					for i := 0; i < inputLen; i++ {
+				}
+			} else {
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
+					for _, i := range sel {
 
-						if a.groups[i] {
+						if groups[i] {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.curAgg = zeroBytesValue
+
+							a.foundNonNullForCurrentGroup = false
+						}
+
+						var isNull bool
+						isNull = nulls.NullAt(i)
+						if !isNull {
+							a.curAgg = append(a.curAgg, col.Get(i)...)
+							a.foundNonNullForCurrentGroup = true
+						}
+					}
+				} else {
+					for _, i := range sel {
+
+						if groups[i] {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
 							if !a.foundNonNullForCurrentGroup {

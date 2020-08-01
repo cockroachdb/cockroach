@@ -74,9 +74,9 @@ func (a *sumIntInt16HashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -95,48 +95,7 @@ func (a *sumIntInt16HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -219,9 +178,9 @@ func (a *sumIntInt32HashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -240,48 +199,7 @@ func (a *sumIntInt32HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -364,9 +282,9 @@ func (a *sumIntInt64HashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -385,48 +303,7 @@ func (a *sumIntInt64HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-						result := int64(a.scratch.curAgg) + int64(col[i])
-						if (result < int64(a.scratch.curAgg)) != (int64(col[i]) < 0) {
-							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-						}
-						a.scratch.curAgg = result
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false

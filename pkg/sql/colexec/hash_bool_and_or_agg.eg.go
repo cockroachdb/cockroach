@@ -58,29 +58,30 @@ func (a *boolAndHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	if sel != nil {
+	{
 		sel = sel[:inputLen]
-		for _, i := range sel {
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg && col[i]
-				a.sawNonNull = true
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
+
 			}
+		} else {
+			for _, i := range sel {
 
-		}
-	} else {
-		col = col[:inputLen]
-		for i := range col {
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg && col[i]
-				a.sawNonNull = true
 			}
-
 		}
 	}
 }
@@ -148,29 +149,30 @@ func (a *boolOrHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	if sel != nil {
+	{
 		sel = sel[:inputLen]
-		for _, i := range sel {
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg || col[i]
-				a.sawNonNull = true
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
+
 			}
+		} else {
+			for _, i := range sel {
 
-		}
-	} else {
-		col = col[:inputLen]
-		for i := range col {
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg || col[i]
-				a.sawNonNull = true
 			}
-
 		}
 	}
 }

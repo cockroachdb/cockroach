@@ -66,8 +66,8 @@ func genBooleanAgg(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 3)
-	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" .}}`)
+	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 4)
+	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" . "HasNulls" $4}}`)
 
 	assignBoolRe := makeFunctionRegex("_ASSIGN_BOOL_OP", 3)
 	s = assignBoolRe.ReplaceAllString(s, makeTemplateFunctionCall(`AssignBoolOp`, 3))

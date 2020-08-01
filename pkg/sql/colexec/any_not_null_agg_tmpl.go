@@ -129,32 +129,32 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 			_ = col.Get(inputLen - 1)
 			// {{if eq "_AGGKIND" "Ordered"}}
 			groups := a.groups
-			// {{end}}
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
-					}
-				} else {
-					// {{if eq "_AGGKIND" "Ordered"}}
-					_ = groups[inputLen-1]
-					// {{end}}
+			// {{/*
+			// We don't need to check whether sel is non-nil when performing
+			// hash aggregation because the hash aggregator always uses non-nil
+			// sel to specify the tuples to be aggregated.
+			// */}}
+			if sel == nil {
+				_ = groups[inputLen-1]
+				if nulls.MaybeHasNulls() {
 					for i := 0; i < inputLen; i++ {
 						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
+				} else {
+					for i := 0; i < inputLen; i++ {
 						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
+				}
+			} else
+			// {{end}}
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
+					for _, i := range sel {
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
+					}
 				} else {
-					// {{if eq "_AGGKIND" "Ordered"}}
-					_ = groups[inputLen-1]
-					// {{end}}
-					for i := 0; i < inputLen; i++ {
+					for _, i := range sel {
 						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
 				}
