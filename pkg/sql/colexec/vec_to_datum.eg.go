@@ -56,8 +56,14 @@ func newVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *vecToDatumC
 	}
 }
 
-// convertBatch converts the selected vectors from the batch.
-func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
+// convertBatchDensely converts the selected vectors from the batch while
+// performing a deselection step.
+// NOTE: converted columns are "dense" in regards to the selection vector - if
+// there was a selection vector on the batch, only elements that were selected
+// are converted, so in order to access the tuple at position tupleIdx, use
+// getDatumColumn(colIdx)[tupleIdx] and *NOT*
+// getDatumColumn(colIdx)[sel[tupleIdx]].
+func (c *vecToDatumConverter) convertBatchDensely(batch coldata.Batch) {
 	if len(c.vecIdxsToConvert) == 0 {
 		// No vectors were selected for conversion, so there is nothing to do.
 		return
@@ -79,7 +85,49 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 	sel := batch.Selection()
 	vecs := batch.ColVecs()
 	for _, vecIdx := range c.vecIdxsToConvert {
-		PhysicalTypeColVecToDatum(
+		ColVecToDatumDensely(
+			c.convertedVecs[vecIdx], vecs[vecIdx], batchLength, sel, &c.da,
+		)
+	}
+}
+
+// convertBatchSparsely converts the selected vectors from the batch *without*
+// performing a deselection step.
+// NOTE: converted columns are "sparse" in regards to the selection vector - if
+// there was a selection vector on the batch, only elements that were selected
+// are converted, but the results are put at position sel[tupleIdx], so use
+// getDatumColumn(colIdx)[sel[tupleIdx]] and *NOT*
+// getDatumColumn(colIdx)[tupleIdx].
+func (c *vecToDatumConverter) convertBatchSparsely(batch coldata.Batch) {
+	if len(c.vecIdxsToConvert) == 0 {
+		// No vectors were selected for conversion, so there is nothing to do.
+		return
+	}
+	batchLength := batch.Length()
+	sel := batch.Selection()
+	// Ensure that convertedVecs are of sufficient length.
+	requiredLength := batchLength
+	if sel != nil {
+		// When sel is non-nil, it might be something like sel = [1023], so we
+		// need to allocate up to the full coldata.BatchSize(), regardless of
+		// the length of the batch.
+		requiredLength = coldata.BatchSize()
+	}
+	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
+		for _, vecIdx := range c.vecIdxsToConvert {
+			c.convertedVecs[vecIdx] = make([]tree.Datum, requiredLength)
+		}
+		// Adjust the datum alloc according to the length of the batch since
+		// this batch is the longest we've seen so far.
+		c.da.AllocSize = requiredLength
+	} else {
+		for _, vecIdx := range c.vecIdxsToConvert {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
+		}
+	}
+	vecs := batch.ColVecs()
+	for _, vecIdx := range c.vecIdxsToConvert {
+		ColVecToDatumSparsely(
 			c.convertedVecs[vecIdx], vecs[vecIdx], batchLength, sel, &c.da,
 		)
 	}
@@ -87,23 +135,22 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 
 // getDatumColumn returns the converted column of tree.Datum of the vector on
 // position colIdx from the last converted batch.
-// NOTE: this column is "dense" in regards to the selection vector - if there
-// was a selection vector on the batch, only elements that were selected are
-// converted, so in order to access the tuple at position tupleIdx, use
-// getDatumColumn(colIdx)[tupleIdx] and *NOT*
-// getDatumColumn(colIdx)[sel[tupleIdx]].
 func (c *vecToDatumConverter) getDatumColumn(colIdx int) tree.Datums {
 	return c.convertedVecs[colIdx]
 }
 
-func PhysicalTypeColVecToDatum(
+// ColVecToDatumDensely converts a vector of coldata-represented values in col
+// into tree.Datum representation and writes it "densely" to converted. length
+// specifies the number of values to be converted and sel is an optional
+// selection vector.
+func ColVecToDatumDensely(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
 ) {
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
 			sel = sel[:length]
-			var idx, tupleIdx int
+			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
@@ -111,22 +158,24 @@ func PhysicalTypeColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
+					destIdx = idx
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -134,12 +183,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = tree.MakeDBool(tree.DBool(typedCol[tupleIdx]))
+						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
 					}
 				}
 			case types.IntFamily:
@@ -147,33 +197,36 @@ func PhysicalTypeColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				}
 			case types.FloatFamily:
@@ -182,12 +235,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDFloat(tree.DFloat(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
 					}
 				}
 			case types.DecimalFamily:
@@ -196,17 +250,18 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[tupleIdx]})
+						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[tupleIdx].Coeff)
-						converted[idx] = d
+						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						converted[destIdx] = d
 					}
 				}
 			case types.DateFamily:
@@ -215,12 +270,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[tupleIdx])})
+						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
 					}
 				}
 			case types.BytesFamily:
@@ -229,14 +285,15 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[idx] = da.NewDBytes(tree.DBytes(typedCol.Get(tupleIdx)))
+						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
 			case types.OidFamily:
@@ -245,12 +302,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[tupleIdx])))
+						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 					}
 				}
 			case types.UuidFamily:
@@ -259,18 +317,19 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(tupleIdx))
+						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
 					}
 				}
 			case types.TimestampFamily:
@@ -279,12 +338,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.TimestampTZFamily:
@@ -293,12 +353,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.IntervalFamily:
@@ -307,12 +368,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInterval(tree.DInterval{Duration: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -322,17 +384,18 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = typedCol.Get(tupleIdx).(*coldataext.Datum).Datum
+						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
 					}
 				}
 			}
 		} else {
-			var idx, tupleIdx int
+			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
@@ -340,22 +403,24 @@ func PhysicalTypeColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
+					destIdx = idx
+					srcIdx = idx
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -363,12 +428,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = tree.MakeDBool(tree.DBool(typedCol[tupleIdx]))
+						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
 					}
 				}
 			case types.IntFamily:
@@ -376,33 +442,36 @@ func PhysicalTypeColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				}
 			case types.FloatFamily:
@@ -411,12 +480,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDFloat(tree.DFloat(typedCol[tupleIdx]))
+						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
 					}
 				}
 			case types.DecimalFamily:
@@ -425,17 +495,18 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[tupleIdx]})
+						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[tupleIdx].Coeff)
-						converted[idx] = d
+						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						converted[destIdx] = d
 					}
 				}
 			case types.DateFamily:
@@ -444,12 +515,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[tupleIdx])})
+						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
 					}
 				}
 			case types.BytesFamily:
@@ -458,14 +530,15 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[idx] = da.NewDBytes(tree.DBytes(typedCol.Get(tupleIdx)))
+						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
 			case types.OidFamily:
@@ -474,12 +547,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[tupleIdx])))
+						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 					}
 				}
 			case types.UuidFamily:
@@ -488,18 +562,19 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(tupleIdx))
+						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
 					}
 				}
 			case types.TimestampFamily:
@@ -508,12 +583,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.TimestampTZFamily:
@@ -522,12 +598,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.IntervalFamily:
@@ -536,12 +613,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInterval(tree.DInterval{Duration: typedCol[tupleIdx]})
+						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -551,12 +629,13 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						if nulls.NullAt(tupleIdx) {
-							converted[idx] = tree.DNull
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[idx] = typedCol.Get(tupleIdx).(*coldataext.Datum).Datum
+						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
 					}
 				}
 			}
@@ -564,7 +643,7 @@ func PhysicalTypeColVecToDatum(
 	} else {
 		if sel != nil {
 			sel = sel[:length]
-			var idx, tupleIdx int
+			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
@@ -572,14 +651,16 @@ func PhysicalTypeColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					destIdx = idx
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -587,8 +668,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = tree.MakeDBool(tree.DBool(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
 					}
 				}
 			case types.IntFamily:
@@ -596,21 +678,24 @@ func PhysicalTypeColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				}
 			case types.FloatFamily:
@@ -619,8 +704,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDFloat(tree.DFloat(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
 					}
 				}
 			case types.DecimalFamily:
@@ -629,13 +715,14 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = sel[idx]
+						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[tupleIdx].Coeff)
-						converted[idx] = d
+						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						converted[destIdx] = d
 					}
 				}
 			case types.DateFamily:
@@ -644,8 +731,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[tupleIdx])})
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
 					}
 				}
 			case types.BytesFamily:
@@ -654,10 +742,11 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
+						destIdx = idx
+						srcIdx = sel[idx]
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[idx] = da.NewDBytes(tree.DBytes(typedCol.Get(tupleIdx)))
+						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
 			case types.OidFamily:
@@ -666,8 +755,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[tupleIdx])))
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 					}
 				}
 			case types.UuidFamily:
@@ -676,14 +766,15 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
+						destIdx = idx
+						srcIdx = sel[idx]
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(tupleIdx))
+						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
 					}
 				}
 			case types.TimestampFamily:
@@ -692,8 +783,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.TimestampTZFamily:
@@ -702,8 +794,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.IntervalFamily:
@@ -712,8 +805,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInterval(tree.DInterval{Duration: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -723,13 +817,14 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = sel[idx]
-						converted[idx] = typedCol.Get(tupleIdx).(*coldataext.Datum).Datum
+						destIdx = idx
+						srcIdx = sel[idx]
+						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
 					}
 				}
 			}
 		} else {
-			var idx, tupleIdx int
+			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
 				// Note that there is no need for a copy since casting to a string will
@@ -737,14 +832,16 @@ func PhysicalTypeColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					destIdx = idx
+					srcIdx = idx
+					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -752,8 +849,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = tree.MakeDBool(tree.DBool(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
 					}
 				}
 			case types.IntFamily:
@@ -761,21 +859,24 @@ func PhysicalTypeColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
 					}
 				}
 			case types.FloatFamily:
@@ -784,8 +885,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDFloat(tree.DFloat(typedCol[tupleIdx]))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
 					}
 				}
 			case types.DecimalFamily:
@@ -794,13 +896,14 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = idx
+						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[tupleIdx].Coeff)
-						converted[idx] = d
+						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						converted[destIdx] = d
 					}
 				}
 			case types.DateFamily:
@@ -809,8 +912,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[tupleIdx])})
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
 					}
 				}
 			case types.BytesFamily:
@@ -819,10 +923,11 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
+						destIdx = idx
+						srcIdx = idx
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[idx] = da.NewDBytes(tree.DBytes(typedCol.Get(tupleIdx)))
+						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
 			case types.OidFamily:
@@ -831,8 +936,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[tupleIdx])))
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 					}
 				}
 			case types.UuidFamily:
@@ -841,14 +947,15 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
+						destIdx = idx
+						srcIdx = idx
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(tupleIdx))
+						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
 					}
 				}
 			case types.TimestampFamily:
@@ -857,8 +964,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.TimestampTZFamily:
@@ -867,8 +975,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
 					}
 				}
 			case types.IntervalFamily:
@@ -877,8 +986,9 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = da.NewDInterval(tree.DInterval{Duration: typedCol[tupleIdx]})
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -888,9 +998,451 @@ func PhysicalTypeColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
-						tupleIdx = idx
-						converted[idx] = typedCol.Get(tupleIdx).(*coldataext.Datum).Datum
+						destIdx = idx
+						srcIdx = idx
+						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
 					}
+				}
+			}
+		}
+	}
+}
+
+// ColVecToDatumSparsely converts a vector of coldata-represented values in col
+// into tree.Datum representation and writes it "sparsely" to converted.
+func ColVecToDatumSparsely(
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
+) {
+	if sel == nil {
+		ColVecToDatumDensely(converted, col, length, sel, da)
+		return
+	}
+	if col.MaybeHasNulls() {
+		nulls := col.Nulls()
+		sel = sel[:length]
+		var idx, destIdx, srcIdx int
+		switch ct := col.Type(); ct.Family() {
+		case types.StringFamily:
+			// Note that there is no need for a copy since casting to a string will
+			// do that.
+			bytes := col.Bytes()
+			if ct.Oid() == oid.T_name {
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+				}
+				return
+			}
+			for idx = 0; idx < length; idx++ {
+				destIdx = sel[idx]
+				srcIdx = sel[idx]
+				if nulls.NullAt(srcIdx) {
+					converted[destIdx] = tree.DNull
+					continue
+				}
+				converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+			}
+		case types.BoolFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bool()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+				}
+			}
+		case types.IntFamily:
+			switch ct.Width() {
+			case 16:
+				typedCol := col.Int16()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			case 32:
+				typedCol := col.Int32()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			}
+		case types.FloatFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Float64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+				}
+			}
+		case types.DecimalFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Decimal()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					// Clear the Coeff so that the Set below allocates a new slice for the
+					// Coeff.abs field.
+					d.Coeff = big.Int{}
+					d.Coeff.Set(&typedCol[srcIdx].Coeff)
+					converted[destIdx] = d
+				}
+			}
+		case types.DateFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+				}
+			}
+		case types.BytesFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bytes()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					// Note that there is no need for a copy since DBytes uses a string
+					// as underlying storage, which will perform the copy for us.
+					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+				}
+			}
+		case types.OidFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
+				}
+			}
+		case types.UuidFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bytes()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					// Note that there is no need for a copy because uuid.FromBytes
+					// will perform a copy.
+					id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+					if err != nil {
+						colexecerror.InternalError(err)
+					}
+					converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+				}
+			}
+		case types.TimestampFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Timestamp()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+				}
+			}
+		case types.TimestampTZFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Timestamp()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+				}
+			}
+		case types.IntervalFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Interval()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+				}
+			}
+		case typeconv.DatumVecCanonicalTypeFamily:
+		default:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Datum()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+				}
+			}
+		}
+	} else {
+		sel = sel[:length]
+		var idx, destIdx, srcIdx int
+		switch ct := col.Type(); ct.Family() {
+		case types.StringFamily:
+			// Note that there is no need for a copy since casting to a string will
+			// do that.
+			bytes := col.Bytes()
+			if ct.Oid() == oid.T_name {
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+				}
+				return
+			}
+			for idx = 0; idx < length; idx++ {
+				destIdx = sel[idx]
+				srcIdx = sel[idx]
+				converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+			}
+		case types.BoolFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bool()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+				}
+			}
+		case types.IntFamily:
+			switch ct.Width() {
+			case 16:
+				typedCol := col.Int16()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			case 32:
+				typedCol := col.Int32()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+				}
+			}
+		case types.FloatFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Float64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+				}
+			}
+		case types.DecimalFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Decimal()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					// Clear the Coeff so that the Set below allocates a new slice for the
+					// Coeff.abs field.
+					d.Coeff = big.Int{}
+					d.Coeff.Set(&typedCol[srcIdx].Coeff)
+					converted[destIdx] = d
+				}
+			}
+		case types.DateFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+				}
+			}
+		case types.BytesFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bytes()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					// Note that there is no need for a copy since DBytes uses a string
+					// as underlying storage, which will perform the copy for us.
+					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+				}
+			}
+		case types.OidFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Int64()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
+				}
+			}
+		case types.UuidFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Bytes()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					// Note that there is no need for a copy because uuid.FromBytes
+					// will perform a copy.
+					id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+					if err != nil {
+						colexecerror.InternalError(err)
+					}
+					converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+				}
+			}
+		case types.TimestampFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Timestamp()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+				}
+			}
+		case types.TimestampTZFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Timestamp()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+				}
+			}
+		case types.IntervalFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Interval()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+				}
+			}
+		case typeconv.DatumVecCanonicalTypeFamily:
+		default:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.Datum()
+				for idx = 0; idx < length; idx++ {
+					destIdx = sel[idx]
+					srcIdx = sel[idx]
+					converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
 				}
 			}
 		}
