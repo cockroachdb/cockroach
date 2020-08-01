@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -61,7 +61,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	rows, err := conn.QueryContext(ctx, `SELECT id, name FROM system.namespace`)
 	require.NoError(t, err)
 
-	namesToID := make(map[string]sqlbase.ID)
+	namesToID := make(map[string]descpb.ID)
 	var schemaName string
 	for rows.Next() {
 		var id int64
@@ -69,7 +69,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		err := rows.Scan(&id, &name)
 		require.NoError(t, err)
 
-		namesToID[name] = sqlbase.ID(id)
+		namesToID[name] = descpb.ID(id)
 		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
 			schemaName = name
 		}

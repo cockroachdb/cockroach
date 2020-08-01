@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -22,8 +23,8 @@ import (
 type unsplitNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
+	index     *descpb.IndexDescriptor
 	run       unsplitRun
 	rows      planNode
 }
@@ -73,8 +74,8 @@ func (n *unsplitNode) Close(ctx context.Context) {
 type unsplitAllNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
+	tableDesc *descpb.TableDescriptor
+	index     *descpb.IndexDescriptor
 	run       unsplitAllRun
 }
 

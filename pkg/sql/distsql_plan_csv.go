@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -154,7 +155,9 @@ func presplitTableBoundaries(
 ) error {
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
-		for _, span := range tbl.Desc.AllIndexSpans(cfg.Codec) {
+		// TODO(ajwerner): Consider passing in the wrapped descriptors.
+		tblDesc := sqlbase.MakeImmutableTableDescriptor(*tbl.Desc)
+		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}

@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +40,7 @@ func TestRenameTable(t *testing.T) {
 
 	counter := int64(keys.MinNonPredefinedUserDescID)
 
-	oldDBID := sqlbase.ID(counter)
+	oldDBID := descpb.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -51,13 +53,7 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor.
-	desc := &sqlbase.Descriptor{}
-	tableDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(counter))
-	ts, err := kvDB.GetProtoTs(context.Background(), tableDescKey, desc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc := desc.Table(ts)
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
 	if tableDesc.Name != oldName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
@@ -67,7 +63,7 @@ func TestRenameTable(t *testing.T) {
 
 	// Create database test2.
 	counter++
-	newDBID := sqlbase.ID(counter)
+	newDBID := descpb.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}
@@ -79,16 +75,16 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	ts, err = kvDB.GetProtoTs(context.Background(), tableDescKey, desc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc = desc.Table(ts)
-	if tableDesc.Name != newName {
+	renamedDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test2", "bar")
+	if renamedDesc.Name != newName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, tableDesc)
 	}
-	if tableDesc.ParentID != newDBID {
+	if renamedDesc.ParentID != newDBID {
 		t.Fatalf("Wrong parent ID on table, expected %d, got: %+v", newDBID, tableDesc)
+	}
+	if renamedDesc.ID != tableDesc.ID {
+		t.Fatalf("Wrong ID after rename, got %d, expected %d",
+			renamedDesc.ID, tableDesc.ID)
 	}
 }
 
@@ -117,7 +113,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 			SQLLeaseManager: &lmKnobs,
 		}}
 	var mu syncutil.Mutex
-	var waitTableID sqlbase.ID
+	var waitTableID descpb.ID
 	// renamed is used to block until the node cannot get leases with the original
 	// table name. It will be signaled once the table has been renamed and the update
 	// about the new name has been processed. Moreover, not only does an update to
@@ -127,13 +123,14 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
 	lmKnobs.TestingDescriptorRefreshedEvent =
-		func(descriptor *sqlbase.Descriptor) {
+		func(descriptor *descpb.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			if waitTableID != descriptor.GetID() {
+			id, version, name, _, _ := sqlbase.GetDescriptorMetadata(descriptor)
+			if waitTableID != id {
 				return
 			}
-			if descriptor.GetName() == "t2" && descriptor.GetVersion() == 2 {
+			if name == "t2" && version == 2 {
 				close(renamed)
 				waitTableID = 0
 			}
@@ -150,7 +147,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	mu.Lock()
 	waitTableID = tableDesc.ID
 	mu.Unlock()
@@ -390,7 +387,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	// The expected version will be the result of two increments for the two
 	// schema changes and one increment for signaling of the completion of the
 	// drain. See the above comment for an explanation of why there's only one
@@ -417,7 +414,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	wg.Wait()
 
 	// Table rename to t3 was successful.
-	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
 	if version := tableDesc.Version; expectedVersion != version {
 		t.Fatalf("version mismatch: expected = %d, current = %d", expectedVersion, version)
 	}

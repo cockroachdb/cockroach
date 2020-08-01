@@ -11,10 +11,10 @@
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "sqlbase";
+option go_package = "descpb";
 
 import "util/hlc/timestamp.proto";
-import "sql/sqlbase/privilege.proto";
+import "sql/catalog/descpb/privilege.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
 import "gogoproto/gogo.proto";

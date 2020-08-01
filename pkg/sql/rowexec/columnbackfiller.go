@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,7 +79,7 @@ func (cb *columnBackfiller) CurrentBufferFill() float32 {
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
 	ctx context.Context,
-	mutations []sqlbase.DescriptorMutation,
+	mutations []descpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,

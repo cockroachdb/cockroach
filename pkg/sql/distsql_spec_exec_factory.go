@@ -12,6 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -193,7 +194,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// Check if any system columns are requested, as they need special handling.
 	systemColumns, systemColumnOrdinals := collectSystemColumnsFromCfg(&colCfg)
 
-	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
+	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
 	// to what scan.initTable call does in execFactory.ConstructScan.
@@ -250,9 +251,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return nil, err
 	}
 	if params.Locking != nil {
-		trSpec.LockingStrength = sqlbase.ToScanLockingStrength(params.Locking.Strength)
-		trSpec.LockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
-		if trSpec.LockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+		trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+		trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+		if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Scans that are performing row-level locking cannot currently be
 			// distributed because their locks would not be propagated back to
 			// the root transaction coordinator.
@@ -394,7 +395,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 }
 
 func (e *distSQLSpecExecFactory) ConstructApplyJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left exec.Node,
 	rightColumns sqlbase.ResultColumns,
 	onCond tree.TypedExpr,
@@ -404,7 +405,7 @@ func (e *distSQLSpecExecFactory) ConstructApplyJoin(
 }
 
 func (e *distSQLSpecExecFactory) ConstructHashJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right exec.Node,
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
@@ -418,7 +419,7 @@ func (e *distSQLSpecExecFactory) ConstructHashJoin(
 }
 
 func (e *distSQLSpecExecFactory) ConstructMergeJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right exec.Node,
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
@@ -437,7 +438,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 
 // ConstructInterleavedJoin is part of the exec.Factory interface.
 func (e *distSQLSpecExecFactory) ConstructInterleavedJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	leftTable cat.Table,
 	leftIndex cat.Index,
 	leftParams exec.ScanParams,
@@ -625,7 +626,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 }
 
 func (e *distSQLSpecExecFactory) ConstructLookupJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
@@ -640,7 +641,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 }
 
 func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	invertedExpr tree.TypedExpr,
 	input exec.Node,
 	table cat.Table,
@@ -939,7 +940,7 @@ func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {
 }
 
 func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left, right exec.Node,
 	onCond tree.TypedExpr,
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,

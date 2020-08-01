@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -55,7 +56,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	if tableDesc.State != descpb.TableDescriptor_PUBLIC {
 		return nil, sqlbase.NewUndefinedRelationError(&oldTn)
 	}
 
@@ -155,13 +156,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 	descID := tableDesc.GetID()
 	parentSchemaID := tableDesc.GetParentSchemaID()
 
-	renameDetails := sqlbase.NameInfo{
+	renameDetails := descpb.NameInfo{
 		ParentID:       prevDBID,
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
@@ -204,9 +205,9 @@ func (n *renameTableNode) Close(context.Context)        {}
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
 func (p *planner) dependentViewRenameError(
-	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
+	ctx context.Context, typeName, objName string, parentID, viewID descpb.ID,
 ) error {
-	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, viewID)
+	viewDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, viewID)
 	if err != nil {
 		return err
 	}

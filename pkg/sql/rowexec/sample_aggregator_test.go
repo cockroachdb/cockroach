@@ -146,7 +146,7 @@ func TestSampleAggregator(t *testing.T) {
 		spec := &execinfrapb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,
-			SampledColumnIDs: []sqlbase.ColumnID{100, 101},
+			SampledColumnIDs: []descpb.ColumnID{100, 101},
 			TableID:          13,
 		}
 
@@ -239,7 +239,7 @@ func TestSampleAggregator(t *testing.T) {
 
 				for _, b := range h.Buckets {
 					ed, _, err := sqlbase.EncDatumFromBuffer(
-						types.Int, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+						types.Int, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 					)
 					if err != nil {
 						t.Fatal(err)

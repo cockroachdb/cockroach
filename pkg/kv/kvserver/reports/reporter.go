@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -433,18 +434,20 @@ func visitAncestors(
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, sqlbase.ID(id)))
+	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, descpb.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.
 		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
-	var desc sqlbase.Descriptor
+	// TODO(ajwerner): Reconsider how this zone config picking apart happens. This
+	// isn't how we want to be retreiving table descriptors in general.
+	var desc descpb.Descriptor
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err
 	}
-	tableDesc := desc.Table(descVal.Timestamp)
+	tableDesc := sqlbase.TableFromDescriptor(&desc, descVal.Timestamp)
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
 		return visitDefaultZone(ctx, cfg, visitor), nil

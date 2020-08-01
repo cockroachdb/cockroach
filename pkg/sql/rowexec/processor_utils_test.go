@@ -77,7 +77,7 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 	if err != nil {
 		panic(err)
 	}
-	encodedDatum := sqlbase.EncDatumFromEncoded(sqlbase.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
 	encodedDatum.Datum = d
 	return encodedDatum
 }

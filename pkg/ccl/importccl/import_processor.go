@@ -157,11 +157,11 @@ func makeInputConverter(
 		}
 	}
 
-	var singleTable *sqlbase.TableDescriptor
+	var singleTable *sqlbase.ImmutableTableDescriptor
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
-			singleTable = table.Desc
+			singleTable = sqlbase.NewImmutableTableDescriptor(*table.Desc)
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
 				singleTableTargetCols[i] = tree.Name(colName)

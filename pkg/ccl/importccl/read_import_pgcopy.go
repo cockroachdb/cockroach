@@ -42,7 +42,7 @@ func newPgCopyReader(
 	kvCh chan row.KVBatch,
 	walltime int64,
 	parallelism int,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{

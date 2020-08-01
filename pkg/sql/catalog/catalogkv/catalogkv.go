@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,36 +33,36 @@ import (
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
 // the counter. The incrementing is non-transactional, and the counter could be
 // incremented multiple times because of retries.
-func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (sqlbase.ID, error) {
+func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (descpb.ID, error) {
 	// Increment unique descriptor counter.
 	newVal, err := kv.IncrementValRetryable(ctx, db, codec.DescIDSequenceKey(), 1)
 	if err != nil {
-		return sqlbase.InvalidID, err
+		return descpb.InvalidID, err
 	}
-	return sqlbase.ID(newVal - 1), nil
+	return descpb.ID(newVal - 1), nil
 }
 
 // GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func GetDescriptorID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey sqlbase.DescriptorKey,
-) (sqlbase.ID, error) {
+) (descpb.ID, error) {
 	key := plainKey.Key(codec)
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
 	gr, err := txn.Get(ctx, key)
 	if err != nil {
-		return sqlbase.InvalidID, err
+		return descpb.InvalidID, err
 	}
 	if !gr.Exists() {
-		return sqlbase.InvalidID, nil
+		return descpb.InvalidID, nil
 	}
-	return sqlbase.ID(gr.ValueInt()), nil
+	return descpb.ID(gr.ValueInt()), nil
 }
 
 // ResolveSchemaID resolves a schema's ID based on db and name.
 func ResolveSchemaID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
-) (bool, sqlbase.ID, error) {
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
+) (bool, descpb.ID, error) {
 	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
 	// checking for public schema.
 	if scName == tree.PublicSchema {
@@ -70,8 +71,8 @@ func ResolveSchemaID(
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)
 	schemaID, err := GetDescriptorID(ctx, txn, codec, sKey)
-	if err != nil || schemaID == sqlbase.InvalidID {
-		return false, sqlbase.InvalidID, err
+	if err != nil || schemaID == descpb.InvalidID {
+		return false, descpb.InvalidID, err
 	}
 
 	return true, schemaID, nil
@@ -84,11 +85,11 @@ func ResolveSchemaID(
 //
 // TODO(ajwerner): Consider passing mutability information into here.
 func GetDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
-	desc := &sqlbase.Descriptor{}
+	desc := &descpb.Descriptor{}
 	ts, err := txn.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
@@ -97,20 +98,22 @@ func GetDescriptorByID(
 }
 
 // unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
-// it into an immutable implementation of DescriptorInterface. It ensures that
+// it into an immutable implementation of ExtendedDescriptorInterface. It ensures that
 // the ModificationTime is set properly.
 func unwrapDescriptor(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.Descriptor, error) {
 	// TODO(ajwerner): Fill in the ModificationTime field for the descriptor.
-	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
-	table, database, typ, schema := desc.Table(hlc.Timestamp{}), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
+		if err := sqlbase.MaybeFillInDescriptor(ctx, txn, codec, table); err != nil {
 			return nil, err
 		}
-		if err := table.Validate(ctx, txn, codec); err != nil {
+		immTable := sqlbase.NewImmutableTableDescriptor(*table)
+		if err := immTable.Validate(ctx, txn, codec); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
@@ -135,11 +138,11 @@ func unwrapDescriptor(
 // TODO (lucy): Should this be unified with GetDescriptorByID? See the comment
 // there.
 func GetMutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := sqlbase.MakeDescMetadataKey(codec, id)
-	desc := &sqlbase.Descriptor{}
+	desc := &descpb.Descriptor{}
 	ts, err := txn.GetProtoTs(ctx, descKey, desc)
 	if err != nil {
 		return nil, err
@@ -148,22 +151,25 @@ func GetMutableDescriptorByID(
 }
 
 // unwrapDescriptorMutable takes a descriptor retrieved using a transaction and
-// unwraps it into a mutable implementation of DescriptorInterface. It ensures
+// unwraps it into a mutable implementation of ExtendedDescriptorInterface. It ensures
 // that the ModificationTime is set properly.
 func unwrapDescriptorMutable(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.MutableDescriptor, error) {
-	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
-	table, database, typ, schema := desc.Table(hlc.Timestamp{}), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	table, database, typ, schema :=
+		sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
+		if err := sqlbase.MaybeFillInDescriptor(ctx, txn, codec, table); err != nil {
 			return nil, err
 		}
-		if err := table.ValidateTable(); err != nil {
+		mutTable := sqlbase.NewMutableExistingTableDescriptor(*table)
+		if err := mutTable.ValidateTable(); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewMutableExistingTableDescriptor(*table), nil
+		return mutTable, nil
 	case database != nil:
 		dbDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*database)
 		if err := dbDesc.Validate(); err != nil {
@@ -209,7 +215,7 @@ func GetAllDescriptors(
 	}
 
 	// TODO(ajwerner): Fill in ModificationTime.
-	rawDescs := make([]sqlbase.Descriptor, len(kvs))
+	rawDescs := make([]descpb.Descriptor, len(kvs))
 	descs := make([]sqlbase.DescriptorInterface, len(kvs))
 	for i, kv := range kvs {
 		desc := &rawDescs[i]
@@ -228,7 +234,7 @@ func GetAllDescriptors(
 // descriptor IDs.
 func GetAllDatabaseDescriptorIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]sqlbase.ID, error) {
+) ([]descpb.ID, error) {
 	log.Eventf(ctx, "fetching all database descriptor IDs")
 	nameKey := sqlbase.NewDatabaseKey("" /* name */).Key(codec)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /*maxRows */)
@@ -246,10 +252,10 @@ func GetAllDatabaseDescriptorIDs(
 	}
 	kvs = append(kvs, dkvs...)
 
-	descIDs := make([]sqlbase.ID, 0, len(kvs))
-	alreadySeen := make(map[sqlbase.ID]bool)
+	descIDs := make([]descpb.ID, 0, len(kvs))
+	alreadySeen := make(map[descpb.ID]bool)
 	for _, kv := range kvs {
-		ID := sqlbase.ID(kv.ValueInt())
+		ID := descpb.ID(kv.ValueInt())
 		if alreadySeen[ID] {
 			continue
 		}
@@ -268,7 +274,7 @@ func WriteDescToBatch(
 	s *cluster.Settings,
 	b *kv.Batch,
 	codec keys.SQLCodec,
-	descID sqlbase.ID,
+	descID descpb.ID,
 	desc sqlbase.DescriptorInterface,
 ) (err error) {
 	descKey := sqlbase.MakeDescMetadataKey(codec, descID)
@@ -290,8 +296,8 @@ func WriteNewDescToBatch(
 	s *cluster.Settings,
 	b *kv.Batch,
 	codec keys.SQLCodec,
-	tableID sqlbase.ID,
-	desc sqlbase.BaseDescriptorInterface,
+	tableID descpb.ID,
+	desc sqlbase.DescriptorInterface,
 ) (err error) {
 	descKey := sqlbase.MakeDescMetadataKey(codec, tableID)
 	descDesc := desc.DescriptorProto()
@@ -306,13 +312,13 @@ func WriteNewDescToBatch(
 // Returns InvalidID on failure.
 func GetDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string, required bool,
-) (sqlbase.ID, error) {
+) (descpb.ID, error) {
 	if name == sqlbase.SystemDatabaseName {
 		return keys.SystemDatabaseID, nil
 	}
 	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
-		return sqlbase.InvalidID, err
+		return descpb.InvalidID, err
 	}
 	if !found && required {
 		return dbID, sqlbase.NewUndefinedDatabaseError(name)
@@ -324,7 +330,7 @@ func GetDatabaseID(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func GetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id)
 	if err != nil || desc == nil {
@@ -338,10 +344,44 @@ func GetDatabaseDescByID(
 	return db, nil
 }
 
+// GetTableDescByID looks up the table descriptor given its ID,
+// returning nil if the descriptor is not found. If you want the "not
+// found" condition to return an error, use MustGetTableDescByID() instead.
+func GetTableDescByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	desc, err := GetDescriptorByID(ctx, txn, codec, id)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	if desc != nil && !ok {
+		return nil, pgerror.Newf(pgcode.WrongObjectType,
+			"%q with ID %d is not a database", desc, log.Safe(id))
+	}
+	return table, nil
+}
+
+// MustGetTableDescByID looks up the table descriptor given its ID,
+// returning an error if the table is not found.
+func MustGetTableDescByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	desc, err := GetTableDescByID(ctx, txn, codec, id)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, errors.CombineErrors(sqlbase.ErrDescriptorNotFound,
+			sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)}))
+	}
+	return desc, nil
+}
+
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	desc, err := GetDatabaseDescByID(ctx, txn, codec, id)
 	if err != nil {
@@ -349,7 +389,8 @@ func MustGetDatabaseDescByID(
 	}
 	if desc == nil {
 		// TODO(ajwerner): How does this case ever happen?
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		return nil, errors.CombineErrors(sqlbase.ErrDescriptorNotFound,
+			sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id)))
 	}
 	return desc, nil
 }
@@ -359,7 +400,7 @@ func MustGetDatabaseDescByID(
 // database. It attempts to perform this operation in a single request,
 // rather than making a round trip for each ID.
 func GetDatabaseDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []sqlbase.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*sqlbase.ImmutableDatabaseDescriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
@@ -382,7 +423,7 @@ func GetDatabaseDescriptorsFromIDs(
 				len(result.Rows),
 			)
 		}
-		desc := &sqlbase.Descriptor{}
+		desc := &descpb.Descriptor{}
 		if err := result.Rows[0].ValueProto(desc); err != nil {
 			return nil, err
 		}
@@ -393,7 +434,7 @@ func GetDatabaseDescriptorsFromIDs(
 				desc.String(),
 			)
 		}
-		desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, result.Rows[0].Value.Timestamp)
+		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
 		results = append(results, sqlbase.NewImmutableDatabaseDescriptor(*db))
 	}
 	return results, nil

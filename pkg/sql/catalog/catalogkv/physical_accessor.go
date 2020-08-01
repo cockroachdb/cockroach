@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -75,7 +76,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 // GetSchema implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetSchema(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if scName == tree.PublicSchema {
@@ -105,14 +106,14 @@ func (a UncachedPhysicalAccessor) GetSchema(
 		return false, sqlbase.ResolvedSchema{}, nil
 	}
 
-	sc := desc.SchemaDesc()
-	if sc == nil {
+	sc, ok := desc.(sqlbase.SchemaDescriptorInterface)
+	if !ok {
 		return false, sqlbase.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
 	}
 	return true, sqlbase.ResolvedSchema{
-		ID:   sc.ID,
+		ID:   sc.GetID(),
 		Kind: sqlbase.SchemaUserDefined,
-		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc),
+		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc.SchemaDesc()),
 	}, nil
 }
 
@@ -212,7 +213,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 ) (catalog.Descriptor, error) {
 	// Look up the database ID.
 	dbID, err := GetDatabaseID(ctx, txn, codec, db, flags.Required)
-	if err != nil || dbID == sqlbase.InvalidID {
+	if err != nil || dbID == descpb.InvalidID {
 		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
 	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
-	if descID == sqlbase.InvalidID {
+	if descID == descpb.InvalidID {
 		var found bool
 		found, descID, err = sqlbase.LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
 		if err != nil {
@@ -260,10 +261,11 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	case *sqlbase.ImmutableTableDescriptor:
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
-		acceptableStates := map[sqlbase.TableDescriptor_State]bool{
-			sqlbase.TableDescriptor_ADD:     true,
-			sqlbase.TableDescriptor_PUBLIC:  true,
-			sqlbase.TableDescriptor_OFFLINE: flags.IncludeOffline,
+		acceptableStates := map[descpb.TableDescriptor_State]bool{
+			descpb.TableDescriptor_ADD:     true,
+			descpb.TableDescriptor_PUBLIC:  true,
+			descpb.TableDescriptor_OFFLINE: flags.IncludeOffline,
+			descpb.TableDescriptor_DROP:    flags.IncludeDropped,
 		}
 		if acceptableStates[desc.State] {
 			// Immediately after a RENAME an old name still points to the

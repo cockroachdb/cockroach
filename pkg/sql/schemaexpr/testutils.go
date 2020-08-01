@@ -11,6 +11,7 @@
 package schemaexpr
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -27,36 +28,33 @@ type testCol struct {
 func testTableDesc(
 	name string, columns []testCol, mutationColumns []testCol,
 ) sqlbase.MutableTableDescriptor {
-	cols := make([]sqlbase.ColumnDescriptor, len(columns))
+	cols := make([]descpb.ColumnDescriptor, len(columns))
 	for i := range columns {
-		cols[i] = sqlbase.ColumnDescriptor{
+		cols[i] = descpb.ColumnDescriptor{
 			Name: columns[i].name,
 			Type: columns[i].typ,
 			// Column IDs start at 1 to mimic "real" table descriptors.
-			ID: sqlbase.ColumnID(i + 1),
+			ID: descpb.ColumnID(i + 1),
 		}
 	}
 
-	muts := make([]sqlbase.DescriptorMutation, len(mutationColumns))
+	muts := make([]descpb.DescriptorMutation, len(mutationColumns))
 	for i := range mutationColumns {
-		muts[i] = sqlbase.DescriptorMutation{
-			Descriptor_: &sqlbase.DescriptorMutation_Column{
-				Column: &sqlbase.ColumnDescriptor{
+		muts[i] = descpb.DescriptorMutation{
+			Descriptor_: &descpb.DescriptorMutation_Column{
+				Column: &descpb.ColumnDescriptor{
 					Name: mutationColumns[i].name,
 					Type: mutationColumns[i].typ,
-					ID:   sqlbase.ColumnID(len(columns) + i + 1),
+					ID:   descpb.ColumnID(len(columns) + i + 1),
 				},
 			},
-			Direction: sqlbase.DescriptorMutation_ADD,
+			Direction: descpb.DescriptorMutation_ADD,
 		}
 	}
-
-	return sqlbase.MutableTableDescriptor{
-		TableDescriptor: sqlbase.TableDescriptor{
-			Name:      name,
-			ID:        1,
-			Columns:   cols,
-			Mutations: muts,
-		},
-	}
+	return *sqlbase.NewMutableCreatedTableDescriptor(descpb.TableDescriptor{
+		Name:      name,
+		ID:        1,
+		Columns:   cols,
+		Mutations: muts,
+	})
 }

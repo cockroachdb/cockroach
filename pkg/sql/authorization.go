@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -29,7 +30,7 @@ import (
 // MembershipCache is a shared cache for role membership information.
 type MembershipCache struct {
 	syncutil.Mutex
-	tableVersion sqlbase.DescriptorVersion
+	tableVersion descpb.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[string]userRoleMembership
 }
@@ -94,7 +95,7 @@ func (p *planner) CheckPrivilege(
 	}
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(sqlbase.PublicRole, privilege) {
+	if privs.CheckPrivilege(security.PublicRole, privilege) {
 		return nil
 	}
 
@@ -137,7 +138,7 @@ func (p *planner) CheckAnyPrivilege(
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(sqlbase.PublicRole) {
+	if privs.AnyPrivilege(security.PublicRole) {
 		return nil
 	}
 
@@ -187,7 +188,7 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[sqlbase.AdminRole]; ok {
+	if _, ok := memberOf[security.AdminRole]; ok {
 		return true, nil
 	}
 
@@ -237,8 +238,8 @@ func (p *planner) MemberOfWithAdminOption(
 	if err != nil {
 		return nil, err
 	}
-	tableDesc := objDesc.TableDesc()
-	tableVersion := tableDesc.Version
+	tableDesc := objDesc.(sqlbase.TableDescriptorInterface)
+	tableVersion := tableDesc.GetVersion()
 
 	// We loop in case the table version changes while we're looking up memberships.
 	for {

@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -32,7 +33,7 @@ func BenchmarkColSet(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var c TableColSet
 			for j := 0; j < n; j++ {
-				c.Add(ColumnID(j))
+				c.Add(descpb.ColumnID(j))
 			}
 		}
 	})
@@ -41,11 +42,11 @@ func BenchmarkColSet(b *testing.B) {
 func TestColSet_Ordered(t *testing.T) {
 	testData := []struct {
 		set      TableColSet
-		expected []ColumnID
+		expected []descpb.ColumnID
 	}{
-		{MakeTableColSet(1, 2, 3), []ColumnID{1, 2, 3}},
-		{MakeTableColSet(3, 5, 6, 17), []ColumnID{3, 5, 6, 17}},
-		{MakeTableColSet(9, 4, 6, 1), []ColumnID{1, 4, 6, 9}},
+		{MakeTableColSet(1, 2, 3), []descpb.ColumnID{1, 2, 3}},
+		{MakeTableColSet(3, 5, 6, 17), []descpb.ColumnID{3, 5, 6, 17}},
+		{MakeTableColSet(9, 4, 6, 1), []descpb.ColumnID{1, 4, 6, 9}},
 	}
 
 	for _, d := range testData {

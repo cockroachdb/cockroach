@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -271,8 +272,8 @@ func backup(
 	})
 
 	pkIDs := make(map[uint64]bool)
-	for _, desc := range backupManifest.Descriptors {
-		if t := desc.Table(hlc.Timestamp{}); t != nil {
+	for i := range backupManifest.Descriptors {
+		if t := sqlbase.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
 	}
@@ -344,8 +345,8 @@ func backup(
 		return RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
-	for _, desc := range backupManifest.Descriptors {
-		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+	for i := range backupManifest.Descriptors {
+		if tableDesc := sqlbase.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); tableDesc != nil {
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
 			if err != nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -92,7 +93,7 @@ func (tr *DistSQLTypeResolver) ResolveType(
 func makeTypeLookupFunc(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) sqlbase.TypeLookupFunc {
-	return func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	return func(ctx context.Context, id descpb.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlagsWithRequired())
 	}
 }
@@ -102,7 +103,7 @@ func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (
 	// TODO (rohany): This should eventually look into the set of cached type
 	//  descriptors before attempting to access it here.
 	lookup := makeTypeLookupFunc(ctx, tr.EvalContext.Txn, tr.EvalContext.Codec)
-	name, typDesc, err := lookup(ctx, sqlbase.ID(id))
+	name, typDesc, err := lookup(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
 	lookup := makeTypeLookupFunc(evalCtx.Context, evalCtx.Txn, evalCtx.Codec)
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, typDesc, err := lookup(evalCtx.Context, sqlbase.ID(t.StableTypeID()))
+			name, typDesc, err := lookup(evalCtx.Context, descpb.ID(t.StableTypeID()))
 			if err != nil {
 				return err
 			}
