@@ -11,13 +11,6 @@
 package cli
 
 import (
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"reflect"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -125,53 +118,6 @@ func TestStartArgChecking(t *testing.T) {
 		if !testutils.IsError(err, c.expected) {
 			t.Errorf("%d: expected %q, but found %v", i, c.expected, err)
 		}
-	}
-}
-
-func TestGCProfiles(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	dir, err := ioutil.TempDir("", "TestGCProfile.")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(dir)
-	}()
-
-	data := []byte("hello world")
-	const prefix = "testprof."
-
-	var expected []string
-	var sum int
-	for i := 1; i < len(data); i++ {
-		p := filepath.Join(dir, fmt.Sprintf("%s%04d", prefix, i))
-		err := ioutil.WriteFile(p, data[:i], 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
-		expected = append(expected, p)
-		sum += len(data[:i])
-
-		otherPath := filepath.Join(dir, fmt.Sprintf("other.%04d", i))
-		if err := ioutil.WriteFile(otherPath, data[:i], 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	for i := 1; i < len(data); i++ {
-		gcProfiles(dir, prefix, int64(sum))
-		paths, err := filepath.Glob(filepath.Join(dir, prefix+"*"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		sort.Strings(paths)
-		if e := expected[i-1:]; !reflect.DeepEqual(e, paths) {
-			t.Fatalf("%d: expected\n%s\nfound\n%s\n",
-				i, strings.Join(e, "\n"), strings.Join(paths, "\n"))
-		}
-		sum -= len(data[:i])
 	}
 }
 
