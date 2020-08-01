@@ -131,9 +131,9 @@ func (a *minBoolHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -168,80 +168,7 @@ func (a *minBoolHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if !candidate && a.curAgg {
-										cmpResult = -1
-									} else if candidate && !a.curAgg {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if !candidate && a.curAgg {
-										cmpResult = -1
-									} else if candidate && !a.curAgg {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -352,9 +279,9 @@ func (a *minBytesHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -381,68 +308,7 @@ func (a *minBytesHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col
-					_ = 0
-					_ = inputLen
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = append(a.curAgg[:0], val...)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = bytes.Compare(candidate, a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = append(a.curAgg[:0], candidate...)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = append(a.curAgg[:0], val...)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = bytes.Compare(candidate, a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = append(a.curAgg[:0], candidate...)
-								}
-							}
-						}
-					}
-				} else {
-					col = col
-					_ = 0
-					_ = inputLen
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -545,9 +411,9 @@ func (a *minDecimalHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -574,64 +440,7 @@ func (a *minDecimalHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg.Set(&val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg.Set(&candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg.Set(&val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg.Set(&candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -734,9 +543,9 @@ func (a *minInt16HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -774,86 +583,7 @@ func (a *minInt16HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -967,9 +697,9 @@ func (a *minInt32HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1007,86 +737,7 @@ func (a *minInt32HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1200,9 +851,9 @@ func (a *minInt64HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1240,86 +891,7 @@ func (a *minInt64HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1433,9 +1005,9 @@ func (a *minFloat64HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1481,102 +1053,7 @@ func (a *minFloat64HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := float64(candidate), float64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else if a == b {
-											cmpResult = 0
-										} else if math.IsNaN(a) {
-											if math.IsNaN(b) {
-												cmpResult = 0
-											} else {
-												cmpResult = -1
-											}
-										} else {
-											cmpResult = 1
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := float64(candidate), float64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else if a == b {
-											cmpResult = 0
-										} else if math.IsNaN(a) {
-											if math.IsNaN(b) {
-												cmpResult = 0
-											} else {
-												cmpResult = -1
-											}
-										} else {
-											cmpResult = 1
-										}
-									}
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1698,9 +1175,9 @@ func (a *minTimestampHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1734,78 +1211,7 @@ func (a *minTimestampHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if candidate.Before(a.curAgg) {
-										cmpResult = -1
-									} else if a.curAgg.Before(candidate) {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if candidate.Before(a.curAgg) {
-										cmpResult = -1
-									} else if a.curAgg.Before(candidate) {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -1915,9 +1321,9 @@ func (a *minIntervalHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -1944,64 +1350,7 @@ func (a *minIntervalHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = candidate.Compare(a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = candidate.Compare(a.curAgg)
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -2104,9 +1453,9 @@ func (a *minDatumHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -2135,68 +1484,7 @@ func (a *minDatumHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col.Slice(0, inputLen)
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
-
-									cmp = cmpResult < 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col.Slice(0, inputLen)
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -2301,9 +1589,9 @@ func (a *maxBoolHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -2338,80 +1626,7 @@ func (a *maxBoolHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if !candidate && a.curAgg {
-										cmpResult = -1
-									} else if candidate && !a.curAgg {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if !candidate && a.curAgg {
-										cmpResult = -1
-									} else if candidate && !a.curAgg {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -2522,9 +1737,9 @@ func (a *maxBytesHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -2551,68 +1766,7 @@ func (a *maxBytesHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col
-					_ = 0
-					_ = inputLen
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = append(a.curAgg[:0], val...)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = bytes.Compare(candidate, a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = append(a.curAgg[:0], candidate...)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = append(a.curAgg[:0], val...)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = bytes.Compare(candidate, a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = append(a.curAgg[:0], candidate...)
-								}
-							}
-						}
-					}
-				} else {
-					col = col
-					_ = 0
-					_ = inputLen
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -2715,9 +1869,9 @@ func (a *maxDecimalHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -2744,64 +1898,7 @@ func (a *maxDecimalHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg.Set(&val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg.Set(&candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg.Set(&val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg.Set(&candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -2904,9 +2001,9 @@ func (a *maxInt16HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -2944,86 +2041,7 @@ func (a *maxInt16HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -3137,9 +2155,9 @@ func (a *maxInt32HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -3177,86 +2195,7 @@ func (a *maxInt32HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -3370,9 +2309,9 @@ func (a *maxInt64HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -3410,86 +2349,7 @@ func (a *maxInt64HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = int64(val)
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := int64(candidate), int64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else {
-											cmpResult = 0
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = int64(candidate)
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -3603,9 +2463,9 @@ func (a *maxFloat64HashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -3651,102 +2511,7 @@ func (a *maxFloat64HashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := float64(candidate), float64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else if a == b {
-											cmpResult = 0
-										} else if math.IsNaN(a) {
-											if math.IsNaN(b) {
-												cmpResult = 0
-											} else {
-												cmpResult = -1
-											}
-										} else {
-											cmpResult = 1
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									{
-										a, b := float64(candidate), float64(a.curAgg)
-										if a < b {
-											cmpResult = -1
-										} else if a > b {
-											cmpResult = 1
-										} else if a == b {
-											cmpResult = 0
-										} else if math.IsNaN(a) {
-											if math.IsNaN(b) {
-												cmpResult = 0
-											} else {
-												cmpResult = -1
-											}
-										} else {
-											cmpResult = 1
-										}
-									}
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -3868,9 +2633,9 @@ func (a *maxTimestampHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -3904,78 +2669,7 @@ func (a *maxTimestampHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if candidate.Before(a.curAgg) {
-										cmpResult = -1
-									} else if a.curAgg.Before(candidate) {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									if candidate.Before(a.curAgg) {
-										cmpResult = -1
-									} else if a.curAgg.Before(candidate) {
-										cmpResult = 1
-									} else {
-										cmpResult = 0
-									}
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -4085,9 +2779,9 @@ func (a *maxIntervalHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -4114,64 +2808,7 @@ func (a *maxIntervalHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = candidate.Compare(a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-									cmpResult = candidate.Compare(a.curAgg)
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col[0:inputLen]
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
@@ -4274,9 +2911,9 @@ func (a *maxDatumHashAgg) Compute(
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -4305,68 +2942,7 @@ func (a *maxDatumHashAgg) Compute(
 						}
 					}
 				} else {
-					col = col.Slice(0, inputLen)
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
-								a.curAgg = val
-								a.foundNonNullForCurrentGroup = true
-							} else {
-								var cmp bool
-								candidate := col.Get(i)
-
-								{
-									var cmpResult int
-
-									cmpResult = candidate.(*coldataext.Datum).CompareDatum(col, a.curAgg)
-
-									cmp = cmpResult > 0
-								}
-
-								if cmp {
-									a.curAgg = candidate
-								}
-							}
-						}
-					}
-				} else {
-					col = col.Slice(0, inputLen)
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false
