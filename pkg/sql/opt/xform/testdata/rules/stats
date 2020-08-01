@@ -14,9 +14,10 @@ Top normalization rules:
   EliminateProject   applied 1 times.
   PruneJoinLeftCols  applied 1 times.
   PruneJoinRightCols applied 1 times.
-Exploration rules applied 8 times, added 5 expressions.
+Exploration rules applied 9 times, added 5 expressions.
 Top exploration rules:
   CommuteJoin         applied 2 times, added 1 expressions.
   GenerateMergeJoins  applied 2 times, added 2 expressions.
   GenerateLookupJoins applied 2 times, added 2 expressions.
   GenerateIndexScans  applied 2 times, added 0 expressions.
+  ReorderJoins        applied 1 times, added 0 expressions.
