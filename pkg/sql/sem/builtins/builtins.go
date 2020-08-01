@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -2863,6 +2864,32 @@ may increase either contention or retry errors, or both.`,
 	"json_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
+
+	"crdb_internal.pb_to_json": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pbname", types.String},
+				{"data", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg, err := protoreflect.DecodeMessage(
+					string(tree.MustBeDString(args[0])),
+					[]byte(tree.MustBeDBytes(args[1])),
+				)
+				if err != nil {
+					return nil, err
+				}
+				j, err := protoreflect.MessageToJSON(msg)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDJSON(j), nil
+			},
+			Info:       "Converts protocol message to its JSONB representation.",
+			Volatility: tree.VolatilityImmutable,
+		}),
 
 	// Enum functions.
 	"enum_first": makeBuiltin(
