@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -167,7 +169,7 @@ func TestInvertedJoiner(t *testing.T) {
 	const biIndex = 1
 	const ciIndex = 2
 
-	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	type testCase struct {
 		description string
@@ -177,7 +179,7 @@ func TestInvertedJoiner(t *testing.T) {
 		input       [][]tree.Datum
 		lookupCol   uint32
 		datumToExpr invertedexpr.DatumToInvertedExpr
-		joinType    sqlbase.JoinType
+		joinType    descpb.JoinType
 		inputTypes  []*types.T
 		outputTypes []*types.T
 		expected    string
@@ -205,7 +207,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
 			datumToExpr: arrayIntersectionExpr{},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[5 5] [5 50] [20 2] [20 20] [42 24] [42 42]]",
 		},
@@ -225,7 +227,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
 			datumToExpr: arrayIntersectionExpr{},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[5 50] [42 24] [42 42]]",
 		},
@@ -243,7 +245,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
 			datumToExpr: arrayIntersectionExpr{},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			outputTypes: sqlbase.TwoIntCols,
 			// Similar to previous, but the left side input failing the onExpr is emitted.
 			expected: "[[5 50] [20 NULL] [42 24] [42 42]]",
@@ -261,7 +263,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
 			datumToExpr: arrayIntersectionExpr{},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[[5] [42]]",
 		},
@@ -278,7 +280,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
 			datumToExpr: arrayIntersectionExpr{},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[[20]]",
 		},
@@ -298,7 +300,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(20))},
 			},
 			datumToExpr: jsonIntersectionExpr{},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[5 5] [42 42] [20 20]]",
 		},
@@ -319,7 +321,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(20))},
 			},
 			datumToExpr: jsonUnionExpr{},
-			joinType:    sqlbase.InnerJoin,
+			joinType:    descpb.InnerJoin,
 			outputTypes: sqlbase.TwoIntCols,
 			// The ordering looks odd because of how the JSON values were ordered in the
 			// inverted index. The spans we are reading for the first batch of two inputs
@@ -351,7 +353,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(20))},
 			},
 			datumToExpr: jsonUnionExpr{},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[[5] [42] [101] [20]]",
 		},
@@ -369,7 +371,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(20))},
 			},
 			datumToExpr: jsonUnionExpr{},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[]",
 		},
@@ -412,7 +414,7 @@ func TestInvertedJoiner(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.InvertedJoinerSpec{
-				Table:        *td,
+				Table:        *td.TableDesc(),
 				IndexIdx:     c.indexIdx,
 				LookupColumn: c.lookupCol,
 				// The invertedJoiner does not look at InvertedExpr since that information

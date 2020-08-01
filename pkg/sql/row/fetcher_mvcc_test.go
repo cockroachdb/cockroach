@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -83,11 +85,11 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		e STRING, f STRING, PRIMARY KEY (e, f)
 	) INTERLEAVE IN PARENT parent (e)`)
 
-	parentDesc := sqlbase.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
-	childDesc := sqlbase.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
+	parentDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
 	for _, desc := range []*sqlbase.ImmutableTableDescriptor{parentDesc, childDesc} {
-		colIdxMap := make(map[sqlbase.ColumnID]int)
+		colIdxMap := make(map[descpb.ColumnID]int)
 		var valNeededForCol util.FastIntSet
 		for colIdx := range desc.Columns {
 			id := desc.Columns[colIdx].ID
@@ -108,7 +110,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	if err := rf.Init(
 		keys.SystemSQLCodec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		true, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		args...,

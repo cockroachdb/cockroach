@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -239,7 +239,7 @@ func NewMergeJoinOp(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
 	leftTypes []*types.T,
@@ -330,21 +330,21 @@ func NewMergeJoinOp(
 	}
 	var mergeJoinerOp ResettableOperator
 	switch joinType {
-	case sqlbase.InnerJoin:
+	case descpb.InnerJoin:
 		mergeJoinerOp = &mergeJoinInnerOp{base}
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		mergeJoinerOp = &mergeJoinLeftOuterOp{base}
-	case sqlbase.RightOuterJoin:
+	case descpb.RightOuterJoin:
 		mergeJoinerOp = &mergeJoinRightOuterOp{base}
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		mergeJoinerOp = &mergeJoinFullOuterOp{base}
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		mergeJoinerOp = &mergeJoinLeftSemiOp{base}
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		mergeJoinerOp = &mergeJoinLeftAntiOp{base}
-	case sqlbase.IntersectAllJoin:
+	case descpb.IntersectAllJoin:
 		mergeJoinerOp = &mergeJoinIntersectAllOp{base}
-	case sqlbase.ExceptAllJoin:
+	case descpb.ExceptAllJoin:
 		mergeJoinerOp = &mergeJoinExceptAllOp{base}
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
@@ -411,7 +411,7 @@ func newMergeJoinBase(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
 	leftTypes []*types.T,
@@ -484,7 +484,7 @@ type mergeJoinBase struct {
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
-	joinType           sqlbase.JoinType
+	joinType           descpb.JoinType
 	left               mergeJoinInput
 	right              mergeJoinInput
 

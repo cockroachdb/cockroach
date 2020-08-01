@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -80,7 +81,7 @@ func getDescriptorFromDB(
 			}
 			return nil, errors.Wrap(err, "fetch database descriptor")
 		}
-		var desc sqlbase.Descriptor
+		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(dbDescBytes, &desc); err != nil {
 			return nil, errors.Wrap(err, "unmarshal database descriptor")
 		}
@@ -145,15 +146,15 @@ func Load(
 	scanner := bufio.NewReader(r)
 	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
-	var cols []sqlbase.ColumnDescriptor
+	var cols []descpb.ColumnDescriptor
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
 	var kvs []storage.MVCCKeyValue
 	var kvBytes int64
 	backup := backupccl.BackupManifest{
-		Descriptors: []sqlbase.Descriptor{
-			{Union: &sqlbase.Descriptor_Database{Database: dbDesc.DatabaseDesc()}},
+		Descriptors: []descpb.Descriptor{
+			{Union: &descpb.Descriptor_Database{Database: dbDesc.DatabaseDesc()}},
 		},
 	}
 	for {
@@ -202,7 +203,7 @@ func Load(
 			// rejected during restore.
 			st := cluster.MakeTestingClusterSettings()
 
-			affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+			affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
@@ -217,8 +218,8 @@ func Load(
 
 			tableDesc = sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
 			tableDescs[tableName] = tableDesc
-			backup.Descriptors = append(backup.Descriptors, sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{Table: desc.TableDesc()},
+			backup.Descriptors = append(backup.Descriptors, descpb.Descriptor{
+				Union: &descpb.Descriptor_Table{Table: desc.TableDesc()},
 			})
 
 			for i := range tableDesc.Columns {
@@ -302,7 +303,7 @@ func insertStmtToKVs(
 	ctx context.Context,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
-	cols []sqlbase.ColumnDescriptor,
+	cols []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
 	ri row.Inserter,
 	stmt *tree.Insert,
@@ -363,7 +364,7 @@ func insertStmtToKVs(
 
 		// We have disallowed computed exprs.
 		var computeExprs []tree.TypedExpr
-		var computedCols []sqlbase.ColumnDescriptor
+		var computedCols []descpb.ColumnDescriptor
 
 		insertRow, err := row.GenerateInsertRow(
 			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, insertRow, &computedIVarContainer,

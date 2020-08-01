@@ -91,11 +91,11 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			}
 		}
 
-		span.Key, err = getRowKey(p.ExecCfg().Codec, tableDesc.TableDesc(), index, fromVals)
+		span.Key, err = getRowKey(p.ExecCfg().Codec, tableDesc, index, fromVals)
 		if err != nil {
 			return nil, err
 		}
-		span.EndKey, err = getRowKey(p.ExecCfg().Codec, tableDesc.TableDesc(), index, toVals)
+		span.EndKey, err = getRowKey(p.ExecCfg().Codec, tableDesc, index, toVals)
 		if err != nil {
 			return nil, err
 		}

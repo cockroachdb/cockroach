@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -36,11 +37,11 @@ var DefaultUserDBs = map[string]struct{}{
 
 // MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
 // new cluster.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + ID(len(DefaultUserDBs))
+var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))
 
 // IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
 // present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID ID) bool {
+func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
 	return descID <= MaxDefaultDescriptorID
 }
 
@@ -49,7 +50,7 @@ func IsDefaultCreatedDescriptor(descID ID) bool {
 // Pass name == "" in order to generate the prefix key to use to scan over all
 // of the names for the specified parentID.
 func MakeNameMetadataKey(
-	codec keys.SQLCodec, parentID ID, parentSchemaID ID, name string,
+	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
 ) roachpb.Key {
 	k := codec.IndexPrefix(uint32(NamespaceTable.ID), uint32(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
@@ -65,7 +66,7 @@ func MakeNameMetadataKey(
 // NameMetadataKey for version >= 20.1.
 func DecodeNameMetadataKey(
 	codec keys.SQLCodec, k roachpb.Key,
-) (parentID ID, parentSchemaID ID, name string, err error) {
+) (parentID, parentSchemaID descpb.ID, name string, err error) {
 	k, _, err = codec.DecodeTablePrefix(k)
 	if err != nil {
 		return 0, 0, "", err
@@ -84,13 +85,13 @@ func DecodeNameMetadataKey(
 	if err != nil {
 		return 0, 0, "", err
 	}
-	parentID = ID(buf)
+	parentID = descpb.ID(buf)
 
 	k, buf, err = encoding.DecodeUvarintAscending(k)
 	if err != nil {
 		return 0, 0, "", err
 	}
-	parentSchemaID = ID(buf)
+	parentSchemaID = descpb.ID(buf)
 
 	var bytesBuf []byte
 	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
@@ -105,7 +106,9 @@ func DecodeNameMetadataKey(
 // MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
 // versions < 20.1. Pass name == "" in order to generate the prefix key to use
 // to scan over all of the names for the specified parentID.
-func MakeDeprecatedNameMetadataKey(codec keys.SQLCodec, parentID ID, name string) roachpb.Key {
+func MakeDeprecatedNameMetadataKey(
+	codec keys.SQLCodec, parentID descpb.ID, name string,
+) roachpb.Key {
 	k := codec.IndexPrefix(
 		uint32(DeprecatedNamespaceTable.ID), uint32(DeprecatedNamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
@@ -122,7 +125,7 @@ func MakeAllDescsMetadataKey(codec keys.SQLCodec) roachpb.Key {
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
-func MakeDescMetadataKey(codec keys.SQLCodec, descID ID) roachpb.Key {
+func MakeDescMetadataKey(codec keys.SQLCodec, descID descpb.ID) roachpb.Key {
 	return codec.DescMetadataKey(uint32(descID))
 }
 
@@ -135,7 +138,7 @@ func MakeDescMetadataKey(codec keys.SQLCodec, descID ID) roachpb.Key {
 //    /51/1/42/#/51/2/1337
 // which would return the slice
 //    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
-func IndexKeyValDirs(index *IndexDescriptor) []encoding.Direction {
+func IndexKeyValDirs(index *descpb.IndexDescriptor) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
@@ -209,7 +212,7 @@ func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) strin
 // PrettySpans returns a human-readable description of the spans.
 // If index is nil, then pretty print subroutines will use their default
 // settings.
-func PrettySpans(index *IndexDescriptor, spans []roachpb.Span, skip int) string {
+func PrettySpans(index *descpb.IndexDescriptor, spans []roachpb.Span, skip int) string {
 	if len(spans) == 0 {
 		return ""
 	}

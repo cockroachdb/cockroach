@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +53,7 @@ type insertRun struct {
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted into.
-	insertCols []sqlbase.ColumnDescriptor
+	insertCols []descpb.ColumnDescriptor
 
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.
@@ -109,7 +110,7 @@ func (r *insertRun) initRowContainer(
 		r.resultRowBuffer[i] = tree.DNull
 	}
 
-	colIDToRetIndex := make(map[sqlbase.ColumnID]int)
+	colIDToRetIndex := make(map[descpb.ColumnID]int)
 	cols := r.ti.tableDesc().Columns
 	for i := range cols {
 		colIDToRetIndex[cols[i].ID] = i

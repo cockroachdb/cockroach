@@ -11,6 +11,7 @@
 package catalog
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -21,7 +22,7 @@ type Descriptor = sqlbase.DescriptorInterface
 // MutableDescriptor represents a descriptor undergoing in-memory mutations
 // as part of a schema change.
 type MutableDescriptor interface {
-	Descriptor
+	sqlbase.DescriptorInterface
 	// MaybeIncrementVersion sets the version of the descriptor to
 	// OriginalVersion()+1.
 	// TODO (lucy): It's not a good idea to have callers handle incrementing the
@@ -30,12 +31,12 @@ type MutableDescriptor interface {
 	// outset.
 	MaybeIncrementVersion()
 	// SetDrainingNames sets the draining names for the descriptor.
-	SetDrainingNames([]sqlbase.NameInfo)
+	SetDrainingNames([]descpb.NameInfo)
 
 	// Accessors for the original state of the descriptor prior to the mutations.
 	OriginalName() string
-	OriginalID() sqlbase.ID
-	OriginalVersion() sqlbase.DescriptorVersion
+	OriginalID() descpb.ID
+	OriginalVersion() descpb.DescriptorVersion
 	// Immutable returns an immutable copy of this descriptor.
 	Immutable() Descriptor
 	// IsNew returns whether the descriptor was created in this transaction.

@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -43,10 +44,10 @@ type scanNode struct {
 	_ util.NoCopy
 
 	desc  *sqlbase.ImmutableTableDescriptor
-	index *sqlbase.IndexDescriptor
+	index *descpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
-	specifiedIndex *sqlbase.IndexDescriptor
+	specifiedIndex *descpb.IndexDescriptor
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
@@ -57,12 +58,12 @@ type scanNode struct {
 	// be gained (e.g. for tables with wide rows) by reading only certain
 	// columns from KV using point lookups instead of a single range lookup for
 	// the entire row.
-	cols []*sqlbase.ColumnDescriptor
+	cols []*descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap map[descpb.ColumnID]int
 
 	spans   []roachpb.Span
 	reverse bool
@@ -96,13 +97,13 @@ type scanNode struct {
 
 	// lockingStrength and lockingWaitPolicy represent the row-level locking
 	// mode of the Scan.
-	lockingStrength   sqlbase.ScanLockingStrength
-	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 
 	// systemColumns and systemColumnOrdinals contain information about what
 	// system columns the scan needs to produce, and what row ordinals to
 	// write those columns out into.
-	systemColumns        []sqlbase.SystemColumnKind
+	systemColumns        []descpb.SystemColumnKind
 	systemColumnOrdinals []int
 }
 
@@ -236,11 +237,11 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		}
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexFlags.IndexID) {
+		if n.desc.PrimaryIndex.ID == descpb.IndexID(indexFlags.IndexID) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexFlags.IndexID) {
+				if n.desc.Indexes[i].ID == descpb.IndexID(indexFlags.IndexID) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
@@ -256,25 +257,25 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
 	desc *sqlbase.ImmutableTableDescriptor, colCfg scanColumnsConfig,
-) (cols []*sqlbase.ColumnDescriptor, err error) {
+) (cols []*descpb.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*sqlbase.ColumnDescriptor, 0, len(desc.ReadableColumns))
+	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns))
 	for _, wc := range colCfg.wantedColumns {
-		var c *sqlbase.ColumnDescriptor
+		var c *descpb.ColumnDescriptor
 		var err error
-		if sqlbase.IsColIDSystemColumn(sqlbase.ColumnID(wc)) {
+		if sqlbase.IsColIDSystemColumn(descpb.ColumnID(wc)) {
 			// If the requested column is a system column, then retrieve the
 			// corresponding descriptor.
-			c, err = sqlbase.GetSystemColumnDescriptorFromID(sqlbase.ColumnID(wc))
+			c, err = sqlbase.GetSystemColumnDescriptorFromID(descpb.ColumnID(wc))
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// Otherwise, collect the descriptors from the table's columns.
-			if id := sqlbase.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
+			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
 				c, err = desc.FindActiveColumnByID(id)
 			} else {
 				c, _, err = desc.FindReadableColumnByID(id)
@@ -292,7 +293,7 @@ func initColsForScan(
 			c := &desc.Columns[i]
 			found := false
 			for _, wc := range colCfg.wantedColumns {
-				if sqlbase.ColumnID(wc) == c.ID {
+				if descpb.ColumnID(wc) == c.ID {
 					found = true
 					break
 				}
@@ -324,7 +325,7 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 
 	// Set up the rest of the scanNode.
 	n.resultColumns = sqlbase.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
-	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
+	n.colIdxMap = make(map[descpb.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}

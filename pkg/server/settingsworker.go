@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,7 +29,7 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable.TableDesc()
+	tbl := sqlbase.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
 	codec := keys.TODOSQLCodec
@@ -68,14 +69,14 @@ func (s *Server) refreshSettings() {
 				return err
 			}
 			var colIDDiff uint32
-			var lastColID sqlbase.ColumnID
+			var lastColID descpb.ColumnID
 			var res tree.Datum
 			for len(bytes) > 0 {
 				_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 				if err != nil {
 					return err
 				}
-				colID := lastColID + sqlbase.ColumnID(colIDDiff)
+				colID := lastColID + descpb.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
 					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
