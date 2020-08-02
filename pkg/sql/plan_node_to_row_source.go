@@ -202,8 +202,16 @@ func (p *planNodeToRowSource) ConsumerClosed() {
 
 // IsException implements the VectorizeAlwaysException interface.
 func (p *planNodeToRowSource) IsException() bool {
-	_, ok := p.node.(*setVarNode)
-	return ok
+	if _, ok := p.node.(*setVarNode); ok {
+		// We need to make an exception for changing a session variable.
+		return true
+	}
+	if d, ok := p.node.(*delayedNode); ok {
+		// We want to make an exception for retrieving the current database
+		// name (which is done via a scan of 'session_variables' virtual table.
+		return d.name == "session_variables@primary"
+	}
+	return false
 }
 
 // forwardMetadata will be called by any upstream rowSourceToPlanNode processors
