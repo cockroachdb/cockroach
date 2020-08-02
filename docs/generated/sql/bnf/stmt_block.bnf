@@ -188,6 +188,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_partitions_stmt
 	| show_jobs_stmt
+	| show_schedules_stmt
 	| show_queries_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
@@ -555,6 +556,11 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOB' a_expr
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' a_expr
 
+show_schedules_stmt ::=
+	'SHOW' 'SCHEDULES' opt_schedule_executor_type
+	| 'SHOW' schedule_state 'SCHEDULES' opt_schedule_executor_type
+	| 'SHOW' 'SCHEDULE' a_expr
+
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
 	| 'SHOW' 'ALL' opt_cluster 'QUERIES'
@@ -818,6 +824,7 @@ unreserved_keyword ::=
 	| 'PARTITIONS'
 	| 'PASSWORD'
 	| 'PAUSE'
+	| 'PAUSED'
 	| 'PHYSICAL'
 	| 'PLAN'
 	| 'PLANS'
@@ -853,6 +860,7 @@ unreserved_keyword ::=
 	| 'ROLLUP'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
 	| 'SETTING'
@@ -1283,6 +1291,13 @@ opt_on_targets_roles ::=
 for_grantee_clause ::=
 	'FOR' name_list
 	| 
+
+opt_schedule_executor_type ::=
+	'FOR' 'BACKUP'
+
+schedule_state ::=
+	'RUNNING'
+	| 'PAUSED'
 
 opt_cluster ::=
 	'CLUSTER'
