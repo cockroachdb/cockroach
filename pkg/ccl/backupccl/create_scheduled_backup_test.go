@@ -226,7 +226,7 @@ WITH EXPERIMENTAL SCHEDULE OPTIONS first_run=$1
 			require.Equal(t, 1, len(schedules))
 			schedule := schedules[0]
 
-			require.Equal(t, scheduledBackupExecutorName, schedule.ExecutorType())
+			require.Equal(t, tree.ScheduledBackupExecutor.InternalName(), schedule.ExecutorType())
 			require.EqualValues(t, tc.nextRun, schedule.NextRun())
 			var arg ScheduledBackupExecutionArgs
 			require.NoError(t, types.UnmarshalAny(schedule.ExecutionArgs().Args, &arg))

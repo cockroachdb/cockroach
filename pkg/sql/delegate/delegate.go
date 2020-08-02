@@ -109,6 +109,9 @@ func TryDelegate(
 	case *tree.ShowTransactionStatus:
 		return d.delegateShowVar(&tree.ShowVar{Name: "transaction_status"})
 
+	case *tree.ShowSchedules:
+		return d.delegateShowSchedules(t)
+
 	case *tree.ControlJobsForSchedules:
 		return d.delegateJobControl(t)
 

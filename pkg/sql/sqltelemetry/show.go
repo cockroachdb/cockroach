@@ -42,6 +42,8 @@ const (
 	Jobs
 	// Roles represents the SHOW ROLES command.
 	Roles
+	// Schedules represents the SHOW SCHEDULE command.
+	Schedules
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -55,6 +57,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Constraints: "constraints",
 	Jobs:        "jobs",
 	Roles:       "roles",
+	Schedules:   "schedules",
 }
 
 func (s ShowTelemetryType) String() string {

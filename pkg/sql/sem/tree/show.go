@@ -533,3 +533,94 @@ func (node *ShowPartitions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Table)
 	}
 }
+
+// ScheduledJobExecutorType is a type identifying the names of
+// the supported scheduled job executors.
+type ScheduledJobExecutorType int
+
+const (
+	// InvalidExecutor is a placeholder for an invalid executor type.
+	InvalidExecutor ScheduledJobExecutorType = iota
+
+	// ScheduledBackupExecutor is an executor responsible for
+	// the execution of the scheduled backups.
+	ScheduledBackupExecutor
+)
+
+var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
+	InvalidExecutor:         "unknown-executor",
+	ScheduledBackupExecutor: "scheduled-backup-executor",
+}
+
+// InternalName returns an internal executor name.
+// This name can be used to filter matching schedules.
+func (t ScheduledJobExecutorType) InternalName() string {
+	return scheduleExecutorInternalNames[t]
+}
+
+// UserName returns a user friendly executor name.
+func (t ScheduledJobExecutorType) UserName() string {
+	switch t {
+	case ScheduledBackupExecutor:
+		return "BACKUP"
+	}
+	return "unsupported-executor"
+}
+
+// ScheduleState describes what kind of schedules to display
+type ScheduleState int
+
+const (
+	// SpecifiedSchedules indicates that show schedules should
+	// only show subset of schedules.
+	SpecifiedSchedules ScheduleState = iota
+
+	// ActiveSchedules indicates that show schedules should
+	// only show those schedules that are currently active.
+	ActiveSchedules
+
+	// PausedSchedules indicates that show schedules should
+	// only show those schedules that are currently paused.
+	PausedSchedules
+)
+
+// Format implements the NodeFormatter interface.
+func (s ScheduleState) Format(ctx *FmtCtx) {
+	switch s {
+	case ActiveSchedules:
+		ctx.WriteString("RUNNING")
+	case PausedSchedules:
+		ctx.WriteString("PAUSED")
+	default:
+		// Nothing
+	}
+}
+
+// ShowSchedules represents a SHOW SCHEDULES statement.
+type ShowSchedules struct {
+	WhichSchedules ScheduleState
+	ExecutorType   ScheduledJobExecutorType
+	ScheduleID     Expr
+}
+
+var _ Statement = &ShowSchedules{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowSchedules) Format(ctx *FmtCtx) {
+	if n.ScheduleID != nil {
+		ctx.Printf("SHOW SCHEDULE %s", AsString(n.ScheduleID))
+		return
+	}
+	ctx.Printf("SHOW")
+
+	if n.WhichSchedules != SpecifiedSchedules {
+		ctx.WriteString(" ")
+		n.WhichSchedules.Format(ctx)
+	}
+
+	ctx.Printf(" SCHEDULES")
+
+	if n.ExecutorType != InvalidExecutor {
+		ctx.Printf(" FOR %s", n.ExecutorType.UserName())
+	}
+}
