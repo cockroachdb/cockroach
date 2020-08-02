@@ -700,7 +700,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 func (ef *execFactory) constructScanForZigzag(
 	indexDesc *sqlbase.IndexDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	cols exec.NodeColumnOrdinalSet,
+	cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
 
 	colCfg := scanColumnsConfig{
@@ -725,14 +725,15 @@ func (ef *execFactory) constructScanForZigzag(
 func (ef *execFactory) ConstructZigzagJoin(
 	leftTable cat.Table,
 	leftIndex cat.Index,
+	leftCols exec.TableColumnOrdinalSet,
+	leftFixedVals []tree.TypedExpr,
+	leftEqCols []exec.TableColumnOrdinal,
 	rightTable cat.Table,
 	rightIndex cat.Index,
-	leftEqCols []exec.NodeColumnOrdinal,
-	rightEqCols []exec.NodeColumnOrdinal,
-	leftCols exec.NodeColumnOrdinalSet,
-	rightCols exec.NodeColumnOrdinalSet,
+	rightCols exec.TableColumnOrdinalSet,
+	rightFixedVals []tree.TypedExpr,
+	rightEqCols []exec.TableColumnOrdinal,
 	onCond tree.TypedExpr,
-	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	leftIndexDesc := leftIndex.(*optIndex).desc
@@ -781,16 +782,25 @@ func (ef *execFactory) ConstructZigzagJoin(
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
 	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.
-	for i := range fixedVals {
-		valNode, ok := fixedVals[i].(*valuesNode)
-		if !ok {
-			panic("non-values node passed as fixed value to zigzag join")
+
+	// mkFixedVals creates a values node that contains a single row with values
+	// for a prefix of the index columns.
+	// TODO(radu): using a valuesNode to represent a single tuple is dubious.
+	mkFixedVals := func(fixedVals []tree.TypedExpr, index cat.Index) *valuesNode {
+		cols := make(sqlbase.ResultColumns, len(fixedVals))
+		for i := range cols {
+			col := index.Column(i)
+			cols[i].Name = string(col.ColName())
+			cols[i].Typ = col.DatumType()
 		}
-		if i >= len(n.sides) {
-			panic("more fixed values passed than zigzag join sides")
+		return &valuesNode{
+			columns:          cols,
+			tuples:           [][]tree.TypedExpr{fixedVals},
+			specifiedInQuery: true,
 		}
-		n.sides[i].fixedVals = valNode
 	}
+	n.sides[0].fixedVals = mkFixedVals(leftFixedVals, leftIndex)
+	n.sides[1].fixedVals = mkFixedVals(rightFixedVals, rightIndex)
 	return n, nil
 }
 
