@@ -252,22 +252,44 @@ define InvertedJoin {
 
 # ZigzagJoin performs a zigzag join.
 #
-# Each side of the join has two kinds of columns that form a prefix
-# of the specified index: fixed columns (with values specified in
-# fixedVals), and equal columns (with column ordinals specified in
-# {left,right}EqCols). The lengths of leftEqCols and rightEqCols
-# must match.
+# Each side of the join has two kinds of columns: fixed columns and equal
+# columns. The fixed columns correspond 1-to-1 to a prefix of the index columns.
+# The fixed columns and the equal columns together also form a prefix of the
+# index columns.
 define ZigzagJoin {
+    # Left table and index.
     LeftTable cat.Table
     LeftIndex cat.Index
+
+    # LeftCols are the columns that are scanned from the left index.
+    LeftCols exec.TableColumnOrdinalSet
+
+    # LeftFixedVals contains values for the fixed columns (a prefix of the
+    # index columns).
+    LeftFixedVals []tree.TypedExpr
+
+    # LeftEqCols are the left table columns that have equality constraints,
+    # corresponding 1-1 to RightEqCols.
+    LeftEqCols []exec.TableColumnOrdinal
+
+    # Right table and index.
     RightTable cat.Table
     RightIndex cat.Index
-    LeftEqCols []exec.NodeColumnOrdinal
-    RightEqCols []exec.NodeColumnOrdinal
-    LeftCols exec.NodeColumnOrdinalSet
-    RightCols exec.NodeColumnOrdinalSet
+
+    # RightCols are the columns that are scanned from the right index.
+    RightCols exec.TableColumnOrdinalSet
+
+    # RightFixedVals contains values for the fixed columns (a prefix of the
+    # index columns).
+    RightFixedVals []tree.TypedExpr
+
+    # RightEqCols are the right table columns that have equality constraints,
+    # corresponding 1-1 to LeftEqCols.
+    RightEqCols []exec.TableColumnOrdinal
+
+    # OnCond is an extra filter that is evaluated on the results.
+    # TODO(radu): remove this (it can be a separate Select).
     OnCond tree.TypedExpr
-    FixedVals []exec.Node
     ReqOrdering exec.OutputOrdering
 }
 
