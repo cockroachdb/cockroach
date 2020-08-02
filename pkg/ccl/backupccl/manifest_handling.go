@@ -74,11 +74,10 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 func ReadBackupManifestFromURI(
 	ctx context.Context,
 	uri string,
-	user string,
-	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	makeExternalStorageFromURI cloud.ScopedExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
-	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
+	exportStore, err := makeExternalStorageFromURI(ctx, uri)
 
 	if err != nil {
 		return BackupManifest{}, err
@@ -352,14 +351,13 @@ func writeTableStatistics(
 func loadBackupManifests(
 	ctx context.Context,
 	uris []string,
-	user string,
-	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	makeExternalStorageFromURI cloud.ScopedExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, error) {
 	backupManifests := make([]BackupManifest, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupManifestFromURI(ctx, uri, user, makeExternalStorageFromURI, encryption)
+		desc, err := ReadBackupManifestFromURI(ctx, uri, makeExternalStorageFromURI, encryption)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}

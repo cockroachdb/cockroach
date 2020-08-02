@@ -810,11 +810,11 @@ func restore(
 func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
+	makeCloudStorage cloud.ScopedExternalStorageFromURIFactory,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
-	backupManifests, err := loadBackupManifests(ctx, details.URIs,
-		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
+	backupManifests, err := loadBackupManifests(ctx, details.URIs, makeCloudStorage, encryption)
 	if err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
@@ -1133,8 +1133,12 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
+	makeCloudStorage := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+		return p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	}
+
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
-		ctx, p, details, details.Encryption,
+		ctx, p, makeCloudStorage, details, details.Encryption,
 	)
 	if err != nil {
 		return err
@@ -1143,11 +1147,7 @@ func (r *restoreResumer) Resume(
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
-	if err != nil {
-		return errors.Wrapf(err, "creating external store configuration")
-	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	defaultStore, err := makeCloudStorage(ctx, details.URIs[lastBackupIndex])
 	if err != nil {
 		return err
 	}

@@ -170,15 +170,18 @@ func backup(
 	urisByLocalityKV map[string]string,
 	db *kv.DB,
 	settings *cluster.Settings,
-	defaultStore cloud.ExternalStorage,
-	storageByLocalityKV map[string]*roachpb.ExternalStorage,
 	job *jobs.Job,
 	backupManifest *BackupManifest,
 	checkpointDesc *BackupManifest,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	makeExternalStorage cloud.ScopedExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
 ) (RowCount, error) {
+	defaultStore, err := makeExternalStorage(ctx, defaultURI)
+	if err != nil {
+		return RowCount{}, err
+	}
+	defer defaultStore.Close()
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
@@ -304,7 +307,7 @@ func backup(
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
-	if len(storageByLocalityKV) > 0 {
+	if len(urisByLocalityKV) > 0 {
 		filesByLocalityKV := make(map[string][]BackupManifest_File)
 		for i := range files {
 			file := &files[i]
@@ -312,23 +315,23 @@ func backup(
 		}
 
 		nextPartitionedDescFilenameID := 1
-		for kv, conf := range storageByLocalityKV {
-			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
+		for localityKV, uri := range urisByLocalityKV {
+			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, localityKV)
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
 			filename := fmt.Sprintf("%s_%d_%s",
-				BackupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
+				BackupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(localityKV))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
 			desc := BackupPartitionDescriptor{
-				LocalityKV: kv,
-				Files:      filesByLocalityKV[kv],
+				LocalityKV: localityKV,
+				Files:      filesByLocalityKV[localityKV],
 				BackupID:   backupID,
 			}
 
 			if err := func() error {
-				store, err := makeExternalStorage(ctx, *conf)
+				store, err := makeExternalStorage(ctx, uri)
 				if err != nil {
 					return err
 				}
@@ -401,6 +404,10 @@ func (b *backupResumer) Resume(
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
+	makeCloudStorage := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+		return p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	}
+
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
@@ -423,43 +430,9 @@ func (b *backupResumer) Resume(
 		return pgerror.Wrapf(err, pgcode.DataCorrupted,
 			"unmarshal backup descriptor")
 	}
-	// For all backups, partitioned or not, the main BACKUP manifest is stored at
-	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, p.User())
+	checkpointDesc, err := getCheckpoint(ctx, makeCloudStorage, details, p.ExecCfg().ClusterID())
 	if err != nil {
-		return errors.Wrapf(err, "export configuration")
-	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
-	if err != nil {
-		return errors.Wrapf(err, "make storage")
-	}
-	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
-	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
-		if err != nil {
-			return err
-		}
-		storageByLocalityKV[kv] = &conf
-	}
-	var checkpointDesc *BackupManifest
-
-	// We don't read the table descriptors from the backup descriptor, but
-	// they could be using either the new or the old foreign key
-	// representations. We should just preserve whatever representation the
-	// table descriptors were using and leave them alone.
-	if desc, err := readBackupManifest(ctx, defaultStore, BackupManifestCheckpointName, details.Encryption); err == nil {
-		// If the checkpoint is from a different cluster, it's meaningless to us.
-		// More likely though are dummy/lock-out checkpoints with no ClusterID.
-		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
-			checkpointDesc = &desc
-		}
-	} else {
-		// TODO(benesch): distinguish between a missing checkpoint, which simply
-		// indicates the prior backup attempt made no progress, and a corrupted
-		// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
-		// "not found" error that's consistent across all ExternalStorage
-		// implementations.
-		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *b.job.ID(), err)
+		return err
 	}
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
@@ -475,12 +448,10 @@ func (b *backupResumer) Resume(
 		details.URIsByLocalityKV,
 		p.ExecCfg().DB,
 		p.ExecCfg().Settings,
-		defaultStore,
-		storageByLocalityKV,
 		b.job,
 		&backupManifest,
 		checkpointDesc,
-		p.ExecCfg().DistSQLSrv.ExternalStorage,
+		makeCloudStorage,
 		details.Encryption,
 		statsCache,
 	)
@@ -535,6 +506,43 @@ func (b *backupResumer) Resume(
 	}
 
 	return nil
+}
+
+func getCheckpoint(
+	ctx context.Context,
+	makeCloudStorage cloud.ScopedExternalStorageFromURIFactory,
+	details jobspb.BackupDetails,
+	clusterID uuid.UUID,
+) (*BackupManifest, error) {
+	// For all backups, partitioned or not, the main BACKUP manifest is stored at
+	// details.URI.
+	defaultStore, err := makeCloudStorage(ctx, details.URI)
+	if err != nil {
+		return nil, errors.Wrapf(err, "make storage")
+	}
+	defer defaultStore.Close()
+
+	var checkpointDesc *BackupManifest
+
+	// We don't read the table descriptors from the backup descriptor, but
+	// they could be using either the new or the old foreign key
+	// representations. We should just preserve whatever representation the
+	// table descriptors were using and leave them alone.
+	if desc, err := readBackupManifest(ctx, defaultStore, BackupManifestCheckpointName, details.Encryption); err == nil {
+		// If the checkpoint is from a different cluster, it's meaningless to us.
+		// More likely though are dummy/lock-out checkpoints with no ClusterID.
+		if desc.ClusterID.Equal(clusterID) {
+			checkpointDesc = &desc
+		}
+	} else {
+		// TODO(benesch): distinguish between a missing checkpoint, which simply
+		// indicates the prior backup attempt made no progress, and a corrupted
+		// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
+		// "not found" error that's consistent across all ExternalStorage
+		// implementations.
+		log.Warningf(ctx, "unable to load backup checkpoint while resuming: %v", err)
+	}
+	return checkpointDesc, err
 }
 
 func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {

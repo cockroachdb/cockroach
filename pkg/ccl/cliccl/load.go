@@ -60,17 +60,15 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 		basepath = cloudimpl.MakeLocalStorageURI(basepath)
 	}
 
-	externalStorageFromURI := func(ctx context.Context, uri string,
-		user string) (cloud.ExternalStorage, error) {
+	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
 		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.RootUser, nil, nil)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	desc, err := backupccl.ReadBackupManifestFromURI(ctx, basepath, security.RootUser,
-		externalStorageFromURI, nil)
+	desc, err := backupccl.ReadBackupManifestFromURI(ctx, basepath, externalStorageFromURI, nil)
 	if err != nil {
 		return err
 	}

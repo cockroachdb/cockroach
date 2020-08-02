@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -392,7 +393,9 @@ func backupPlanHook(
 			return err
 		}
 
-		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+		makeCloudStorage := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+			return p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+		}
 
 		var encryptionPassphrase []byte
 		if pwFn != nil {
@@ -410,7 +413,7 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
-		defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+		defaultStore, err := makeCloudStorage(ctx, defaultURI)
 		if err != nil {
 			return err
 		}
@@ -426,7 +429,7 @@ func backupPlanHook(
 		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
-				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0], p.User())
+				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0])
 				if err != nil {
 					return err
 				}
@@ -451,7 +454,7 @@ func backupPlanHook(
 					// descriptors around.
 					uri := incrementalFrom[i]
 					desc, err := ReadBackupManifestFromURI(
-						ctx, uri, p.User(), makeCloudStorage, encryption,
+						ctx, uri, makeCloudStorage, encryption,
 					)
 					if err != nil {
 						return errors.Wrapf(err, "failed to read backup from %q", uri)
@@ -521,7 +524,7 @@ func backupPlanHook(
 				// Close the old store before overwriting the reference with the new
 				// subdir store.
 				defaultStore.Close()
-				defaultStore, err = makeCloudStorage(ctx, defaultURI, p.User())
+				defaultStore, err = makeCloudStorage(ctx, defaultURI)
 				if err != nil {
 					return errors.Wrap(err, "re-opening layer-specific destination location")
 				}
@@ -696,7 +699,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+			exportStore, err := makeCloudStorage(ctx, defaultURI)
 			if err != nil {
 				return err
 			}
