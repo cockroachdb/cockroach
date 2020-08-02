@@ -1631,11 +1631,11 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
 
-	leftEqCols := make([]exec.NodeColumnOrdinal, len(join.LeftEqCols))
-	rightEqCols := make([]exec.NodeColumnOrdinal, len(join.RightEqCols))
+	leftEqCols := make([]exec.TableColumnOrdinal, len(join.LeftEqCols))
+	rightEqCols := make([]exec.TableColumnOrdinal, len(join.RightEqCols))
 	for i := range join.LeftEqCols {
-		leftEqCols[i] = exec.NodeColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
-		rightEqCols[i] = exec.NodeColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
+		leftEqCols[i] = exec.TableColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
+		rightEqCols[i] = exec.TableColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
 	}
 	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex).Intersection(join.Cols)
 	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex).Intersection(join.Cols)
@@ -1658,38 +1658,39 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// Build the fixed value scalars. These are represented as one value node
-	// per side of the join, containing one row/tuple with fixed values for
-	// a prefix of that index's columns.
-	fixedVals := make([]exec.Node, 2)
-	fixedCols := []opt.ColList{join.LeftFixedCols, join.RightFixedCols}
-	for i := range join.FixedVals {
-		tup := join.FixedVals[i].(*memo.TupleExpr)
-		valExprs := make([]tree.TypedExpr, len(tup.Elems))
-		for j := range tup.Elems {
-			valExprs[j], err = b.buildScalar(&ctx, tup.Elems[j])
+	// Build the fixed value scalars.
+	tupleToExprs := func(tup *memo.TupleExpr) ([]tree.TypedExpr, error) {
+		res := make([]tree.TypedExpr, len(tup.Elems))
+		for i := range res {
+			res[i], err = b.buildScalar(&ctx, tup.Elems[i])
 			if err != nil {
-				return execPlan{}, err
+				return nil, err
 			}
 		}
-		valuesPlan, err := b.constructValues([][]tree.TypedExpr{valExprs}, fixedCols[i])
-		if err != nil {
-			return execPlan{}, err
-		}
-		fixedVals[i] = valuesPlan.root
+		return res, nil
+	}
+
+	leftFixedVals, err := tupleToExprs(join.FixedVals[0].(*memo.TupleExpr))
+	if err != nil {
+		return execPlan{}, err
+	}
+	rightFixedVals, err := tupleToExprs(join.FixedVals[1].(*memo.TupleExpr))
+	if err != nil {
+		return execPlan{}, err
 	}
 
 	res.root, err = b.factory.ConstructZigzagJoin(
 		leftTable,
 		leftIndex,
+		leftOrdinals,
+		leftFixedVals,
+		leftEqCols,
 		rightTable,
 		rightIndex,
-		leftEqCols,
-		rightEqCols,
-		leftOrdinals,
 		rightOrdinals,
+		rightFixedVals,
+		rightEqCols,
 		onExpr,
-		fixedVals,
 		res.reqOrdering(join),
 	)
 	if err != nil {
