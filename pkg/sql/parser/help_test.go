@@ -280,6 +280,9 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW JOBS ??`, `SHOW JOBS`},
 		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
 
+		{`SHOW SCHEDULE ??`, `SHOW SCHEDULES`},
+		{`SHOW SCHEDULES ??`, `SHOW SCHEDULES`},
+
 		{`SHOW BACKUP 'foo' ??`, `SHOW BACKUP`},
 
 		{`SHOW CLUSTER SETTING all ??`, `SHOW CLUSTER SETTING`},
