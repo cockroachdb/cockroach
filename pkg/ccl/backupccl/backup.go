@@ -1112,6 +1112,7 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		return err
 	}
+	defer exportStore.Close()
 	var checkpointDesc *BackupDescriptor
 	if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
@@ -1159,6 +1160,7 @@ func (b *backupResumer) OnTerminal(
 		if err != nil {
 			return err
 		}
+		defer exportStore.Close()
 		return exportStore.Delete(ctx, BackupDescriptorCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
