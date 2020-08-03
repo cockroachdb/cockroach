@@ -91,7 +91,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8
 ·                vectorized    true                                                  ·              ·
 filter           ·             ·                                                     (a, b, c)      ·
  │               filter        ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·              ·
- └── index-join  ·             ·                                                     (a, b, c)      ·
+ └── index join  ·             ·                                                     (a, b, c)      ·
       │          table         abc@primary                                           ·              ·
       │          key columns   rowid                                                 ·              ·
       └── scan   ·             ·                                                     (a, b, rowid)  ·

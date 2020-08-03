@@ -195,7 +195,7 @@ EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ·                distribution       full
 ·                vectorized         true
 render           ·                  ·
- └── merge-join  ·                  ·
+ └── merge join  ·                  ·
       │          type               inner
       │          equality           (pid1) = (pid1)
       │          left cols are key  ·
@@ -216,7 +216,7 @@ EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ·                      distribution  full
 ·                      vectorized    true
 render                 ·             ·
- └── interleaved-join  ·             ·
+ └── interleaved join  ·             ·
 ·                      type          inner
 ·                      left table    parent1@primary
 ·                      left spans    FULL SCAN
@@ -239,7 +239,7 @@ render                 ·             ·                    (pid1, pa1, cid1, ca
  │                     render 1      pa1                  ·                             ·
  │                     render 2      cid1                 ·                             ·
  │                     render 3      ca1                  ·                             ·
- └── interleaved-join  ·             ·                    (pid1, pa1, pid1, cid1, ca1)  ·
+ └── interleaved join  ·             ·                    (pid1, pa1, pid1, cid1, ca1)  ·
 ·                      type          inner                ·                             ·
 ·                      left table    parent1@primary      ·                             ·
 ·                      left spans    /3-/5/#              ·                             ·
@@ -263,7 +263,7 @@ render                 ·             ·                    (pid1, cid1, ca1, pa
  │                     render 1      cid1                 ·                             ·
  │                     render 2      ca1                  ·                             ·
  │                     render 3      pa1                  ·                             ·
- └── interleaved-join  ·             ·                    (pid1, cid1, ca1, pid1, pa1)  ·
+ └── interleaved join  ·             ·                    (pid1, cid1, ca1, pid1, pa1)  ·
 ·                      type          inner                ·                             ·
 ·                      left table    child1@primary       ·                             ·
 ·                      left spans    /3/#/55/1-/5/#/55/2  ·                             ·
@@ -284,7 +284,7 @@ EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid
 ----
 ·                 distribution  full                   ·                             ·
 ·                 vectorized    true                   ·                             ·
-interleaved-join  ·             ·                      (pid1, pa1, pid1, cid1, ca1)  +pid1
+interleaved join  ·             ·                      (pid1, pa1, pid1, cid1, ca1)  +pid1
 ·                 type          inner                  ·                             ·
 ·                 left table    parent1@primary        ·                             ·
 ·                 left spans    /29-/31/#              ·                             ·
@@ -315,7 +315,7 @@ render                 ·             ·                (pid1, pa1, cid2, cid3, 
  │                     render 2      cid2             ·                                   ·
  │                     render 3      cid3             ·                                   ·
  │                     render 4      ca2              ·                                   ·
- └── interleaved-join  ·             ·                (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+ └── interleaved join  ·             ·                (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
 ·                      type          inner            ·                                   ·
 ·                      left table    parent1@primary  ·                                   ·
 ·                      left spans    /12-             ·                                   ·
@@ -340,7 +340,7 @@ render                 ·             ·                                        
  │                     render 2      cid2                                                                                   ·                                   ·
  │                     render 3      cid3                                                                                   ·                                   ·
  │                     render 4      ca2                                                                                    ·                                   ·
- └── interleaved-join  ·             ·                                                                                      (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+ └── interleaved join  ·             ·                                                                                      (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
 ·                      type          inner                                                                                  ·                                   ·
 ·                      left table    parent1@primary                                                                        ·                                   ·
 ·                      left spans    /1-/1/# /11-/11/# /21-/21/# /31-/31/#                                                  ·                                   ·
@@ -372,7 +372,7 @@ render                 ·             ·                                        
  │                     render 3      cid3                                                                                                                    ·                                           ·
  │                     render 4      gcid2                                                                                                                   ·                                           ·
  │                     render 5      gca2                                                                                                                    ·                                           ·
- └── interleaved-join  ·             ·                                                                                                                       (pid1, pa1, pid1, cid2, cid3, gcid2, gca2)  ·
+ └── interleaved join  ·             ·                                                                                                                       (pid1, pa1, pid1, cid2, cid3, gcid2, gca2)  ·
 ·                      type          inner                                                                                                                   ·                                           ·
 ·                      left table    parent1@primary                                                                                                         ·                                           ·
 ·                      left spans    FULL SCAN                                                                                                               ·                                           ·
@@ -409,7 +409,7 @@ render                 ·             ·                                        
  │                     render 3      gcid2                                                                                                                   ·                                           ·
  │                     render 4      gca2                                                                                                                    ·                                           ·
  │                     render 5      pa1                                                                                                                     ·                                           ·
- └── interleaved-join  ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)  ·
+ └── interleaved join  ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)  ·
 ·                      type          inner                                                                                                                   ·                                           ·
 ·                      left table    grandchild2@primary                                                                                                     ·                                           ·
 ·                      left spans    FULL SCAN                                                                                                               ·                                           ·
@@ -439,7 +439,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
 ·                      distribution  full
 ·                      vectorized    true
 render                 ·             ·
- └── interleaved-join  ·             ·
+ └── interleaved join  ·             ·
 ·                      type          inner
 ·                      left table    grandchild2@primary
 ·                      left spans    FULL SCAN
@@ -478,7 +478,7 @@ EXPLAIN
 ----
 ·                 distribution  full
 ·                 vectorized    true
-interleaved-join  ·             ·
+interleaved join  ·             ·
 ·                 type          inner
 ·                 left table    child2@primary
 ·                 left spans    FULL SCAN
@@ -576,7 +576,7 @@ render                 ·             ·                     (pid1, pa1, cid1, c
  │                     render 2      cid1                  ·                                   ·
  │                     render 3      cid2                  ·                                   ·
  │                     render 4      ca1                   ·                                   ·
- └── interleaved-join  ·             ·                     (pid1, pa1, pid1, cid1, cid2, ca1)  ·
+ └── interleaved join  ·             ·                     (pid1, pa1, pid1, cid1, cid2, ca1)  ·
 ·                      type          full outer            ·                                   ·
 ·                      left table    outer_p1@primary      ·                                   ·
 ·                      left spans    FULL SCAN             ·                                   ·
@@ -601,7 +601,7 @@ render                 ·             ·                     (pid1, cid1, cid2, 
  │                     render 3      gcid1                 ·                                                       ·
  │                     render 4      gca1                  ·                                                       ·
  │                     render 5      ca1                   ·                                                       ·
- └── interleaved-join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, cid1, cid2, ca1)  ·
+ └── interleaved join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, cid1, cid2, ca1)  ·
 ·                      type          full outer            ·                                                       ·
 ·                      left table    outer_gc1@primary     ·                                                       ·
 ·                      left spans    FULL SCAN             ·                                                       ·
@@ -625,7 +625,7 @@ render                 ·             ·                     (pid1, cid1, cid2, 
  │                     render 2      cid2                  ·                                   ·
  │                     render 3      ca1                   ·                                   ·
  │                     render 4      pa1                   ·                                   ·
- └── interleaved-join  ·             ·                     (pid1, cid1, cid2, ca1, pid1, pa1)  ·
+ └── interleaved join  ·             ·                     (pid1, cid1, cid2, ca1, pid1, pa1)  ·
 ·                      type          left outer            ·                                   ·
 ·                      left table    outer_c1@primary      ·                                   ·
 ·                      left spans    /0/#/60/1-/39/#/60/2  ·                                   ·
@@ -650,7 +650,7 @@ render                 ·             ·                     (pid1, pa1, cid1, c
  │                     render 3      cid2                  ·                                           ·
  │                     render 4      gcid1                 ·                                           ·
  │                     render 5      gca1                  ·                                           ·
- └── interleaved-join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
+ └── interleaved join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
 ·                      type          left outer            ·                                           ·
 ·                      left table    outer_gc1@primary     ·                                           ·
 ·                      left spans    /1/#/60/1-/20/#/60/2  ·                                           ·
@@ -727,14 +727,14 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM (SELECT * FROM parent1 ORDER BY pid1 LIMIT 2) AS parent1 INNER MERGE JOIN child1 USING(pid1)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN (SELECT * FROM child1 ORDER BY pid1 LIMIT 10) AS child1 USING(pid1)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 statement ok
 DROP TABLE grandchild2, grandchild1, child1, child2, parent1, parent2
@@ -764,21 +764,21 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN child1 USING (pid1)
 ] WHERE node_type LIKE '%join'
 ----
-interleaved-join
+interleaved join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN child1 USING (pid1, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN child1 USING (v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 # Parent-grandchild cases.
 # parent1-grandchild1 share interleave prefix (pid1).
@@ -787,21 +787,21 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (pid1)
 ] WHERE node_type LIKE '%join'
 ----
-interleaved-join
+interleaved join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (pid1, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM parent1 INNER MERGE JOIN grandchild1 USING (v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 # Multiple-column interleave prefix.
 # child1-grandchild1 share interleave prefix (pid1, cid1, cid2).
@@ -810,21 +810,21 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, cid2)
 ] WHERE node_type LIKE '%join'
 ----
-interleaved-join
+interleaved join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, cid2, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 # TODO(richardwu): update these once prefix/subset of
 # interleave prefixes are permitted.
@@ -833,70 +833,70 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid2)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid2, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, cid2)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (cid1, cid2, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid2)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid1, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 query T
 SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN grandchild1 USING (pid1, cid2, v)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 # Common ancestor example.
 # TODO(richardwu): update this when common ancestor interleaved joins are possible.
@@ -905,7 +905,7 @@ SELECT node_type FROM [ EXPLAIN (VERBOSE)
   SELECT * FROM child1 INNER MERGE JOIN child2 USING (pid1)
 ] WHERE node_type LIKE '%join'
 ----
-merge-join
+merge join
 
 # Case where the merge join ordering includes a non-interleaved column (this is
 # possible if that column is constrained to a constant value). We shouldn't
@@ -916,7 +916,7 @@ EXPLAIN (VERBOSE) SELECT * FROM parent1 INNER MERGE JOIN child1 ON parent1.pid1 
 ----
 ·               distribution       full                     ·                               ·
 ·               vectorized         true                     ·                               ·
-merge-join      ·                  ·                        (pid1, v, pid1, cid1, cid2, v)  ·
+merge join      ·                  ·                        (pid1, v, pid1, cid1, cid2, v)  ·
  │              type               inner                    ·                               ·
  │              equality           (pid1, v) = (pid1, v)    ·                               ·
  │              left cols are key  ·                        ·                               ·

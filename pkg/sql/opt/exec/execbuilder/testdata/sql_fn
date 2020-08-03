@@ -24,7 +24,7 @@ root                        ·              ·                                  
       │                     id             @S1                                                                                 ·                    ·
       │                     original sql   ALTER TABLE test.public.my_spatial_table ADD COLUMN geom1 GEOMETRY(POINT,4326)      ·                    ·
       │                     exec mode      all rows                                                                            ·                    ·
-      └── buffer node       ·              ·                                                                                   ()                   ·
+      └── buffer            ·              ·                                                                                   ()                   ·
            │                label          buffer 1                                                                            ·                    ·
            └── alter table  ·              ·                                                                                   ()                   ·
 
@@ -182,14 +182,14 @@ root                        ·             ·                                   
  │    │                     id            @S1                                                                 ·                                          ·
  │    │                     original sql  ALTER TABLE my_spatial_table ADD COLUMN geom7 GEOMETRY(POINT,4326)  ·                                          ·
  │    │                     exec mode     all rows                                                            ·                                          ·
- │    └── buffer node       ·             ·                                                                   ()                                         ·
+ │    └── buffer            ·             ·                                                                   ()                                         ·
  │         │                label         buffer 1                                                            ·                                          ·
  │         └── alter table  ·             ·                                                                   ()                                         ·
  └── subquery               ·             ·                                                                   ·                                          ·
       │                     id            @S2                                                                 ·                                          ·
       │                     original sql  ALTER TABLE my_spatial_table ADD COLUMN geom8 GEOMETRY(POINT,4326)  ·                                          ·
       │                     exec mode     all rows                                                            ·                                          ·
-      └── buffer node       ·             ·                                                                   ()                                         ·
+      └── buffer            ·             ·                                                                   ()                                         ·
            │                label         buffer 2                                                            ·                                          ·
            └── alter table  ·             ·                                                                   ()                                         ·
 

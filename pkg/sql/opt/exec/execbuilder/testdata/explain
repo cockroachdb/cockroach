@@ -186,7 +186,7 @@ render                                       ·             ·
  └── sort                                    ·             ·
       │                                      order         +nspname,+relname
       └── render                             ·             ·
-           └── hash-join                     ·             ·
+           └── hash join                     ·             ·
                 │                            type          inner
                 │                            equality      (oid) = (relnamespace)
                 ├── filter                   ·             ·
@@ -209,7 +209,7 @@ render                                            ·                  ·
  └── sort                                         ·                  ·
       │                                           order              +nspname,+relname
       └── render                                  ·                  ·
-           └── hash-join                          ·                  ·
+           └── hash join                          ·                  ·
                 │                                 type               inner
                 │                                 equality           (oid) = (relnamespace)
                 ├── filter                        ·                  ·
@@ -217,7 +217,7 @@ render                                            ·                  ·
                 │    └── render                   ·                  ·
                 │         └── virtual table       ·                  ·
                 │                                 source             pg_namespace@primary
-                └── hash-join                     ·                  ·
+                └── hash join                     ·                  ·
                      │                            type               left outer
                      │                            equality           (oid) = (objoid)
                      │                            left cols are key  ·
@@ -324,7 +324,7 @@ render                                            ·             ·
       └── render                                  ·             ·
            └── sort                               ·             ·
                 │                                 order         +ordinal_position
-                └── hash-join                     ·             ·
+                └── hash join                     ·             ·
                      │                            type          left outer
                      │                            equality      (column_name) = (column_name)
                      ├── filter                   ·             ·
@@ -373,7 +373,7 @@ render                                            ·             ·
  └── sort                                         ·             ·
       │                                           order         +conname
       └── render                                  ·             ·
-           └── hash-join                          ·             ·
+           └── hash join                          ·             ·
                 │                                 type          inner
                 │                                 equality      (oid) = (relnamespace)
                 ├── filter                        ·             ·
@@ -381,7 +381,7 @@ render                                            ·             ·
                 │    └── render                   ·             ·
                 │         └── virtual table       ·             ·
                 │                                 source        pg_namespace@primary
-                └── virtual-table-lookup-join     ·             ·
+                └── virtual table lookup join     ·             ·
                      │                            table         pg_constraint@pg_constraint_conrelid_idx
                      │                            type          inner
                      │                            equality      (oid) = (conrelid)
@@ -409,7 +409,7 @@ render                                                             ·           
                 └── render                                         ·                  ·
                      └── sort                                      ·                  ·
                           │                                        order              +role
-                          └── hash-join                            ·                  ·
+                          └── hash join                            ·                  ·
                                │                                   type               left outer
                                │                                   equality           (username) = (member)
                                │                                   left cols are key  ·
@@ -420,7 +420,7 @@ render                                                             ·           
                                │    └── render                     ·                  ·
                                │         └── window                ·                  ·
                                │              └── render           ·                  ·
-                               │                   └── merge-join  ·                  ·
+                               │                   └── merge join  ·                  ·
                                │                        │          type               left outer
                                │                        │          equality           (username) = (username)
                                │                        │          left cols are key  ·
@@ -470,7 +470,7 @@ EXPLAIN INSERT INTO t VALUES (1, 2)
 ·                      distribution  local
 ·                      vectorized    false
 count                  ·             ·
- └── insert-fast-path  ·             ·
+ └── insert fast path  ·             ·
 ·                      into          t(k, v)
 ·                      strategy      inserter
 ·                      auto commit   ·
@@ -520,7 +520,7 @@ EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ----
 ·            distribution           local
 ·            vectorized             true
-lookup-join  ·                      ·
+lookup join  ·                      ·
  │           table                  t2@primary
  │           type                   inner
  │           equality               (k) = (x)
@@ -606,7 +606,7 @@ EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ·                vectorized    true        ·           ·
 sort             ·             ·           (a, b)      +b
  │               order         +b          ·           ·
- └── index-join  ·             ·           (a, b)      ·
+ └── index join  ·             ·           (a, b)      ·
       │          table         tc@primary  ·           ·
       │          key columns   rowid       ·           ·
       └── scan   ·             ·           (a, rowid)  ·
@@ -620,7 +620,7 @@ tree                   field          description       columns  ordering
 ·                      distribution   local             ·        ·
 ·                      vectorized     false             ·        ·
 count                  ·              ·                 ()       ·
- └── insert-fast-path  ·              ·                 ()       ·
+ └── insert fast path  ·              ·                 ()       ·
 ·                      into           t(k, v)           ·        ·
 ·                      strategy       inserter          ·        ·
 ·                      auto commit    ·                 ·        ·

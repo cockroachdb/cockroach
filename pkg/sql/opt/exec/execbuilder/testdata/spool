@@ -16,13 +16,13 @@ EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x)
 root                                ·             ·
  ├── limit                          ·             ·
  │    │                             count         1
- │    └── scan buffer node          ·             ·
+ │    └── scan buffer               ·             ·
  │                                  label         buffer 1 (a)
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1 (a)
            └── spool                ·             ·
                 └── run             ·             ·
@@ -42,13 +42,13 @@ EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
 root                                ·             ·
  ├── limit                          ·             ·
  │    │                             count         1
- │    └── scan buffer node          ·             ·
+ │    └── scan buffer               ·             ·
  │                                  label         buffer 1 (a)
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  DELETE FROM t RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1 (a)
            └── spool                ·             ·
                 └── run             ·             ·
@@ -69,13 +69,13 @@ EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
 root                                     ·                 ·
  ├── limit                               ·                 ·
  │    │                                  count             1
- │    └── scan buffer node               ·                 ·
+ │    └── scan buffer                    ·                 ·
  │                                       label             buffer 1 (a)
  └── subquery                            ·                 ·
       │                                  id                @S1
       │                                  original sql      UPDATE t SET x = x + 1 RETURNING x
       │                                  exec mode         all rows
-      └── buffer node                    ·                 ·
+      └── buffer                         ·                 ·
            │                             label             buffer 1 (a)
            └── spool                     ·                 ·
                 └── run                  ·                 ·
@@ -98,13 +98,13 @@ EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
 root                                  ·             ·
  ├── limit                            ·             ·
  │    │                               count         1
- │    └── scan buffer node            ·             ·
+ │    └── scan buffer                 ·             ·
  │                                    label         buffer 1 (a)
  └── subquery                         ·             ·
       │                               id            @S1
       │                               original sql  UPSERT INTO t VALUES (2), (3) RETURNING x
       │                               exec mode     all rows
-      └── buffer node                 ·             ·
+      └── buffer                      ·             ·
            │                          label         buffer 1 (a)
            └── spool                  ·             ·
                 └── run               ·             ·
@@ -123,13 +123,13 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x] LIMIT 1
 root                                ·             ·
  ├── limit                          ·             ·
  │    │                             count         1
- │    └── scan buffer node          ·             ·
+ │    └── scan buffer               ·             ·
  │                                  label         buffer 1
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1
            └── spool                ·             ·
                 └── run             ·             ·
@@ -148,13 +148,13 @@ EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
 root                                ·             ·
  ├── limit                          ·             ·
  │    │                             count         1
- │    └── scan buffer node          ·             ·
+ │    └── scan buffer               ·             ·
  │                                  label         buffer 1
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  DELETE FROM t RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1
            └── spool                ·             ·
                 └── run             ·             ·
@@ -173,13 +173,13 @@ EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 root                                     ·                 ·
  ├── limit                               ·                 ·
  │    │                                  count             1
- │    └── scan buffer node               ·                 ·
+ │    └── scan buffer                    ·                 ·
  │                                       label             buffer 1
  └── subquery                            ·                 ·
       │                                  id                @S1
       │                                  original sql      UPDATE t SET x = x + 1 RETURNING x
       │                                  exec mode         all rows
-      └── buffer node                    ·                 ·
+      └── buffer                         ·                 ·
            │                             label             buffer 1
            └── spool                     ·                 ·
                 └── run                  ·                 ·
@@ -201,13 +201,13 @@ EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2), (3) RETURNING x] LIMIT 1
 root                                  ·             ·
  ├── limit                            ·             ·
  │    │                               count         1
- │    └── scan buffer node            ·             ·
+ │    └── scan buffer                 ·             ·
  │                                    label         buffer 1
  └── subquery                         ·             ·
       │                               id            @S1
       │                               original sql  UPSERT INTO t VALUES (2), (3) RETURNING x
       │                               exec mode     all rows
-      └── buffer node                 ·             ·
+      └── buffer                      ·             ·
            │                          label         buffer 1
            └── spool                  ·             ·
                 └── run               ·             ·
@@ -228,13 +228,13 @@ root                                ·             ·
  │    │                             aggregate 0   count_rows()
  │    │                             scalar        ·
  │    └── render                    ·             ·
- │         └── scan buffer node     ·             ·
+ │         └── scan buffer          ·             ·
  │                                  label         buffer 1
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1
            └── spool                ·             ·
                 └── run             ·             ·
@@ -251,9 +251,9 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ·                                   distribution  local
 ·                                   vectorized    false
 root                                ·             ·
- ├── cross-join                     ·             ·
+ ├── cross join                     ·             ·
  │    │                             type          cross
- │    ├── scan buffer node          ·             ·
+ │    ├── scan buffer               ·             ·
  │    │                             label         buffer 1
  │    └── scan                      ·             ·
  │                                  table         t@primary
@@ -262,7 +262,7 @@ root                                ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1
            └── spool                ·             ·
                 └── run             ·             ·
@@ -281,41 +281,41 @@ EXPLAIN WITH a AS (INSERT INTO t SELECT * FROM t2 RETURNING x),
              b AS (INSERT INTO t SELECT x+1 FROM a RETURNING x)
         SELECT * FROM b LIMIT 1
 ----
-·                                                    distribution  local
-·                                                    vectorized    false
-root                                                 ·             ·
- ├── limit                                           ·             ·
- │    │                                              count         1
- │    └── scan buffer node                           ·             ·
- │                                                   label         buffer 2 (b)
- ├── subquery                                        ·             ·
- │    │                                              id            @S1
- │    │                                              original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
- │    │                                              exec mode     all rows
- │    └── buffer node                                ·             ·
- │         │                                         label         buffer 1 (a)
- │         └── spool                                 ·             ·
- │              └── run                              ·             ·
- │                   └── insert                      ·             ·
- │                        │                          into          t(x)
- │                        │                          strategy      inserter
- │                        └── scan                   ·             ·
- │                                                   table         t2@primary
- │                                                   spans         FULL SCAN
- └── subquery                                        ·             ·
-      │                                              id            @S2
-      │                                              original sql  INSERT INTO t SELECT x + 1 FROM a RETURNING x
-      │                                              exec mode     all rows
-      └── buffer node                                ·             ·
-           │                                         label         buffer 2 (b)
-           └── spool                                 ·             ·
-                └── run                              ·             ·
-                     └── insert                      ·             ·
-                          │                          into          t(x)
-                          │                          strategy      inserter
-                          └── render                 ·             ·
-                               └── scan buffer node  ·             ·
-·                                                    label         buffer 1 (a)
+·                                               distribution  local
+·                                               vectorized    false
+root                                            ·             ·
+ ├── limit                                      ·             ·
+ │    │                                         count         1
+ │    └── scan buffer                           ·             ·
+ │                                              label         buffer 2 (b)
+ ├── subquery                                   ·             ·
+ │    │                                         id            @S1
+ │    │                                         original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
+ │    │                                         exec mode     all rows
+ │    └── buffer                                ·             ·
+ │         │                                    label         buffer 1 (a)
+ │         └── spool                            ·             ·
+ │              └── run                         ·             ·
+ │                   └── insert                 ·             ·
+ │                        │                     into          t(x)
+ │                        │                     strategy      inserter
+ │                        └── scan              ·             ·
+ │                                              table         t2@primary
+ │                                              spans         FULL SCAN
+ └── subquery                                   ·             ·
+      │                                         id            @S2
+      │                                         original sql  INSERT INTO t SELECT x + 1 FROM a RETURNING x
+      │                                         exec mode     all rows
+      └── buffer                                ·             ·
+           │                                    label         buffer 2 (b)
+           └── spool                            ·             ·
+                └── run                         ·             ·
+                     └── insert                 ·             ·
+                          │                     into          t(x)
+                          │                     strategy      inserter
+                          └── render            ·             ·
+                               └── scan buffer  ·             ·
+·                                               label         buffer 1 (a)
 
 # Check that no spool is inserted if a top-level render is elided.
 query TTT
@@ -324,13 +324,13 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ·                                   distribution  local
 ·                                   vectorized    false
 root                                ·             ·
- ├── scan buffer node               ·             ·
+ ├── scan buffer                    ·             ·
  │                                  label         buffer 1
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
-      └── buffer node               ·             ·
+      └── buffer                    ·             ·
            │                        label         buffer 1
            └── spool                ·             ·
                 └── run             ·             ·
@@ -346,30 +346,30 @@ root                                ·             ·
 query TTT
 EXPLAIN INSERT INTO t SELECT x+1 FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ----
-·                                     distribution  local
-·                                     vectorized    false
-root                                  ·             ·
- ├── count                            ·             ·
- │    └── insert                      ·             ·
- │         │                          into          t(x)
- │         │                          strategy      inserter
- │         └── render                 ·             ·
- │              └── scan buffer node  ·             ·
- │                                    label         buffer 1
- └── subquery                         ·             ·
-      │                               id            @S1
-      │                               original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
-      │                               exec mode     all rows
-      └── buffer node                 ·             ·
-           │                          label         buffer 1
-           └── spool                  ·             ·
-                └── run               ·             ·
-                     └── insert       ·             ·
-                          │           into          t(x)
-                          │           strategy      inserter
-                          └── scan    ·             ·
-·                                     table         t2@primary
-·                                     spans         FULL SCAN
+·                                   distribution  local
+·                                   vectorized    false
+root                                ·             ·
+ ├── count                          ·             ·
+ │    └── insert                    ·             ·
+ │         │                        into          t(x)
+ │         │                        strategy      inserter
+ │         └── render               ·             ·
+ │              └── scan buffer     ·             ·
+ │                                  label         buffer 1
+ └── subquery                       ·             ·
+      │                             id            @S1
+      │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
+      │                             exec mode     all rows
+      └── buffer                    ·             ·
+           │                        label         buffer 1
+           └── spool                ·             ·
+                └── run             ·             ·
+                     └── insert     ·             ·
+                          │         into          t(x)
+                          │         strategy      inserter
+                          └── scan  ·             ·
+·                                   table         t2@primary
+·                                   spans         FULL SCAN
 
 # Check that simple computations using RETURNING get their spool pulled up.
 query TTT
@@ -382,13 +382,13 @@ root                                     ·             ·
  │    │                                  count         10
  │    └── filter                         ·             ·
  │         │                             filter        "?column?" < 3
- │         └── scan buffer node          ·             ·
+ │         └── scan buffer               ·             ·
  │                                       label         buffer 1
  └── subquery                            ·             ·
       │                                  id            @S1
       │                                  original sql  INSERT INTO t SELECT * FROM t2 RETURNING x + 10
       │                                  exec mode     all rows
-      └── buffer node                    ·             ·
+      └── buffer                         ·             ·
            │                             label         buffer 1
            └── spool                     ·             ·
                 └── render               ·             ·
@@ -409,13 +409,13 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10] WHERE @1 <
 root                                     ·             ·
  ├── filter                              ·             ·
  │    │                                  filter        "?column?" < 3
- │    └── scan buffer node               ·             ·
+ │    └── scan buffer                    ·             ·
  │                                       label         buffer 1
  └── subquery                            ·             ·
       │                                  id            @S1
       │                                  original sql  INSERT INTO t SELECT * FROM t2 RETURNING x + 10
       │                                  exec mode     all rows
-      └── buffer node                    ·             ·
+      └── buffer                         ·             ·
            │                             label         buffer 1
            └── spool                     ·             ·
                 └── render               ·             ·
