@@ -100,7 +100,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	sqlDB.Exec(t, "CREATE DATABASE data2")
 
 	if err := verifyBackupRestoreStatementResult(
-		t, sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", LocalFoo,
+		t, sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS (into_db=data2)", LocalFoo,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 	// Backup and restore the tables into a new database.
 	sqlDB.Exec(t, `CREATE DATABASE system_new`)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP %s TO '%s' AS OF SYSTEM TIME %s`, tableSpec, LocalFoo, backupAsOf))
-	sqlDB.Exec(t, fmt.Sprintf(`RESTORE %s FROM '%s' WITH into_db='system_new'`, tableSpec, LocalFoo))
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE %s FROM '%s' WITH into_db=system_new`, tableSpec, LocalFoo))
 
 	// Verify the fingerprints match.
 	for _, table := range tables {
@@ -638,11 +638,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
+	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS (into_db=restoredb)`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
+			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db=restoredb`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -746,7 +746,7 @@ func checkInProgressBackupRestore(
 	}
 
 	do(`BACKUP DATABASE data TO $1`, checkBackup)
-	do(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restoredb')`, checkRestore)
+	do(`RESTORE data.* FROM $1 WITH OPTIONS (into_db=restoredb)`, checkRestore)
 }
 
 func TestBackupRestoreSystemJobsProgress(t *testing.T) {
@@ -1087,7 +1087,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 		for i, query := range []string{
 			`BACKUP TABLE orig_fkdb.fk TO $1`,
-			`RESTORE TABLE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
+			`RESTORE TABLE orig_fkdb.fk FROM $1 WITH OPTIONS (skip_missing_foreign_keys, into_db=restore_fkdb)`,
 		} {
 			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, []string{"PAUSE"}, query, foreignDir)
 			if !testutils.IsError(err, "job paused") {
@@ -1110,7 +1110,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 		for i, query := range []string{
 			`BACKUP DATABASE data TO $1`,
-			`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
+			`RESTORE TABLE data.* FROM $1 WITH OPTIONS (into_db=pause)`,
 		} {
 			ops := []string{"PAUSE", "RESUME", "PAUSE"}
 			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, ops, query, pauseDir)
@@ -1181,7 +1181,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 		for i, query := range []string{
 			`BACKUP DATABASE data TO $1`,
-			`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
+			`RESTORE TABLE data.* FROM $1 WITH OPTIONS (into_db=cancel)`,
 		} {
 			if _, err := jobutils.RunJob(
 				t, sqlDB, &allowResponse, []string{"cancel"}, query, cancelDir,
@@ -1240,7 +1240,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 	}
 	sqlDB.ExpectErr(
 		t, "sst: no such file",
-		`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, LocalFoo,
+		`RESTORE data.* FROM $1 WITH OPTIONS (into_db=restore)`, LocalFoo,
 	)
 	// Verify the failed RESTORE added some DROP tables.
 	sqlDB.CheckQueryResults(t,
@@ -1435,7 +1435,7 @@ INSERT INTO d.t3 VALUES ('hi');
 			// Create a new database to restore the table into.
 			sqlDB.Exec(t, `CREATE DATABASE d2`)
 			// Restore t into d2.
-			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d2`)
 			// Ensure that greeting type has been restored into d2 as well.
 			sqlDB.Exec(t, `CREATE TABLE d2.t2 (x d2.greeting, y d2._greeting)`)
 			// Check that the table data is as expected.
@@ -1450,7 +1450,7 @@ INSERT INTO d.t3 VALUES ('hi');
 			// Create a new database to restore the table into.
 			sqlDB.Exec(t, `CREATE DATABASE d3`)
 			// Restore t2 into d3.
-			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = 'd3'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = d3`)
 			// Ensure that the base type and array type have been restored into d3.
 			sqlDB.Exec(t, `CREATE TABLE d3.t (x d3.greeting, y d3._greeting)`)
 			// Check that the table data is as expected.
@@ -1464,7 +1464,7 @@ INSERT INTO d.t3 VALUES ('hi');
 			// Create a new database to restore all of the tables into.
 			sqlDB.Exec(t, `CREATE DATABASE d4`)
 			// Restore all of the tables.
-			sqlDB.Exec(t, `RESTORE TABLE d.* FROM 'nodelocal://0/test3/' WITH into_db = 'd4'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.* FROM 'nodelocal://0/test3/' WITH into_db = d4`)
 			// Check that all of the tables have expected data.
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t2 ORDER BY x`, [][]string{{"{hello}"}})
@@ -1519,12 +1519,12 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `CREATE TYPE d2.greeting AS ENUM ('hello', 'howdy', 'hi')`)
 
 			// Now restore t into this database. It should remap d.greeting to d2.greeting.
-			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d2`)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d2.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
 			sqlDB.Exec(t, `INSERT INTO d2.t VALUES ('hi'::d2.greeting)`)
 
 			// Restore t2 as well.
-			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = 'd2'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = d2`)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d2.t2 ORDER BY x`, [][]string{{"{hello}"}})
 			sqlDB.Exec(t, `INSERT INTO d2.t2 VALUES (ARRAY['hi'::d2.greeting])`)
 
@@ -1540,12 +1540,12 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 
 			// Now restore t into this database. We'll attempt to remap d.greeting to
 			// d3.greeting and fail because they aren't compatible.
-			sqlDB.ExpectErr(t, `could not find enum value "hi"`, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd3'`)
+			sqlDB.ExpectErr(t, `could not find enum value "hi"`, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d3`)
 
 			// Test the same case, but with differing internal representations.
 			sqlDB.Exec(t, `CREATE DATABASE d4`)
 			sqlDB.Exec(t, `CREATE TYPE d4.greeting AS ENUM ('hello', 'howdy', 'hi', 'greetings')`)
-			sqlDB.ExpectErr(t, `has differing physical representation`, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd4'`)
+			sqlDB.ExpectErr(t, `has differing physical representation`, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d4`)
 		}
 
 		{
@@ -1566,7 +1566,7 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `CREATE TYPE d6.typ1 AS ENUM ('v1', 'v2')`)
 			// Restoring tb1 into d6 will remap d5.typ1 to d6.typ1 and d5.___typ1
 			// to d6._typ1.
-			sqlDB.Exec(t, `RESTORE TABLE d5.tb1 FROM 'nodelocal://0/test3/' WITH into_db = 'd6'`)
+			sqlDB.Exec(t, `RESTORE TABLE d5.tb1 FROM 'nodelocal://0/test3/' WITH into_db = d6`)
 			sqlDB.Exec(t, `INSERT INTO d6.tb1 VALUES (ARRAY['v1']::d6._typ1)`)
 		}
 
@@ -1580,7 +1580,7 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			sqlDB.Exec(t, `ALTER TYPE d7.greeting ADD VALUE 'greetings' BEFORE 'howdy'`)
 
 			// We should be able to restore d.greeting using d7.greeting.
-			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd7'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d7`)
 			sqlDB.Exec(t, `INSERT INTO d7.t VALUES ('greetings')`)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d7.t ORDER BY x`, [][]string{{"hello"}, {"greetings"}, {"howdy"}})
 			// d7.t should have a back reference from d7.greeting.
@@ -1608,7 +1608,7 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 			// We should be able to restore this backup, and see that the type's
 			// name change is present.
 			sqlDB.Exec(t, `CREATE DATABASE d2`)
-			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = d2`)
 			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d2.newname`, [][]string{{"hello"}})
 		}
 
@@ -1874,7 +1874,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 			`RESTORE store.orders FROM $1`, LocalFoo,
 		)
 
-		db.Exec(t, `RESTORE store.orders FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, LocalFoo)
+		db.Exec(t, `RESTORE store.orders FROM $1 WITH OPTIONS (skip_missing_foreign_keys)`, LocalFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation is gone.
@@ -1887,7 +1887,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE store.receipts FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, LocalFoo)
+		db.Exec(t, `RESTORE store.receipts FROM $1 WITH OPTIONS (skip_missing_foreign_keys)`, LocalFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders and customer is gone.
@@ -1905,7 +1905,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, LocalFoo)
+		db.Exec(t, `RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS (skip_missing_foreign_keys)`, LocalFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders is gone.
@@ -2003,7 +2003,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.CheckQueryResults(t, `SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
 
 		db.Exec(t, `CREATE DATABASE otherstore`)
-		db.Exec(t, `RESTORE store.* FROM $1 WITH into_db = 'otherstore'`, LocalFoo)
+		db.Exec(t, `RESTORE store.* FROM $1 WITH into_db = otherstore`, LocalFoo)
 		// we want to observe just the view-related errors, not fk errors below.
 		db.Exec(t, `ALTER TABLE otherstore.orders DROP CONSTRAINT fk_customerid_ref_customers`)
 		db.Exec(t, `DROP TABLE otherstore.receipts`)
@@ -2028,18 +2028,18 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// Test cases where, after filtering out views that can't be restored, there are no other tables to restore
 
-		db.Exec(t, `RESTORE DATABASE storestats from $1 WITH OPTIONS ('skip_missing_views')`, LocalFoo)
-		db.Exec(t, `RESTORE storestats.ordercounts from $1 WITH OPTIONS ('skip_missing_views')`, LocalFoo)
+		db.Exec(t, `RESTORE DATABASE storestats from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
+		db.Exec(t, `RESTORE storestats.ordercounts from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
 
-		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS ('skip_missing_views')`, LocalFoo)
+		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
 		db.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
 
 		// Test that views with valid dependencies are restored
 
-		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS ('skip_missing_views')`, LocalFoo)
+		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS (skip_missing_views)`, LocalFoo)
 		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
 		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
 		// TODO(lucy, jordan): DROP DATABASE CASCADE doesn't work in the mixed 19.1/
@@ -2054,7 +2054,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// db.Exec(t, createStore)
 		// storestats.ordercounts depends also on store.orders, so it can't be restored
 		db.Exec(t, `CREATE DATABASE store2`)
-		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views', 'into_db'='store2')`, LocalFoo)
+		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS (skip_missing_views, into_db=store2)`, LocalFoo)
 		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store2.customers`, origCustomers)
 		db.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
 	})
@@ -2383,7 +2383,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 				if _, err := sqlDB.DB.ExecContext(gCtx, fmt.Sprintf(`CREATE DATABASE %s`, dbName)); err != nil {
 					return err
 				}
-				restoreQ := fmt.Sprintf(`RESTORE data.%s FROM $1 WITH OPTIONS ('into_db'='%s')`, table, dbName)
+				restoreQ := fmt.Sprintf(`RESTORE data.%s FROM $1 WITH OPTIONS (into_db=%s)`, table, dbName)
 				if _, err := sqlDB.DB.ExecContext(gCtx, restoreQ, backupDir); err != nil {
 					return err
 				}
@@ -2579,7 +2579,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// time-travel.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='%s'`,
+					`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db=%s`,
 					timestamp, name,
 				),
 				fullBackup, incBackup, inc2Backup,
@@ -2588,7 +2588,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// backups sometimes behave differently.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`RESTORE data.bank FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
+					`RESTORE data.bank FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db=%stbl`,
 					timestamp, name,
 				),
 				fullTableBackup, incTableBackup,
@@ -2629,7 +2629,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// fullBackup covers up to ts[2], inc to ts[5], inc2 to > ts[8].
 		sqlDB.ExpectErr(
 			t, "invalid RESTORE timestamp",
-			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[3]),
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=err`, ts[3]),
 			fullBackup,
 		)
 
@@ -2639,14 +2639,14 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				// latestBackup is _at_ ts2 so that is the time, and the only time, at
 				// which restoring it is allowed.
 				sqlDB.Exec(
-					t, fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					t, fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=err`, i),
 					latestBackup,
 				)
 				sqlDB.Exec(t, `DROP DATABASE err; CREATE DATABASE err`)
 			} else {
 				sqlDB.ExpectErr(
 					t, "invalid RESTORE timestamp",
-					fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=err`, i),
 					latestBackup,
 				)
 			}
@@ -2657,14 +2657,14 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				// there's a third time -- that of inc2Latest, that is valid as well but
 				// it isn't fixed when created above so we know it / test for it.
 				sqlDB.Exec(
-					t, fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					t, fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db=err`, i),
 					latestBackup, incLatestBackup, inc2LatestBackup,
 				)
 				sqlDB.Exec(t, `DROP DATABASE err; CREATE DATABASE err`)
 			} else {
 				sqlDB.ExpectErr(
 					t, "invalid RESTORE timestamp",
-					fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db=err`, i),
 					latestBackup, incLatestBackup, inc2LatestBackup,
 				)
 			}
@@ -2672,7 +2672,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 		sqlDB.ExpectErr(
 			t, "invalid RESTORE timestamp",
-			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, after),
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=err`, after),
 			latestBackup,
 		)
 	})
@@ -2690,7 +2690,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		sqlDB.Exec(t, "DROP TABLE drop_table_db.a")
 		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
 		restoreQuery := fmt.Sprintf(
-			"RESTORE drop_table_db.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='drop_table_db_restore'", tsBefore)
+			"RESTORE drop_table_db.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=drop_table_db_restore", tsBefore)
 		sqlDB.Exec(t, restoreQuery, backupPath)
 
 		restoredTableQuery := "SELECT * FROM drop_table_db_restore.a"
@@ -2711,7 +2711,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		sqlDB.Exec(t, "DROP TABLE create_and_drop.a")
 		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop TO $1 WITH revision_history`, backupPath)
 		restoreQuery := fmt.Sprintf(
-			"RESTORE create_and_drop.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore'", tsBefore)
+			"RESTORE create_and_drop.* FROM $1 AS OF SYSTEM TIME %s WITH into_db=create_and_drop_restore", tsBefore)
 		sqlDB.Exec(t, restoreQuery, backupPath)
 
 		restoredTableQuery := "SELECT * FROM create_and_drop_restore.a"
@@ -3154,7 +3154,7 @@ func TestRestoreInto(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 
-	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = 'data 2'`, LocalFoo)
+	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = "data 2"`, LocalFoo)
 
 	sqlDB.ExpectErr(t, "a database named \"data 2\" needs to exist", restoreStmt)
 
@@ -3205,7 +3205,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 		// a valid `dir` though, since descriptors are always loaded first.
 		sqlDB.ExpectErr(
 			t, "user root does not have CREATE privilege",
-			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, LocalFoo,
+			`RESTORE data.bank FROM $1 WITH OPTIONS (into_db=system)`, LocalFoo,
 		)
 	})
 
@@ -3220,7 +3220,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 				t.Fatal(err)
 			}
 			sqlDB.Exec(t, `CREATE DATABASE data2`)
-			if _, err := testuser.Exec(`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='data2')`, testLocalFoo); err != nil {
+			if _, err := testuser.Exec(`RESTORE data.bank FROM $1 WITH OPTIONS (into_db=data2)`, testLocalFoo); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3282,7 +3282,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 
 		sqlDB.ExpectErr(
 			t, "cannot RESTORE <database>.* from a backup of individual tables",
-			`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foo,
+			`RESTORE d4.* FROM $1 WITH into_db = d5`, d4foo,
 		)
 
 		sqlDB.ExpectErr(
@@ -3292,7 +3292,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 
 		sqlDB.ExpectErr(
 			t, "cannot RESTORE <database>.* from a backup of individual tables",
-			`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foobar,
+			`RESTORE d4.* FROM $1 WITH into_db = d5`, d4foobar,
 		)
 
 		sqlDB.ExpectErr(
@@ -3344,7 +3344,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 
 		sqlDB.ExpectErr(
 			t, `cannot use "into_db"`,
-			`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, LocalFoo,
+			`RESTORE DATABASE data FROM $1 WITH into_db = other`, LocalFoo,
 		)
 	})
 }
@@ -3468,7 +3468,7 @@ func TestBackupRestoreDropDB(t *testing.T) {
 
 	sqlDB.Exec(t, "BACKUP DATABASE data TO $1", LocalFoo)
 	sqlDB.Exec(t, "CREATE DATABASE data2")
-	sqlDB.Exec(t, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", LocalFoo)
+	sqlDB.Exec(t, "RESTORE data.* FROM $1 WITH OPTIONS (into_db=data2)", LocalFoo)
 
 	expected := sqlDB.QueryStr(t, `SELECT * FROM data.bank`)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM data2.bank`, expected)
@@ -3490,7 +3490,7 @@ func TestBackupRestoreDropTable(t *testing.T) {
 
 	sqlDB.Exec(t, "BACKUP DATABASE data TO $1", LocalFoo)
 	sqlDB.Exec(t, "CREATE DATABASE data2")
-	sqlDB.Exec(t, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", LocalFoo)
+	sqlDB.Exec(t, "RESTORE data.* FROM $1 WITH OPTIONS (into_db=data2)", LocalFoo)
 
 	expected := sqlDB.QueryStr(t, `SELECT * FROM data.bank`)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM data2.bank`, expected)
@@ -3719,7 +3719,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 			`RESTORE TABLE t FROM $1`, LocalFoo,
 		)
 
-		newDB.Exec(t, `RESTORE TABLE t FROM $1 WITH OPTIONS ('skip_missing_sequences')`, LocalFoo)
+		newDB.Exec(t, `RESTORE TABLE t FROM $1 WITH OPTIONS (skip_missing_sequences)`, LocalFoo)
 
 		// Verify that the table was restored correctly.
 		newDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
@@ -3870,7 +3870,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		kvDB := tc.Server(0).DB()
 
 		newDB.Exec(t, `CREATE DATABASE restore_db`)
-		newDB.Exec(t, `RESTORE d.* FROM $1 WITH into_db='restore_db'`, backupLoc)
+		newDB.Exec(t, `RESTORE d.* FROM $1 WITH into_db=restore_db`, backupLoc)
 
 		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "restore_db", "t")
 		seqDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "restore_db", "seq")
@@ -4028,7 +4028,8 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, LocalFoo)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 
-	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`, LocalFoo, "data 2")
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db="data 2"`,
+		LocalFoo)
 	// The "updating privileges" clause in the SELECT statement is for excluding jobs
 	// run by an unrelated startup migration.
 	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
@@ -4037,7 +4038,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history"},
-			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+			{`RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db="data 2", skip_missing_foreign_keys`},
 		},
 	)
 }
@@ -4057,8 +4058,8 @@ func TestBackupCreatedStats(t *testing.T) {
 	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
 	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, LocalFoo)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
-	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
-		LocalFoo, "data 2")
+	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, 
+into_db="data 2"`, LocalFoo)
 
 	sqlDB.CheckQueryResults(t,
 		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -4109,8 +4110,8 @@ func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, LocalFoo)
 	sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE name = 'foo_stats' OR name = 'bank_stats'`)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
-	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
-		LocalFoo, "data 2")
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = "data 2"`,
+		LocalFoo)
 
 	// Ensure that the bank_stats have been restored, but foo_stats have not.
 	sqlDB.CheckQueryResults(t,
@@ -4442,7 +4443,7 @@ func TestClientDisconnect(t *testing.T) {
 		},
 		{
 			jobType:    "RESTORE",
-			jobCommand: fmt.Sprintf("RESTORE data.* FROM '%s' WITH into_db='%s'", LocalFoo, restoreDB),
+			jobCommand: fmt.Sprintf("RESTORE data.* FROM '%s' WITH into_db=%s", LocalFoo, restoreDB),
 		},
 	}
 

@@ -2183,8 +2183,14 @@ $function$`,
 			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
 		{`BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)`,
 			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret', detached`},
-		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
-			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
+
+		{`RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db=baz, 
+skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views)`,
+			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db=baz, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
+		{`RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, 
+SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS`,
+			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db=baz, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
+
 		{`CREATE CHANGEFEED FOR foo INTO 'sink'`, `CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 
 		{`GRANT SELECT ON foo TO root`,

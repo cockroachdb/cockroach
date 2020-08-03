@@ -53,15 +53,6 @@ const (
 	restoreTempSystemDB = "crdb_temp_system"
 )
 
-var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
-	restoreOptIntoDB:                    sql.KVStringOptRequireValue,
-	restoreOptSkipMissingFKs:            sql.KVStringOptRequireNoValue,
-	restoreOptSkipMissingSequences:      sql.KVStringOptRequireNoValue,
-	restoreOptSkipMissingSequenceOwners: sql.KVStringOptRequireNoValue,
-	restoreOptSkipMissingViews:          sql.KVStringOptRequireNoValue,
-	backupOptEncPassphrase:              sql.KVStringOptRequireValue,
-}
-
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
 // non-empty db qualifiers with `newDB`.
 //
@@ -110,10 +101,10 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
 // missing dependencies, and returns the resulting set of tables. If the
-// restoreOptSkipMissingViews option is not set, an error is returned if any
+// skipMissingViews option is not set, an error is returned if any
 // unrestorable views are found.
 func maybeFilterMissingViews(
-	tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor, opts map[string]string,
+	tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor, skipMissingViews bool,
 ) (map[sqlbase.ID]*sqlbase.TableDescriptor, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
@@ -135,7 +126,7 @@ func maybeFilterMissingViews(
 		if hasValidViewDependencies(table) {
 			filteredTablesByID[id] = table
 		} else {
-			if _, ok := opts[restoreOptSkipMissingViews]; !ok {
+			if !skipMissingViews {
 				return nil, errors.Errorf(
 					"cannot restore view %q without restoring referenced table (or %q option)",
 					table.Name, restoreOptSkipMissingViews,
@@ -159,10 +150,15 @@ func allocateDescriptorRewrites(
 	typesByID map[sqlbase.ID]*sqlbase.TypeDescriptor,
 	restoreDBs []*sqlbase.ImmutableDatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
-	opts map[string]string,
+	opts tree.RestoreOptions,
 ) (DescRewriteMap, error) {
 	descriptorRewrites := make(DescRewriteMap)
-	overrideDB, renaming := opts[restoreOptIntoDB]
+	var overrideDB string
+	var renaming bool
+	if opts.IntoDB != "" {
+		overrideDB = string(opts.IntoDB)
+		renaming = true
+	}
 
 	restoreDBNames := make(map[string]*sqlbase.ImmutableDatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
@@ -187,7 +183,7 @@ func allocateDescriptorRewrites(
 		for i := range table.OutboundFKs {
 			fk := &table.OutboundFKs[i]
 			if _, ok := tablesByID[fk.ReferencedTableID]; !ok {
-				if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
+				if !opts.SkipMissingFKs {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced table %d (or %q option)",
 						table.Name, fk.ReferencedTableID, restoreOptSkipMissingFKs,
@@ -212,7 +208,7 @@ func allocateDescriptorRewrites(
 			}
 			for _, seqID := range col.UsesSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
-					if _, ok := opts[restoreOptSkipMissingSequences]; !ok {
+					if !opts.SkipMissingSequences {
 						return nil, errors.Errorf(
 							"cannot restore table %q without referenced sequence %d (or %q option)",
 							table.Name, seqID, restoreOptSkipMissingSequences,
@@ -222,7 +218,7 @@ func allocateDescriptorRewrites(
 			}
 			for _, seqID := range col.OwnsSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
-					if _, ok := opts[restoreOptSkipMissingSequenceOwners]; !ok {
+					if !opts.SkipMissingSequenceOwners {
 						return nil, errors.Errorf(
 							"cannot restore table %q without referenced sequence %d (or %q option)",
 							table.Name, seqID, restoreOptSkipMissingSequenceOwners)
@@ -234,7 +230,7 @@ func allocateDescriptorRewrites(
 		// Handle sequence ownership dependencies.
 		if table.IsSequence() && table.SequenceOpts.HasOwner() {
 			if _, ok := tablesByID[table.SequenceOpts.SequenceOwner.OwnerTableID]; !ok {
-				if _, ok := opts[restoreOptSkipMissingSequenceOwners]; !ok {
+				if !opts.SkipMissingSequenceOwners {
 					return nil, errors.Errorf(
 						"cannot restore sequence %q without referenced owner table %d (or %q option)",
 						table.Name,
@@ -873,11 +869,11 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 }
 
 func restoreJobDescription(
-	p sql.PlanHookState, restore *tree.Restore, from [][]string, opts map[string]string,
+	p sql.PlanHookState, restore *tree.Restore, from [][]string, opts tree.RestoreOptions,
 ) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
-		Options: optsToKVOptions(opts),
+		Options: opts,
 		Targets: restore.Targets,
 		From:    make([]tree.PartitionedBackup, len(restore.From)),
 	}
@@ -925,11 +921,6 @@ func restorePlanHook(
 		fromFns[i] = fromFn
 	}
 
-	optsFn, err := p.TypeAsStringOpts(ctx, restoreStmt.Options, restoreOptionExpectValues)
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -944,6 +935,7 @@ func restorePlanHook(
 		}
 
 		from := make([][]string, len(fromFns))
+		var err error
 		for i := range fromFns {
 			from[i], err = fromFns[i]()
 			if err != nil {
@@ -959,11 +951,7 @@ func restorePlanHook(
 			}
 		}
 
-		opts, err := optsFn()
-		if err != nil {
-			return err
-		}
-		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, endTime, resultsCh)
 	}
 	return fn, RestoreHeader, nil, false, nil
 }
@@ -974,7 +962,6 @@ func doRestorePlan(
 	p sql.PlanHookState,
 	from [][]string,
 	endTime hlc.Timestamp,
-	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
 	if len(from) < 1 || len(from[0]) < 1 {
@@ -991,7 +978,17 @@ func doRestorePlan(
 	}
 
 	var encryption *jobspb.BackupEncryptionOptions
-	if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+	if restoreStmt.Options.EncryptionPassphrase != nil {
+		fn, err := p.TypeAsString(ctx, restoreStmt.Options.EncryptionPassphrase, "RESTORE")
+		if err != nil {
+			return nil
+		}
+
+		passphrase, err := fn()
+		if err != nil {
+			return err
+		}
+
 		opts, err := readEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
@@ -1028,8 +1025,8 @@ func doRestorePlan(
 		)
 	}
 
-	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, p.ExecCfg().Codec, skipMissingFKs); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, p.ExecCfg().Codec,
+		restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
 
@@ -1072,7 +1069,8 @@ func doRestorePlan(
 			typesByID[typDesc.ID] = typDesc
 		}
 	}
-	filteredTablesByID, err := maybeFilterMissingViews(tablesByID, opts)
+	filteredTablesByID, err := maybeFilterMissingViews(tablesByID,
+		restoreStmt.Options.SkipMissingViews)
 	if err != nil {
 		return err
 	}
@@ -1084,12 +1082,12 @@ func doRestorePlan(
 		typesByID,
 		restoreDBs,
 		restoreStmt.DescriptorCoverage,
-		opts,
+		restoreStmt.Options,
 	)
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, opts)
+	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options)
 	if err != nil {
 		return err
 	}
@@ -1105,7 +1103,8 @@ func doRestorePlan(
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := RewriteTableDescs(tables, descriptorRewrites, opts[restoreOptIntoDB]); err != nil {
+	if err := RewriteTableDescs(tables, descriptorRewrites,
+		string(restoreStmt.Options.IntoDB)); err != nil {
 		return err
 	}
 	if err := rewriteTypeDescs(types, descriptorRewrites); err != nil {
@@ -1135,7 +1134,7 @@ func doRestorePlan(
 			URIs:               defaultURIs,
 			BackupLocalityInfo: localityInfo,
 			TableDescs:         tables,
-			OverrideDB:         opts[restoreOptIntoDB],
+			OverrideDB:         string(restoreStmt.Options.IntoDB),
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
 			Tenants:            tenants,

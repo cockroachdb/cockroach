@@ -347,7 +347,7 @@ func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 	sqlDB.Exec(t, `CREATE DATABASE data2`)
-	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH into_db='data2'`, LocalFoo)
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH into_db=data2`, LocalFoo)
 
 	checkResults := "SELECT * FROM data.bank"
 	sqlDB.CheckQueryResults(t, checkResults, sqlDB.QueryStr(t, checkResults))
@@ -386,7 +386,7 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 
 	t.Run("system tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
-		sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db='temp_sys'`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db=temp_sys`, LocalFoo)
 		sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 	})
 }
