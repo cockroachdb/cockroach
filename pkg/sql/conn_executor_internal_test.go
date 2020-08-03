@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // Test portal implicit destruction. Unless destroying a portal is explicitly
@@ -315,4 +318,61 @@ func startConnExecutor(
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
 	return buf, syncResults, finished, stopper, nil
+}
+
+// Test that a client session can close without deadlocking when the closing
+// needs to cleanup temp tables and the txn that has created these tables is
+// still open. The act of cleaning up used to block for the open transaction,
+// thus deadlocking.
+func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	srv := s.SQLServer().(*Server)
+	stmtBuf := NewStmtBuf()
+	flushed := make(chan []resWithPos)
+	clientComm := &internalClientComm{
+		sync: func(res []resWithPos) {
+			flushed <- res
+		},
+	}
+	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUser}, stmtBuf, clientComm, MemoryMetrics{})
+	require.NoError(t, err)
+
+	stmts, err := parser.Parse(`
+SET experimental_enable_temp_tables = true;
+CREATE DATABASE test;
+USE test;
+BEGIN;
+CREATE TEMPORARY TABLE foo();
+`)
+	require.NoError(t, err)
+	for _, stmt := range stmts {
+		require.NoError(t, stmtBuf.Push(ctx, ExecStmt{Statement: stmt}))
+	}
+	require.NoError(t, stmtBuf.Push(ctx, Sync{}))
+
+	done := make(chan error)
+	go func() {
+		done <- srv.ServeConn(ctx, connHandler, mon.BoundAccount{}, nil /* cancel */)
+	}()
+	results := <-flushed
+	require.Len(t, results, 6) // We expect results for 5 statements + sync.
+	for _, res := range results {
+		require.NoError(t, res.err)
+	}
+
+	// Close the client connection and verify that ServeConn() returns.
+	stmtBuf.Close()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("session close timed out; connExecutor deadlocked?")
+	case err = <-done:
+		require.NoError(t, err)
+	}
 }
