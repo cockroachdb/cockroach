@@ -367,7 +367,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	annot := getCellInfoAnnotation(c.EvalCtx.Annotations)
 	annot.Reset(sourceID, rowIndex)
 	if annot.randSource == nil || rowIndex%reseedRowMultiple == 0 {
-		annot.reseedForImport(sourceID, rowIndex)
+		annot.reseedForImport()
 	}
 	for i := range c.cols {
 		col := &c.cols[i]

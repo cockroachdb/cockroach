@@ -71,9 +71,10 @@ func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
 	c.uniqueRowIDInstance = 0
 }
 
-func (c *cellInfoAnnotation) reseedForImport(sourceID int32, rowIndex int64) {
-	c.randSeed = (int64(sourceID) << rowIDBits) + rowIndex
-	c.uuidSeed = (int64(sourceID) << rowIDBits) + rowIndex
+func (c *cellInfoAnnotation) reseedForImport() {
+	adjustedrowID := (c.rowID / reseedRowMultiple) * reseedRowMultiple
+	c.randSeed = (int64(c.sourceID) << rowIDBits) + adjustedrowID
+	c.uuidSeed = (int64(c.sourceID) << rowIDBits) + adjustedrowID
 	c.randSource = nil
 	c.uuidSource = nil
 }
