@@ -337,12 +337,12 @@ CREATE TABLE test.tt (x test.t);
 		t.Fatal(err)
 	}
 	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
-	typLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	typLookup := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 		typDesc, err := sqlbase.GetTypeDescFromID(ctx, kvDB, keys.SystemSQLCodec, id)
 		if err != nil {
-			return nil, nil, err
+			return tree.TypeName{}, nil, err
 		}
-		return &tree.TypeName{}, typDesc, nil
+		return tree.TypeName{}, typDesc, nil
 	}
 	if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc, sqlbase.TypeLookupFunc(typLookup)); err != nil {
 		t.Fatal(err)
