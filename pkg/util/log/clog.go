@@ -368,54 +368,6 @@ func DumpStacks(ctx context.Context) {
 	Infof(ctx, "stack traces:\n%s", allStacks)
 }
 
-// printPanicToFile is used by ReportPanic() to copy the panic details to the log file. This is
-// used when we understand that the Go runtime will only automatically
-// print the panic details to the external stderr stream (e.g.
-// when we're not redirecting that to a file).
-//
-// This function is a lightweight version of outputLogEntry() which
-// does not exit the process in case of error.
-func (l *loggerT) printPanicToFile(ctx context.Context, depth int, r interface{}) {
-	if !l.logDir.IsSet() {
-		// There's no log file. Can't do anything.
-		return
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Mark logging as active, so that further configuration changes
-	// are disabled. We need to do this ourselves here because we are
-	// not using outputLogEntry() which does it for us and
-	// this function also creates files in the logging directory.
-	// See IsActive() and its callers for details.
-	setActive()
-
-	if err := l.ensureFile(); err != nil {
-		// We're already exiting; no need to pile an error upon an
-		// error. Simply report the logging error and continue.
-		l.reportErrorEverywhereLocked(ctx, err)
-		return
-	}
-
-	// Create a fully structured log entry. This ensures there a
-	// timestamp in front of the panic object.
-	entry := l.makeEntryForPanicObject(ctx, depth+1, r)
-	buf := logging.processForFile(entry, debug.Stack())
-	defer putBuffer(buf)
-
-	// Actually write the panic object to a file.
-	if err := l.writeToFile(buf.Bytes()); err != nil {
-		// Ditto; report the error but continue. We're terminating anyway.
-		l.reportErrorEverywhereLocked(ctx, err)
-	}
-}
-
-func (l *loggerT) makeEntryForPanicObject(ctx context.Context, depth int, r interface{}) Entry {
-	return MakeEntry(
-		ctx, Severity_ERROR, &l.logCounter, depth+1, l.redactableLogs.Get(), "panic: %v", r)
-}
-
 func setActive() {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
@@ -439,19 +391,6 @@ func resetActive() (restore func()) {
 		defer logging.mu.Unlock()
 		logging.mu.active = prevActive
 		logging.mu.firstUseStack = prevFirstuse
-	}
-}
-
-// printPanicToExternalStderr is used by ReportPanic() in case we
-// understand that the Go runtime will not print the panic object to
-// the external stderr itself (e.g.  because we've redirected it to a
-// file).
-func (l *loggerT) printPanicToExternalStderr(ctx context.Context, depth int, r interface{}) {
-	entry := l.makeEntryForPanicObject(ctx, depth+1, r)
-	if err := l.outputToStderr(entry, debug.Stack()); err != nil {
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.reportErrorEverywhereLocked(ctx, err)
 	}
 }
 

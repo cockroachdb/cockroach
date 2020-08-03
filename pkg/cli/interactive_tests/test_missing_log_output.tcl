@@ -90,7 +90,7 @@ system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld'
 # Check the panic is reported on the server's stderr
 eexpect "a SQL panic has occurred"
 eexpect "panic: helloworld"
-eexpect "goroutine"
+eexpect "stack trace"
 eexpect ":/# "
 # Check the panic is reported on the server log file
 send "cat logs/db/logs/cockroach.log\r"
