@@ -15,6 +15,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -418,7 +419,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html#AEN74432
 func decodeCopy(in string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	start := 0
 	for i, n := 0, len(in); i < n; i++ {
 		if in[i] != '\\' {
