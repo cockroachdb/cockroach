@@ -93,7 +93,9 @@ func (*tpccChecks) Meta() workload.Meta {
 }
 
 // Ops implements the Opser interface.
-func (w *tpccChecks) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *tpccChecks) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.flags.Lookup("db").Value.String(), urls)
 	if err != nil {
 		return workload.QueryLoad{}, fmt.Errorf("%v", err)

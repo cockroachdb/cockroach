@@ -430,7 +430,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *interleavedPartitioned) Ops(
-	urls []string, reg *histogram.Registry,
+	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, ``, urls)
 	if err != nil {

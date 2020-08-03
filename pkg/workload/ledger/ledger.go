@@ -11,6 +11,7 @@
 package ledger
 
 import (
+	"context"
 	gosql "database/sql"
 	"hash/fnv"
 	"math/rand"
@@ -179,7 +180,9 @@ func (w *ledger) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *ledger) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *ledger) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

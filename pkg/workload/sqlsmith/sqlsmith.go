@@ -115,7 +115,9 @@ func (g *sqlSmith) validateErrorSetting() error {
 }
 
 // Ops implements the Opser interface.
-func (g *sqlSmith) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (g *sqlSmith) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	if err := g.validateErrorSetting(); err != nil {
 		return workload.QueryLoad{}, err
 	}
