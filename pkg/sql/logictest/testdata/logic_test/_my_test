@@ -1,0 +1,27 @@
+statement ok
+set experimental_enable_enums = true;
+set experimental_enable_user_defined_schemas = true;
+
+statement ok
+create type t as enum('hello');
+
+statement ok
+create schema ss;
+
+statement ok
+ALTER TYPE t SET SCHEMA ss;
+
+statement ok
+SELECT 'hello'::ss.t;
+
+statement error pq: type "public.t" does not exist
+SELECT 'hello'::public.t;
+
+statement ok
+ALTER TYPE ss.t SET SCHEMA public;
+
+statement ok
+SELECT 'hello'::public.t;
+
+statement error pq: type "ss.t" does not exist
+SELECT 'hello'::ss.t;

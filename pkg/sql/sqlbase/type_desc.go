@@ -349,6 +349,23 @@ func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove ID) {
 	}
 }
 
+// SetParentSchemaID sets the SchemaID of the type.
+func (desc *MutableTypeDescriptor) SetParentSchemaID(schemaID ID) {
+	desc.ParentSchemaID = schemaID
+}
+
+// AddDrainingName adds a draining name to the TypeDescriptor's slice of
+// draining names.
+func (desc *MutableTypeDescriptor) AddDrainingName(databaseID ID, schemaID ID, name string) {
+	renameDetails := NameInfo{
+		ParentID:       databaseID,
+		ParentSchemaID: schemaID,
+		Name:           name,
+	}
+
+	desc.DrainingNames = append(desc.DrainingNames, renameDetails)
+}
+
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
 // physical representation.
 type EnumMembers []TypeDescriptor_EnumMember
