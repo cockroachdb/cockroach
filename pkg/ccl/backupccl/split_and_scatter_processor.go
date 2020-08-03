@@ -62,16 +62,14 @@ func (s dbSplitAndScatterer) splitAndScatterKey(
 	}
 
 	log.VEventf(ctx, 1, "scattering new key %+v", newSpanKey)
-	var ba roachpb.BatchRequest
-	ba.Header.ReturnRangeInfo = true
-	ba.Add(&roachpb.AdminScatterRequest{
+	req := &roachpb.AdminScatterRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{
 			Key:    newSpanKey,
 			EndKey: newSpanKey.Next(),
 		}),
-	})
+	}
 
-	br, pErr := db.NonTransactionalSender().Send(ctx, ba)
+	res, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), req)
 	if pErr != nil {
 		// TODO(dan): Unfortunately, Scatter is still too unreliable to
 		// fail the RESTORE when Scatter fails. I'm uncomfortable that
@@ -83,14 +81,18 @@ func (s dbSplitAndScatterer) splitAndScatterKey(
 		return 0, nil
 	}
 
-	return s.findDestination(ctx, br), nil
+	return s.findDestination(res.(*roachpb.AdminScatterResponse)), nil
 }
 
 // findDestination returns the node ID of the node of the destination of the
 // AdminScatter request. If the destination cannot be found, 0 is returned.
-func (s dbSplitAndScatterer) findDestination(
-	_ context.Context, _ *roachpb.BatchResponse,
-) roachpb.NodeID {
+func (s dbSplitAndScatterer) findDestination(res *roachpb.AdminScatterResponse) roachpb.NodeID {
+	// A request from a 20.1 node will not have a RangeInfos with a lease.
+	if len(res.RangeInfos) > 0 {
+		// If the lease is not populated, we return the 0 value anyway.
+		return res.RangeInfos[0].Lease.Replica.NodeID
+	}
+
 	return roachpb.NodeID(0)
 }
 
