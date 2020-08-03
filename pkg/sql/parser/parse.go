@@ -236,6 +236,26 @@ func ParseOne(sql string) (Statement, error) {
 	return p.parseOneWithDepth(1, sql)
 }
 
+// HasMultipleStatements returns true if the sql string contains more than one
+// statements.
+func HasMultipleStatements(sql string) bool {
+	var p Parser
+	p.scanner.init(sql)
+	defer p.scanner.cleanup()
+	count := 0
+	for {
+		_, _, done := p.scanOneStmt()
+		if done {
+			break
+		}
+		count += 1
+		if count > 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseQualifiedTableName parses a SQL string of the form
 // `[ database_name . ] [ schema_name . ] table_name`.
 func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
