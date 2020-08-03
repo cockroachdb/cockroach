@@ -1436,8 +1436,7 @@ limit                                                                  ·       
  └── sort                                                              ·                      ·
       │                                                                order                  -numwait,+s_name
       └── group                                                        ·                      ·
-           │                                                           aggregate 0            s_name
-           │                                                           aggregate 1            count_rows()
+           │                                                           aggregate 0            count_rows()
            │                                                           group by               s_name
            └── render                                                  ·                      ·
                 └── lookup join                                        ·                      ·

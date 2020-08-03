@@ -100,9 +100,8 @@ render                    ·             ·                (sum)                
       └── sort            ·             ·                (k, sum, any_not_null)  -any_not_null
            │              order         -any_not_null    ·                       ·
            └── group      ·             ·                (k, sum, any_not_null)  ·
-                │         aggregate 0   k                ·                       ·
-                │         aggregate 1   sum(w)           ·                       ·
-                │         aggregate 2   any_not_null(v)  ·                       ·
+                │         aggregate 0   sum(w)           ·                       ·
+                │         aggregate 1   any_not_null(v)  ·                       ·
                 │         group by      k                ·                       ·
                 │         ordered       +k               ·                       ·
                 └── scan  ·             ·                (k, v, w)               +k
