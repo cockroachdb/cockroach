@@ -96,6 +96,15 @@ func (r schemaChangeGCResumer) Resume(
 	if err != nil {
 		return err
 	}
+
+	// If there are any interleaved indexes to drop as part of a table TRUNCATE
+	// operation, then drop the indexes before waiting on the GC timer.
+	if len(details.InterleavedIndexes) > 0 {
+		if err := sql.TruncateIndexes(ctx, execCfg, details.ParentID, details.InterleavedIndexes); err != nil {
+			return err
+		}
+	}
+
 	zoneCfgFilter, gossipUpdateC := setupConfigWatcher(execCfg)
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 

@@ -36,13 +36,10 @@ type Deleter struct {
 // expectation of which values are passed as values to DeleteRow. Any column
 // passed in requestedCols will be included in FetchCols.
 func MakeDeleter(
-	ctx context.Context,
-	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
-	alloc *sqlbase.DatumAlloc,
-) (Deleter, error) {
+) Deleter {
 	indexes := tableDesc.DeletableIndexes()
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
@@ -61,19 +58,19 @@ func MakeDeleter(
 	}
 	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		if err := maybeAddCol(colID); err != nil {
-			return Deleter{}, err
+			return Deleter{}
 		}
 	}
 	for _, index := range indexes {
 		for _, colID := range index.ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
-				return Deleter{}, err
+				return Deleter{}
 			}
 		}
 		// The extra columns are needed to fix #14601.
 		for _, colID := range index.ExtraColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
-				return Deleter{}, err
+				return Deleter{}
 			}
 		}
 	}
@@ -84,7 +81,7 @@ func MakeDeleter(
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
 
-	return rd, nil
+	return rd
 }
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row

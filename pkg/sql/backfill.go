@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -617,6 +618,60 @@ func (sc *SchemaChanger) getTableVersion(
 	return tableDesc, nil
 }
 
+// TruncateIndexes deletes the input indexes from the table with the requested
+// ID. It manages its own transactions, and will retry on transient failures.
+func TruncateIndexes(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	tableID sqlbase.ID,
+	indexes []sqlbase.IndexDescriptor,
+) error {
+	sc := &SchemaChanger{
+		tableID:              tableID,
+		mutationID:           sqlbase.InvalidMutationID,
+		sqlInstanceID:        execCfg.NodeID.SQLInstanceID(),
+		db:                   execCfg.DB,
+		leaseMgr:             execCfg.LeaseManager,
+		testingKnobs:         execCfg.SchemaChangerTestingKnobs,
+		jobRegistry:          execCfg.JobRegistry,
+		rangeDescriptorCache: execCfg.RangeDescriptorCache,
+		clock:                execCfg.Clock,
+		settings:             execCfg.Settings,
+		execCfg:              execCfg,
+	}
+	exec := func() error {
+		var table *sqlbase.TableDescriptor
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			var err error
+			table, err = sqlbase.GetTableDescFromID(ctx, txn, execCfg.Codec, tableID)
+			return err
+		}); err != nil {
+			return err
+		}
+		return sc.truncateIndexes(ctx, table.Version, indexes)
+	}
+	opts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     20 * time.Second,
+		Multiplier:     1.5,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		// Note that retry.StartWithCtx ensures that this runs at least once.
+		err := exec()
+		switch {
+		case err == nil:
+			return err
+		case errors.Is(err, sqlbase.ErrDescriptorNotFound):
+			log.Infof(ctx, "descriptor %d not found for GCJob index truncation", tableID)
+		case !isPermanentSchemaChangeError(err):
+			// If the error is not permanent, then let's retry.
+		default:
+			return err
+		}
+	}
+	return nil
+}
+
 // truncateIndexes truncate the KV ranges corresponding to dropped indexes.
 //
 // The indexes are dropped chunk by chunk, each chunk being deleted in
@@ -658,17 +713,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-				rd, err := row.MakeDeleter(
-					ctx,
-					txn,
-					sc.execCfg.Codec,
-					tableDesc,
-					nil,
-					alloc,
-				)
-				if err != nil {
-					return err
-				}
+				rd := row.MakeDeleter(sc.execCfg.Codec, tableDesc, nil)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
@@ -1748,16 +1793,12 @@ func indexTruncateInTxn(
 	alloc := &sqlbase.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		rd, err := row.MakeDeleter(
-			ctx, txn, execCfg.Codec, tableDesc, nil, alloc,
-		)
-		if err != nil {
-			return err
-		}
+		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn, evalCtx); err != nil {
 			return err
 		}
+		var err error
 		sp, err = td.deleteIndex(
 			ctx, idx, sp, indexTruncateChunkSize, traceKV,
 		)
