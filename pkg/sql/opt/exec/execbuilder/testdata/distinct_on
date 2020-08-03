@@ -302,8 +302,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 render          ·             ·            (min)     ·
  │              render 0      min          ·         ·
  └── group      ·             ·            (y, min)  ·
-      │         aggregate 0   y            ·         ·
-      │         aggregate 1   min(x)       ·         ·
+      │         aggregate 0   min(x)       ·         ·
       │         group by      y            ·         ·
       └── scan  ·             ·            (x, y)    ·
 ·               table         xyz@primary  ·         ·
@@ -321,8 +320,7 @@ render                    ·             ·            (min)     ·
       └── filter          ·             ·            (y, min)  ·
            │              filter        min = 1      ·         ·
            └── group      ·             ·            (y, min)  ·
-                │         aggregate 0   y            ·         ·
-                │         aggregate 1   min(x)       ·         ·
+                │         aggregate 0   min(x)       ·         ·
                 │         group by      y            ·         ·
                 └── scan  ·             ·            (x, y)    ·
 ·                         table         xyz@primary  ·         ·
