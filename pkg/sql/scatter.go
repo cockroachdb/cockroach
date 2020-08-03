@@ -122,7 +122,7 @@ type scatterRun struct {
 	span roachpb.Span
 
 	rangeIdx int
-	ranges   []roachpb.AdminScatterResponse_Range
+	ranges   []roachpb.Span
 }
 
 func (n *scatterNode) startExec(params runParams) error {
@@ -135,8 +135,22 @@ func (n *scatterNode) startExec(params runParams) error {
 	if pErr != nil {
 		return pErr.GoError()
 	}
+	scatterRes := res.(*roachpb.AdminScatterResponse)
 	n.run.rangeIdx = -1
-	n.run.ranges = res.(*roachpb.AdminScatterResponse).Ranges
+	n.run.ranges = make([]roachpb.Span, len(scatterRes.RangeInfos))
+	if len(scatterRes.RangeInfos) != 0 {
+		for i, rangeInfo := range scatterRes.RangeInfos {
+			n.run.ranges[i] = roachpb.Span{
+				Key:    rangeInfo.Desc.StartKey.AsRawKey(),
+				EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
+			}
+		}
+	} else {
+		// TODO(pbardea): This is a non-combined response from 20.1. Remove in 21.1.
+		for i, r := range scatterRes.DeprecatedRanges {
+			n.run.ranges[i] = r.Span
+		}
+	}
 	return nil
 }
 
@@ -149,8 +163,8 @@ func (n *scatterNode) Next(params runParams) (bool, error) {
 func (n *scatterNode) Values() tree.Datums {
 	r := n.run.ranges[n.run.rangeIdx]
 	return tree.Datums{
-		tree.NewDBytes(tree.DBytes(r.Span.Key)),
-		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
+		tree.NewDBytes(tree.DBytes(r.Key)),
+		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Key)),
 	}
 }
 
