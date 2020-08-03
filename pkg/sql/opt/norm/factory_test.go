@@ -115,3 +115,45 @@ func TestCopyAndReplace(t *testing.T) {
 		t.Errorf("expected optimizer to choose lookup-join, not %v", e.Op())
 	}
 }
+
+// Test that CopyAndReplace works on expressions using WithScan.
+func TestCopyAndReplaceWithScan(t *testing.T) {
+	cat := testcat.New()
+	for _, ddl := range []string{
+		"CREATE TABLE ab (a INT PRIMARY KEY, b INT)",
+		"CREATE TABLE parent (p INT PRIMARY KEY)",
+		"CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))",
+	} {
+		if _, err := cat.ExecuteDDL(ddl); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for _, query := range []string{
+		"WITH cte AS (SELECT * FROM ab) SELECT * FROM cte, cte AS cte2 WHERE cte.a = cte2.b",
+		"INSERT INTO child VALUES (1,1), (2,2)",
+		"UPSERT INTO child SELECT a, b FROM ab",
+		"UPDATE child SET p=p+1 WHERE c > 1",
+		"UPDATE parent SET p=p+1 WHERE p > 1",
+		"DELETE FROM parent WHERE p < 10",
+	} {
+		t.Run(query, func(t *testing.T) {
+			var o xform.Optimizer
+			testutils.BuildQuery(t, &o, cat, &evalCtx, query)
+
+			m := o.Factory().DetachMemo()
+
+			o.Init(&evalCtx, cat)
+			var replaceFn norm.ReplaceFunc
+			replaceFn = func(e opt.Expr) opt.Expr {
+				return o.Factory().CopyAndReplaceDefault(e, replaceFn)
+			}
+			o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
+
+			if _, err := o.Optimize(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

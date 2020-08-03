@@ -50,17 +50,17 @@ with &1
  │    ├── update-mapping:
  │    │    └── column7:7 => xyz.y:2
  │    ├── side-effects, mutations
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(2,3)
  │    └── project
  │         ├── columns: column7:7(int!null) xyz.x:4(string!null) xyz.y:5(int!null) xyz.z:6(float!null)
- │         ├── stats: [rows=10]
+ │         ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0]
  │         ├── key: (4)
  │         ├── fd: ()-->(6,7), (4)-->(5)
  │         ├── select
  │         │    ├── columns: xyz.x:4(string!null) xyz.y:5(int!null) xyz.z:6(float!null)
- │         │    ├── stats: [rows=10, distinct(6)=1, null(6)=0]
+ │         │    ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(6)=1, null(6)=0]
  │         │    ├── key: (4)
  │         │    ├── fd: ()-->(6), (4)-->(5)
  │         │    ├── scan xyz

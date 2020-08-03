@@ -640,6 +640,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
 
+	if len(memo.WithUses(rightExpr)) != 0 {
+		return execPlan{}, fmt.Errorf("references to WITH expressions from correlated subqueries are unsupported")
+	}
 	// Create a fake version of the right-side plan that contains NULL for all
 	// outer columns, so that we can figure out the output columns and various
 	// other attributes.
@@ -1551,9 +1554,9 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 		}
 	}
 	if e == nil {
-		err := errors.Errorf("couldn't find WITH expression %q with ID %d", withScan.Name, withID)
-		return execPlan{}, errors.WithHint(
-			err, "references to WITH expressions from correlated subqueries are unsupported")
+		return execPlan{}, errors.AssertionFailedf(
+			"couldn't find With expression with ID %d", withScan.With,
+		)
 	}
 
 	var label bytes.Buffer
