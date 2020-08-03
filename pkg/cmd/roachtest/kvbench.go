@@ -314,18 +314,22 @@ func runKVBench(ctx context.Context, t *test, c *cluster, b kvBenchSpec) {
 		}
 		close(resultChan)
 		res := <-resultChan
-		failErr := res.failureError(b)
-		if failErr == nil {
-			ttycolor.Stdout(ttycolor.Green)
-			t.l.Printf(`--- PASS: kv workload maintained an average latency of %0.1fms`+
-				` with avg throughput of %d`, res.latency(), res.throughput())
+
+		var color ttycolor.Code
+		var msg string
+		pass := res.latency() <= b.LatencyThresholdMs
+		if pass {
+			color = ttycolor.Green
+			msg = "PASS"
 		} else {
-			ttycolor.Stdout(ttycolor.Red)
-			t.l.Printf(`--- FAIL: kv workload maintained an average latency of %0.1fms (threshold: %0.1fms)`+
-				` with avg throughput of %d`, res.latency(), b.LatencyThresholdMs, res.throughput())
+			color = ttycolor.Red
+			msg = "FAIL"
 		}
+		ttycolor.Stdout(color)
+		t.l.Printf(`--- SEARCH ITER %s: kv workload avg latency: %0.1fms (threshold: %0.1fms), avg throughput: %d`,
+			msg, res.latency(), b.LatencyThresholdMs, res.throughput())
 		ttycolor.Stdout(ttycolor.Reset)
-		return failErr == nil, nil
+		return pass, nil
 	}
 	if res, err := s.Search(searchPredicate); err != nil {
 		t.Fatal(err)
@@ -380,11 +384,4 @@ func (r kvBenchResult) throughput() int {
 	// Currently the `kv` workload does not track histograms purely for throughput. We can
 	// compute the average throughput here but not much more than that.
 	return int(float64(r.Cumulative[`write`].TotalCount()) / r.Elapsed.Seconds())
-}
-
-func (r kvBenchResult) failureError(b kvBenchSpec) error {
-	if r.latency() <= b.LatencyThresholdMs {
-		return nil
-	}
-	return errors.Errorf(`average latency is too high %0.1fms`, r.latency())
 }
