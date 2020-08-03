@@ -84,3 +84,211 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"here"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+##############################################################################
+# Deviations from Postgres in how we handle portals' suspension and attempts #
+# to execute exhausted portals.                                              #
+##############################################################################
+
+# Execute a statement of "Rows" statement types. We will execute an UPDATE
+# twice and then will use SELECT to verify that the UPDATE only happened once.
+# Note that this test case is in this file rather than in 'portals' because we
+# deviate from Postgres in the command tag (Postgres returns "UPDATE 3").
+
+send
+Query {"String": "DROP TABLE IF EXISTS foo; CREATE TABLE foo (id INT8); INSERT INTO foo (id) VALUES (1), (2), (3)"}
+Query {"String": "BEGIN"}
+Parse {"Name": "rows_stmt", "Query": "UPDATE foo SET id = id * 10 WHERE true RETURNING id"}
+Bind {"DestinationPortal": "rows_portal", "PreparedStatement": "rows_stmt"}
+Execute {"Portal": "rows_portal", "MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"20"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "rows_portal"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"30"}]}
+{"Type":"CommandComplete","CommandTag":"UPDATE 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "rows_portal"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"UPDATE 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "rows_portal"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"UPDATE 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "SELECT * FROM foo ORDER BY id"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"20"}]}
+{"Type":"DataRow","Values":[{"text":"30"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# When attempting to execute portals of statements that don't return row sets
+# for the second and consequent times, Postgres returns an error whereas we
+# silently do nothing.
+
+# Execute a statement of "DDL" statement type. We will try to execute DROP
+# TABLE twice, but on the second attempt we silently do nothing.
+
+send
+Query {"String": "CREATE TABLE bar (a INT PRIMARY KEY)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "ddl_stmt", "Query": "DROP TABLE bar"}
+Bind {"DestinationPortal": "ddl_portal", "PreparedStatement": "ddl_stmt"}
+Execute {"Portal": "ddl_portal", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "ddl_portal"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a statement of "RowsAffected" statement type. We will try to execute
+# an UPDATE twice and will confirm that it was executed only once.
+
+send
+Query {"String": "DROP TABLE IF EXISTS foo; CREATE TABLE foo (id INT8); INSERT INTO foo (id) VALUES (1), (2), (3)"}
+Query {"String": "BEGIN"}
+Parse {"Name": "rows_affected_stmt", "Query": "UPDATE foo SET id = id * 10 WHERE true"}
+Bind {"DestinationPortal": "rows_affected_portal", "PreparedStatement": "rows_affected_stmt"}
+Execute {"Portal": "rows_affected_portal", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"UPDATE 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "rows_affected_portal"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"UPDATE 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "SELECT * FROM foo ORDER BY id"}
+Query {"String": "COMMIT"}
+Sync
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"20"}]}
+{"Type":"DataRow","Values":[{"text":"30"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
