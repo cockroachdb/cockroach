@@ -3992,6 +3992,9 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 		newOverload.Fn = func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			var err error
 			argsToCast.ForEach(func(i int) {
+				if err != nil {
+					return
+				}
 				arg := string(tree.MustBeDString(args[i]))
 				var g *geo.Geometry
 				g, err = geo.ParseGeometry(arg)
