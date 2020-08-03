@@ -2037,6 +2037,14 @@ func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
 	m.data.DefaultReadOnly = val
 }
 
+func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
+	m.data.EnableSeqScan = val
+}
+
+func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
+	m.data.SynchronousCommit = val
+}
+
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }

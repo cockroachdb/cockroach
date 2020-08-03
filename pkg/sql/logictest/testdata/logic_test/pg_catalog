@@ -1760,6 +1760,7 @@ enable_experimental_alter_column_type_general  off                 NULL      NUL
 enable_implicit_select_for_update              on                  NULL      NULL        NULL        string
 enable_insert_fast_path                        on                  NULL      NULL        NULL        string
 enable_interleaved_joins                       on                  NULL      NULL        NULL        string
+enable_seqscan                                 on                  NULL      NULL        NULL        string
 enable_zigzag_join                             on                  NULL      NULL        NULL        string
 experimental_distsql_planning                  off                 NULL      NULL        NULL        string
 experimental_enable_enums                      on                  NULL      NULL        NULL        string
@@ -1795,6 +1796,7 @@ sql_safe_updates                               off                 NULL      NUL
 standard_conforming_strings                    on                  NULL      NULL        NULL        string
 statement_timeout                              0                   NULL      NULL        NULL        string
 synchronize_seqscans                           on                  NULL      NULL        NULL        string
+synchronous_commit                             on                  NULL      NULL        NULL        string
 timezone                                       UTC                 NULL      NULL        NULL        string
 tracing                                        off                 NULL      NULL        NULL        string
 transaction_isolation                          serializable        NULL      NULL        NULL        string
@@ -1830,6 +1832,7 @@ enable_experimental_alter_column_type_general  off                 NULL  user   
 enable_implicit_select_for_update              on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                        on                  NULL  user     NULL      on                  on
 enable_interleaved_joins                       on                  NULL  user     NULL      on                  on
+enable_seqscan                                 on                  NULL  user     NULL      on                  on
 enable_zigzag_join                             on                  NULL  user     NULL      on                  on
 experimental_distsql_planning                  off                 NULL  user     NULL      off                 off
 experimental_enable_enums                      on                  NULL  user     NULL      off                 off
@@ -1865,6 +1868,7 @@ sql_safe_updates                               off                 NULL  user   
 standard_conforming_strings                    on                  NULL  user     NULL      on                  on
 statement_timeout                              0                   NULL  user     NULL      0                   0
 synchronize_seqscans                           on                  NULL  user     NULL      on                  on
+synchronous_commit                             on                  NULL  user     NULL      on                  on
 timezone                                       UTC                 NULL  user     NULL      UTC                 UTC
 tracing                                        off                 NULL  user     NULL      off                 off
 transaction_isolation                          serializable        NULL  user     NULL      serializable        serializable
@@ -1896,6 +1900,7 @@ enable_experimental_alter_column_type_general  NULL    NULL     NULL     NULL   
 enable_implicit_select_for_update              NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                        NULL    NULL     NULL     NULL        NULL
 enable_interleaved_joins                       NULL    NULL     NULL     NULL        NULL
+enable_seqscan                                 NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                             NULL    NULL     NULL     NULL        NULL
 experimental_distsql_planning                  NULL    NULL     NULL     NULL        NULL
 experimental_enable_enums                      NULL    NULL     NULL     NULL        NULL
@@ -1933,6 +1938,7 @@ sql_safe_updates                               NULL    NULL     NULL     NULL   
 standard_conforming_strings                    NULL    NULL     NULL     NULL        NULL
 statement_timeout                              NULL    NULL     NULL     NULL        NULL
 synchronize_seqscans                           NULL    NULL     NULL     NULL        NULL
+synchronous_commit                             NULL    NULL     NULL     NULL        NULL
 timezone                                       NULL    NULL     NULL     NULL        NULL
 tracing                                        NULL    NULL     NULL     NULL        NULL
 transaction_isolation                          NULL    NULL     NULL     NULL        NULL

@@ -43,6 +43,7 @@ enable_experimental_alter_column_type_general  off
 enable_implicit_select_for_update              on
 enable_insert_fast_path                        on
 enable_interleaved_joins                       on
+enable_seqscan                                 on
 enable_zigzag_join                             on
 experimental_distsql_planning                  off
 experimental_enable_enums                      off
@@ -78,6 +79,7 @@ sql_safe_updates                               off
 standard_conforming_strings                    on
 statement_timeout                              0
 synchronize_seqscans                           on
+synchronous_commit                             on
 timezone                                       UTC
 tracing                                        off
 transaction_isolation                          serializable
