@@ -12650,16 +12650,27 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
 
   // accessors -------------------------------------------------------
 
-  int ranges_size() const;
-  void clear_ranges();
-  static const int kRangesFieldNumber = 2;
-  ::cockroach::roachpb::AdminScatterResponse_Range* mutable_ranges(int index);
+  int deprecated_ranges_size() const;
+  void clear_deprecated_ranges();
+  static const int kDeprecatedRangesFieldNumber = 2;
+  ::cockroach::roachpb::AdminScatterResponse_Range* mutable_deprecated_ranges(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >*
-      mutable_ranges();
-  const ::cockroach::roachpb::AdminScatterResponse_Range& ranges(int index) const;
-  ::cockroach::roachpb::AdminScatterResponse_Range* add_ranges();
+      mutable_deprecated_ranges();
+  const ::cockroach::roachpb::AdminScatterResponse_Range& deprecated_ranges(int index) const;
+  ::cockroach::roachpb::AdminScatterResponse_Range* add_deprecated_ranges();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >&
-      ranges() const;
+      deprecated_ranges() const;
+
+  int range_infos_size() const;
+  void clear_range_infos();
+  static const int kRangeInfosFieldNumber = 3;
+  ::cockroach::roachpb::RangeInfo* mutable_range_infos(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+      mutable_range_infos();
+  const ::cockroach::roachpb::RangeInfo& range_infos(int index) const;
+  ::cockroach::roachpb::RangeInfo* add_range_infos();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+      range_infos() const;
 
   bool has_header() const;
   void clear_header();
@@ -12676,7 +12687,8 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range > ranges_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range > deprecated_ranges_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo > range_infos_;
   ::cockroach::roachpb::ResponseHeader* header_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -28861,33 +28873,59 @@ inline void AdminScatterResponse::set_allocated_header(::cockroach::roachpb::Res
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminScatterResponse.header)
 }
 
-inline int AdminScatterResponse::ranges_size() const {
-  return ranges_.size();
+inline int AdminScatterResponse::deprecated_ranges_size() const {
+  return deprecated_ranges_.size();
 }
-inline void AdminScatterResponse::clear_ranges() {
-  ranges_.Clear();
+inline void AdminScatterResponse::clear_deprecated_ranges() {
+  deprecated_ranges_.Clear();
 }
-inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::mutable_ranges(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Mutable(index);
+inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::mutable_deprecated_ranges(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >*
-AdminScatterResponse::mutable_ranges() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.ranges)
-  return &ranges_;
+AdminScatterResponse::mutable_deprecated_ranges() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return &deprecated_ranges_;
 }
-inline const ::cockroach::roachpb::AdminScatterResponse_Range& AdminScatterResponse::ranges(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Get(index);
+inline const ::cockroach::roachpb::AdminScatterResponse_Range& AdminScatterResponse::deprecated_ranges(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Get(index);
 }
-inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::add_ranges() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_.Add();
+inline ::cockroach::roachpb::AdminScatterResponse_Range* AdminScatterResponse::add_deprecated_ranges() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::AdminScatterResponse_Range >&
-AdminScatterResponse::ranges() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.ranges)
-  return ranges_;
+AdminScatterResponse::deprecated_ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.deprecated_ranges)
+  return deprecated_ranges_;
+}
+
+inline int AdminScatterResponse::range_infos_size() const {
+  return range_infos_.size();
+}
+inline ::cockroach::roachpb::RangeInfo* AdminScatterResponse::mutable_range_infos(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >*
+AdminScatterResponse::mutable_range_infos() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return &range_infos_;
+}
+inline const ::cockroach::roachpb::RangeInfo& AdminScatterResponse::range_infos(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Get(index);
+}
+inline ::cockroach::roachpb::RangeInfo* AdminScatterResponse::add_range_infos() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeInfo >&
+AdminScatterResponse::range_infos() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.AdminScatterResponse.range_infos)
+  return range_infos_;
 }
 
 // -------------------------------------------------------------------
