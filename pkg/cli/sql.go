@@ -154,7 +154,8 @@ type cliState struct {
 	partialStmtsLen int
 
 	// concatLines is the concatenation of partialLines, computed during
-	// doCheckStatement and then reused in doRunStatement().
+	// doPrepareStatementLine and then reused in doRunStatements() and
+	// doCheckStatement().
 	concatLines string
 
 	// exitErr defines the error to report to the user upon termination.
@@ -1135,7 +1136,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Println(helpText)
 		}
 
-		_ = c.invalidSyntax(0, "statement ignored: %v",
+		_ = c.invalidSyntax(cliStart, "statement ignored: %v",
 			&formattedError{err: err, showSeverity: false, verbose: false})
 
 		// Stop here if exiterr is set.
@@ -1163,7 +1164,24 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	return nextState
 }
 
-func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
+// doRunStatements runs all the statements that have been accumulated by
+// concatLines.
+func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	stmts := parser.Scan(c.concatLines)
+	for _, stmt := range stmts {
+		c.doRunStatement(stmt)
+		if c.exitErr != nil {
+			if c.errExit {
+				return cliStop
+			}
+			return nextState
+		}
+	}
+	return nextState
+}
+
+// doRunStatement runs a single sql statement.
+func (c *cliState) doRunStatement(stmt string) {
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
@@ -1175,15 +1193,12 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.autoTrace, nil)
 		if c.exitErr != nil {
 			cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			if c.errExit {
-				return cliStop
-			}
-			return nextState
+			return
 		}
 	}
 
 	// Now run the statement/query.
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
 	if c.exitErr != nil {
 		cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 	}
@@ -1225,12 +1240,6 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 			}
 		}
 	}
-
-	if c.exitErr != nil && c.errExit {
-		return cliStop
-	}
-
-	return nextState
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -1299,7 +1308,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			state = c.doCheckStatement(cliStartLine, cliContinueLine, cliRunStatement)
 
 		case cliRunStatement:
-			state = c.doRunStatement(cliStartLine)
+			state = c.doRunStatements(cliStartLine)
 
 		default:
 			panic(fmt.Sprintf("unknown state: %d", state))
@@ -1332,6 +1341,9 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 			// This is a form of client-side error checking to help with large txns.
 			c.tryEnableCheckSyntax()
 		}
+		// Try to enable server execution timings for the CLI to display if
+		// supported by the server.
+		c.tryEnableServerExecutionTimings()
 	} else {
 		// When running non-interactive, by default we want errors to stop
 		// further processing and we can just let syntax checking to be
@@ -1413,7 +1425,7 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 	return cleanupFn, nil
 }
 
-// runOneStatement executes one statement and terminates
+// runStatements executes the given statements and terminates
 // on error.
 func (c *cliState) runStatements(stmts []string) error {
 	for {
@@ -1528,6 +1540,17 @@ func (c *cliState) tryEnableCheckSyntax() {
 		fmt.Fprintf(stderr, "warning: cannot enable check_syntax: %v\n", err)
 	} else {
 		c.checkSyntax = true
+	}
+}
+
+// tryEnableServerExecutionTimings attempts to check if the server supports the
+// SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
+// server side execution timings instead of timing on the client.
+func (c *cliState) tryEnableServerExecutionTimings() {
+	if err := c.conn.Exec("SHOW LAST QUERY STATISTICS", nil); err != nil {
+		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
+	} else {
+		sqlCtx.enableServerExecutionTimings = true
 	}
 }
 
