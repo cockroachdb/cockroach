@@ -3056,6 +3056,87 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_scale": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"x_factor", types.Float},
+				{"y_factor", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				xFactor := float64(*args[1].(*tree.DFloat))
+				yFactor := float64(*args[2].(*tree.DFloat))
+
+				ret, err := geomfn.Scale(g.Geometry, []float64{xFactor, yFactor})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry scaled by the given factors`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"factor", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				factor, err := args[1].(*tree.DGeometry).AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				pointFactor, ok := factor.(*geom.Point)
+				if !ok {
+					return nil, errors.Newf("a Point must be used as the scaling factor")
+				}
+
+				ret, err := geomfn.Scale(g.Geometry, pointFactor.FlatCoords())
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry scaled by taking in a Geometry as the factor`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"factor", types.Geometry},
+				{"origin", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				factor := args[1].(*tree.DGeometry)
+				origin := args[2].(*tree.DGeometry)
+
+				ret, err := geomfn.ScaleRelativeToOrigin(g.Geometry, factor.Geometry, origin.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry scaled by the Geometry factor relative to a false origin`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_segmentize": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -3848,7 +3929,7 @@ func initGeoBuiltins() {
 		// TODO(#48883): uncomment
 		// "st_assvg",
 		// TODO(#48886): uncomment
-		//"st_astwkb",
+		// "st_astwkb",
 		"st_astext",
 		"st_buffer",
 		"st_centroid",
