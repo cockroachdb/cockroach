@@ -273,7 +273,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		//
 		// For the refresh, we have two options: either refresh everything read
 		// *before* this batch, and then retry this batch, or refresh the current
-		// batch's reads too and then, if successful, there'd be nothing to refresh.
+		// batch's reads too and then, if successful, there'd be nothing to retry.
 		// We take the former option by setting br = nil below to minimized the
 		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
