@@ -4280,6 +4280,11 @@ func (desc *ColumnDescriptor) HasNullDefault() bool {
 
 // ColID is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColID() cat.StableID {
+	return cat.StableID(desc.GetLogicalColumnID())
+}
+
+// PhysicalColID is part of the cat.Column interface.
+func (desc *ColumnDescriptor) PhysicalColID() cat.StableID {
 	return cat.StableID(desc.ID)
 }
 
