@@ -350,8 +350,18 @@ func init() {
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
+		// --sql-advertise-addr is misdesigned and not yet completely
+		// useful in practice. Avoid confusing the user by having it
+		// called out in --help.
+		// See: https://github.com/cockroachdb/cockroach/issues/52266
+		_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
+
 		varFlag(f, addrSetter{&serverTenantAddr, &serverTenantPort}, cliflags.ListenTenantAddr)
 		varFlag(f, addrSetter{&serverTenantAdvertiseAddr, &serverTenantAdvertisePort}, cliflags.TenantAdvertiseAddr)
+		// Hide tenant-related flags.
+		_ = f.MarkHidden(cliflags.ListenTenantAddr.Name)
+		_ = f.MarkHidden(cliflags.TenantAdvertiseAddr.Name)
+
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
 		// --socket is deprecated as of 20.1.
@@ -359,10 +369,6 @@ func init() {
 		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket)
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
-
-		// Hide tenant-related flags.
-		_ = f.MarkHidden(cliflags.ListenTenantAddr.Name)
-		_ = f.MarkHidden(cliflags.TenantAdvertiseAddr.Name)
 
 		// Backward-compatibility flags.
 
