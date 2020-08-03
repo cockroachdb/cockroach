@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -477,33 +476,13 @@ func makeSQLServerArgs(
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
 
-	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
-	// https://github.com/cockroachdb/cockroach/issues/47150
-	var g *gossip.Gossip
-	{
-		var nodeID base.NodeIDContainer
-		nodeID.Set(context.Background(), fakeNodeID)
-		var clusterID base.ClusterIDContainer
-		dummyGossipGRPC := rpc.NewServer(rpcContext) // never Serve()s anything
-		g = gossip.New(
-			baseCfg.AmbientCtx,
-			&clusterID,
-			&nodeID,
-			rpcContext,
-			dummyGossipGRPC,
-			stopper,
-			registry,
-			baseCfg.Locality,
-			&baseCfg.DefaultZoneConfig,
-		)
+	tpCfg := kvtenant.ProxyConfig{
+		AmbientCtx:        baseCfg.AmbientCtx,
+		RPCContext:        rpcContext,
+		RPCRetryOptions:   rpcRetryOptions,
+		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
 	}
-
-	tenantProxy, err := kvtenant.Factory.NewProxy(
-		baseCfg.AmbientCtx,
-		rpcContext,
-		rpcRetryOptions,
-		sqlCfg.TenantKVAddrs,
-	)
+	tenantProxy, err := kvtenant.Factory.NewProxy(tpCfg, sqlCfg.TenantKVAddrs)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -572,12 +551,11 @@ func makeSQLServerArgs(
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := rpc.NewServer(rpcContext)
-	noStatusServer := serverpb.MakeOptionalStatusServer(nil)
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
-			statusServer: noStatusServer,
+			statusServer: serverpb.MakeOptionalStatusServer(nil),
 			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
-			gossip:       gossip.MakeUnexposedGossip(g),
+			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
@@ -602,6 +580,7 @@ func makeSQLServerArgs(
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantProxy,
+		systemConfigProvider:     tenantProxy,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,
@@ -691,22 +670,6 @@ func StartTenant(
 		socketFile = "" // no unix socket
 	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
-
-	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
-	// https://github.com/cockroachdb/cockroach/issues/47150
-	{
-		rs := make([]resolver.Resolver, len(sqlCfg.TenantKVAddrs))
-		for i := range rs {
-			var err error
-			rs[i], err = resolver.NewResolver(sqlCfg.TenantKVAddrs[i])
-			if err != nil {
-				return "", err
-			}
-		}
-		// NB: gossip server is not bound to any address, so the advertise addr does
-		// not matter.
-		args.gossip.Start(pgL.Addr(), rs)
-	}
 
 	if err := s.start(ctx,
 		args.stopper,

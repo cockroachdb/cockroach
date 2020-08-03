@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -250,12 +251,13 @@ func startConnExecutor(
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
-	gw := gossip.MakeExposedGossip(nil)
+	gw := gossip.MakeOptionalGossip(nil)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
 		Clock:           clock,
 		DB:              db,
+		SystemConfig:    config.EmptySystemConfigProvider{},
 		SessionRegistry: NewSessionRegistry(),
 		NodeInfo: NodeInfo{
 			NodeID:    nodeID,
