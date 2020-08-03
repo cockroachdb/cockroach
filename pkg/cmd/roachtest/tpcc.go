@@ -788,7 +788,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	}
 	defer func() { _ = os.RemoveAll(resultsDir) }()
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
+	iteration := 0
 	if res, err := s.Search(func(warehouses int) (bool, error) {
+		iteration++
+		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 		m := newMonitor(ctx, c, roachNodes)
 		// Restart the cluster before each iteration to help eliminate
 		// inter-trial interactions.
