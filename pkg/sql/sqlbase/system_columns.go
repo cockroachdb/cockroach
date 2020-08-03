@@ -38,17 +38,14 @@ var MVCCTimestampColumnType = types.Decimal
 // system columns will have ID's that decrement from this value.
 const MVCCTimestampColumnID = math.MaxUint32
 
-// NewMVCCTimestampColumnDesc creates a column descriptor for the MVCC timestamp
-// system column.
-func NewMVCCTimestampColumnDesc() *ColumnDescriptor {
-	return &ColumnDescriptor{
-		Name:             MVCCTimestampColumnName,
-		Type:             MVCCTimestampColumnType,
-		Hidden:           true,
-		Nullable:         true,
-		SystemColumnKind: SystemColumnKind_MVCCTIMESTAMP,
-		ID:               MVCCTimestampColumnID,
-	}
+// MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
+var MVCCTimestampColumnDesc = ColumnDescriptor{
+	Name:             MVCCTimestampColumnName,
+	Type:             MVCCTimestampColumnType,
+	Hidden:           true,
+	Nullable:         true,
+	SystemColumnKind: SystemColumnKind_MVCCTIMESTAMP,
+	ID:               MVCCTimestampColumnID,
 }
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
@@ -66,7 +63,7 @@ func IsColIDSystemColumn(colID ColumnID) bool {
 func GetSystemColumnDescriptorFromID(colID ColumnID) (*ColumnDescriptor, error) {
 	switch colID {
 	case MVCCTimestampColumnID:
-		return NewMVCCTimestampColumnDesc(), nil
+		return &MVCCTimestampColumnDesc, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported system column ID %d", colID)
 	}
