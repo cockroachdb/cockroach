@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -170,6 +171,19 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
+// tryEnableServerExecutionTimings attempts to check if the server supports the
+// SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
+// server side execution timings instead of timing on the client.
+func (c *sqlConn) tryEnableServerExecutionTimings() {
+	_, _, err := c.getLastQueryStatistics()
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
+		sqlCtx.enableServerExecutionTimings = false
+	} else {
+		sqlCtx.enableServerExecutionTimings = true
+	}
+}
+
 func (c *sqlConn) getServerMetadata() (
 	nodeID roachpb.NodeID,
 	version, clusterID string,
@@ -299,6 +313,9 @@ func (c *sqlConn) checkServerMetadata() error {
 			fmt.Println("# Organization:", c.clusterOrganization)
 		}
 	}
+	// Try to enable server execution timings for the CLI to display if
+	// supported by the server.
+	c.tryEnableServerExecutionTimings()
 
 	return nil
 }
@@ -325,8 +342,6 @@ func (c *sqlConn) requireServerVersion(required *version.Version) error {
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
 func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
-	var dbVals [1]driver.Value
-
 	rows, err := c.Query(sql, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
@@ -339,6 +354,8 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 		return nil, false
 	}
 
+	dbVals := make([]driver.Value, len(rows.Columns()))
+
 	err = rows.Next(dbVals[:])
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: invalid %s: %v\n", what, err)
@@ -346,6 +363,61 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 	}
 
 	return dbVals[0], true
+}
+
+// parseLastQueryStatistics runs the "SHOW LAST QUERY STATISTICS" statements,
+// performs sanity checks, and returns the exec latency and service latency from
+// the sql row parsed as time.Duration.
+func (c *sqlConn) getLastQueryStatistics() (
+	execLatency time.Duration,
+	serviceLatency time.Duration,
+	err error,
+) {
+	rows, err := c.Query("SHOW LAST QUERY STATISTICS", nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	if len(rows.Columns()) != 4 {
+		return 0, 0,
+			errors.New("unexpected number of columns in SHOW LAST QUERY STATISTICS")
+	}
+
+	if rows.Columns()[2] != "exec_latency" || rows.Columns()[3] != "service_latency" {
+		return 0, 0,
+			errors.New("unexpected columns in SHOW LAST QUERY STATISTICS")
+	}
+
+	iter := newRowIter(rows, true /* showMoreChars */)
+	nRows := 0
+	var execLatencyRaw string
+	var serviceLatencyRaw string
+	for {
+		row, err := iter.Next()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, 0, err
+		}
+
+		execLatencyRaw = formatVal(row[2], false, false)
+		serviceLatencyRaw = formatVal(row[3], false, false)
+
+		nRows++
+	}
+
+	if nRows != 1 {
+		return 0, 0,
+			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
+	}
+
+	parsedExecLatency, _ := tree.ParseDInterval(execLatencyRaw)
+	parsedServiceLatency, _ := tree.ParseDInterval(serviceLatencyRaw)
+
+	return time.Duration(parsedExecLatency.Duration.Nanos()),
+		time.Duration(parsedServiceLatency.Duration.Nanos()),
+		nil
 }
 
 // sqlTxnShim implements the crdb.Tx interface.
@@ -424,7 +496,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 }
 
 func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, error) {
-	rows, err := makeQuery(query, args...)(c)
+	rows, _, err := makeQuery(query, args...)(c)
 	if err != nil {
 		return nil, err
 	}
@@ -634,10 +706,11 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 	return makeSQLConn(sqlURL), nil
 }
 
-type queryFunc func(conn *sqlConn) (*sqlRows, error)
+type queryFunc func(conn *sqlConn) (rows *sqlRows, isMultiStatementQuery bool, err error)
 
 func makeQuery(query string, parameters ...driver.Value) queryFunc {
-	return func(conn *sqlConn) (*sqlRows, error) {
+	return func(conn *sqlConn) (*sqlRows, bool, error) {
+		isMultiStatementQuery := len(parser.ScanStatements(query)) > 1
 		// driver.Value is an alias for interface{}, but must adhere to a restricted
 		// set of types when being passed to driver.Queryer.Query (see
 		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
@@ -648,17 +721,18 @@ func makeQuery(query string, parameters ...driver.Value) queryFunc {
 			var err error
 			parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
 			if err != nil {
-				return nil, err
+				return nil, isMultiStatementQuery, err
 			}
 		}
-		return conn.Query(query, parameters)
+		rows, err := conn.Query(query, parameters)
+		return rows, isMultiStatementQuery, err
 	}
 }
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 func runQuery(conn *sqlConn, fn queryFunc, showMoreChars bool) ([]string, [][]string, error) {
-	rows, err := fn(conn)
+	rows, _, err := fn(conn)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -698,7 +772,7 @@ var tagsWithRowsAffected = map[string]struct{}{
 // It runs the sql query and writes output to 'w'.
 func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 	startTime := timeutil.Now()
-	rows, err := fn(conn)
+	rows, isMultiStatementQuery, err := fn(conn)
 	if err != nil {
 		return handleCopyError(conn, err)
 	}
@@ -788,14 +862,23 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 			return err
 		}
 
-		if sqlCtx.showTimes {
-			// Present the time since the last result, or since the
-			// beginning of execution. Currently the execution engine makes
-			// all the work upfront so most of the time is accounted for by
-			// the 1st result; this is subject to change once CockroachDB
-			// evolves to stream results as statements are executed.
-			fmt.Fprintf(w, "\nTime: %s\n", queryCompleteTime.Sub(startTime))
-			// Make users better understand any discrepancy they observe.
+		// We only show times for the first result set.
+		if sqlCtx.showTimes && !isMultiStatementQuery {
+			clientSideQueryTime := queryCompleteTime.Sub(startTime)
+			if sqlCtx.enableServerExecutionTimings {
+				execLatency, serviceLatency, err := conn.getLastQueryStatistics()
+				if err != nil {
+					return err
+				}
+				networkLatency := clientSideQueryTime - serviceLatency
+
+				fmt.Fprintf(w, "\nServer Execution Time: %s\n", execLatency)
+				fmt.Fprintf(w, "Network Latency: %s\n", networkLatency)
+			} else {
+				// If the server doesn't support `SHOW LAST QUERY STATISTICS` statement,
+				// we revert to the pre-20.2 time formatting in the CLI.
+				fmt.Fprintf(w, "\nTime: %s\n", clientSideQueryTime)
+			}
 			renderDelay := timeutil.Now().Sub(queryCompleteTime)
 			if renderDelay >= 1*time.Second {
 				fmt.Fprintf(w,
@@ -804,8 +887,8 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 					renderDelay)
 			}
 			fmt.Fprintln(w)
-			// Reset the clock. We ignore the rendering time.
-			startTime = timeutil.Now()
+		} else {
+			fmt.Fprintf(w, "Note: timings for multiple statements on a single line are not supported\n")
 		}
 
 		if more, err := rows.NextResultSet(); err != nil {

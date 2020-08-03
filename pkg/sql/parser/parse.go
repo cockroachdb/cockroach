@@ -236,6 +236,24 @@ func ParseOne(sql string) (Statement, error) {
 	return p.parseOneWithDepth(1, sql)
 }
 
+// ScanStatements takes a sql string and returns potential sql statements
+// by performing semi-colon delimited splitting. This function does not perform
+// any parsing, as it is intended to be called from the client, and we never
+// want to do client side parsing (with potentially old grammars).
+func ScanStatements(sql string) (stmts []string) {
+	var p Parser
+	p.scanner.init(sql)
+	defer p.scanner.cleanup()
+	for {
+		sql, _, done := p.scanOneStmt()
+		if done {
+			break
+		}
+		stmts = append(stmts, sql)
+	}
+	return stmts
+}
+
 // ParseQualifiedTableName parses a SQL string of the form
 // `[ database_name . ] [ schema_name . ] table_name`.
 func ParseQualifiedTableName(sql string) (*tree.TableName, error) {

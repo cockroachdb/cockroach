@@ -58,7 +58,7 @@ end_test
 start_test "Check option to echo statements"
 send "\\set echo\r"
 send "select 1;\r"
-eexpect "\n> select 1;\r\n"
+eexpect "\n> select 1\r\n"
 eexpect root@
 end_test
 

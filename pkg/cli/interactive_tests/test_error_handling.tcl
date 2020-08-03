@@ -8,14 +8,6 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-start_test "Check that by default, an error prevents subsequent statements from running."
-send "(echo 'select foo;'; echo 'select 1;') | $argv sql\r"
-eexpect "ERROR: column \"foo\" does not exist"
-eexpect ":/# "
-send "echo \$?\r"
-eexpect "1\r\n:/# "
-end_test
-
 start_test "Check that a user can request to continue upon failures."
 send "(echo '\\unset errexit'; echo 'select foo;'; echo 'select 1;') | $argv sql\r"
 eexpect "ERROR: column \"foo\" does not exist"
