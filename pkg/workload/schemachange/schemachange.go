@@ -170,7 +170,9 @@ func (s *schemaChange) Tables() []workload.Table {
 }
 
 // Tables implements the workload.Opser interface.
-func (s *schemaChange) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (s *schemaChange) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(s, s.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

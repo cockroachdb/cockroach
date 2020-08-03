@@ -258,7 +258,9 @@ func (w *tpcds) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcds) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *tpcds) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

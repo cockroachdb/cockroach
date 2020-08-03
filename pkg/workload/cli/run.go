@@ -353,8 +353,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
+	const prepareTimeout = 10 * time.Minute
+	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
+	defer cancel()
 	for i := 1; ; i++ {
-		ops, err = o.Ops(urls, reg)
+		ops, err = o.Ops(prepareCtx, urls, reg)
 		if err == nil {
 			break
 		}
@@ -362,12 +365,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		if !*tolerateErrors {
 			return err
 		}
-		if timeutil.Now().Sub(prepareStart) > 10*time.Minute {
+		if prepareCtx.Err() != nil {
 			// Don't retry endlessly. Note that this retry loop is not under the
 			// control of --duration, so we're avoiding retrying endlessly.
 			log.Errorf(ctx, "attempt %d to create load failed. "+
-				"It's been more than 10min since we started trying to create the load generator "+
-				"so we're giving up. Last failure: %s", err)
+				"It's been more than %s since we started trying to create the load generator "+
+				"so we're giving up. Last failure: %s", prepareTimeout, err)
 			return err
 		} else {
 			log.Warningf(ctx, "retrying after error while creating load: %v", err)
