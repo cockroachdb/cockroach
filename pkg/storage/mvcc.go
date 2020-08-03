@@ -1322,6 +1322,7 @@ func replayTransactionalWrite(
 ) error {
 	var found bool
 	var writtenValue []byte
+	var writtenValueSafety valueSafety
 	var err error
 	metaKey := MakeMVCCMetadataKey(key)
 	if txn.Sequence == meta.Txn.Sequence {
@@ -1332,7 +1333,7 @@ func replayTransactionalWrite(
 		defer getBuf.release()
 		getBuf.meta = buf.meta
 		var exVal *roachpb.Value
-		if exVal, _, _, err = mvccGetInternal(
+		if exVal, _, writtenValueSafety, err = mvccGetInternal(
 			ctx, iter, metaKey, timestamp, true /* consistent */, unsafeValue, txn, getBuf); err != nil {
 			return err
 		}
@@ -1341,6 +1342,7 @@ func replayTransactionalWrite(
 	} else {
 		// Get the value from the intent history.
 		writtenValue, found = meta.GetIntentValue(txn.Sequence)
+		writtenValueSafety = safeValue
 	}
 	if !found {
 		return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
@@ -1360,8 +1362,14 @@ func replayTransactionalWrite(
 			prevVal := prevIntent.Value
 
 			exVal = &roachpb.Value{RawBytes: prevVal}
-		}
-		if exVal == nil {
+		} else {
+			// We're going to be using the iterator again, so make sure the
+			// existing writtenValue bytes are safe and won't be corrupted.
+			if writtenValueSafety == unsafeValue {
+				writtenValue = append([]byte(nil), writtenValue...)
+				writtenValueSafety = safeValue
+			}
+
 			// If the previous value at the key wasn't written by this
 			// transaction, or it was hidden by a rolled back seqnum, we
 			// look at last committed value on the key.

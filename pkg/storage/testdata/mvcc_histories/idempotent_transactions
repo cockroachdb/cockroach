@@ -54,7 +54,7 @@ error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 
 
 run ok
 with t=a k=i
-  # On a separate key, start an increment.
+  # On a separate nonexistent key, start an increment.
   txn_step n=3
   increment
   # As long as the sequence is unchanged, replaying the increment doesn't increase the value.
@@ -75,8 +75,11 @@ data: "i"/0.000000011,0 -> /INT/1
 
 run ok
 with t=a k=i
-  # Increment again.
+  # Increment previously nonexistent key again.
   txn_step
+  increment
+  # As long as the sequence is unchanged, replaying the increment doesn't increase the value.
+  increment
   increment
   txn_step n=-1
   # Replaying an older increment doesn't increase the value.
@@ -84,6 +87,8 @@ with t=a k=i
   increment
   increment
 ----
+inc: current value = 2
+inc: current value = 2
 inc: current value = 2
 inc: current value = 1
 inc: current value = 1
@@ -94,3 +99,69 @@ meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 
 data: "a"/0.000000011,0 -> /BYTES/second
 meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
 data: "i"/0.000000011,0 -> /INT/2
+
+# Write a key outside of the transaction.
+run ok
+increment k=i2 ts=10
+----
+inc: current value = 1
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+data: "a"/0.000000011,0 -> /BYTES/second
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+data: "i"/0.000000011,0 -> /INT/2
+data: "i2"/0.000000010,0 -> /INT/1
+
+run ok
+with t=a k=i2
+  # On a separate existent key, start an increment.
+  txn_step n=2
+  increment
+  # As long as the sequence is unchanged, replaying the increment doesn't increase the value.
+  increment
+  increment
+  increment
+----
+inc: current value = 2
+inc: current value = 2
+inc: current value = 2
+inc: current value = 2
+>> at end:
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=4} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+data: "a"/0.000000011,0 -> /BYTES/second
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+data: "i"/0.000000011,0 -> /INT/2
+meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=4} ts=0.000000011,0 del=false klen=12 vlen=6
+data: "i2"/0.000000011,0 -> /INT/2
+data: "i2"/0.000000010,0 -> /INT/1
+
+run ok
+with t=a k=i2
+  # Increment previously existent key again.
+  txn_step
+  increment
+  # As long as the sequence is unchanged, replaying the increment doesn't increase the value.
+  increment
+  increment
+  txn_step n=-1
+  # Replaying an older increment doesn't increase the value.
+  increment
+  increment
+  increment
+----
+inc: current value = 3
+inc: current value = 3
+inc: current value = 3
+inc: current value = 2
+inc: current value = 2
+inc: current value = 2
+>> at end:
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=4} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+data: "a"/0.000000011,0 -> /BYTES/second
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+data: "i"/0.000000011,0 -> /INT/2
+meta: "i2"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=5} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{4 /INT/2}}
+data: "i2"/0.000000011,0 -> /INT/3
+data: "i2"/0.000000010,0 -> /INT/1
