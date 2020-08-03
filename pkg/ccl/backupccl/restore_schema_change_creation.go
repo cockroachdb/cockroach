@@ -114,6 +114,32 @@ func jobDescriptionFromMutationID(
 	return jobDesc, mutationCount, nil
 }
 
+func createTypeChangeJobFromDesc(
+	ctx context.Context,
+	jr *jobs.Registry,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	username string,
+	typ sqlbase.TypeDescriptorInterface,
+) (*jobs.StartableJob, error) {
+	record := jobs.Record{
+		Description:   fmt.Sprintf("RESTORING: type %d", typ.GetID()),
+		Username:      username,
+		DescriptorIDs: sqlbase.IDs{typ.GetID()},
+		Details: jobspb.TypeSchemaChangeDetails{
+			TypeID: typ.GetID(),
+		},
+		Progress: jobspb.TypeSchemaChangeProgress{},
+		// Type change jobs are not cancellable.
+		NonCancelable: true,
+	}
+	job, err := jr.CreateStartableJobWithTxn(ctx, record, txn, nil /* resultsCh */)
+	if err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 // createSchemaChangeJobsFromMutations creates and runs jobs for any mutations
 // on the table descriptor. It also updates tableDesc's MutationJobs to
 // reference the new jobs. This is only used to reconstruct a job based off a
