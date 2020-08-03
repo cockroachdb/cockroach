@@ -1047,7 +1047,11 @@ func createImportingDescriptors(
 	}
 
 	if !details.PrepareCompleted {
+		var typeChangeJobs []*jobs.StartableJob
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Reset typeChangeJobs in case the closure has run multiple times.
+			typeChangeJobs = typeChangeJobs[0:]
+
 			// Write the new TableDescriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(ctx, txn, databases, tables, typesToWrite, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
@@ -1103,6 +1107,29 @@ func createImportingDescriptors(
 				}
 			}
 
+			for _, typ := range typesToWrite {
+				// If any of the written types have pending schema changes, then start
+				// jobs to complete those schema changes.
+				if typ.HasPendingSchemaChanges() {
+					record := jobs.Record{
+						Description:   fmt.Sprintf("RESTORING: type %d", typ.GetID()),
+						Username:      p.User(),
+						DescriptorIDs: sqlbase.IDs{typ.GetID()},
+						Details: jobspb.TypeSchemaChangeDetails{
+							TypeID: typ.GetID(),
+						},
+						Progress: jobspb.TypeSchemaChangeProgress{},
+						// Type change jobs are not cancellable.
+						NonCancelable: true,
+					}
+					job, err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, record, txn, nil /* resultsCh */)
+					if err != nil {
+						return err
+					}
+					typeChangeJobs = append(typeChangeJobs, job)
+				}
+			}
+
 			details.PrepareCompleted = true
 			details.TableDescs = tableDescs
 
@@ -1113,6 +1140,13 @@ func createImportingDescriptors(
 		})
 		if err != nil {
 			return nil, nil, nil, nil, err
+		}
+
+		// Start any type change jobs that were queued.
+		for _, job := range typeChangeJobs {
+			if _, err := job.Start(ctx); err != nil {
+				return nil, nil, nil, nil, err
+			}
 		}
 
 		// Wait for one version on any existing changed types.
