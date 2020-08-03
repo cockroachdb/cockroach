@@ -36,7 +36,7 @@ type kvScanner interface {
 
 type scanRequestScanner struct {
 	settings *cluster.Settings
-	gossip   gossip.DeprecatedGossip
+	gossip   gossip.OptionalGossip
 	db       *kv.DB
 }
 
@@ -244,7 +244,7 @@ func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescr
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(gw gossip.DeprecatedGossip) (int, error) {
+func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	g, err := gw.OptionalErr(47971)
 	if err != nil {
 		return 0, err

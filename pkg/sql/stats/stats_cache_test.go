@@ -231,7 +231,7 @@ func TestCacheBasic(t *testing.T) {
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
 		2, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 		keys.SystemSQLCodec,
@@ -323,7 +323,7 @@ CREATE STATISTICS s FROM tt;
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
 		1,
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		keys.SystemSQLCodec,
@@ -362,7 +362,7 @@ func TestCacheWait(t *testing.T) {
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
 		len(tableIDs), /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 		keys.SystemSQLCodec,

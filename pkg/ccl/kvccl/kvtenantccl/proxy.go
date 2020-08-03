@@ -14,8 +14,11 @@ import (
 	"context"
 	"io"
 	"math/rand"
+	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -49,12 +52,17 @@ type Proxy struct {
 	rpcRetryOptions retry.Options
 	rpcDialTimeout  time.Duration // for testing
 	rpcDial         singleflight.Group
+	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 	startupC        chan struct{}
 
-	mu        syncutil.RWMutex
-	client    roachpb.InternalClient
-	nodeDescs map[roachpb.NodeID]*roachpb.NodeDescriptor
+	mu struct {
+		syncutil.RWMutex
+		client               roachpb.InternalClient
+		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
+		systemConfig         *config.SystemConfig
+		systemConfigChannels []chan<- struct{}
+	}
 }
 
 // Proxy is capable of providing information on each of the KV nodes in the
@@ -70,28 +78,29 @@ var _ kvcoord.NodeDescStore = (*Proxy)(nil)
 // requested owned by the requesting tenant?).
 var _ kvcoord.RangeDescriptorDB = (*Proxy)(nil)
 
+// Proxy is capable of providing a filtered view of the SystemConfig containing
+// only information applicable to secondary tenants. This obviates the need for
+// SQL-only tenant processes to join the cluster-wide gossip network.
+var _ config.SystemConfigProvider = (*Proxy)(nil)
+
 // NewProxy creates a new Proxy.
-func NewProxy(
-	ac log.AmbientContext, rpcContext *rpc.Context, rpcRetryOptions retry.Options, addrs []string,
-) *Proxy {
-	ac.AddLogTag("tenant-proxy", nil)
+func NewProxy(cfg kvtenant.ProxyConfig, addrs []string) *Proxy {
+	cfg.AmbientCtx.AddLogTag("tenant-proxy", nil)
 	return &Proxy{
-		AmbientContext:  ac,
-		rpcContext:      rpcContext,
-		rpcRetryOptions: rpcRetryOptions,
+		AmbientContext:  cfg.AmbientCtx,
+		rpcContext:      cfg.RPCContext,
+		rpcRetryOptions: cfg.RPCRetryOptions,
+		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
 		startupC:        make(chan struct{}),
-		nodeDescs:       make(map[roachpb.NodeID]*roachpb.NodeDescriptor),
 	}
 }
 
 // proxyFactory implements kvtenant.ProxyFactory.
 type proxyFactory struct{}
 
-func (proxyFactory) NewProxy(
-	ac log.AmbientContext, rpcContext *rpc.Context, rpcRetryOptions retry.Options, addrs []string,
-) (kvtenant.Proxy, error) {
-	return NewProxy(ac, rpcContext, rpcRetryOptions, addrs), nil
+func (proxyFactory) NewProxy(cfg kvtenant.ProxyConfig, addrs []string) (kvtenant.Proxy, error) {
+	return NewProxy(cfg, addrs), nil
 }
 
 // Start launches the proxy's worker thread and waits for it to receive an
@@ -158,9 +167,10 @@ func (p *Proxy) runGossipSubscription(ctx context.Context) {
 }
 
 var gossipSubsHandlers = map[string]func(*Proxy, context.Context, string, roachpb.Value){
-	// Subscribe to all *NodeDescriptor updates in the gossip network.
+	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Proxy).updateNodeAddress,
-	// TODO(nvanbenschoten): subscribe to updates to the tenant zones key.
+	// Subscribe to a filtered view of *SystemConfig updates.
+	gossip.KeySystemConfig: (*Proxy).updateSystemConfig,
 }
 
 var gossipSubsPatterns = func() []string {
@@ -168,6 +178,7 @@ var gossipSubsPatterns = func() []string {
 	for pattern := range gossipSubsHandlers {
 		patterns = append(patterns, pattern)
 	}
+	sort.Strings(patterns)
 	return patterns
 }()
 
@@ -176,7 +187,7 @@ var gossipSubsPatterns = func() []string {
 func (p *Proxy) updateNodeAddress(ctx context.Context, key string, content roachpb.Value) {
 	desc := new(roachpb.NodeDescriptor)
 	if err := content.GetProto(desc); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Errorf(ctx, "could not unmarshal node descriptor: %v", err)
 		return
 	}
 
@@ -188,18 +199,70 @@ func (p *Proxy) updateNodeAddress(ctx context.Context, key string, content roach
 	// nothing ever removes them from Gossip.nodeDescs. Fix this.
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.nodeDescs[desc.NodeID] = desc
+	if p.mu.nodeDescs == nil {
+		p.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	}
+	p.mu.nodeDescs[desc.NodeID] = desc
 }
 
 // GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
 func (p *Proxy) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	desc, ok := p.nodeDescs[nodeID]
+	desc, ok := p.mu.nodeDescs[nodeID]
 	if !ok {
 		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
 	}
 	return desc, nil
+}
+
+// updateSystemConfig handles updates to a filtered view of the "system-db"
+// gossip key, performing the corresponding update to the Proxy's cached
+// SystemConfig.
+func (p *Proxy) updateSystemConfig(ctx context.Context, key string, content roachpb.Value) {
+	cfg := config.NewSystemConfig(p.defaultZoneCfg)
+	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
+		log.Errorf(ctx, "could not unmarshal system config: %v", err)
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.systemConfig = cfg
+	for _, c := range p.mu.systemConfigChannels {
+		select {
+		case c <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// GetSystemConfig implements the config.SystemConfigProvider interface.
+func (p *Proxy) GetSystemConfig() *config.SystemConfig {
+	// TODO(nvanbenschoten): we need to wait in `(*Proxy).Start()` until the
+	// system config is populated. As is, there's a small chance that we return
+	// nil, which SQL does not handle.
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.mu.systemConfig
+}
+
+// RegisterSystemConfigChannel implements the config.SystemConfigProvider
+// interface.
+func (p *Proxy) RegisterSystemConfigChannel() <-chan struct{} {
+	// Create channel that receives new system config notifications.
+	// The channel has a size of 1 to prevent proxy from having to block on it.
+	c := make(chan struct{}, 1)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.systemConfigChannels = append(p.mu.systemConfigChannels, c)
+
+	// Notify the channel right away if we have a config.
+	if p.mu.systemConfig != nil {
+		c <- struct{}{}
+	}
+	return c
 }
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.
@@ -256,7 +319,7 @@ func (p *Proxy) FirstRange() (*roachpb.RangeDescriptor, error) {
 // context is canceled.
 func (p *Proxy) getClient(ctx context.Context) (roachpb.InternalClient, error) {
 	p.mu.RLock()
-	if c := p.client; c != nil {
+	if c := p.mu.client; c != nil {
 		p.mu.RUnlock()
 		return c, nil
 	}
@@ -269,7 +332,7 @@ func (p *Proxy) getClient(ctx context.Context) (roachpb.InternalClient, error) {
 			return nil, err
 		}
 		// NB: read lock not needed.
-		return p.client, nil
+		return p.mu.client, nil
 	})
 	p.mu.RUnlock()
 
@@ -299,7 +362,7 @@ func (p *Proxy) dialAddrs(ctx context.Context) error {
 			}
 			client := roachpb.NewInternalClient(conn)
 			p.mu.Lock()
-			p.client = client
+			p.mu.client = client
 			p.mu.Unlock()
 			return nil
 		}
@@ -326,7 +389,7 @@ func (p *Proxy) tryForgetClient(ctx context.Context, c roachpb.InternalClient) {
 	// Compare-and-swap to avoid thrashing.
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.client == c {
-		p.client = nil
+	if p.mu.client == c {
+		p.mu.client = nil
 	}
 }

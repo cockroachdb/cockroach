@@ -599,7 +599,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
 			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
-			gossip:                 gossip.MakeExposedGossip(g),
+			gossip:                 gossip.MakeOptionalGossip(g),
 			grpcServer:             grpc.Server,
 			recorder:               recorder,
 			nodeIDContainer:        idContainer,
@@ -614,6 +614,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
+		systemConfigProvider:     g,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,

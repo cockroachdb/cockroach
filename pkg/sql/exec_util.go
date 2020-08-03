@@ -652,7 +652,8 @@ type ExecutorConfig struct {
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
 	DB                *kv.DB
-	Gossip            gossip.DeprecatedGossip
+	Gossip            gossip.OptionalGossip
+	SystemConfig      config.SystemConfigProvider
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
 	LeaseManager      *lease.Manager
