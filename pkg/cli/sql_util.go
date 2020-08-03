@@ -165,6 +165,25 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
+// tryEnableServerExecutionTimings attempts to check if the server supports the
+// SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
+// server side execution timings instead of timing on the client.
+func (c *sqlConn) tryEnableServerExecutionTimings() {
+	rows, err := c.Query("SHOW LAST QUERY STATISTICS", nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: cannot show server execution timings: %v\n", err)
+		sqlCtx.enableServerExecutionTimings = false
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	if rows.Columns()[2] != "exec_latency" {
+		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
+		sqlCtx.enableServerExecutionTimings = false
+	} else {
+		sqlCtx.enableServerExecutionTimings = true
+	}
+}
+
 func (c *sqlConn) getServerMetadata() (
 	nodeID roachpb.NodeID,
 	version, clusterID string,
@@ -294,6 +313,9 @@ func (c *sqlConn) checkServerMetadata() error {
 			fmt.Println("# Organization:", c.clusterOrganization)
 		}
 	}
+	// Try to enable server execution timings for the CLI to display if
+	// supported by the server.
+	c.tryEnableServerExecutionTimings()
 
 	return nil
 }
@@ -320,8 +342,14 @@ func (c *sqlConn) requireServerVersion(required *version.Version) error {
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
 func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
-	var dbVals [1]driver.Value
+	return c.getServerValueFromColumnIndex(what, sql, 0)
+}
 
+// getServerValueFromColumnIndex retrieves the driverValue at a particular
+// column index from the result of the given sql query. If the query fails or
+// does not return at least as many columns as colIdx - 1, `false` is returned
+// in the second result.
+func (c *sqlConn) getServerValueFromColumnIndex(what, sql string, colIdx int) (driver.Value, bool) {
 	rows, err := c.Query(sql, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
@@ -329,10 +357,12 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	if len(rows.Columns()) == 0 {
+	if len(rows.Columns()) <= colIdx {
 		fmt.Fprintf(stderr, "warning: cannot get the %s\n", what)
 		return nil, false
 	}
+
+	dbVals := make([]driver.Value, len(rows.Columns()))
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
@@ -340,7 +370,7 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 		return nil, false
 	}
 
-	return dbVals[0], true
+	return dbVals[colIdx], true
 }
 
 // sqlTxnShim implements the crdb.Tx interface.
@@ -784,13 +814,19 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		}
 
 		if sqlCtx.showTimes {
-			// Present the time since the last result, or since the
-			// beginning of execution. Currently the execution engine makes
-			// all the work upfront so most of the time is accounted for by
-			// the 1st result; this is subject to change once CockroachDB
-			// evolves to stream results as statements are executed.
-			fmt.Fprintf(w, "\nTime: %s\n", queryCompleteTime.Sub(startTime))
-			// Make users better understand any discrepancy they observe.
+			if sqlCtx.enableServerExecutionTimings {
+				execLatencyRaw, hasVal := conn.getServerValueFromColumnIndex(
+					"last query statistics", `SHOW LAST QUERY STATISTICS`, 2 /* exec_latency */)
+				if hasVal {
+					execLatency := formatVal(execLatencyRaw, false, false)
+					parsed, _ := tree.ParseDInterval(execLatency)
+					fmt.Fprintf(w, "\nServer Execution Time: %s\n", time.Duration(parsed.Duration.Nanos()))
+				}
+			} else {
+				// If the server doesn't support `SHOW LAST QUERY STATISTICS` statement,
+				// we revert to the pre-20.2 time formatting in the CLI.
+				fmt.Fprintf(w, "\nTime: %s\n", queryCompleteTime.Sub(startTime))
+			}
 			renderDelay := timeutil.Now().Sub(queryCompleteTime)
 			if renderDelay >= 1*time.Second {
 				fmt.Fprintf(w,

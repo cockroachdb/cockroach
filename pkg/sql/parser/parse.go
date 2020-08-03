@@ -225,6 +225,22 @@ func Parse(sql string) (Statements, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
+// SplitAtSemicolons takes a sql string and returns potential sql statements
+// by performing semi-colon delimited splitting.
+func SplitAtSemicolons(sql string) (stmts []string) {
+	var p Parser
+	p.scanner.init(sql)
+	defer p.scanner.cleanup()
+	for {
+		sql, _, done := p.scanOneStmt()
+		if done {
+			break
+		}
+		stmts = append(stmts, sql)
+	}
+	return
+}
+
 // ParseOne parses a sql statement string, ensuring that it contains only a
 // single statement, and returns that Statement. ParseOne will always
 // interpret the INT and SERIAL types as 64-bit types, since this is
