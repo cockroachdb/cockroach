@@ -41,6 +41,7 @@ type TableDescriptor interface {
 	GetIndexes() []descpb.IndexDescriptor
 	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	IsInterleaved() bool
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
 	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
