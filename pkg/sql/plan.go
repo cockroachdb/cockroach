@@ -138,6 +138,7 @@ type planNodeReadingOwnWrites interface {
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterTableSetSchemaNode{}
 var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}

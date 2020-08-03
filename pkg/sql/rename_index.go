@@ -75,8 +75,9 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		if tableRef.IndexID != idx.ID {
 			continue
 		}
-		return p.dependentViewRenameError(
-			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
+		return p.dependentViewError(
+			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, "rename",
+		)
 	}
 
 	if n.n.NewName == "" {

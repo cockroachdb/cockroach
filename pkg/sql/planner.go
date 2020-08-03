@@ -123,6 +123,10 @@ type schemaInterface struct {
 type planner struct {
 	txn *kv.Txn
 
+	// isInternalPlanner is set to true when this planner is not bound to
+	// a SQL session.
+	isInternalPlanner bool
+
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
 
@@ -286,6 +290,7 @@ func newInternalPlanner(
 	p.txn = txn
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = sd.SearchPath
@@ -310,7 +315,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
-	p.extendedEvalCtx.TypeResolver = p
 
 	p.sessionDataMutator = dataMutator
 	p.autoCommit = false

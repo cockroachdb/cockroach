@@ -532,6 +532,12 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacement {
     return u.val.(*tree.AlterTypeAddValuePlacement)
 }
+func (u *sqlSymUnion) scheduleState() tree.ScheduleState {
+  return u.val.(tree.ScheduleState)
+}
+func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
+  return u.val.(tree.ScheduledJobExecutorType)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -611,7 +617,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
@@ -621,7 +627,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
-%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
+%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
@@ -692,6 +698,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> alter_relocate_stmt
 %type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
+%type <tree.Statement> alter_table_set_schema_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -712,10 +719,12 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
+%type <tree.Statement> alter_view_set_schema_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
 %type <tree.Statement> alter_sequence_options_stmt
+%type <tree.Statement> alter_sequence_set_schema_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -834,6 +843,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
+%type <tree.Statement> show_schedules_stmt
 
 %type <str> session_var
 %type <*string> comment_text
@@ -1108,6 +1118,8 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 %type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
+%type <tree.ScheduleState> schedule_state
+%type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -1251,6 +1263,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
 //   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER TABLE ... SET SCHEMA <newschemaname>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1274,6 +1287,7 @@ alter_table_stmt:
 | alter_scatter_stmt
 | alter_zone_table_stmt
 | alter_rename_table_stmt
+| alter_table_set_schema_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
@@ -1308,9 +1322,11 @@ alter_partition_stmt:
 // %Category: DDL
 // %Text:
 // ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
+// ALTER VIEW [IF EXISTS] <name> SET SCHEMA <newschemaname>
 // %SeeAlso: WEBDOCS/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
+| alter_view_set_schema_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -1325,9 +1341,11 @@ alter_view_stmt:
 //   [START <start>]
 //   [[NO] CYCLE]
 // ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
+// ALTER SEQUENCE [IF EXISTS] <name> SET SCHEMA <newschemaname>
 alter_sequence_stmt:
   alter_rename_sequence_stmt
 | alter_sequence_options_stmt
+| alter_sequence_set_schema_stmt
 | ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
 
 alter_sequence_options_stmt:
@@ -3840,7 +3858,7 @@ zone_value:
 // PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS,
-// SHOW LAST QUERY STATISTICS
+// SHOW LAST QUERY STATISTICS, SHOW SCHEDULES
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3854,6 +3872,7 @@ show_stmt:
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
 | show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
@@ -4225,6 +4244,58 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+
+// %Help: SHOW SCHEDULES - list periodic schedules
+// %Category: Misc
+// %Text:
+// SHOW [RUNNING | PAUSED] SCHEDULES [FOR BACKUP]
+// SHOW SCHEDULE <schedule_id>
+// %SeeAlso: PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES
+show_schedules_stmt:
+  SHOW SCHEDULES opt_schedule_executor_type
+  {
+    $$.val = &tree.ShowSchedules{
+      WhichSchedules: tree.SpecifiedSchedules,
+      ExecutorType: $3.executorType(),
+    }
+  }
+| SHOW SCHEDULES opt_schedule_executor_type error // SHOW HELP: SHOW SCHEDULES
+| SHOW schedule_state SCHEDULES opt_schedule_executor_type
+  {
+    $$.val = &tree.ShowSchedules{
+      WhichSchedules: $2.scheduleState(),
+      ExecutorType: $4.executorType(),
+    }
+  }
+| SHOW schedule_state SCHEDULES opt_schedule_executor_type error // SHOW HELP: SHOW SCHEDULES
+| SHOW SCHEDULE a_expr
+  {
+    $$.val = &tree.ShowSchedules{
+      WhichSchedules: tree.SpecifiedSchedules,
+      ScheduleID:  $3.expr(),
+    }
+  }
+| SHOW SCHEDULE error  // SHOW HELP: SHOW SCHEDULES
+
+schedule_state:
+  RUNNING
+  {
+    $$.val = tree.ActiveSchedules
+  }
+| PAUSED
+  {
+    $$.val = tree.PausedSchedules
+  }
+
+opt_schedule_executor_type:
+  /* Empty */
+  {
+    $$.val = tree.InvalidExecutor
+  }
+| FOR BACKUP
+  {
+    $$.val = tree.ScheduledBackupExecutor
+  }
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
@@ -6196,6 +6267,48 @@ alter_rename_table_stmt:
     newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
+
+alter_table_set_schema_stmt:
+  ALTER TABLE relation_expr SET SCHEMA schema_name
+   {
+     $$.val = &tree.AlterTableSetSchema{
+       Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false,
+     }
+   }
+| ALTER TABLE IF EXISTS relation_expr SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterTableSetSchema{
+      Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true,
+    }
+  }
+
+alter_view_set_schema_stmt:
+	ALTER VIEW relation_expr SET SCHEMA schema_name
+	 {
+		 $$.val = &tree.AlterTableSetSchema{
+			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsView: true,
+		 }
+	 }
+| ALTER VIEW IF EXISTS relation_expr SET SCHEMA schema_name
+	{
+		$$.val = &tree.AlterTableSetSchema{
+			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsView: true,
+		}
+	}
+
+alter_sequence_set_schema_stmt:
+	ALTER SEQUENCE relation_expr SET SCHEMA schema_name
+	 {
+		 $$.val = &tree.AlterTableSetSchema{
+			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsSequence: true,
+		 }
+	 }
+| ALTER SEQUENCE IF EXISTS relation_expr SET SCHEMA schema_name
+	{
+		$$.val = &tree.AlterTableSetSchema{
+			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsSequence: true,
+		}
+	}
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
@@ -10788,6 +10901,7 @@ unreserved_keyword:
 | PARTITIONS
 | PASSWORD
 | PAUSE
+| PAUSED
 | PHYSICAL
 | PLAN
 | PLANS
@@ -10823,6 +10937,7 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
+| RUNNING
 | SCHEDULE
 | SCHEDULES
 | SETTING

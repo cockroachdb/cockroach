@@ -220,17 +220,18 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 	onExprColTypes := make([]*types.T, 0, len(ij.inputTypes)+len(rightColTypes))
 	onExprColTypes = append(onExprColTypes, ij.inputTypes...)
 	onExprColTypes = append(onExprColTypes, rightColTypes...)
-	if err := ij.onExprHelper.Init(spec.OnExpr, onExprColTypes, ij.EvalCtx); err != nil {
+	if err := ij.onExprHelper.Init(spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 		return nil, err
 	}
 	ij.combinedRow = make(sqlbase.EncDatumRow, 0, len(onExprColTypes))
 
 	if ij.datumToInvertedExpr == nil {
 		var invertedExprHelper execinfra.ExprHelper
-		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, ij.EvalCtx); err != nil {
+		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 			return nil, err
 		}
 		ij.datumToInvertedExpr, err = invertedidx.NewDatumToInvertedExpr(invertedExprHelper.Expr, ij.index)

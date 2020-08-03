@@ -711,8 +711,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			depViewRenameError := func(objType string, refTableID sqlbase.ID) error {
-				return params.p.dependentViewRenameError(params.ctx,
-					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID)
+				return params.p.dependentViewError(params.ctx,
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, "rename",
+				)
 			}
 
 			if err := n.tableDesc.RenameConstraint(

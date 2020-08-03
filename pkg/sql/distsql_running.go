@@ -163,19 +163,21 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// vectorized. If any of them can't, turn off the setting.
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
+
+			// TODO (rohany): This is unfortunate that this call to setup vectorize makes
+			//  it's own flow context rather than being able to use the one that is made
+			//  later.
+			flowCtx := dsp.distSQLSrv.NewFlowContext(execinfrapb.FlowID{}, &evalCtx.EvalContext, setupReq.TraceKV, localState)
+			// This flowCtx is only used during the vectorize check, so we need to
+			// clean up any accessed descriptors after checking.
+			defer func() {
+				flowCtx.TypeResolverFactory.CleanupFunc(ctx)
+			}()
+
 			for scheduledOnNodeID, spec := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
 				if _, err := colflow.SupportsVectorized(
-					ctx, &execinfra.FlowCtx{
-						EvalCtx: &evalCtx.EvalContext,
-						Cfg: &execinfra.ServerConfig{
-							DiskMonitor:    &mon.BytesMonitor{},
-							Settings:       dsp.st,
-							ClusterID:      &dsp.rpcCtx.ClusterID,
-							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
-						},
-						NodeID: evalCtx.NodeID,
-					}, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
+					ctx, &flowCtx, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
@@ -306,6 +308,16 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = &evalCtx.EvalContext
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
+	// If we have access to a planner and are currently being used to plan
+	// statements in a user transaction, then take the descs.Collection to resolve
+	// types with during flow execution. This is necessary to do in the case of
+	// a transaction that has already created or updated some types. If we do not
+	// use the local descs.Collection, we would attempt to acquire a lease on
+	// modified types when accessing them, which would error out.
+	if planCtx.planner != nil && !planCtx.planner.isInternalPlanner {
+		localState.Collection = planCtx.planner.Descriptors()
+	}
+
 	if planCtx.isLocal {
 		localState.IsLocal = true
 	} else if txn != nil {
