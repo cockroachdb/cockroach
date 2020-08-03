@@ -351,16 +351,29 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	reg := histogram.NewRegistry(*histogramsMaxLatency)
 	var ops workload.QueryLoad
-	for {
+	prepareStart := timeutil.Now()
+	log.Infof(ctx, "creating load generator...")
+	for i := 1; ; i++ {
 		ops, err = o.Ops(urls, reg)
 		if err == nil {
 			break
 		}
+		err = errors.Wrapf(err, "failed to initialize the load generator")
 		if !*tolerateErrors {
 			return err
 		}
-		log.Infof(ctx, "retrying after error while creating load: %v", err)
+		if timeutil.Now().Sub(prepareStart) > 10*time.Minute {
+			// Don't retry endlessly. Note that this retry loop is not under the
+			// control of --duration, so we're avoiding retrying endlessly.
+			log.Errorf(ctx, "attempt %d to create load failed. "+
+				"It's been more than 10min since we started trying to create the load generator "+
+				"so we're giving up. Last failure: %s", err)
+			return err
+		} else {
+			log.Warningf(ctx, "retrying after error while creating load: %v", err)
+		}
 	}
+	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Now().Sub(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
