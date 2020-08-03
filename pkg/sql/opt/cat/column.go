@@ -45,6 +45,11 @@ type Column interface {
 	// a different ID. See the comment for StableID for more detail.
 	ColID() StableID
 
+	// PhysicalColID returns the physical column ID of a column. This ID is not
+	// stable and can be changed for example through an ALTER COLUMN TYPE command.
+	// It is guaranteed that the PhysicalColID will not be reused.
+	PhysicalColID() StableID
+
 	// ColName returns the name of the column.
 	ColName() tree.Name
 

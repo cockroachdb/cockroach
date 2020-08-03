@@ -546,3 +546,17 @@ INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
+
+# Regression 52305.
+statement ok
+CREATE TABLE t52305(x INT)
+
+statement ok
+ALTER TABLE t52305 ALTER COLUMN x TYPE STRING
+
+let $table_id
+SELECT oid FROM pg_catalog.pg_class WHERE relname LIKE '%t52305%'
+
+# The ordinal id for the column should stay the same after the alter column type.
+statement ok
+SELECT * FROM [$table_id(1) as t]

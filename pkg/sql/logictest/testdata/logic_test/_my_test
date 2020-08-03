@@ -1,0 +1,17 @@
+statement ok
+SET enable_experimental_alter_column_type_general = true
+
+# Ensure we can change the column type of a column stored in a secondary index.
+statement ok
+CREATE TABLE t15 (x INT, y INT);
+CREATE INDEX ON t15 (x) STORING (y);
+INSERT INTO t15 VALUES (1, 1), (2, 2)
+
+statement ok
+ALTER TABLE t15 ALTER COLUMN y TYPE STRING;
+
+query IT
+SELECT x, y FROM t15 ORDER BY x
+----
+1  1
+2  2
