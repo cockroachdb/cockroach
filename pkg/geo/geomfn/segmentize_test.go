@@ -179,8 +179,15 @@ func TestSegmentizeCoords(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
-			convertedPoints := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
+			convertedPoints, err := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
+			require.NoError(t, err)
 			require.Equal(t, test.resultantCoordinates, convertedPoints)
 		})
 	}
+
+	t.Run("many coordinates to segmentize", func(t *testing.T) {
+		g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
+		_, err := Segmentize(g, 0.001)
+		require.EqualError(t, err, "attempting to segmentize into too many coordinates; need 282846 points between [0 0] and [100 100], max 16336")
+	})
 }

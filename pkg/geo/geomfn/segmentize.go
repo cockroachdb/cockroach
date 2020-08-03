@@ -50,18 +50,27 @@ func Segmentize(g *geo.Geometry, segmentMaxLength float64) (*geo.Geometry, error
 // way that they create minimum number segments of equal length such that each
 // segment has a length less than or equal to given maximum segment length.
 // Note: List of points does not consist of end point.
-func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) []float64 {
+func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]float64, error) {
 	distanceBetweenPoints := math.Sqrt(math.Pow(a.X()-b.X(), 2) + math.Pow(b.Y()-a.Y(), 2))
 
-	// numberOfSegmentToCreate represent the total number of segments
+	// numberOfSegmentsToCreate represent the total number of segments
 	// in which given two coordinates will be divided.
-	numberOfSegmentToCreate := int(math.Ceil(distanceBetweenPoints / maxSegmentLength))
-	// segmentFraction represent the fraction of length each segment
+	numberOfSegmentsToCreate := int(math.Ceil(distanceBetweenPoints / maxSegmentLength))
+	numPoints := 2 * (1 + numberOfSegmentsToCreate)
+	if numPoints > geosegmentize.MaxPoints {
+		return nil, errors.Newf(
+			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
+			numPoints,
+			a,
+			b,
+			geosegmentize.MaxPoints,
+		)
+	} // segmentFraction represent the fraction of length each segment
 	// has with respect to total length between two coordinates.
-	allSegmentizedCoordinates := make([]float64, 0, 2*(1+numberOfSegmentToCreate))
+	allSegmentizedCoordinates := make([]float64, 0, 2*(1+numberOfSegmentsToCreate))
 	allSegmentizedCoordinates = append(allSegmentizedCoordinates, a.Clone()...)
-	segmentFraction := 1.0 / float64(numberOfSegmentToCreate)
-	for pointInserted := 1; pointInserted < numberOfSegmentToCreate; pointInserted++ {
+	segmentFraction := 1.0 / float64(numberOfSegmentsToCreate)
+	for pointInserted := 1; pointInserted < numberOfSegmentsToCreate; pointInserted++ {
 		allSegmentizedCoordinates = append(
 			allSegmentizedCoordinates,
 			b.X()*float64(pointInserted)*segmentFraction+a.X()*(1-float64(pointInserted)*segmentFraction),
@@ -69,5 +78,5 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) []fl
 		)
 	}
 
-	return allSegmentizedCoordinates
+	return allSegmentizedCoordinates, nil
 }
