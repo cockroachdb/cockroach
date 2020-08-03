@@ -59,7 +59,7 @@ Query {"String": "SELECT a FROM tab1"}
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":55,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":59,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -71,7 +71,7 @@ Query {"String": "SELECT tab1.a, tab2.c FROM tab1 JOIN tab2 ON tab1.a = tab2.tab
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":55,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":56,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":59,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":60,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"4"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -83,7 +83,7 @@ Query {"String": "SELECT * FROM v WHERE v1 = 1"}
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":55,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":59,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":60,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -115,7 +115,7 @@ Query {"String": "SELECT b FROM tab3"}
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":58,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":62,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hello"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
