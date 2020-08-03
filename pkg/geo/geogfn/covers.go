@@ -158,8 +158,7 @@ func polylineCoversPointWithIdx(a *s2.Polyline, b s2.Point) (bool, int) {
 
 // polygonCoversPoints returns whether a polygon covers a given point.
 func polygonCoversPoint(a *s2.Polygon, b s2.Point) bool {
-	// Account for the case where b is on the edge of the polygon.
-	return a.ContainsPoint(b) || a.IntersectsCell(s2.CellFromPoint(b))
+	return a.IntersectsCell(s2.CellFromPoint(b))
 }
 
 // edgeCoversPoint determines whether a given edge contains a point.
