@@ -355,3 +355,41 @@ statement ok
 SET experimental_distsql_planning = always;
 SET experimental_distsql_planning = on;
 SET experimental_distsql_planning = off
+
+subtest dummy_session_vars
+
+query T noticetrace
+SET synchronous_commit = off; SET enable_seqscan = false
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+off
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+off
+
+query T noticetrace
+SET synchronous_commit = on; SET enable_seqscan = true
+----
+WARNING: setting session var "synchronous_commit" is a no-op
+WARNING: setting session var "enable_seqscan" is a no-op
+
+query T colnames
+SHOW synchronous_commit
+----
+synchronous_commit
+on
+
+query T colnames
+SHOW enable_seqscan
+----
+enable_seqscan
+on

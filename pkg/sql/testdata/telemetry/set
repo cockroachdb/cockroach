@@ -1,0 +1,9 @@
+feature-allowlist
+sql.session_var.dummy.*
+----
+
+feature-usage
+SET synchronous_commit = off; SET enable_seqscan = false
+----
+sql.session_var.dummy.enable_seqscan
+sql.session_var.dummy.synchronous_commit

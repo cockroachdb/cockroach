@@ -114,6 +114,30 @@ func parseBoolVar(varName, val string) (bool, error) {
 	return b, nil
 }
 
+// makeDummyBooleanSessionVar generates a sessionVar for a bool session setting.
+// These functions allow the setting to be changed, but whose values are not used.
+// They are logged to telemetry and output a notice that these are unused.
+func makeDummyBooleanSessionVar(
+	name string,
+	getFunc func(*extendedEvalContext) string,
+	setFunc func(*sessionDataMutator, bool),
+	sv func(_ *settings.Values) string,
+) sessionVar {
+	return sessionVar{
+		GetStringVal: makePostgresBoolGetStringValFn(name),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar(name, s)
+			if err != nil {
+				return err
+			}
+			setFunc(m, b)
+			return nil
+		},
+		Get:           getFunc,
+		GlobalDefault: sv,
+	}
+}
+
 // varGen is the main definition array for all session variables.
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
@@ -1143,10 +1167,22 @@ var varGen = map[string]sessionVar{
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
 func init() {
+	for k, v := range DummyVars {
+		varGen[k] = v
+	}
 	// Initialize delegate.ValidVars.
 	for v := range varGen {
 		delegate.ValidVars[v] = struct{}{}
 	}
+	// Initialize varNames.
+	varNames = func() []string {
+		res := make([]string, 0, len(varGen))
+		for vName := range varGen {
+			res = append(res, vName)
+		}
+		sort.Strings(res)
+		return res
+	}()
 }
 
 // makePostgresBoolGetStringValFn returns a function that evaluates and returns
@@ -1280,14 +1316,7 @@ func IsSessionVariableConfigurable(varName string) (exists, configurable bool) {
 	return exists, v.Set != nil
 }
 
-var varNames = func() []string {
-	res := make([]string, 0, len(varGen))
-	for vName := range varGen {
-		res = append(res, vName)
-	}
-	sort.Strings(res)
-	return res
-}()
+var varNames []string
 
 // getSingleBool returns the boolean if the input Datum is a DBool,
 // and returns a detailed error message if not.
@@ -1317,7 +1346,6 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 		return false, sessionVar{}, pgerror.Newf(pgcode.UndefinedObject,
 			"unrecognized configuration parameter %q", name)
 	}
-
 	return true, v, nil
 }
 
@@ -1330,7 +1358,6 @@ func (p *planner) GetSessionVar(
 	if err != nil || !ok {
 		return ok, "", err
 	}
-
 	return true, v.Get(&p.extendedEvalCtx), nil
 }
 

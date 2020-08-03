@@ -584,7 +584,7 @@ func EncodeBytesDescending(b []byte, data []byte) []byte {
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
 func DecodeBytesAscending(b []byte, r []byte) ([]byte, []byte, error) {
-	return decodeBytesInternal(b, r, ascendingBytesEscapes, true)
+	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */)
 }
 
 // DecodeBytesDescending decodes a []byte value from the input buffer
@@ -597,7 +597,7 @@ func DecodeBytesDescending(b []byte, r []byte) ([]byte, []byte, error) {
 	if r == nil {
 		r = []byte{}
 	}
-	b, r, err := decodeBytesInternal(b, r, descendingBytesEscapes, true)
+	b, r, err := decodeBytesInternal(b, r, descendingBytesEscapes, true /* expectMarker */)
 	onesComplement(r)
 	return b, r, err
 }
@@ -978,39 +978,55 @@ func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 
 // EncodeGeoAscending encodes a geopb.SpatialObject value in ascending order and
 // returns the new buffer.
-// TODO(otan): this should ideally just be encoded by {SRID,Shape,Raw Points}.
-// EWKB is expensive to encode. However, we don't store this as a PRIMARY KEY
-// (this is needed for GROUP BY only for now), so we ignore it for now.
-func EncodeGeoAscending(b []byte, g *geopb.SpatialObject) ([]byte, error) {
+// It is sorted by the given curve index, followed by the bytes of the spatial object.
+func EncodeGeoAscending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([]byte, error) {
+	b = append(b, geoMarker)
+	b = EncodeUint64Ascending(b, curveIndex)
+
 	data, err := protoutil.Marshal(g)
 	if err != nil {
 		return nil, err
 	}
-	b = encodeBytesAscendingWithTerminatorAndPrefix(b, data, ascendingGeoEscapes.escapedTerm, geoMarker)
+	b = encodeBytesAscendingWithTerminator(b, data, ascendingGeoEscapes.escapedTerm)
 	return b, nil
 }
 
 // EncodeGeoDescending encodes a geopb.SpatialObject value in descending order and
 // returns the new buffer.
-func EncodeGeoDescending(b []byte, g *geopb.SpatialObject) ([]byte, error) {
-	n := len(b)
-	var err error
-	b, err = EncodeGeoAscending(b, g)
+// It is sorted by the given curve index, followed by the bytes of the spatial object.
+func EncodeGeoDescending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([]byte, error) {
+	b = append(b, geoDescMarker)
+	b = EncodeUint64Descending(b, curveIndex)
+
+	data, err := protoutil.Marshal(g)
 	if err != nil {
 		return nil, err
 	}
-	b[n] = geoDescMarker
-	onesComplement(b[n+1:])
+	n := len(b)
+	b = encodeBytesAscendingWithTerminator(b, data, ascendingGeoEscapes.escapedTerm)
+	if err != nil {
+		return nil, err
+	}
+	onesComplement(b[n:])
 	return b, nil
 }
 
 // DecodeGeoAscending decodes a geopb.SpatialObject value that was encoded
 // in ascending order back into a geopb.SpatialObject.
 func DecodeGeoAscending(b []byte) ([]byte, geopb.SpatialObject, error) {
+	if PeekType(b) != Geo {
+		return nil, geopb.SpatialObject{}, errors.Errorf("did not find Geo marker")
+	}
+	b = b[1:]
+	var err error
+	b, _, err = DecodeUint64Ascending(b)
+	if err != nil {
+		return nil, geopb.SpatialObject{}, err
+	}
+
 	var pbBytes []byte
 	var ret geopb.SpatialObject
-	var err error
-	b, pbBytes, err = decodeBytesInternal(b, pbBytes, ascendingGeoEscapes, true)
+	b, pbBytes, err = decodeBytesInternal(b, pbBytes, ascendingGeoEscapes, false /* expectMarker */)
 	if err != nil {
 		return b, ret, err
 	}
@@ -1021,10 +1037,19 @@ func DecodeGeoAscending(b []byte) ([]byte, geopb.SpatialObject, error) {
 // DecodeGeoDescending decodes a geopb.SpatialObject value that was encoded
 // in descending order back into a geopb.SpatialObject.
 func DecodeGeoDescending(b []byte) ([]byte, geopb.SpatialObject, error) {
+	if PeekType(b) != GeoDesc {
+		return nil, geopb.SpatialObject{}, errors.Errorf("did not find Geo marker")
+	}
+	b = b[1:]
+	var err error
+	b, _, err = DecodeUint64Descending(b)
+	if err != nil {
+		return nil, geopb.SpatialObject{}, err
+	}
+
 	var pbBytes []byte
 	var ret geopb.SpatialObject
-	var err error
-	b, pbBytes, err = decodeBytesInternal(b, pbBytes, descendingGeoEscapes, true)
+	b, pbBytes, err = decodeBytesInternal(b, pbBytes, descendingGeoEscapes, false /* expectMarker */)
 	if err != nil {
 		return b, ret, err
 	}
@@ -1527,13 +1552,29 @@ func PeekLength(b []byte) (int, error) {
 	case bytesMarker:
 		return getBytesLength(b, ascendingBytesEscapes)
 	case geoMarker:
-		return getBytesLength(b, ascendingGeoEscapes)
+		// Expect to reserve at least 8 bytes for int64.
+		if len(b) < 8 {
+			return 0, errors.Errorf("slice too short for geospatial (%d)", len(b))
+		}
+		ret, err := getBytesLength(b[8:], ascendingGeoEscapes)
+		if err != nil {
+			return 0, err
+		}
+		return 8 + ret, nil
 	case jsonInvertedIndex:
 		return getJSONInvertedIndexKeyLength(b)
 	case bytesDescMarker:
 		return getBytesLength(b, descendingBytesEscapes)
 	case geoDescMarker:
-		return getBytesLength(b, descendingGeoEscapes)
+		// Expect to reserve at least 8 bytes for int64.
+		if len(b) < 8 {
+			return 0, errors.Errorf("slice too short for geospatial (%d)", len(b))
+		}
+		ret, err := getBytesLength(b[8:], descendingGeoEscapes)
+		if err != nil {
+			return 0, err
+		}
+		return 8 + ret, nil
 	case timeMarker, timeTZMarker:
 		return GetMultiVarintLen(b, 2)
 	case durationBigNegMarker, durationMarker, durationBigPosMarker:
