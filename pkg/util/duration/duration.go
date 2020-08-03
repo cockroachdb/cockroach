@@ -416,7 +416,12 @@ func Add(t time.Time, d Duration) time.Time {
 	}
 
 	// Adjustments for 1-based math.
-	expectedMonth := time.Month((int(t.Month())-1+int(d.Months))%12 + 1)
+	expectedMonth := time.Month((int(t.Month())-1+int(d.Months))%MonthsPerYear) + 1
+	// If we have a negative duration, we have a negative modulus.
+	// Push it back up to the positive expectedMonth.
+	if expectedMonth <= 0 {
+		expectedMonth += MonthsPerYear
+	}
 
 	// Use AddDate() to get a rough value.  This might overshoot the
 	// end of the expected month by multiple days.  We could iteratively
