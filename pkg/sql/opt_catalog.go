@@ -611,7 +611,7 @@ func newOptTable(
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
 	ot.colMap = make(map[sqlbase.ColumnID]int, ot.ColumnCount())
 	for i, n := 0, ot.ColumnCount(); i < n; i++ {
-		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+		ot.colMap[sqlbase.ColumnID(ot.Column(i).PhysicalColID())] = i
 	}
 
 	// Build the indexes (add 1 to account for lack of primary index in
@@ -1628,6 +1628,11 @@ var _ cat.Column = optDummyVirtualPKColumn{}
 // ColID is part of the cat.Column interface.
 func (optDummyVirtualPKColumn) ColID() cat.StableID {
 	return math.MaxInt64
+}
+
+// PhysicalColID is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) PhysicalColID() tree.ColumnID {
+	return math.MaxInt32
 }
 
 // ColName is part of the cat.Column interface.
