@@ -259,7 +259,14 @@ CREATE INDEX allidx ON t.test (k, v);
 				func(t *testing.T) {
 
 					// Init table to start state.
-					mTest.Exec(t, `TRUNCATE TABLE t.test`)
+					if _, err := sqlDB.Exec(`
+DROP TABLE t.test;
+CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR, i VARCHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.test (k, v);
+`); err != nil {
+						t.Fatal(err)
+					}
+
 					// read table descriptor
 					mTest.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 						kvDB, keys.SystemSQLCodec, "t", "test")
@@ -524,6 +531,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := sqlDB.Exec(`
+DROP TABLE t.test;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
+`); err != nil {
+				t.Fatal(err)
+			}
 			// read table descriptor
 			mTest.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 				kvDB, keys.SystemSQLCodec, "t", "test")
@@ -687,6 +700,13 @@ CREATE INDEX allidx ON t.test (k, v);
 					continue
 				}
 				// Init table to start state.
+				if _, err := sqlDB.Exec(`
+DROP TABLE t.test;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.test (k, v);
+`); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 					t.Fatal(err)
 				}

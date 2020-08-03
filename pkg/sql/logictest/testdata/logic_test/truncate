@@ -48,18 +48,6 @@ query II
 SELECT * FROM kview
 ----
 
-# The "updating privileges" clause in the SELECT statement is for excluding jobs
-# run by an unrelated startup migration.
-# TODO (lucy): Update this if/when we decide to change how these jobs queued by
-# the startup migration are handled.
-query T
-SELECT status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'
-----
-succeeded
-succeeded
-succeeded
-succeeded
-
 query T
 SELECT status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'
 ----

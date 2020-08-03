@@ -267,6 +267,8 @@ message SchemaChangeGCDetails {
   // Indexes to GC.
   repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
 
+  repeated sqlbase.IndexDescriptor interleaved_indexes = 4 [(gogoproto.nullable) = false];
+
   // Entire tables to GC.
   repeated DroppedID tables = 2 [(gogoproto.nullable) = false];
 

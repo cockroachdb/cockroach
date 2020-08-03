@@ -3920,15 +3920,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 
 	// Check that SQL thinks the table is empty.
-	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
+	row := sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	var count int
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, 0, count)
 
-	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if newTableDesc.Adding() {
-		t.Fatalf("bad state = %s", newTableDesc.State)
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	if tableDesc.Adding() {
+		t.Fatalf("bad state = %s", tableDesc.State)
 	}
-	if err := zoneExists(sqlDB, &cfg, newTableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3939,22 +3940,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 		t.Fatal(err)
 	} else if e := maxValue + 1; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
-	}
-	// Check that the table descriptor exists so we know the data will
-	// eventually be deleted.
-	var droppedDesc *sqlbase.ImmutableTableDescriptor
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		droppedDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if droppedDesc == nil {
-		t.Fatalf("table descriptor doesn't exist after table is truncated: %d", tableDesc.ID)
-	}
-	if !droppedDesc.Dropped() {
-		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
 
 	close(blockGC)
@@ -4030,18 +4015,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 
 	// Check that SQL thinks the table is empty.
-	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
+	row := sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	var count int
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, 0, count)
 
 	// Bulk insert.
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	row = sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, maxValue+1, count)
+
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
@@ -4053,6 +4040,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatalf("err = %v", err)
 	}
 
+	// Get the table descriptor after the truncation.
 	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
@@ -4061,27 +4049,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	// Wait until the older descriptor has been deleted.
-	testutils.SucceedsSoon(t, func() error {
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			_, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
-			return err
-		}); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
-				return nil
-			}
-			return err
-		}
-		return errors.Errorf("table descriptor exists after table is truncated: %d", tableDesc.ID)
-	})
-
-	if err := zoneExists(sqlDB, nil, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-
 	// Ensure that the table data has been deleted.
-	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
+	tablePrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.PrimaryIndex.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)

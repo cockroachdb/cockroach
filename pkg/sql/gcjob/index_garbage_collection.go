@@ -39,6 +39,13 @@ func gcIndexes(
 		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
 
+	// Before deleting any indexes, ensure that old versions of the table descriptor
+	// are no longer in use. This is necessary in the case of truncate, where we
+	// schedule a GC Job in the transaction that commits the truncation.
+	if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID); err != nil {
+		return false, err
+	}
+
 	var parentTable *sqlbase.ImmutableTableDescriptor
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		parentTable, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
