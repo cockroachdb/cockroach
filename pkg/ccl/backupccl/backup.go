@@ -1327,6 +1327,7 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		return errors.Wrapf(err, "make storage")
 	}
+	defer defaultStore.Close()
 	storageByLocalityKV := make(map[string]*roachpb.ExportStorage)
 	for kv, uri := range details.URIsByLocalityKV {
 		conf, err := storageccl.ExportStorageConfFromURI(uri)
@@ -1419,6 +1420,7 @@ func (b *backupResumer) OnTerminal(
 		if err != nil {
 			return err
 		}
+		defer exportStore.Close()
 		return exportStore.Delete(ctx, BackupDescriptorCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
