@@ -16,9 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -104,6 +107,14 @@ func unresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 
 func (n *setVarNode) startExec(params runParams) error {
 	var strVal string
+
+	if _, ok := DummyVars[n.name]; ok {
+		telemetry.Inc(sqltelemetry.DummySessionVarValueCounter(n.name))
+		params.p.SendClientNotice(
+			params.ctx,
+			pgnotice.NewWithSeverityf("WARNING", "setting session var %q is a no-op", n.name),
+		)
+	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.EvalContext())

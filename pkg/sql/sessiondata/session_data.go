@@ -141,6 +141,11 @@ type SessionData struct {
 	// AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
 	// TYPE x may be used for general conversions requiring online schema change/
 	AlterColumnTypeGeneralEnabled bool
+
+	// SynchronousCommit is a dummy setting for the synchronous_commit var.
+	SynchronousCommit bool
+	// EnableSeqScan is a dummy setting for the enable_seqscan var.
+	EnableSeqScan bool
 }
 
 // DataConversionConfig contains the parameters that influence
