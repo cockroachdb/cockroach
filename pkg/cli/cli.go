@@ -151,7 +151,7 @@ Output build version information.
 		fmt.Fprintln(tw)
 		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
 		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
-		fmt.Fprintf(tw, "Build SHA-1:  %s\n", info.Revision)
+		fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
 		fmt.Fprintf(tw, "Build Type:   %s\n", info.Type)
 		return tw.Flush()
 	},
