@@ -65,8 +65,7 @@ render                                                                          
            │                        render 1     (@1)[int]
            │                        render 2     (@2)[decimal]
            └── group                                                                        (cid int, sum decimal)
-                │                   aggregate 0  cid
-                │                   aggregate 1  sum(value)
+                │                   aggregate 0  sum(value)
                 │                   group by     cid
                 └── render                                                                  (cid int, value decimal)
                      │              render 0     (@1)[int]
@@ -104,8 +103,6 @@ children:
     - name: group
       attrs:
       - key: aggregate 0
-        value: cid
-      - key: aggregate 1
         value: sum(value)
       - key: group by
         value: cid
