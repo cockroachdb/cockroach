@@ -277,7 +277,10 @@ export class SortableTable extends React.Component<TableProps> {
                 if (!isUndefined(c.sortKey)) {
                   classes.push(cx("sort-table__cell--sortable"));
                   onClick = () => {
-                    trackTableSort(className, c, sortSetting);
+                    // TODO (koorosh): `title` field has ReactNode type isn't correct field to
+                    // track column name. `SortableColumn` has to be imported from `@cockroachlabs/admin-ui-components`
+                    // package which has extended field to track column name.
+                    trackTableSort(className, c.title.toString(), sortSetting.ascending);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {

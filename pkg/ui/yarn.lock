@@ -1806,10 +1806,10 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.7":
-  version "0.1.7"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.7.tgz#8d85668b1e72840cf1dabbb2721eb819246489a6"
-  integrity sha512-le5IF2KqM2ZXJnC7a86UfZvyWQBJqJcYHFo9EnPkL9hFkKTxNeNY6PJh60d+dfffga/FZJd/aT3tbNvaLTopMw==
+"@cockroachlabs/admin-ui-components@^0.1.9":
+  version "0.1.9"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.9.tgz#e43a2508bc258e368d0c50c5ecf5d5c7fcf72c53"
+  integrity sha512-qWp4K0ChHHrNQYVCMhZxX5Ugwqjgog6htBm24d7KWmiHtZmEeqRzowuiO1I6289LvRk885yQJouD9XRe+vqjXA==
   dependencies:
     "@cockroachlabs/icons" "^0.2.2"
     "@popperjs/core" "^2.4.0"

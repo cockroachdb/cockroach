@@ -12,7 +12,10 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshStatementDiagnosticsRequests,
+  refreshStatements,
+} from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
@@ -34,7 +37,11 @@ import { getMatchParamByName } from "src/util/query";
 
 import { StatementsPage, AggregateStatistics } from "@cockroachlabs/admin-ui-components";
 import { createOpenDiagnosticsModalAction, createStatementDiagnosticsReportAction } from "src/redux/statements";
-import { trackStatementsPaginationAction, trackStatementsSearchAction } from "src/redux/analyticsActions";
+import {
+  trackStatementsPaginationAction,
+  trackStatementsSearchAction,
+  trackTableSortAction,
+} from "src/redux/analyticsActions";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -177,6 +184,7 @@ const StatementsPageConnected = withRouter(connect(
     onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
     onSearchComplete: (results: AggregateStatistics[]) => trackStatementsSearchAction(results.length),
     onPageChanged: trackStatementsPaginationAction,
+    onSortingChange: trackTableSortAction,
   },
 )(StatementsPage));
 

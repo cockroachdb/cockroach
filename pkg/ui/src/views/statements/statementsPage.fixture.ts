@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { StatementsPageProps } from "./statementsPage";
+import { StatementsPageProps } from "@cockroachlabs/admin-ui-components";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "src/js/protos";
@@ -392,6 +392,9 @@ const statementsPagePropsFixture: StatementsPageProps = {
   dismissAlertMessage: () => {},
   refreshStatementDiagnosticsRequests: (() => {}) as (typeof refreshStatementDiagnosticsRequests),
   refreshStatements: (() => {}) as (typeof refreshStatements),
+  onActivateStatementDiagnostics: _ => {},
+  onDiagnosticsModalOpen: _ => {},
+  onPageChanged: _ => {},
 };
 
 export default statementsPagePropsFixture;

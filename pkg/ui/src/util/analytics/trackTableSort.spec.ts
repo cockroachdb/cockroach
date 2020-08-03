@@ -42,10 +42,9 @@ describe("trackTableSort", () => {
   it("should send the correct payload", () => {
     const spy = sandbox.spy();
     const tableName = "Test table";
-    const column = { title: "test", cell: (x: number) => x };
-    const sortSetting = { sortKey: "whatever", ascending: true };
+    const title = "test";
 
-    track(spy)(tableName, column, sortSetting);
+    track(spy)(tableName, title, "asc");
 
     const sent = spy.getCall(0).args[0];
     const table = get(sent, "properties.tableName");
@@ -56,7 +55,7 @@ describe("trackTableSort", () => {
     assert.isTrue(table === tableName, "Table name matches given table name");
 
     assert.isTrue(isString(columnName), "Column name is a string");
-    assert.isTrue(column.title === columnName, "Column name matches given column name");
+    assert.isTrue(title === columnName, "Column name matches given column name");
 
     assert.isTrue(isString(direction), "Sort direction is a string");
     assert.isTrue(
