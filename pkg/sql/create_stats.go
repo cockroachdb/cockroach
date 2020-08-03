@@ -465,11 +465,6 @@ func (r *createStatsResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn
 func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn) error {
 	details := r.job.Details().(jobspb.CreateStatsDetails)
 
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	r.evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
-
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&r.evalCtx.Settings.SV) {
 		return nil

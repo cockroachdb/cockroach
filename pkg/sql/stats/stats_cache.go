@@ -63,10 +63,24 @@ type TableStatisticsCache struct {
 // The cache stores *cacheEntry objects. The fields are protected by the
 // cache-wide mutex.
 type cacheEntry struct {
-	// If true, we are in the process of updating the statistics for this
-	// table. Other callers can wait on the waitCond until this is false.
+	// If mustWait is true, we do not have any statistics for this table and we
+	// are in the process of fetching the stats from the database. Other callers
+	// can wait on the waitCond until this is false.
 	mustWait bool
 	waitCond sync.Cond
+
+	// If refreshing is true, the current statistics for this table are stale,
+	// and we are in the process of fetching the updated stats from the database.
+	// In the mean time, other callers can use the stale stats and do not need to
+	// wait.
+	//
+	// If a goroutine tries to perform a refresh when a refresh is already
+	// in progress, it will see that refreshing=true and will set the
+	// mustRefreshAgain flag to true before returning. When the original
+	// goroutine that was performing the refresh returns from the database and
+	// sees that mustRefreshAgain=true, it will trigger another refresh.
+	refreshing       bool
+	mustRefreshAgain bool
 
 	stats []*TableStatistic
 
@@ -106,7 +120,7 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 		log.Errorf(context.Background(), "tableStatAddedGossipUpdate(%s) error: %v", key, err)
 		return
 	}
-	sc.InvalidateTableStats(context.Background(), sqlbase.ID(tableID))
+	sc.RefreshTableStats(context.Background(), sqlbase.ID(tableID))
 }
 
 // GetTableStats looks up statistics for the requested table ID in the cache,
@@ -130,8 +144,8 @@ func (sc *TableStatisticsCache) GetTableStats(
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	if found, stats, err := sc.lookupStatsLocked(ctx, tableID); found {
-		return stats, err
+	if found, e := sc.lookupStatsLocked(ctx, tableID); found {
+		return e.stats, e.err
 	}
 
 	return sc.addCacheEntryLocked(ctx, tableID)
@@ -146,12 +160,12 @@ func (sc *TableStatisticsCache) GetTableStats(
 // locked again if we need to wait (this can only happen when found=true).
 func (sc *TableStatisticsCache) lookupStatsLocked(
 	ctx context.Context, tableID sqlbase.ID,
-) (found bool, _ []*TableStatistic, _ error) {
+) (found bool, e *cacheEntry) {
 	eUntyped, ok := sc.mu.cache.Get(tableID)
 	if !ok {
-		return false, nil, nil
+		return false, nil
 	}
-	e := eUntyped.(*cacheEntry)
+	e = eUntyped.(*cacheEntry)
 
 	if e.mustWait {
 		// We are in the process of grabbing stats for this table. Wait until
@@ -165,7 +179,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 			log.Infof(ctx, "statistics for table %d found in cache", tableID)
 		}
 	}
-	return true, e.stats, e.err
+	return true, e
 }
 
 // addCacheEntryLocked creates a new cache entry and retrieves table statistics
@@ -213,7 +227,80 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	return stats, err
 }
 
+// refreshCacheEntry retrieves table statistics from the database and updates
+// an existing cache entry. It does this in a way so that the other goroutines
+// can continue using the stale stats from the existing entry until the new
+// stats are added:
+//  - the existing cache entry is retrieved;
+//  - mutex is unlocked;
+//  - stats are retrieved from database:
+//  - mutex is locked again and the entry is updated.
+//
+func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID sqlbase.ID) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	if log.V(1) {
+		log.Infof(ctx, "reading statistics for table %d", tableID)
+	}
+
+	// If the stats don't already exist in the cache, don't bother performing
+	// the refresh. If e.err is not nil, the stats are in the process of being
+	// removed from the cache (see addCacheEntryLocked), so don't refresh in this
+	// case either.
+	found, e := sc.lookupStatsLocked(ctx, tableID)
+	if !found || e.err != nil {
+		return
+	}
+
+	// Don't perform a refresh if a refresh is already in progress, but let that
+	// goroutine know it needs to refresh again.
+	if e.refreshing {
+		e.mustRefreshAgain = true
+		return
+	}
+	e.refreshing = true
+
+	var stats []*TableStatistic
+	var err error
+	for {
+		func() {
+			sc.mu.numInternalQueries++
+			sc.mu.Unlock()
+			defer sc.mu.Lock()
+
+			stats, err = sc.getTableStatsFromDB(ctx, tableID)
+		}()
+		if !e.mustRefreshAgain {
+			break
+		}
+		e.mustRefreshAgain = false
+	}
+
+	e.stats, e.err = stats, err
+	e.refreshing = false
+
+	if err != nil {
+		// Don't keep the cache entry around, so that we retry the query.
+		sc.mu.cache.Del(tableID)
+	}
+}
+
+// RefreshTableStats refreshes the cached statistics for the given table ID
+// by fetching the new stats from the database.
+func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID sqlbase.ID) {
+	if log.V(1) {
+		log.Infof(ctx, "refreshing statistics for table %d", tableID)
+	}
+	// Perform an asynchronous refresh of the cache.
+	go sc.refreshCacheEntry(ctx, tableID)
+}
+
 // InvalidateTableStats invalidates the cached statistics for the given table ID.
+//
+// Note that RefreshTableStats should normally be used instead of this function.
+// This function is used only when we want to guarantee that the next query
+// uses updated stats.
 func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
 	if log.V(1) {
 		log.Infof(ctx, "evicting statistics for table %d", tableID)

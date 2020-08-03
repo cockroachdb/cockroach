@@ -1023,6 +1023,7 @@ func injectTableStats(
 	// update is handled asynchronously).
 	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
 
+	// Use Gossip to refresh the caches on other nodes.
 	return stats.GossipTableStatAdded(params.extendedEvalCtx.ExecCfg.Gossip, desc.ID)
 }
 
