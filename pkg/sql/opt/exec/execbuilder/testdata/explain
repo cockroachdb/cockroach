@@ -311,14 +311,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 ·                                                 vectorized    false
 render                                            ·             ·
  └── group                                        ·             ·
-      │                                           aggregate 0   column_name
-      │                                           aggregate 1   ordinal_position
-      │                                           aggregate 2   column_default
-      │                                           aggregate 3   is_nullable
-      │                                           aggregate 4   generation_expression
-      │                                           aggregate 5   is_hidden
-      │                                           aggregate 6   crdb_sql_type
-      │                                           aggregate 7   array_agg(index_name)
+      │                                           aggregate 0   array_agg(index_name)
       │                                           group by      column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
       │                                           ordered       +ordinal_position
       └── render                                  ·             ·
@@ -401,10 +394,9 @@ render                                                             ·           
       │                                                            order              +username
       └── render                                                   ·                  ·
            └── group                                               ·                  ·
-                │                                                  aggregate 0        username
-                │                                                  aggregate 1        array_agg(role)
-                │                                                  aggregate 2        any_not_null(any_not_null)
-                │                                                  aggregate 3        any_not_null(role)
+                │                                                  aggregate 0        array_agg(role)
+                │                                                  aggregate 1        any_not_null(any_not_null)
+                │                                                  aggregate 2        any_not_null(role)
                 │                                                  group by           username
                 └── render                                         ·                  ·
                      └── sort                                      ·                  ·
@@ -414,8 +406,7 @@ render                                                             ·           
                                │                                   equality           (username) = (member)
                                │                                   left cols are key  ·
                                ├── group                           ·                  ·
-                               │    │                              aggregate 0        username
-                               │    │                              aggregate 1        any_not_null(string_agg)
+                               │    │                              aggregate 0        any_not_null(string_agg)
                                │    │                              group by           username
                                │    └── render                     ·                  ·
                                │         └── window                ·                  ·

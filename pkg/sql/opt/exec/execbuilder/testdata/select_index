@@ -796,8 +796,7 @@ ORDER BY total DESC
 sort                 ·             ·
  │                   order         -total
  └── group           ·             ·
-      │              aggregate 0   resource_key
-      │              aggregate 1   count_rows()
+      │              aggregate 0   count_rows()
       │              group by      resource_key
       └── render     ·             ·
            └── scan  ·             ·
