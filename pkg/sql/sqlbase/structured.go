@@ -4691,6 +4691,12 @@ func (desc *MutableTableDescriptor) SetParentSchemaID(schemaID ID) {
 
 // AddDrainingName adds a draining name to the TableDescriptor's slice of
 // draining names.
-func (desc *MutableTableDescriptor) AddDrainingName(name NameInfo) {
-	desc.DrainingNames = append(desc.DrainingNames, name)
+func (desc *MutableTableDescriptor) AddDrainingName(databaseID ID, schemaID ID, name string) {
+	renameDetails := NameInfo{
+		ParentID:       databaseID,
+		ParentSchemaID: schemaID,
+		Name:           name,
+	}
+
+	desc.DrainingNames = append(desc.DrainingNames, renameDetails)
 }
