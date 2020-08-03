@@ -155,7 +155,8 @@ type cliState struct {
 	partialStmtsLen int
 
 	// concatLines is the concatenation of partialLines, computed during
-	// doCheckStatement and then reused in doRunStatement().
+	// doPrepareStatementLine and then reused in doRunStatements() and
+	// doCheckStatement().
 	concatLines string
 
 	// exitErr defines the error to report to the user upon termination.
@@ -347,7 +348,7 @@ var options = map[string]struct {
 		display:                   func(c *cliState) string { return strconv.FormatBool(c.errExit) },
 	},
 	`check_syntax`: {
-		description:               "check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
+		description:               "check the SQL syntax before running a query",
 		isBoolean:                 true,
 		validDuringMultilineEntry: false,
 		set:                       func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
@@ -361,6 +362,14 @@ var options = map[string]struct {
 		set:                       func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
 		reset:                     func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
 		display:                   func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
+	},
+	`show_server_times`: {
+		description:               "display the server execution times for queries (requires show_times to be set)",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:                       func(_ *cliState, _ string) error { sqlCtx.enableServerExecutionTimings = true; return nil },
+		reset:                     func(_ *cliState) error { sqlCtx.enableServerExecutionTimings = false; return nil },
+		display:                   func(_ *cliState) string { return strconv.FormatBool(sqlCtx.enableServerExecutionTimings) },
 	},
 	`smart_prompt`: {
 		description:               "deprecated",
@@ -1140,7 +1149,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Println(helpText)
 		}
 
-		_ = c.invalidSyntax(0, "statement ignored: %v",
+		_ = c.invalidSyntax(cliStart, "statement ignored: %v",
 			&formattedError{err: err, showSeverity: false, verbose: false})
 
 		// Stop here if exiterr is set.
@@ -1168,7 +1177,9 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	return nextState
 }
 
-func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
+// doRunStatements runs all the statements that have been accumulated by
+// concatLines.
+func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
@@ -1304,7 +1315,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			state = c.doCheckStatement(cliStartLine, cliContinueLine, cliRunStatement)
 
 		case cliRunStatement:
-			state = c.doRunStatement(cliStartLine)
+			state = c.doRunStatements(cliStartLine)
 
 		default:
 			panic(fmt.Sprintf("unknown state: %d", state))
@@ -1335,7 +1346,7 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 		if !sqlCtx.debugMode {
 			// Also, try to enable syntax checking if supported by the server.
 			// This is a form of client-side error checking to help with large txns.
-			c.tryEnableCheckSyntax()
+			c.checkSyntax = true
 		}
 	} else {
 		// When running non-interactive, by default we want errors to stop
@@ -1418,7 +1429,7 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 	return cleanupFn, nil
 }
 
-// runOneStatement executes one statement and terminates
+// runStatements executes the given statements and terminates
 // on error.
 func (c *cliState) runStatements(stmts []string) error {
 	for {
@@ -1522,17 +1533,6 @@ func setupSafeUpdates(cmd *cobra.Command, conn *sqlConn) {
 		// the error with a warning is acceptable, because the user is
 		// there to decide what they want to do if it doesn't work.
 		fmt.Fprintf(stderr, "warning: cannot enable safe updates: %v\n", err)
-	}
-}
-
-// tryEnableCheckSyntax attempts to enable check_syntax.
-// The option is enabled if the SHOW SYNTAX statement is recognized
-// by the server.
-func (c *cliState) tryEnableCheckSyntax() {
-	if err := c.conn.Exec("SHOW SYNTAX 'SHOW SYNTAX ''1'';'", nil); err != nil {
-		fmt.Fprintf(stderr, "warning: cannot enable check_syntax: %v\n", err)
-	} else {
-		c.checkSyntax = true
 	}
 }
 
