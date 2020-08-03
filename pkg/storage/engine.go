@@ -64,10 +64,10 @@ type SimpleIterator interface {
 	// for a key.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeKey() MVCCKey
 	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
 }
 

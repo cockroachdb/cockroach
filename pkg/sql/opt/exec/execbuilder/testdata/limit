@@ -14,7 +14,7 @@ limit                 ·             ·            (k, v, w)  +v
  │                    count         2            ·          ·
  └── filter           ·             ·            (k, v, w)  +v
       │               filter        w > 30       ·          ·
-      └── index-join  ·             ·            (k, v, w)  +v
+      └── index join  ·             ·            (k, v, w)  +v
            │          table         t@primary    ·          ·
            │          key columns   k            ·          ·
            └── scan   ·             ·            (k, v)     +v
@@ -169,7 +169,7 @@ EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 
 render           ·             ·          (k, w)     ·
  │               render 0      k          ·          ·
  │               render 1      w          ·          ·
- └── index-join  ·             ·          (k, v, w)  +v
+ └── index join  ·             ·          (k, v, w)  +v
       │          table         t@primary  ·          ·
       │          key columns   k          ·          ·
       └── scan   ·             ·          (k, v)     +v

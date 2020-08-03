@@ -205,17 +205,17 @@ render                ·               ·                    (b, a, c, d, a, c, 
  │                    render 4        a                    ·                         ·
  │                    render 5        c                    ·                         ·
  │                    render 6        d                    ·                         ·
- └── merge-join       ·               ·                    (a, b, c, d, a, b, c, d)  ·
+ └── merge join       ·               ·                    (a, b, c, d, a, b, c, d)  ·
       │               type            inner                ·                         ·
       │               equality        (b) = (b)            ·                         ·
       │               mergeJoinOrder  +"(b=b)"             ·                         ·
-      ├── index-join  ·               ·                    (a, b, c, d)              ·
+      ├── index join  ·               ·                    (a, b, c, d)              ·
       │    │          table           t@primary            ·                         ·
       │    │          key columns     a, b                 ·                         ·
       │    └── scan   ·               ·                    (a, b, c)                 ·
       │               table           t@bc                 ·                         ·
       │               spans           /"3"-/"3"/PrefixEnd  ·                         ·
-      └── index-join  ·               ·                    (a, b, c, d)              ·
+      └── index join  ·               ·                    (a, b, c, d)              ·
            │          table           t@primary            ·                         ·
            │          key columns     a, b                 ·                         ·
            └── scan   ·               ·                    (a, b, c)                 ·
@@ -736,7 +736,7 @@ EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
 ·             distribution  local                    ·           ·
 ·             vectorized    true                     ·           ·
-index-join    ·             ·                        (id, k, v)  -k
+index join    ·             ·                        (id, k, v)  -k
  │            table         test2@primary            ·           ·
  │            key columns   id                       ·           ·
  └── revscan  ·             ·                        (id, k)     -k
@@ -968,7 +968,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
 ·           distribution  local         ·           ·
 ·           vectorized    true          ·           ·
-index-join  ·             ·             (x, y)      ·
+index join  ·             ·             (x, y)      ·
  │          table         xy@primary    ·           ·
  │          key columns   rowid         ·           ·
  └── scan   ·             ·             (y, rowid)  ·
@@ -980,7 +980,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
 ·           distribution  local        ·           ·
 ·           vectorized    true         ·           ·
-index-join  ·             ·            (x, y)      ·
+index join  ·             ·            (x, y)      ·
  │          table         xy@primary   ·           ·
  │          key columns   rowid        ·           ·
  └── scan   ·             ·            (y, rowid)  ·
@@ -994,7 +994,7 @@ EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ·                vectorized    true         ·           ·
 render           ·             ·            (x)         ·
  │               render 0      x            ·           ·
- └── index-join  ·             ·            (x, y)      ·
+ └── index join  ·             ·            (x, y)      ·
       │          table         xy@primary   ·           ·
       │          key columns   rowid        ·           ·
       └── scan   ·             ·            (y, rowid)  ·
@@ -1073,7 +1073,7 @@ EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
 ·           distribution  local
 ·           vectorized    true
-index-join  ·             ·
+index join  ·             ·
  │          table         noncover@primary
  │          key columns   a
  └── scan   ·             ·
@@ -1100,7 +1100,7 @@ EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
 ·           distribution  local
 ·           vectorized    true
-index-join  ·             ·
+index join  ·             ·
  │          table         noncover@primary
  │          key columns   a
  └── scan   ·             ·
@@ -1178,7 +1178,7 @@ EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
 ·           distribution  local
 ·           vectorized    true
-index-join  ·             ·
+index join  ·             ·
  │          table         noncover@primary
  │          key columns   a
  └── scan   ·             ·
@@ -1211,7 +1211,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ·                vectorized    true
 limit            ·             ·
  │               offset        5
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         noncover@primary
       │          key columns   a
       └── scan   ·             ·
@@ -1282,7 +1282,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ----
 ·               distribution  local
 ·               vectorized    true
-index-join      ·             ·
+index join      ·             ·
  │              table         t2@primary
  │              key columns   a
  └── filter     ·             ·
@@ -1316,7 +1316,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ----
 ·           distribution  local
 ·           vectorized    true
-index-join  ·             ·
+index join  ·             ·
  │          table         t2@primary
  │          key columns   a
  └── scan   ·             ·
@@ -1425,7 +1425,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s !
 ·                vectorized    true        ·          ·
 render           ·             ·           (a)        ·
  │               render 0      a           ·          ·
- └── index-join  ·             ·           (a, b, s)  ·
+ └── index join  ·             ·           (a, b, s)  ·
       │          table         t2@primary  ·          ·
       │          key columns   a           ·          ·
       └── scan   ·             ·           (a, b)     ·
@@ -1442,7 +1442,7 @@ EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ·                vectorized    true        ·       ·
 render           ·             ·           (w)     ·
  │               render 0      w           ·       ·
- └── index-join  ·             ·           (v, w)  +v
+ └── index join  ·             ·           (v, w)  +v
       │          table         t3@primary  ·       ·
       │          key columns   k           ·       ·
       └── scan   ·             ·           (k, v)  +v

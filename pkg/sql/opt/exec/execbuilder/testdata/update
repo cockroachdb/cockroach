@@ -344,13 +344,13 @@ EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 root                                          ·                 ·                                 (a)                  +a
  ├── sort                                     ·                 ·                                 (a)                  +a
  │    │                                       order             +a                                ·                    ·
- │    └── scan buffer node                    ·                 ·                                 (a)                  ·
+ │    └── scan buffer                         ·                 ·                                 (a)                  ·
  │                                            label             buffer 1                          ·                    ·
  └── subquery                                 ·                 ·                                 ·                    ·
       │                                       id                @S1                               ·                    ·
       │                                       original sql      UPDATE abc SET a = c RETURNING a  ·                    ·
       │                                       exec mode         all rows                          ·                    ·
-      └── buffer node                         ·                 ·                                 (a)                  ·
+      └── buffer                              ·                 ·                                 (a)                  ·
            │                                  label             buffer 1                          ·                    ·
            └── spool                          ·                 ·                                 (a)                  ·
                 └── render                    ·                 ·                                 (a)                  ·
@@ -417,7 +417,7 @@ count                           ·             ·               ()              
            │                    render 3      2               ·                 ·
            └── filter           ·             ·               (a, b, c)         ·
                 │               filter        a = 1           ·                 ·
-                └── index-join  ·             ·               (a, b, c)         ·
+                └── index join  ·             ·               (a, b, c)         ·
                      │          table         t38799@primary  ·                 ·
                      │          key columns   a               ·                 ·
                      └── scan   ·             ·               (a, b)            ·
@@ -502,7 +502,7 @@ count                      ·                 ·
       │                    strategy          updater
       │                    auto commit       ·
       └── render           ·                 ·
-           └── index-join  ·                 ·
+           └── index join  ·                 ·
                 │          table             kv3@primary
                 │          key columns       k
                 └── scan   ·                 ·
@@ -522,7 +522,7 @@ count                      ·                 ·
       │                    strategy          updater
       │                    auto commit       ·
       └── render           ·                 ·
-           └── index-join  ·                 ·
+           └── index join  ·                 ·
                 │          table             kv3@primary
                 │          key columns       k
                 └── scan   ·                 ·
@@ -632,7 +632,7 @@ count                      ·             ·
       │                    strategy      updater
       │                    auto commit   ·
       └── render           ·             ·
-           └── index-join  ·             ·
+           └── index join  ·             ·
                 │          table         kv3@primary
                 │          key columns   k
                 └── scan   ·             ·
@@ -651,7 +651,7 @@ count                      ·             ·
       │                    strategy      updater
       │                    auto commit   ·
       └── render           ·             ·
-           └── index-join  ·             ·
+           └── index join  ·             ·
                 │          table         kv3@primary
                 │          key columns   k
                 └── scan   ·             ·

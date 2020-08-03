@@ -528,7 +528,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ·                    distribution           local
 ·                    vectorized             true
 render               ·                      ·
- └── lookup-join     ·                      ·
+ └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
       │              equality               (b) = (a)
@@ -546,7 +546,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ·                    distribution           local
 ·                    vectorized             true
 render               ·                      ·
- └── lookup-join     ·                      ·
+ └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
       │              equality               (b) = (a)
@@ -565,7 +565,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ·                    distribution           local
 ·                    vectorized             true
 render               ·                      ·
- └── lookup-join     ·                      ·
+ └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
       │              equality               (b) = (a)
@@ -583,7 +583,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ·                    distribution           local
 ·                    vectorized             true
 render               ·                      ·
- └── lookup-join     ·                      ·
+ └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
       │              equality               (b) = (a)
@@ -630,40 +630,40 @@ render     ·             ·
 query TTT
 EXPLAIN SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
-·                      distribution      local
-·                      vectorized        false
-root                   ·                 ·
- ├── scan buffer node  ·                 ·
- │                     label             buffer 1
- └── subquery          ·                 ·
-      │                id                @S1
-      │                original sql      SELECT a FROM t FOR UPDATE
-      │                exec mode         all rows
-      └── buffer node  ·                 ·
-           │           label             buffer 1
-           └── scan    ·                 ·
-·                      table             t@primary
-·                      spans             FULL SCAN
-·                      locking strength  for update
+·                    distribution      local
+·                    vectorized        false
+root                 ·                 ·
+ ├── scan buffer     ·                 ·
+ │                   label             buffer 1
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      SELECT a FROM t FOR UPDATE
+      │              exec mode         all rows
+      └── buffer     ·                 ·
+           │         label             buffer 1
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             FULL SCAN
+·                    locking strength  for update
 
 query TTT
 EXPLAIN WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
-·                      distribution      local
-·                      vectorized        false
-root                   ·                 ·
- ├── scan buffer node  ·                 ·
- │                     label             buffer 1 (cte)
- └── subquery          ·                 ·
-      │                id                @S1
-      │                original sql      SELECT a FROM t FOR UPDATE
-      │                exec mode         all rows
-      └── buffer node  ·                 ·
-           │           label             buffer 1 (cte)
-           └── scan    ·                 ·
-·                      table             t@primary
-·                      spans             FULL SCAN
-·                      locking strength  for update
+·                    distribution      local
+·                    vectorized        false
+root                 ·                 ·
+ ├── scan buffer     ·                 ·
+ │                   label             buffer 1 (cte)
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      SELECT a FROM t FOR UPDATE
+      │              exec mode         all rows
+      └── buffer     ·                 ·
+           │         label             buffer 1 (cte)
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             FULL SCAN
+·                    locking strength  for update
 
 # Verify that the unused CTE doesn't get eliminated.
 # TODO(radu): we should at least not buffer the rows in this case.
@@ -671,22 +671,22 @@ query TTT
 EXPLAIN WITH sfu AS (SELECT a FROM t FOR UPDATE)
 SELECT c FROM u
 ----
-·                      distribution      local
-·                      vectorized        true
-root                   ·                 ·
- ├── scan              ·                 ·
- │                     table             u@primary
- │                     spans             FULL SCAN
- └── subquery          ·                 ·
-      │                id                @S1
-      │                original sql      SELECT a FROM t FOR UPDATE
-      │                exec mode         all rows
-      └── buffer node  ·                 ·
-           │           label             buffer 1 (sfu)
-           └── scan    ·                 ·
-·                      table             t@primary
-·                      spans             FULL SCAN
-·                      locking strength  for update
+·                    distribution      local
+·                    vectorized        true
+root                 ·                 ·
+ ├── scan            ·                 ·
+ │                   table             u@primary
+ │                   spans             FULL SCAN
+ └── subquery        ·                 ·
+      │              id                @S1
+      │              original sql      SELECT a FROM t FOR UPDATE
+      │              exec mode         all rows
+      └── buffer     ·                 ·
+           │         label             buffer 1 (sfu)
+           └── scan  ·                 ·
+·                    table             t@primary
+·                    spans             FULL SCAN
+·                    locking strength  for update
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
@@ -698,7 +698,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -719,7 +719,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -739,7 +739,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -759,7 +759,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -780,7 +780,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -804,7 +804,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE 
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -825,7 +825,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -846,7 +846,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -867,7 +867,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UP
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -892,7 +892,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -922,7 +922,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -942,7 +942,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -962,7 +962,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -987,7 +987,7 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -1017,7 +1017,7 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ·                distribution        local
 ·                vectorized          true
 render           ·                   ·
- └── merge-join  ·                   ·
+ └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
       │          left cols are key   ·
@@ -1041,7 +1041,7 @@ EXPLAIN SELECT * FROM t, u FOR UPDATE
 ----
 ·           distribution      local
 ·           vectorized        true
-cross-join  ·                 ·
+cross join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
@@ -1057,7 +1057,7 @@ EXPLAIN SELECT * FROM t, u FOR UPDATE OF t
 ----
 ·           distribution      local
 ·           vectorized        true
-cross-join  ·                 ·
+cross join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
@@ -1072,7 +1072,7 @@ EXPLAIN SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 ·           distribution      local
 ·           vectorized        true
-cross-join  ·                 ·
+cross join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
@@ -1088,7 +1088,7 @@ EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 ·           distribution      local
 ·           vectorized        true
-cross-join  ·                 ·
+cross join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
@@ -1107,7 +1107,7 @@ EXPLAIN SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 ·           distribution      local
 ·           vectorized        true
-cross-join  ·                 ·
+cross join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary

@@ -1320,7 +1320,7 @@ EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
 ·                distribution  local
 ·                vectorized    true
 render           ·             ·
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         a@primary
       │          key columns   a
       └── scan   ·             ·
@@ -1336,7 +1336,7 @@ EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND pric
 ·                distribution  local
 ·                vectorized    true
 render           ·             ·
- └── index-join  ·             ·
+ └── index join  ·             ·
       │          table         a@primary
       │          key columns   a
       └── scan   ·             ·
@@ -1501,7 +1501,7 @@ render                         ·             ·
       └── sort                 ·             ·
            │                   order         +z
            └── project set     ·             ·
-                └── hash-join  ·             ·
+                └── hash join  ·             ·
                      │         type          inner
                      │         equality      (y) = (y)
                      ├── scan  ·             ·
