@@ -11,8 +11,8 @@
 package protoreflect
 
 import (
-	"encoding/json"
 	"reflect"
+	"strings"
 
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -21,9 +21,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// DecodeMessage decodes protocol message specified as its fully
-// qualified name, and it's marshaled data, into a protoutil.Message.
-func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
+// NewMessage creates a new protocol message object, given its fully
+// qualified name.
+func NewMessage(name string) (protoutil.Message, error) {
 	// Get the reflected type of the protocol message.
 	rt := proto.MessageType(name)
 	if rt == nil {
@@ -37,9 +37,7 @@ func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
 	}
 
 	// Construct message of appropriate type, through reflection.
-	rt = rt.Elem()
-	rv := reflect.New(rt)
-
+	rv := reflect.New(rt.Elem())
 	msg, ok := rv.Interface().(protoutil.Message)
 
 	if !ok {
@@ -47,6 +45,16 @@ func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
 		return nil, errors.AssertionFailedf(
 			"unexpected proto type for %s; expected protoutil.Message, got %T",
 			name, rv.Interface())
+	}
+	return msg, nil
+}
+
+// DecodeMessage decodes protocol message specified as its fully
+// qualified name, and it's marshaled data, into a protoutil.Message.
+func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
+	msg, err := NewMessage(name)
+	if err != nil {
+		return nil, err
 	}
 
 	// Now, parse data as our proto message.
@@ -59,28 +67,26 @@ func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
 // MessageToJSON converts a protocol message into a JSONB object.
 func MessageToJSON(msg protoutil.Message) (jsonb.JSON, error) {
 	// Convert to json.
-	jsonEncoder := jsonpb.Marshaler{}
+	jsonEncoder := jsonpb.Marshaler{EmitDefaults: false}
 	msgJSON, err := jsonEncoder.MarshalToString(msg)
 	if err != nil {
 		return nil, errors.Wrapf(err, "marshaling %s; msg=%+v", proto.MessageName(msg), msg)
 	}
 
-	// We need to take encoded json object and, unfortunately, unmarshal
-	// it again, this time as a string->value map, so that we can construct
-	// JSONB object to return.
-	var msgMap map[string]interface{}
-	if err := json.Unmarshal([]byte(msgJSON), &msgMap); err != nil {
-		return nil, errors.Wrap(err, "unmarshaling to map")
-	}
+	return jsonb.ParseJSON(msgJSON)
+}
 
-	// Build JSONB.
-	builder := jsonb.NewObjectBuilder(len(msgMap))
-	for k, v := range msgMap {
-		jv, err := jsonb.MakeJSON(v)
-		if err != nil {
-			return nil, errors.Wrapf(err, "encoding json value for %s", k)
-		}
-		builder.Add(k, jv)
+// JSONBMarshalToMessage initializes the target protocol message with
+// the data in the input JSONB object.
+// Returns serialized byte representation of the protocol message.
+func JSONBMarshalToMessage(input jsonb.JSON, target protoutil.Message) ([]byte, error) {
+	json := &jsonpb.Unmarshaler{}
+	if err := json.Unmarshal(strings.NewReader(input.String()), target); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling json to %s", proto.MessageName(target))
 	}
-	return builder.Build(), nil
+	data, err := protoutil.Marshal(target)
+	if err != nil {
+		return nil, errors.Wrapf(err, "marshaling to proto %s", proto.MessageName(target))
+	}
+	return data, nil
 }
