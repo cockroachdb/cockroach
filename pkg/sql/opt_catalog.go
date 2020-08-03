@@ -605,7 +605,7 @@ func newOptTable(
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
 	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
-		ot.systemColumnDescs = append(ot.systemColumnDescs, sqlbase.NewMVCCTimestampColumnDesc())
+		ot.systemColumnDescs = append(ot.systemColumnDescs, &sqlbase.MVCCTimestampColumnDesc)
 	}
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
