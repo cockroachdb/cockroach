@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -96,6 +97,25 @@ func (r schemaChangeGCResumer) Resume(
 	if err != nil {
 		return err
 	}
+
+	// If there are any interleaved indexes to drop as part of a table TRUNCATE
+	// operation, then drop the indexes before waiting on the GC timer.
+	if len(details.InterleavedIndexes) > 0 {
+		// Before deleting any indexes, ensure that old versions of the table
+		// descriptor are no longer in use.
+		if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID); err != nil {
+			return err
+		}
+		if err := sql.TruncateInterleavedIndexes(
+			ctx,
+			execCfg,
+			sqlbase.NewImmutableTableDescriptor(*details.InterleavedTable),
+			details.InterleavedIndexes,
+		); err != nil {
+			return err
+		}
+	}
+
 	zoneCfgFilter, gossipUpdateC := setupConfigWatcher(execCfg)
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 

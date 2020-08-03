@@ -658,11 +658,8 @@ TRUNCATE want
 statement ok
 INSERT INTO want (k,v) VALUES ('a', 'b')
 
-statement ok
-CREATE INDEX foo on want (v)
-
 query TT
-SELECT * FROM want@foo
+SELECT * FROM want
 ----
 a b
 
@@ -680,8 +677,7 @@ BEGIN
 statement ok
 TRUNCATE orders
 
-# table orders is not visible to the transaction #17949
-statement error pgcode 42P01 relation "orders" does not exist
+statement ok
 INSERT INTO orders (k,v) VALUES ('a', 'b')
 
 statement ok
@@ -693,8 +689,7 @@ BEGIN
 statement ok
 TRUNCATE customers CASCADE
 
-# table customers is not visible to the transaction #17949
-statement error pgcode 42P01 relation "customers" does not exist
+statement ok
 INSERT INTO customers (k) VALUES ('b')
 
 statement ok

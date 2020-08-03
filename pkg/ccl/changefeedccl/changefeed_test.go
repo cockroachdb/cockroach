@@ -1321,13 +1321,13 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
 		assertPayloads(t, truncateCascade, []string{`truncate_cascade: [1]->{"after": {"b": 1}}`})
 		sqlDB.Exec(t, `TRUNCATE TABLE truncate CASCADE`)
-		if _, err := truncate.Next(); !testutils.IsError(err, `"truncate" was dropped or truncated`) {
-			t.Errorf(`expected ""truncate" was dropped or truncated" error got: %+v`, err)
+		if _, err := truncate.Next(); !testutils.IsError(err, `"truncate" was truncated`) {
+			t.Fatalf(`expected ""truncate" was truncated" error got: %+v`, err)
 		}
 		if _, err := truncateCascade.Next(); !testutils.IsError(
-			err, `"truncate_cascade" was dropped or truncated`,
+			err, `"truncate_cascade" was truncated`,
 		) {
-			t.Errorf(`expected ""truncate_cascade" was dropped or truncated" error got: %+v`, err)
+			t.Fatalf(`expected ""truncate_cascade" was truncated" error got: %+v`, err)
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE rename (a INT PRIMARY KEY)`)

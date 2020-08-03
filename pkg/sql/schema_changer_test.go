@@ -3920,15 +3920,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 
 	// Check that SQL thinks the table is empty.
-	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
+	row := sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	var count int
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, 0, count)
 
-	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if newTableDesc.Adding() {
-		t.Fatalf("bad state = %s", newTableDesc.State)
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	if tableDesc.Adding() {
+		t.Fatalf("bad state = %s", tableDesc.State)
 	}
-	if err := zoneExists(sqlDB, &cfg, newTableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3939,22 +3940,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 		t.Fatal(err)
 	} else if e := maxValue + 1; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
-	}
-	// Check that the table descriptor exists so we know the data will
-	// eventually be deleted.
-	var droppedDesc *sqlbase.ImmutableTableDescriptor
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		droppedDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if droppedDesc == nil {
-		t.Fatalf("table descriptor doesn't exist after table is truncated: %d", tableDesc.ID)
-	}
-	if !droppedDesc.Dropped() {
-		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
 
 	close(blockGC)
@@ -4030,18 +4015,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 
 	// Check that SQL thinks the table is empty.
-	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
+	row := sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	var count int
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, 0, count)
 
 	// Bulk insert.
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	row = sqlDB.QueryRow("SELECT count(*) FROM t.test")
+	require.NoError(t, row.Scan(&count))
+	require.Equal(t, maxValue+1, count)
+
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
@@ -4053,6 +4040,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatalf("err = %v", err)
 	}
 
+	// Get the table descriptor after the truncation.
 	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
@@ -4061,27 +4049,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	// Wait until the older descriptor has been deleted.
-	testutils.SucceedsSoon(t, func() error {
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			_, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
-			return err
-		}); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
-				return nil
-			}
-			return err
-		}
-		return errors.Errorf("table descriptor exists after table is truncated: %d", tableDesc.ID)
-	})
-
-	if err := zoneExists(sqlDB, nil, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-
 	// Ensure that the table data has been deleted.
-	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
+	tablePrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.PrimaryIndex.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -4113,6 +4082,64 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTruncateInterleavedTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer setTestJobsAdoptInterval()()
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.SQLRunner{DB: sqlDBRaw}
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDBRaw)()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.parent (x INT PRIMARY KEY);
+CREATE TABLE t.child (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT t.parent (x);
+INSERT INTO t.parent VALUES (1), (2), (3);
+INSERT INTO t.child VALUES (1, 2), (2, 3), (3, 4);
+`)
+
+	// Get the table descriptors before truncation.
+	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "parent")
+	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+
+	// Add zone configs for the parent and child tables.
+	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDBRaw, parent.ID)
+	require.NoError(t, err)
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDBRaw, child.ID)
+	require.NoError(t, err)
+
+	// Truncate the parent now, which should cascade truncate the child.
+	sqlDB.Exec(t, `TRUNCATE TABLE t.parent CASCADE`)
+
+	// SQL should think that both the parent and child tables are empty.
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM t.parent`, [][]string{{"0"}})
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM t.child`, [][]string{{"0"}})
+
+	// The GC should kick in and actually delete all of the data in each table.
+	testutils.SucceedsSoon(t, func() error {
+		// We only need to scan the parent's table span to verify that
+		// the index data is deleted, since child is interleaved in it.
+		start := keys.SystemSQLCodec.TablePrefix(uint32(parent.ID))
+		end := start.PrefixEnd()
+		kvs, err := kvDB.Scan(ctx, start, end, 0)
+		require.NoError(t, err)
+		if len(kvs) != 0 {
+			return errors.Newf("expected 0 kvs, found %d", len(kvs))
+		}
+		return nil
+	})
 }
 
 // Test TRUNCATE during a column backfill.
