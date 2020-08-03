@@ -12,21 +12,20 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,6 +53,24 @@ func (t *truncateNode) startExec(params runParams) error {
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
 
+	// Collect copies of each interleaved descriptor being truncated before any
+	// modification has been done to them. We need this in order to truncate
+	// the interleaved indexes in the GC job. We have to collect these descriptors
+	// before the truncate modifications to know what are the correct index spans
+	// to delete. Once changes have been made, the index spans where k/v data for
+	// the table reside are no longer accessible from the table.
+	interleaveCopies := make(map[descpb.ID]*descpb.TableDescriptor)
+	maybeAddInterleave := func(desc sqlbase.TableDescriptor) {
+		if !desc.IsInterleaved() {
+			return
+		}
+		_, ok := interleaveCopies[desc.GetID()]
+		if ok {
+			return
+		}
+		interleaveCopies[desc.GetID()] = protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor)
+	}
+
 	for i := range n.Tables {
 		tn := &n.Tables[i]
 		tableDesc, err := p.ResolveMutableTableDescriptor(
@@ -68,6 +85,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
+		maybeAddInterleave(tableDesc)
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -100,6 +118,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			}
 			toTruncate[other.ID] = otherName.FQString()
 			toTraverse = append(toTraverse, *other)
+			maybeAddInterleave(other)
 			return nil
 		}
 
@@ -123,9 +142,8 @@ func (t *truncateNode) startExec(params runParams) error {
 		return err
 	}
 
-	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann()), traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, interleaveCopies, tree.AsStringWithFQNames(t.n, params.Ann())); err != nil {
 			return err
 		}
 
@@ -153,11 +171,17 @@ func (t *truncateNode) Next(runParams) (bool, error) { return false, nil }
 func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
 func (t *truncateNode) Close(context.Context)        {}
 
-// truncateTable truncates the data of a table in a single transaction. It
-// drops the table and recreates it with a new ID. The dropped table is
-// GC-ed later through an asynchronous schema change.
+// truncateTable truncates the data of a table in a single transaction. It does
+// so by dropping all existing indexes on the table and creating new ones without
+// backfilling any data into the new indexes. The old indexes are cleaned up
+// asynchronously by the SchemaChangeGCJob. interleaveDescs is a set of
+// interleaved TableDescriptors being truncated before any of the truncate
+// mutations have been applied.
 func (p *planner) truncateTable(
-	ctx context.Context, id descpb.ID, jobDesc string, traceKV bool,
+	ctx context.Context,
+	id descpb.ID,
+	interleaveDescs map[descpb.ID]*descpb.TableDescriptor,
+	jobDesc string,
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -166,231 +190,121 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	newID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	// Get all tables that might reference this one.
+	allRefs, err := p.findAllReferencingInterleaves(ctx, tableDesc)
 	if err != nil {
 		return err
 	}
-	// tableDesc.DropJobID = dropJobID
-	newTableDesc := sqlbase.NewMutableTableDescriptorAsReplacement(
-		newID, tableDesc, p.txn.ReadTimestamp())
 
-	// Remove old name -> id map.
-	// This is a violation of consistency because once the TRUNCATE commits
-	// some nodes in the cluster can have cached the old name to id map
-	// for the table and applying operations using the old table id.
-	// This violation is needed because it is not uncommon for TRUNCATE
-	// to be used along with other CRUD commands that follow it in the
-	// same transaction. Commands that follow the TRUNCATE in the same
-	// transaction will use the correct descriptor (through uncommittedTables)
-	// See the comment about problem 3 related to draining names in
-	// structured.proto
-	//
-	// TODO(vivek): Fix properly along with #12123.
-	key := catalogkv.MakeObjectNameKey(
-		ctx, p.ExecCfg().Settings,
-		newTableDesc.ParentID,
-		newTableDesc.GetParentSchemaID(),
-		newTableDesc.Name,
-	).Key(p.ExecCfg().Codec)
+	// Collect all of the old indexes.
+	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.Indexes)+1)
+	oldIndexes[0] = *protoutil.Clone(&tableDesc.PrimaryIndex).(*descpb.IndexDescriptor)
+	for i := range tableDesc.Indexes {
+		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.Indexes[i]).(*descpb.IndexDescriptor)
+	}
 
-	// Remove the old namespace entry.
-	if err := catalogkv.RemoveObjectNamespaceEntry(
-		ctx, p.txn, p.execCfg.Codec,
-		tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableDesc.GetName(),
-		traceKV); err != nil {
+	// Reset all of the index IDs.
+	tableDesc.PrimaryIndex.ID = descpb.IndexID(0)
+	for i := range tableDesc.Indexes {
+		tableDesc.Indexes[i].ID = descpb.IndexID(0)
+	}
+	// Create new ID's for all of the indexes in the table.
+	if err := tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
 
-	// Drop table.
-	if err := p.initiateDropTable(ctx, tableDesc, true /* queueJob */, jobDesc, false /* drainName */); err != nil {
-		return err
-	}
-
-	// update all the references to this table.
-	tables, err := p.findAllReferences(ctx, *tableDesc)
-	if err != nil {
-		return err
-	}
-	if changed, err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
-		return err
-	} else if changed {
-		newTableDesc.State = descpb.TableDescriptor_ADD
-	}
-
-	for _, table := range tables {
-		if err := p.writeSchemaChange(
-			ctx, table, descpb.InvalidMutationID, "updating reference for truncated table",
-		); err != nil {
-			return err
-		}
-	}
-
-	// Reassign all self references.
-	if changed, err := reassignReferencedTables(
-		[]*sqlbase.MutableTableDescriptor{newTableDesc}, tableDesc.ID, newID,
-	); err != nil {
-		return err
-	} else if changed {
-		newTableDesc.State = descpb.TableDescriptor_ADD
+	// Construct a mapping from old index ID's to new index ID's.
+	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
+	indexIDMapping[oldIndexes[0].ID] = tableDesc.PrimaryIndex.ID
+	for i := range tableDesc.Indexes {
+		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.Indexes[i].ID
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
-	for _, m := range newTableDesc.Mutations {
-		if err := newTableDesc.MakeMutationComplete(m); err != nil {
+	for _, m := range tableDesc.Mutations {
+		if err := tableDesc.MakeMutationComplete(m); err != nil {
 			return err
 		}
 	}
-	newTableDesc.Mutations = nil
-	newTableDesc.GCMutations = nil
-	// NB: Set the modification time to a zero value so that it is interpreted
-	// as the commit timestamp for the new descriptor. See the comment on
-	// descpb.Descriptor.Table().
-	newTableDesc.ModificationTime = hlc.Timestamp{}
-	if err := p.createDescriptorWithID(
-		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings,
-		fmt.Sprintf("creating new descriptor %d for truncated table %s with id %d",
-			newID, newTableDesc.Name, id),
+	tableDesc.Mutations = nil
+	tableDesc.GCMutations = nil
+
+	// Create schema change GC jobs for all of the indexes.
+	dropTime := timeutil.Now().UnixNano()
+	droppedIndexes := make([]jobspb.SchemaChangeGCDetails_DroppedIndex, 0, len(oldIndexes))
+	var droppedInterleaves []descpb.IndexDescriptor
+	for i := range oldIndexes {
+		idx := oldIndexes[i]
+		if idx.IsInterleaved() {
+			droppedInterleaves = append(droppedInterleaves, idx)
+		} else {
+			droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
+				IndexID:  idx.ID,
+				DropTime: dropTime,
+			})
+		}
+	}
+
+	details := jobspb.SchemaChangeGCDetails{
+		Indexes:  droppedIndexes,
+		ParentID: tableDesc.ID,
+	}
+	// If we have any interleaved indexes, add that information to the job record.
+	if len(droppedInterleaves) > 0 {
+		details.InterleavedTable = interleaveDescs[tableDesc.ID]
+		details.InterleavedIndexes = droppedInterleaves
+	}
+	record := CreateGCJobRecord(jobDesc, p.User(), details)
+	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, record, p.txn); err != nil {
+		return err
+	}
+
+	// Unsplit all manually split ranges in the table so they can be
+	// automatically merged by the merge queue.
+	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+		return err
+	}
+
+	// Reassign any referenced index ID's from other tables.
+	if err := p.reassignInterleaveIndexReferences(ctx, allRefs, tableDesc.ID, indexIDMapping); err != nil {
+		return err
+	}
+	// Reassign any self references.
+	if err := p.reassignInterleaveIndexReferences(
+		ctx,
+		[]*sqlbase.MutableTableDescriptor{tableDesc},
+		tableDesc.ID,
+		indexIDMapping,
 	); err != nil {
 		return err
 	}
 
-	// Reassign comments on the table, columns and indexes.
-	if err := reassignComments(ctx, p, tableDesc, newTableDesc); err != nil {
+	// Move any zone configs on indexes over to the new set of indexes.
+	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes)-1)
+	for i := range oldIndexIDs {
+		oldIndexIDs[i] = oldIndexes[i+1].ID
+	}
+	newIndexIDs := make([]descpb.IndexID, len(tableDesc.Indexes))
+	for i := range newIndexIDs {
+		newIndexIDs[i] = tableDesc.Indexes[i].ID
+	}
+	swapInfo := &descpb.PrimaryKeySwap{
+		OldPrimaryIndexId: oldIndexes[0].ID,
+		OldIndexes:        oldIndexIDs,
+		NewPrimaryIndexId: tableDesc.PrimaryIndex.ID,
+		NewIndexes:        newIndexIDs,
+	}
+	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {
 		return err
 	}
 
-	// Remove back references from types to the original table descriptor.
-	if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
+	// Reassign any index comments.
+	if err := p.reassignIndexComments(ctx, tableDesc, indexIDMapping); err != nil {
 		return err
 	}
 
-	// Add all of the references to the new table descriptor.
-	if err := p.addBackRefsFromAllTypesInTable(ctx, newTableDesc); err != nil {
-		return err
-	}
-
-	// Copy the zone config, if this is for the system tenant. Secondary tenants
-	// do not have zone configs for individual objects.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		zoneKey := config.MakeZoneKey(config.SystemTenantObjectID(tableDesc.ID))
-		b := &kv.Batch{}
-		b.Get(zoneKey)
-		if err := p.txn.Run(ctx, b); err != nil {
-			return err
-		}
-		val := b.Results[0].Rows[0].Value
-		if val == nil {
-			return nil
-		}
-		zoneCfg, err := val.GetBytes()
-		if err != nil {
-			return err
-		}
-		const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
-		if _, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx, "insert-zone", p.txn, insertZoneCfg, newID, zoneCfg,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// For all the references from a table
-func (p *planner) findAllReferences(
-	ctx context.Context, table sqlbase.MutableTableDescriptor,
-) ([]*sqlbase.MutableTableDescriptor, error) {
-	refs, err := table.FindAllReferences()
-	if err != nil {
-		return nil, err
-	}
-	tables := make([]*sqlbase.MutableTableDescriptor, 0, len(refs))
-	for id := range refs {
-		if id == table.ID {
-			continue
-		}
-		t, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
-		if err != nil {
-			return nil, err
-		}
-		tables = append(tables, t)
-	}
-
-	return tables, nil
-}
-
-// reassign all the references from oldID to newID.
-func reassignReferencedTables(
-	tables []*sqlbase.MutableTableDescriptor, oldID, newID descpb.ID,
-) (bool, error) {
-	changed := false
-	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
-			for j, a := range index.Interleave.Ancestors {
-				if a.TableID == oldID {
-					index.Interleave.Ancestors[j].TableID = newID
-					changed = true
-				}
-			}
-			for j, c := range index.InterleavedBy {
-				if c.Table == oldID {
-					index.InterleavedBy[j].Table = newID
-					changed = true
-				}
-			}
-			return nil
-		}); err != nil {
-			return false, err
-		}
-		for i := range table.OutboundFKs {
-			fk := &table.OutboundFKs[i]
-			if fk.ReferencedTableID == oldID {
-				fk.ReferencedTableID = newID
-				changed = true
-			}
-		}
-		for i := range table.InboundFKs {
-			fk := &table.InboundFKs[i]
-			if fk.OriginTableID == oldID {
-				fk.OriginTableID = newID
-				changed = true
-			}
-		}
-
-		for i, dest := range table.DependsOn {
-			if dest == oldID {
-				table.DependsOn[i] = newID
-				changed = true
-			}
-		}
-		origRefs := table.DependedOnBy
-		table.DependedOnBy = nil
-		for _, ref := range origRefs {
-			if ref.ID == oldID {
-				ref.ID = newID
-				changed = true
-			}
-			table.DependedOnBy = append(table.DependedOnBy, ref)
-		}
-	}
-	return changed, nil
-}
-
-// reassignComments reassign all comments on the table, indexes and columns.
-func reassignComments(
-	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
-) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"update-table-comments",
-		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`UPDATE system.comments SET object_id=$1 WHERE object_id=$2`,
-		newTableDesc.ID,
-		oldTableDesc.ID,
-	)
-	return err
+	return p.writeSchemaChange(ctx, tableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // ClearTableDataInChunks truncates the data of a table in chunks. It deletes a
@@ -418,27 +332,116 @@ func ClearTableDataInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.Name, rowIdx, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			rd, err := row.MakeDeleter(
-				ctx,
-				txn,
-				codec,
-				tableDesc,
-				nil,
-				alloc,
-			)
-			if err != nil {
-				return err
-			}
+			rd := row.MakeDeleter(codec, tableDesc, nil)
 			td := tableDeleter{rd: rd, alloc: alloc}
 			if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 				return err
 			}
+			var err error
 			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
 			return err
 		}); err != nil {
 			return err
 		}
 		done = resume.Key == nil
+	}
+	return nil
+}
+
+// findAllReferencingInterleaves finds all tables that might interleave or
+// be interleaved by the input table.
+func (p *planner) findAllReferencingInterleaves(
+	ctx context.Context, table *sqlbase.MutableTableDescriptor,
+) ([]*sqlbase.MutableTableDescriptor, error) {
+	refs, err := table.FindAllReferences()
+	if err != nil {
+		return nil, err
+	}
+	tables := make([]*sqlbase.MutableTableDescriptor, 0, len(refs))
+	for id := range refs {
+		if id == table.ID {
+			continue
+		}
+		t, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+		if err != nil {
+			return nil, err
+		}
+		tables = append(tables, t)
+	}
+
+	return tables, nil
+}
+
+// reassignInterleaveIndexReferences reassigns all index ID's present in
+// interleave descriptor references according to indexIDMapping.
+func (p *planner) reassignInterleaveIndexReferences(
+	ctx context.Context,
+	tables []*sqlbase.MutableTableDescriptor,
+	truncatedID descpb.ID,
+	indexIDMapping map[descpb.IndexID]descpb.IndexID,
+) error {
+	for _, table := range tables {
+		changed := false
+		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+			for j, a := range index.Interleave.Ancestors {
+				if a.TableID == truncatedID {
+					index.Interleave.Ancestors[j].IndexID = indexIDMapping[index.Interleave.Ancestors[j].IndexID]
+					changed = true
+				}
+			}
+			for j, c := range index.InterleavedBy {
+				if c.Table == truncatedID {
+					index.InterleavedBy[j].Index = indexIDMapping[index.InterleavedBy[j].Index]
+					changed = true
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if changed {
+			if err := p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "updating reference for truncated table"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (p *planner) reassignIndexComments(
+	ctx context.Context,
+	table *sqlbase.MutableTableDescriptor,
+	indexIDMapping map[descpb.IndexID]descpb.IndexID,
+) error {
+	// Check if there are any index comments that need to be updated.
+	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+		ctx,
+		"update-table-comments",
+		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
+		table.ID,
+		keys.IndexCommentType,
+	)
+	if err != nil {
+		return err
+	}
+	if int(tree.MustBeDInt(row[0])) > 0 {
+		for old, new := range indexIDMapping {
+			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+				ctx,
+				"update-table-comments",
+				p.txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
+				new,
+				old,
+				table.ID,
+				keys.IndexCommentType,
+			); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

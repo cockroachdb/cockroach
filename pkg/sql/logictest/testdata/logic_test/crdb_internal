@@ -537,12 +537,12 @@ query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
-/Table/58/1/1  /Table/58/1/2
-/Table/58/1/2  /Table/58/1/3
-/Table/58/1/3  /Table/58/2/1
-/Table/58/2/1  /Table/58/2/2
-/Table/58/2/2  /Table/58/2/3
-/Table/58/2/3  /Max
+/Table/56/3/1  /Table/56/3/2
+/Table/56/3/2  /Table/56/3/3
+/Table/56/3/3  /Table/56/4/1
+/Table/56/4/1  /Table/56/4/2
+/Table/56/4/2  /Table/56/4/3
+/Table/56/4/3  /Max
 
 statement ok
 DROP TABLE foo
@@ -565,12 +565,12 @@ query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
-/Table/59/1/1  /Table/59/1/2
-/Table/59/1/2  /Table/59/1/3
-/Table/59/1/3  /Table/59/2/1
-/Table/59/2/1  /Table/59/2/2
-/Table/59/2/2  /Table/59/2/3
-/Table/59/2/3  /Max
+/Table/58/1/1  /Table/58/1/2
+/Table/58/1/2  /Table/58/1/3
+/Table/58/1/3  /Table/58/2/1
+/Table/58/2/1  /Table/58/2/2
+/Table/58/2/2  /Table/58/2/3
+/Table/58/2/3  /Max
 
 statement ok
 DROP INDEX foo@idx
@@ -581,9 +581,9 @@ query T colnames
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
-/Table/59/1/1
-/Table/59/1/2
-/Table/59/1/3
+/Table/58/1/1
+/Table/58/1/2
+/Table/58/1/3
 
 query T
 SELECT crdb_internal.cluster_name()
@@ -633,7 +633,7 @@ CREATE TYPE enum2 AS ENUM ()
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements
 ----
-52  test  public  61  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi') {hello,hi}
-52  test  public  63  enum2  CREATE TYPE public.enum2 AS ENUM ()              {}
+52  test  public  60  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi') {hello,hi}
+52  test  public  62  enum2  CREATE TYPE public.enum2 AS ENUM ()              {}
 
 # Test the virtual index as well.
