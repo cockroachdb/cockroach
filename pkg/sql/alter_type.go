@@ -13,13 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +63,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeRename:
 		err = params.p.renameType(params, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
-		err = unimplemented.NewWithIssue(48672, "ALTER TYPE SET SCHEMA unsupported")
+		err = params.p.setTypeSchema(params, n, t.Schema)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -143,11 +144,13 @@ func (p *planner) performRenameTypeDesc(
 	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, newName string, jobDesc string,
 ) error {
 	// Record the rename details in the descriptor for draining.
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+	name := descpb.NameInfo{
 		ParentID:       desc.ParentID,
 		ParentSchemaID: desc.ParentSchemaID,
 		Name:           desc.Name,
-	})
+	}
+	desc.AddDrainingName(name)
+
 	// Set the descriptor up with the new name.
 	desc.Name = newName
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
@@ -196,6 +199,50 @@ func (p *planner) renameTypeValue(
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
+}
+
+func (p *planner) setTypeSchema(params runParams, n *alterTypeNode, schema string) error {
+	ctx := params.ctx
+	typeDesc := n.desc
+	schemaID := typeDesc.GetParentSchemaID()
+	databaseID := typeDesc.GetParentID()
+
+	desiredSchemaID, err := p.prepareSetSchema(ctx, typeDesc, schema)
+	if err != nil {
+		return err
+	}
+
+	// If the schema being changed to is the same as the current schema for the
+	// type, do a no-op.
+	if desiredSchemaID == schemaID {
+		return nil
+	}
+
+	name := descpb.NameInfo{
+		ParentID:       databaseID,
+		ParentSchemaID: schemaID,
+		Name:           typeDesc.Name,
+	}
+	typeDesc.AddDrainingName(name)
+
+	// Set the tableDesc's new schema id to the desired schema's id.
+	typeDesc.SetParentSchemaID(desiredSchemaID)
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	newKey := sqlbase.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
+		databaseID, desiredSchemaID, typeDesc.Name).Key(p.ExecCfg().Codec)
+
+	b := &kv.Batch{}
+	if params.p.extendedEvalCtx.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, typeDesc.ID)
+	}
+	b.CPut(newKey, typeDesc.ID, nil)
+	return p.txn.Run(ctx, b)
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }

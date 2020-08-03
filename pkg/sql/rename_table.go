@@ -163,6 +163,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.AddDrainingName(renameDetails)
+
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
