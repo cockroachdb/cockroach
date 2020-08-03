@@ -121,8 +121,7 @@ render          ·             ·                  (count int, k int)       ·
  │              render 0      (count_rows)[int]  ·                        ·
  │              render 1      (k)[int]           ·                        ·
  └── group      ·             ·                  (k int, count_rows int)  ·
-      │         aggregate 0   k                  ·                        ·
-      │         aggregate 1   count_rows()       ·                        ·
+      │         aggregate 0   count_rows()       ·                        ·
       │         group by      k                  ·                        ·
       │         ordered       +k                 ·                        ·
       └── scan  ·             ·                  (k int)                  +k
@@ -139,8 +138,7 @@ render               ·             ·                           (count int, r i
  │                   render 0      (count_rows)[int]           ·                              ·
  │                   render 1      (column7)[int]              ·                              ·
  └── group           ·             ·                           (column7 int, count_rows int)  ·
-      │              aggregate 0   column7                     ·                              ·
-      │              aggregate 1   count_rows()                ·                              ·
+      │              aggregate 0   count_rows()                ·                              ·
       │              group by      column7                     ·                              ·
       └── render     ·             ·                           (column7 int)                  ·
            │         render 0      ((k)[int] + (v)[int])[int]  ·                              ·
@@ -158,9 +156,8 @@ render          ·             ·                                      (count in
  │              render 0      (count_rows)[int]                      ·                                          ·
  │              render 1      ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
  └── group      ·             ·                                      (k int, count_rows int, any_not_null int)  ·
-      │         aggregate 0   k                                      ·                                          ·
-      │         aggregate 1   count_rows()                           ·                                          ·
-      │         aggregate 2   any_not_null(v)                        ·                                          ·
+      │         aggregate 0   count_rows()                           ·                                          ·
+      │         aggregate 1   any_not_null(v)                        ·                                          ·
       │         group by      k                                      ·                                          ·
       │         ordered       +k                                     ·                                          ·
       └── scan  ·             ·                                      (k int, v int)                             +k
@@ -241,8 +238,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 render                ·             ·
  │                    render 0      min
  └── group            ·             ·
-      │               aggregate 0   k
-      │               aggregate 1   min(k)
+      │               aggregate 0   min(k)
       │               group by      k
       └── cross join  ·             ·
            │          type          cross
@@ -263,8 +259,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 render                ·             ·
  │                    render 0      min
  └── group            ·             ·
-      │               aggregate 0   k
-      │               aggregate 1   min(k)
+      │               aggregate 0   min(k)
       │               group by      k
       └── cross join  ·             ·
            │          type          cross
@@ -286,8 +281,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 render                ·             ·
  │                    render 0      min
  └── group            ·             ·
-      │               aggregate 0   k
-      │               aggregate 1   min(k)
+      │               aggregate 0   min(k)
       │               group by      k
       └── cross join  ·             ·
            │          type          cross
@@ -590,8 +584,7 @@ EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 sort            ·             ·             (v int, count int)  +count
  │              order         +count        ·                   ·
  └── group      ·             ·             (v int, count int)  ·
-      │         aggregate 0   v             ·                   ·
-      │         aggregate 1   count_rows()  ·                   ·
+      │         aggregate 0   count_rows()  ·                   ·
       │         group by      v             ·                   ·
       └── scan  ·             ·             (v int)             ·
 ·               table         kv@primary    ·                   ·
@@ -605,8 +598,7 @@ EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 sort            ·             ·             (v int, count int)  +count
  │              order         +count        ·                   ·
  └── group      ·             ·             (v int, count int)  ·
-      │         aggregate 0   v             ·                   ·
-      │         aggregate 1   count_rows()  ·                   ·
+      │         aggregate 0   count_rows()  ·                   ·
       │         group by      v             ·                   ·
       └── scan  ·             ·             (v int)             ·
 ·               table         kv@primary    ·                   ·
@@ -623,9 +615,8 @@ render                    ·             ·                (v int, count int)   
  └── sort                 ·             ·                (v int, count int, count_rows int)  +count_rows
       │                   order         +count_rows      ·                                   ·
       └── group           ·             ·                (v int, count int, count_rows int)  ·
-           │              aggregate 0   v                ·                                   ·
-           │              aggregate 1   count(column6)   ·                                   ·
-           │              aggregate 2   count_rows()     ·                                   ·
+           │              aggregate 0   count(column6)   ·                                   ·
+           │              aggregate 1   count_rows()     ·                                   ·
            │              group by      v                ·                                   ·
            └── render     ·             ·                (column6 unknown, v int)            ·
                 │         render 0      (NULL)[unknown]  ·                                   ·
@@ -641,8 +632,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE
 ·                    distribution  local           ·             ·
 ·                    vectorized    true            ·             ·
 group                ·             ·               (v, count)    ·
- │                   aggregate 0   v               ·             ·
- │                   aggregate 1   count(column6)  ·             ·
+ │                   aggregate 0   count(column6)  ·             ·
  │                   group by      v               ·             ·
  └── render          ·             ·               (column6, v)  ·
       │              render 0      NULL            ·             ·
@@ -672,9 +662,8 @@ render               ·             ·                                      (cou
  │                   render 0      count                                  ·                      ·
  │                   render 1      max                                    ·                      ·
  └── group           ·             ·                                      (v, count, max)        ·
-      │              aggregate 0   v                                      ·                      ·
-      │              aggregate 1   count(column6) FILTER (WHERE column7)  ·                      ·
-      │              aggregate 2   max(column7) FILTER (WHERE column7)    ·                      ·
+      │              aggregate 0   count(column6) FILTER (WHERE column7)  ·                      ·
+      │              aggregate 1   max(column7) FILTER (WHERE column7)    ·                      ·
       │              group by      v                                      ·                      ·
       └── render     ·             ·                                      (column6, column7, v)  ·
            │         render 0      true                                   ·                      ·
@@ -692,8 +681,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY
 render               ·             ·                                      (count)                ·
  │                   render 0      count                                  ·                      ·
  └── group           ·             ·                                      (v, count)             ·
-      │              aggregate 0   v                                      ·                      ·
-      │              aggregate 1   count(column6) FILTER (WHERE column7)  ·                      ·
+      │              aggregate 0   count(column6) FILTER (WHERE column7)  ·                      ·
       │              group by      v                                      ·                      ·
       └── render     ·             ·                                      (column6, column7, v)  ·
            │         render 0      true                                   ·                      ·
@@ -723,8 +711,7 @@ EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.
 render                ·             ·                                 (sum decimal)         ·
  │                    render 0      (sum)[decimal]                    ·                     ·
  └── group            ·             ·                                 (k int, sum decimal)  ·
-      │               aggregate 0   k                                 ·                     ·
-      │               aggregate 1   sum(d)                            ·                     ·
+      │               aggregate 0   sum(d)                            ·                     ·
       │               group by      k                                 ·                     ·
       └── cross join  ·             ·                                 (k int, d decimal)    ·
            │          type          inner                             ·                     ·
@@ -800,8 +787,7 @@ EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 render          ·             ·                 (min int)         ·
  │              render 0      (min)[int]        ·                 ·
  └── group      ·             ·                 (k int, min int)  ·
-      │         aggregate 0   k                 ·                 ·
-      │         aggregate 1   min(v)            ·                 ·
+      │         aggregate 0   min(v)            ·                 ·
       │         group by      k                 ·                 ·
       │         ordered       +k                ·                 ·
       └── scan  ·             ·                 (k int, v int)    +k
@@ -831,10 +817,8 @@ render                ·             ·                                         
  │                    render 0      (min)[string]                                       ·                                                ·
  │                    render 1      (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
  └── group            ·             ·                                                   (a int, x string, min string, any_not_null int)  ·
-      │               aggregate 0   a                                                   ·                                                ·
-      │               aggregate 1   x                                                   ·                                                ·
-      │               aggregate 2   min(y)                                              ·                                                ·
-      │               aggregate 3   any_not_null(b)                                     ·                                                ·
+      │               aggregate 0   min(y)                                              ·                                                ·
+      │               aggregate 1   any_not_null(b)                                     ·                                                ·
       │               group by      a, x                                                ·                                                ·
       └── cross join  ·             ·                                                   (a int, b int, x string, y string)               ·
            │          type          cross                                               ·                                                ·
@@ -990,8 +974,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 render               ·             ·            (m)             ·
  │                   render 0      min          ·               ·
  └── group           ·             ·            (column6, min)  ·
-      │              aggregate 0   column6      ·               ·
-      │              aggregate 1   min(a)       ·               ·
+      │              aggregate 0   min(a)       ·               ·
       │              group by      column6      ·               ·
       └── render     ·             ·            (column6, a)    ·
            │         render 0      a            ·               ·
@@ -1008,8 +991,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 render               ·             ·            (m)             ·
  │                   render 0      min          ·               ·
  └── group           ·             ·            (column6, min)  ·
-      │              aggregate 0   column6      ·               ·
-      │              aggregate 1   min(a)       ·               ·
+      │              aggregate 0   min(a)       ·               ·
       │              group by      column6      ·               ·
       └── render     ·             ·            (column6, a)    ·
            │         render 0      b            ·               ·
@@ -1119,9 +1101,7 @@ EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER B
 ·          distribution  local         ·          ·
 ·          vectorized    true          ·          ·
 group      ·             ·             (u, v, s)  ·
- │         aggregate 0   u             ·          ·
- │         aggregate 1   v             ·          ·
- │         aggregate 2   array_agg(w)  ·          ·
+ │         aggregate 0   array_agg(w)  ·          ·
  │         group by      u, v          ·          ·
  │         ordered       +u,+v         ·          ·
  └── scan  ·             ·             (u, v, w)  +u,+v,+w
@@ -1166,8 +1146,7 @@ EXPLAIN (VERBOSE)
 sort                 ·             ·                              (company_id, string_agg)         +company_id
  │                   order         +company_id                    ·                                ·
  └── group           ·             ·                              (company_id, string_agg)         ·
-      │              aggregate 0   company_id                     ·                                ·
-      │              aggregate 1   string_agg(employee, column5)  ·                                ·
+      │              aggregate 0   string_agg(employee, column5)  ·                                ·
       │              group by      company_id                     ·                                ·
       └── render     ·             ·                              (column5, company_id, employee)  ·
            │         render 0      ','                            ·                                ·
@@ -1193,8 +1172,7 @@ EXPLAIN (VERBOSE)
 sort                 ·             ·                             (company_id, string_agg)        +company_id
  │                   order         +company_id                   ·                               ·
  └── group           ·             ·                             (company_id, string_agg)        ·
-      │              aggregate 0   company_id                    ·                               ·
-      │              aggregate 1   string_agg(column5, column6)  ·                               ·
+      │              aggregate 0   string_agg(column5, column6)  ·                               ·
       │              group by      company_id                    ·                               ·
       └── render     ·             ·                             (column5, column6, company_id)  ·
            │         render 0      employee::BYTES               ·                               ·
@@ -1220,8 +1198,7 @@ EXPLAIN (VERBOSE)
 sort                 ·             ·                              (company_id, string_agg)         +company_id
  │                   order         +company_id                    ·                                ·
  └── group           ·             ·                              (company_id, string_agg)         ·
-      │              aggregate 0   company_id                     ·                                ·
-      │              aggregate 1   string_agg(employee, column5)  ·                                ·
+      │              aggregate 0   string_agg(employee, column5)  ·                                ·
       │              group by      company_id                     ·                                ·
       └── render     ·             ·                              (column5, company_id, employee)  ·
            │         render 0      NULL                           ·                                ·
@@ -1247,8 +1224,7 @@ EXPLAIN (VERBOSE)
 sort                 ·             ·                             (company_id, string_agg)        +company_id
  │                   order         +company_id                   ·                               ·
  └── group           ·             ·                             (company_id, string_agg)        ·
-      │              aggregate 0   company_id                    ·                               ·
-      │              aggregate 1   string_agg(column5, column6)  ·                               ·
+      │              aggregate 0   string_agg(column5, column6)  ·                               ·
       │              group by      company_id                    ·                               ·
       └── render     ·             ·                             (column5, column6, company_id)  ·
            │         render 0      employee::BYTES               ·                               ·

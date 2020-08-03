@@ -190,3 +190,30 @@ func (node *DropType) Format(ctx *FmtCtx) {
 		ctx.WriteString(node.DropBehavior.String())
 	}
 }
+
+// DropSchema represents a DROP SCHEMA command.
+type DropSchema struct {
+	Names        []string
+	IfExists     bool
+	DropBehavior DropBehavior
+}
+
+var _ Statement = &DropSchema{}
+
+// Format implements the NodeFormatter interface.
+func (node *DropSchema) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP SCHEMA ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	for i := range node.Names {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNameP(&node.Names[i])
+	}
+	if node.DropBehavior != DropDefault {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
+	}
+}

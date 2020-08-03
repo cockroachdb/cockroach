@@ -474,7 +474,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *groupNode:
 		if v.observer.attr != nil {
 			inputCols := planColumns(n.plan)
+			aggIdx := 0
 			for i, agg := range n.funcs {
+				if _, ok := n.aggIsGroupingColumn(i); ok {
+					// Don't show grouping columns as aggregations.
+					continue
+				}
 				var buf bytes.Buffer
 				if groupingCol, ok := n.aggIsGroupingColumn(i); ok {
 					buf.WriteString(inputCols[groupingCol].Name)
@@ -485,8 +490,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 							buf.WriteString("DISTINCT ")
 						}
 
-						for i, idx := range agg.argRenderIdxs {
-							if i != 0 {
+						for j, idx := range agg.argRenderIdxs {
+							if j != 0 {
 								buf.WriteString(", ")
 							}
 							buf.WriteString(inputCols[idx].Name)
@@ -497,7 +502,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 						fmt.Fprintf(&buf, " FILTER (WHERE %s)", inputCols[agg.filterRenderIdx].Name)
 					}
 				}
-				v.observer.attr(name, fmt.Sprintf("aggregate %d", i), buf.String())
+				v.observer.attr(name, fmt.Sprintf("aggregate %d", aggIdx), buf.String())
+				aggIdx++
 			}
 			if len(n.groupCols) > 0 {
 				var cols []string

@@ -49,6 +49,8 @@ func buildOpaque(
 	switch n := stmt.(type) {
 	case *tree.AlterIndex:
 		plan, err = p.AlterIndex(ctx, n)
+	case *tree.AlterSchema:
+		plan, err = p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
 		plan, err = p.AlterTable(ctx, n)
 	case *tree.AlterTableSetSchema:
@@ -93,6 +95,8 @@ func buildOpaque(
 		plan, err = p.DropIndex(ctx, n)
 	case *tree.DropRole:
 		plan, err = p.DropRole(ctx, n)
+	case *tree.DropSchema:
+		plan, err = p.DropSchema(ctx, n)
 	case *tree.DropTable:
 		plan, err = p.DropTable(ctx, n)
 	case *tree.DropType:
@@ -169,6 +173,7 @@ func buildOpaque(
 func init() {
 	for _, stmt := range []tree.Statement{
 		&tree.AlterIndex{},
+		&tree.AlterSchema{},
 		&tree.AlterTable{},
 		&tree.AlterTableSetSchema{},
 		&tree.AlterType{},
@@ -190,6 +195,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
+		&tree.DropSchema{},
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},

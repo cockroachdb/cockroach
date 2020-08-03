@@ -685,6 +685,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
 %type <tree.Statement> alter_type_stmt
+%type <tree.Statement> alter_schema_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -773,6 +774,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Statement> drop_database_stmt
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
+%type <tree.Statement> drop_schema_stmt
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_type_stmt
 %type <tree.Statement> drop_view_stmt
@@ -907,6 +909,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name
+%type <[]string> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
@@ -1234,6 +1237,7 @@ alter_ddl_stmt:
 | alter_database_stmt  // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt     // EXTEND WITH HELP: ALTER RANGE
 | alter_partition_stmt // EXTEND WITH HELP: ALTER PARTITION
+| alter_schema_stmt    // EXTEND WITH HELP: ALTER SCHEMA
 | alter_type_stmt      // EXTEND WITH HELP: ALTER TYPE
 
 // %Help: ALTER TABLE - change the definition of a table
@@ -2727,7 +2731,6 @@ drop_unsupported:
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
 | DROP RULE error { return unimplemented(sqllex, "drop rule") }
-| DROP SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "drop") }
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
@@ -2949,6 +2952,7 @@ drop_ddl_stmt:
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
+| drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 
 // %Help: DROP VIEW - remove a view
@@ -3066,7 +3070,6 @@ drop_type_stmt:
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
 
-
 type_name_list:
   type_name
   {
@@ -3077,6 +3080,37 @@ type_name_list:
     $$.val = append($1.unresolvedObjectNames(), $3.unresolvedObjectName())
   }
 
+// %Help: DROP SCHEMA - remove a schema
+// %Category: DDL
+// %Text: DROP SCHEMA [IF EXISTS] <schema_name> [, ...] [CASCADE | RESTRICT]
+drop_schema_stmt:
+  DROP SCHEMA schema_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSchema{
+      Names: $3.strs(),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP SCHEMA IF EXISTS schema_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSchema{
+      Names: $5.strs(),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP SCHEMA error // SHOW HELP: DROP SCHEMA
+
+schema_name_list:
+  schema_name
+  {
+    $$.val = []string{$1}
+  }
+| schema_name_list ',' schema_name
+  {
+    $$.val = append($1.strs(), $3)
+  }
 
 // %Help: DROP ROLE - remove a user
 // %Category: Priv
@@ -4928,6 +4962,29 @@ create_schema_stmt:
     }
   }
 | CREATE SCHEMA error // SHOW HELP: CREATE SCHEMA
+
+// %Help: ALTER SCHEMA - alter an existing schema
+// %Category: DDL
+// %Text:
+//
+// Commands:
+//   ALTER SCHEMA ... RENAME TO <newschemaname>
+//   ALTER SCHEMA ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
+alter_schema_stmt:
+  ALTER SCHEMA schema_name RENAME TO schema_name
+  {
+    $$.val = &tree.AlterSchema{
+      Schema: $3,
+      Cmd: &tree.AlterSchemaRename{
+        NewName: $6,
+      },
+    }
+  }
+| ALTER SCHEMA schema_name OWNER TO role_spec
+  {
+    return unimplementedWithIssueDetail(sqllex, 50882, "ALTER SCHEMA OWNER TO")
+  }
+| ALTER SCHEMA error // SHOW HELP: ALTER SCHEMA
 
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL

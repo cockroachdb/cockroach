@@ -356,6 +356,13 @@ func TestParse(t *testing.T) {
 		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')`},
 
+		{`DROP SCHEMA a`},
+		{`DROP SCHEMA a, b`},
+		{`DROP SCHEMA IF EXISTS a, b, c`},
+		{`DROP SCHEMA IF EXISTS a, b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a, b RESTRICT`},
+		{`DROP SCHEMA a RESTRICT`},
+
 		{`DROP TYPE a`},
 		{`DROP TYPE a, b, c`},
 		{`DROP TYPE db.sc.a, sc.a`},
@@ -1243,6 +1250,8 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX IF EXISTS b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
+
+		{`ALTER SCHEMA s RENAME TO s2`},
 
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},
@@ -2814,7 +2823,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP OPERATOR a`, 0, `drop operator`, ``},
 		{`DROP PUBLICATION a`, 0, `drop publication`, ``},
 		{`DROP RULE a`, 0, `drop rule`, ``},
-		{`DROP SCHEMA a`, 26443, `drop`, ``},
 		{`DROP SERVER a`, 0, `drop server`, ``},
 		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``},
 		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``},

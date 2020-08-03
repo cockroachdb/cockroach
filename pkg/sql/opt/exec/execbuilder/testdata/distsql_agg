@@ -356,9 +356,8 @@ EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b
 ·          distribution  full           ·                 ·
 ·          vectorized    true           ·                 ·
 group      ·             ·              (b, count, corr)  ·
- │         aggregate 0   b              ·                 ·
- │         aggregate 1   count_rows()   ·                 ·
- │         aggregate 2   corr(a, b)     ·                 ·
+ │         aggregate 0   count_rows()   ·                 ·
+ │         aggregate 1   corr(a, b)     ·                 ·
  │         group by      b              ·                 ·
  │         ordered       +b             ·                 ·
  └── scan  ·             ·              (a, b)            +b
