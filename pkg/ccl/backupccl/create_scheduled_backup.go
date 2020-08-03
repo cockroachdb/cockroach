@@ -224,7 +224,10 @@ func doCreateBackupSchedule(
 	if err != nil {
 		return err
 	}
-	sj.SetExecutionDetails(scheduledBackupExecutorName, jobspb.ExecutionArguments{Args: any})
+	sj.SetExecutionDetails(
+		tree.ScheduledBackupExecutor.InternalName(),
+		jobspb.ExecutionArguments{Args: any},
+	)
 
 	// Create the schedule.
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

@@ -188,6 +188,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_partitions_stmt
 	| show_jobs_stmt
+	| show_schedules_stmt
 	| show_queries_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
@@ -555,6 +556,11 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOB' a_expr
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' a_expr
 
+show_schedules_stmt ::=
+	'SHOW' 'SCHEDULES' opt_schedule_executor_type
+	| 'SHOW' schedule_state 'SCHEDULES' opt_schedule_executor_type
+	| 'SHOW' 'SCHEDULE' a_expr
+
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
 	| 'SHOW' 'ALL' opt_cluster 'QUERIES'
@@ -818,6 +824,7 @@ unreserved_keyword ::=
 	| 'PARTITIONS'
 	| 'PASSWORD'
 	| 'PAUSE'
+	| 'PAUSED'
 	| 'PHYSICAL'
 	| 'PLAN'
 	| 'PLANS'
@@ -853,6 +860,7 @@ unreserved_keyword ::=
 	| 'ROLLUP'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
 	| 'SETTING'
@@ -1027,6 +1035,7 @@ alter_table_stmt ::=
 	| alter_scatter_stmt
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
+	| alter_table_set_schema_stmt
 
 alter_index_stmt ::=
 	alter_oneindex_stmt
@@ -1038,10 +1047,12 @@ alter_index_stmt ::=
 
 alter_view_stmt ::=
 	alter_rename_view_stmt
+	| alter_view_set_schema_stmt
 
 alter_sequence_stmt ::=
 	alter_rename_sequence_stmt
 	| alter_sequence_options_stmt
+	| alter_sequence_set_schema_stmt
 
 alter_database_stmt ::=
 	alter_rename_database_stmt
@@ -1284,6 +1295,13 @@ for_grantee_clause ::=
 	'FOR' name_list
 	| 
 
+opt_schedule_executor_type ::=
+	'FOR' 'BACKUP'
+
+schedule_state ::=
+	'RUNNING'
+	| 'PAUSED'
+
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
@@ -1376,6 +1394,10 @@ alter_rename_table_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' table_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' table_name
 
+alter_table_set_schema_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
+
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
 	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_cmds
@@ -1403,6 +1425,10 @@ alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' view_name
 
+alter_view_set_schema_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
+
 alter_rename_sequence_stmt ::=
 	'ALTER' 'SEQUENCE' relation_expr 'RENAME' 'TO' sequence_name
 	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' sequence_name
@@ -1410,6 +1436,10 @@ alter_rename_sequence_stmt ::=
 alter_sequence_options_stmt ::=
 	'ALTER' 'SEQUENCE' sequence_name sequence_option_list
 	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' sequence_name sequence_option_list
+
+alter_sequence_set_schema_stmt ::=
+	'ALTER' 'SEQUENCE' relation_expr 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
 
 alter_rename_database_stmt ::=
 	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_name

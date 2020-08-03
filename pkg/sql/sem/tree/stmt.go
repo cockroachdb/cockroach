@@ -187,6 +187,14 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterTableSetSchema) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTableSetSchema) StatementTag() string { return "ALTER TABLE SET SCHEMA" }
+
+func (*AlterTableSetSchema) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterType) StatementType() StatementType { return DDL }
 
 // StatementTag implements the Statement interface.
@@ -806,6 +814,12 @@ func (*ShowHistogram) StatementType() StatementType { return Rows }
 func (*ShowHistogram) StatementTag() string { return "SHOW HISTOGRAM" }
 
 // StatementType implements the Statement interface.
+func (*ShowSchedules) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowSchedules) StatementTag() string { return "SHOW SCHEDULES" }
+
+// StatementType implements the Statement interface.
 func (*ShowSyntax) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -948,6 +962,7 @@ func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
+func (n *AlterTableSetSchema) String() string            { return AsString(n) }
 func (n *AlterType) String() string                      { return AsString(n) }
 func (n *AlterRole) String() string                      { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
@@ -1028,6 +1043,7 @@ func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }
 func (n *ShowGrants) String() string                     { return AsString(n) }
 func (n *ShowHistogram) String() string                  { return AsString(n) }
+func (n *ShowSchedules) String() string                  { return AsString(n) }
 func (n *ShowIndexes) String() string                    { return AsString(n) }
 func (n *ShowPartitions) String() string                 { return AsString(n) }
 func (n *ShowJobs) String() string                       { return AsString(n) }

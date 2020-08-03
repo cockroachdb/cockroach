@@ -26,8 +26,6 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
-const scheduledBackupExecutorName = "scheduled-backup-executor"
-
 type scheduledBackupExecutor struct{}
 
 var _ jobs.ScheduledJobExecutor = &scheduledBackupExecutor{}
@@ -153,7 +151,7 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 
 func init() {
 	jobs.RegisterScheduledJobExecutorFactory(
-		scheduledBackupExecutorName,
+		tree.ScheduledBackupExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
 			return &scheduledBackupExecutor{}, nil
 		})

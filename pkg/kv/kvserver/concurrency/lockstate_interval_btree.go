@@ -371,9 +371,9 @@ func (n *node) split(i int) (*lockState, *node) {
 	return out, next
 }
 
-// insert inserts a item into the subtree rooted at this node, making sure no
+// insert inserts an item into the subtree rooted at this node, making sure no
 // nodes in the subtree exceed maxItems items. Returns true if an existing item
-// was replaced and false if a item was inserted. Also returns whether the
+// was replaced and false if an item was inserted. Also returns whether the
 // node's upper bound changes.
 func (n *node) insert(item *lockState) (replaced, newBound bool) {
 	i, found := n.find(item)
@@ -406,8 +406,8 @@ func (n *node) insert(item *lockState) (replaced, newBound bool) {
 	return replaced, newBound
 }
 
-// removeMax removes and returns the maximum item from the subtree rooted
-// at this node.
+// removeMax removes and returns the maximum item from the subtree rooted at
+// this node.
 func (n *node) removeMax() *lockState {
 	if n.leaf {
 		n.count--
@@ -416,17 +416,22 @@ func (n *node) removeMax() *lockState {
 		n.adjustUpperBoundOnRemoval(out, nil)
 		return out
 	}
-	child := mut(&n.children[n.count])
-	if child.count <= minItems {
-		n.rebalanceOrMerge(int(n.count))
-		return n.removeMax()
+	// Recurse into max child.
+	i := int(n.count)
+	if n.children[i].count <= minItems {
+		// Child not large enough to remove from.
+		n.rebalanceOrMerge(i)
+		return n.removeMax() // redo
 	}
-	return child.removeMax()
+	child := mut(&n.children[i])
+	out := child.removeMax()
+	n.adjustUpperBoundOnRemoval(out, nil)
+	return out
 }
 
-// remove removes a item from the subtree rooted at this node. Returns
-// the item that was removed or nil if no matching item was found.
-// Also returns whether the node's upper bound changes.
+// remove removes an item from the subtree rooted at this node. Returns the item
+// that was removed or nil if no matching item was found. Also returns whether
+// the node's upper bound changes.
 func (n *node) remove(item *lockState) (out *lockState, newBound bool) {
 	i, found := n.find(item)
 	if n.leaf {
@@ -439,7 +444,7 @@ func (n *node) remove(item *lockState) (out *lockState, newBound bool) {
 	if n.children[i].count <= minItems {
 		// Child not large enough to remove from.
 		n.rebalanceOrMerge(i)
-		return n.remove(item)
+		return n.remove(item) // redo
 	}
 	child := mut(&n.children[i])
 	if found {
@@ -457,7 +462,7 @@ func (n *node) remove(item *lockState) (out *lockState, newBound bool) {
 }
 
 // rebalanceOrMerge grows child 'i' to ensure it has sufficient room to remove
-// a item from it while keeping it at or above minItems.
+// an item from it while keeping it at or above minItems.
 func (n *node) rebalanceOrMerge(i int) {
 	switch {
 	case i > 0 && n.children[i-1].count > minItems:
@@ -601,9 +606,9 @@ func (n *node) findUpperBound() keyBound {
 	return max
 }
 
-// adjustUpperBoundOnInsertion adjusts the upper key bound for this node
-// given a item and an optional child node that was inserted. Returns
-// true is the upper bound was changed and false if not.
+// adjustUpperBoundOnInsertion adjusts the upper key bound for this node given
+// an item and an optional child node that was inserted. Returns true is the
+// upper bound was changed and false if not.
 func (n *node) adjustUpperBoundOnInsertion(item *lockState, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
@@ -618,9 +623,9 @@ func (n *node) adjustUpperBoundOnInsertion(item *lockState, child *node) bool {
 	return false
 }
 
-// adjustUpperBoundOnRemoval adjusts the upper key bound for this node
-// given a item and an optional child node that were removed. Returns
-// true is the upper bound was changed and false if not.
+// adjustUpperBoundOnRemoval adjusts the upper key bound for this node given an
+// item and an optional child node that was removed. Returns true is the upper
+// bound was changed and false if not.
 func (n *node) adjustUpperBoundOnRemoval(item *lockState, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
@@ -687,7 +692,7 @@ func (t *btree) Clone() btree {
 	return c
 }
 
-// Delete removes a item equal to the passed in item from the tree.
+// Delete removes an item equal to the passed in item from the tree.
 func (t *btree) Delete(item *lockState) {
 	if t.root == nil || t.root.count == 0 {
 		return
@@ -706,8 +711,8 @@ func (t *btree) Delete(item *lockState) {
 	}
 }
 
-// Set adds the given item to the tree. If a item in the tree already
-// equals the given one, it is replaced with the new item.
+// Set adds the given item to the tree. If an item in the tree already equals
+// the given one, it is replaced with the new item.
 func (t *btree) Set(item *lockState) {
 	if t.root == nil {
 		t.root = newLeafNode()
