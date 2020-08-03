@@ -4225,6 +4225,10 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true}
   }
+| SHOW JOBS for_schedules_clause
+  {
+    $$.val = &tree.ShowJobs{Schedules: $3.slct()}
+  }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
   {
