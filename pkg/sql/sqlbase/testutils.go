@@ -1335,36 +1335,49 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	return true
 }
 
+// tableInfo is a helper struct that contains information necessary for mutating
+// indexes. It is used by IndexStoringMutator and PartialIndexMutator.
 type tableInfo struct {
-	columnNames []tree.Name
-	pkCols      []tree.Name
+	columnNames      []tree.Name
+	columnsTableDefs []*tree.ColumnTableDef
+	pkCols           []tree.Name
 }
 
-// IndexStoringMutator is mutations.StatementMutator, but lives here to prevent
-// dependency cycles with RandCreateTable.
-func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
-	changed := false
-	tables := map[tree.Name]tableInfo{}
-	getTableInfoFromCreateStatement := func(ct *tree.CreateTable) tableInfo {
-		var columnNames []tree.Name
-		var pkCols []tree.Name
-		for _, def := range ct.Defs {
-			switch ast := def.(type) {
-			case *tree.ColumnTableDef:
-				columnNames = append(columnNames, ast.Name)
-				if ast.PrimaryKey.IsPrimaryKey {
-					pkCols = []tree.Name{ast.Name}
-				}
-			case *tree.UniqueConstraintTableDef:
-				if ast.PrimaryKey {
-					for _, elem := range ast.Columns {
-						pkCols = append(pkCols, elem.Column)
+// getTableInfoFromCreateStatements collects tableInfo from every CreateTable
+// statement in the given list of statements.
+func getTableInfoFromCreateStatements(stmts []tree.Statement) map[tree.Name]tableInfo {
+	tables := make(map[tree.Name]tableInfo)
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateTable:
+			info := tableInfo{}
+			for _, def := range ast.Defs {
+				switch ast := def.(type) {
+				case *tree.ColumnTableDef:
+					info.columnNames = append(info.columnNames, ast.Name)
+					info.columnsTableDefs = append(info.columnsTableDefs, ast)
+					if ast.PrimaryKey.IsPrimaryKey {
+						info.pkCols = []tree.Name{ast.Name}
+					}
+				case *tree.UniqueConstraintTableDef:
+					if ast.PrimaryKey {
+						for _, elem := range ast.Columns {
+							info.pkCols = append(info.pkCols, elem.Column)
+						}
 					}
 				}
 			}
+			tables[ast.Table.ObjectName] = info
 		}
-		return tableInfo{columnNames: columnNames, pkCols: pkCols}
 	}
+	return tables
+}
+
+// IndexStoringMutator is a mutations.MultiStatementMutator, but lives here to
+// prevent dependency cycles with RandCreateTable.
+func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := getTableInfoFromCreateStatements(stmts)
 	mapFromIndexCols := func(cols []tree.Name) map[tree.Name]struct{} {
 		colMap := map[tree.Name]struct{}{}
 		for _, col := range cols {
@@ -1405,9 +1418,10 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				changed = true
 			}
 		case *tree.CreateTable:
-			// Write down this table for later.
-			tableInfo := getTableInfoFromCreateStatement(ast)
-			tables[ast.Table.ObjectName] = tableInfo
+			tableInfo, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				panic("table info could not be found")
+			}
 			for _, def := range ast.Defs {
 				var idx *tree.IndexTableDef
 				switch defType := def.(type) {
@@ -1436,6 +1450,68 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	return stmts, changed
 }
 
+// PartialIndexMutator is a mutations.MultiStatementMutator, but lives here to
+// prevent dependency cycles with RandCreateTable. This mutator adds random
+// partial index predicate expressions to indexes.
+func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := getTableInfoFromCreateStatements(stmts)
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			// TODO(mgartner): Create partial inverted indexes when they are
+			// fully supported.
+			if ast.Inverted {
+				continue
+			}
+
+			tableInfo, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				continue
+			}
+
+			// If the index is not already a partial index, make it a partial
+			// index with a 50% chance.
+			if ast.Predicate == nil && rng.Intn(2) == 0 {
+				tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
+				ast.Predicate = randPartialIndexPredicateFromCols(rng, tableInfo.columnsTableDefs, &tn)
+				changed = true
+			}
+		case *tree.CreateTable:
+			tableInfo, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				panic("table info could not be found")
+			}
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey {
+						idx = &defType.IndexTableDef
+					}
+				}
+
+				// TODO(mgartner): Create partial inverted indexes when they are
+				// fully supported.
+				if idx == nil || idx.Inverted {
+					continue
+				}
+
+				// If the index is not already a partial index, make it a partial
+				// index with a 50% chance.
+				if idx.Predicate == nil && rng.Intn(2) == 0 {
+					tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
+					idx.Predicate = randPartialIndexPredicateFromCols(rng, tableInfo.columnsTableDefs, &tn)
+					changed = true
+				}
+			}
+		}
+	}
+	return stmts, changed
+}
+
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
 // nullability.
 func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
@@ -1449,6 +1525,8 @@ func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnT
 	return columnDef
 }
 
+// randIndexTableDefFromCols creates an IndexTableDef with a random subset of
+// the given columns and a random direction.
 func randIndexTableDefFromCols(
 	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef,
 ) tree.IndexTableDef {
@@ -1471,6 +1549,110 @@ func randIndexTableDefFromCols(
 		})
 	}
 	return tree.IndexTableDef{Columns: indexElemList}
+}
+
+// randPartialIndexPredicateFromCols creates a partial index expression with a
+// random subset of the given columns. There is a possibility that a partial
+// index expression cannot be created for the given columns, in which case nil
+// is returned. This happens when none of the columns have types that are
+// supported for creating partial index predicate expressions. See
+// isAllowedPartialIndexColType for details on which types are supported.
+func randPartialIndexPredicateFromCols(
+	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, tableName *tree.TableName,
+) tree.Expr {
+	// Shuffle the columns.
+	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
+	copy(cpy, columnTableDefs)
+	rng.Shuffle(len(cpy), func(i, j int) { cpy[i], cpy[j] = cpy[j], cpy[i] })
+
+	// Select a random number of columns (at least 1). Loop through the columns
+	// to find columns with types that are currently supported for generating
+	// partial index expressions.
+	nCols := rng.Intn(len(cpy)) + 1
+	cols := make([]*tree.ColumnTableDef, 0, nCols)
+	for _, col := range cpy {
+		if isAllowedPartialIndexColType(col) {
+			cols = append(cols, col)
+		}
+		if len(cols) == nCols {
+			break
+		}
+	}
+
+	// Build a boolean expression tree with containing a reference to each
+	// column.
+	var e tree.Expr
+	for _, columnTableDef := range cols {
+		expr := randBoolColumnExpr(rng, columnTableDef, tableName)
+		// If an expression has already been built, combine the previous and
+		// current expression with an AndExpr or OrExpr.
+		if e != nil {
+			expr = randAndOrExpr(rng, e, expr)
+		}
+		e = expr
+	}
+	return e
+}
+
+// isAllowedPartialIndexColType returns true if the column type is supported and
+// the column can be included in generating random partial index predicate
+// expressions. Currently, the following types are supported:
+//
+//   - Booleans
+//   - Types that are valid in comparison operations (=, !=, <, <=, >, >=).
+//
+// This function must be kept in sync with the implementation of
+// randBoolColumnExpr.
+func isAllowedPartialIndexColType(columnTableDef *tree.ColumnTableDef) bool {
+	switch fam := columnTableDef.Type.(*types.T).Family(); fam {
+	case types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
+		types.StringFamily, types.DateFamily, types.TimeFamily, types.TimeTZFamily,
+		types.TimestampFamily, types.TimestampTZFamily, types.BytesFamily:
+		return true
+	default:
+		return false
+	}
+}
+
+var cmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GE, tree.GT}
+
+// randBoolColumnExpr returns a random boolean expression with the given column.
+func randBoolColumnExpr(
+	rng *rand.Rand, columnTableDef *tree.ColumnTableDef, tableName *tree.TableName,
+) tree.Expr {
+	varExpr := tree.NewColumnItem(tableName, columnTableDef.Name)
+	t := columnTableDef.Type.(*types.T)
+
+	// If the column is a boolean, then return it or NOT it as an expression.
+	if t.Family() == types.BoolFamily {
+		if rng.Intn(2) == 0 {
+			return &tree.NotExpr{Expr: varExpr}
+		}
+		return varExpr
+	}
+
+	// Otherwise, return a comparison expression with a random comparison
+	// operator, the column as the left side, and an interesting datum as the
+	// right side.
+	op := cmpOps[rng.Intn(len(cmpOps))]
+	datum := randInterestingDatum(rng, t)
+	return &tree.ComparisonExpr{Operator: op, Left: varExpr, Right: datum}
+}
+
+// randAndOrExpr combines the left and right expressions with either an OrExpr
+// or an AndExpr.
+func randAndOrExpr(rng *rand.Rand, left, right tree.Expr) tree.Expr {
+	if rng.Intn(2) == 0 {
+		return &tree.OrExpr{
+			Left:  left,
+			Right: right,
+		}
+	}
+
+	return &tree.AndExpr{
+		Left:  left,
+		Right: right,
+	}
 }
 
 // The following variables are useful for testing.
