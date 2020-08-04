@@ -1182,6 +1182,13 @@ message SchemaDescriptor {
   optional uint32 id = 3
   [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
+  // State is set if this SchemaDescriptor is in the process of being deleted.
+  enum State {
+    PUBLIC = 0;
+    DROP = 1;
+  }
+  optional State state = 8 [(gogoproto.nullable) = false];
+
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
   optional uint32 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];

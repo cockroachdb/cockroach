@@ -330,6 +330,10 @@ func (tc *Collection) ResolveSchema(
 		return exists, sqlbase.ResolvedSchema{}, err
 	}
 
+	if resolved.Kind == sqlbase.SchemaUserDefined && resolved.Desc.Dropped() {
+		return false, sqlbase.ResolvedSchema{}, nil
+	}
+
 	tc.schemaCache.Store(key, resolved)
 	return exists, resolved, err
 }

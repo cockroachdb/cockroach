@@ -135,7 +135,9 @@ func GetDescriptorDropped(desc *descpb.Descriptor) bool {
 		return t.Table.Dropped()
 	case *descpb.Descriptor_Type:
 		return t.Type.Dropped()
-	case *descpb.Descriptor_Database, *descpb.Descriptor_Schema:
+	case *descpb.Descriptor_Schema:
+		return t.Schema.Dropped()
+	case *descpb.Descriptor_Database:
 		return false
 	default:
 		debug.PrintStack()
