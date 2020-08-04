@@ -312,21 +312,21 @@ func (sc *SchemaChanger) dropConstraints(
 	for i := range constraints {
 		c := &constraints[i]
 		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
-			c.ForeignKey.ReferencedTableID != sc.tableID {
+			c.ForeignKey.ReferencedTableID != sc.descID {
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
 	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
 
 	// Create update closure for the table and all other tables with backreferences.
 	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-		scDesc, ok := descs[sc.tableID]
+		scDesc, ok := descs[sc.descID]
 		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
 		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
@@ -356,7 +356,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name == constraint.Name {
 						backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 						if !ok {
-							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 						}
 						backrefTable := backrefDesc.(*MutableTableDescriptor)
 						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable.TableDesc()); err != nil {
@@ -384,7 +384,7 @@ func (sc *SchemaChanger) dropConstraints(
 	if err != nil {
 		return nil, err
 	}
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 		return nil, err
 	}
 	for id := range fksByBackrefTable {
@@ -414,21 +414,21 @@ func (sc *SchemaChanger) addConstraints(
 	for i := range constraints {
 		c := &constraints[i]
 		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
-			c.ForeignKey.ReferencedTableID != sc.tableID {
+			c.ForeignKey.ReferencedTableID != sc.descID {
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
 	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
 
 	// Create update closure for the table and all other tables with backreferences
 	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-		scDesc, ok := descs[sc.tableID]
+		scDesc, ok := descs[sc.descID]
 		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
 		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
@@ -478,7 +478,7 @@ func (sc *SchemaChanger) addConstraints(
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
 					backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 					if !ok {
-						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 					}
 					backrefTable := backrefDesc.(*MutableTableDescriptor)
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
@@ -491,7 +491,7 @@ func (sc *SchemaChanger) addConstraints(
 	if _, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, nil); err != nil {
 		return err
 	}
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 		return err
 	}
 	for id := range fksByBackrefTable {
@@ -531,7 +531,7 @@ func (sc *SchemaChanger) validateConstraints(
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -609,7 +609,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +639,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			resumeAt := resume
 			if log.V(2) {
 				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
-					sc.tableID, sc.mutationID, rowIdx, resume)
+					sc.descID, sc.mutationID, rowIdx, resume)
 			}
 
 			// Make a new txn just to drop this chunk.
@@ -696,7 +696,7 @@ func (sc *SchemaChanger) truncateIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, sc.tableID, dropped)
+			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, sc.descID, dropped)
 		}); err != nil {
 			return err
 		}
@@ -816,7 +816,7 @@ func (sc *SchemaChanger) distBackfill(
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
-			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.tableID, sc.mutationID, filter)
+			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.descID, sc.mutationID, filter)
 		return err
 	}); err != nil {
 		return err
@@ -903,7 +903,7 @@ func (sc *SchemaChanger) distBackfill(
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
 				resumeSpans, _, _, err = rowexec.GetResumeSpans(
-					ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.tableID, sc.mutationID, filter)
+					ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.descID, sc.mutationID, filter)
 				return err
 			}); err != nil {
 				return err
@@ -935,7 +935,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 ) (*sqlbase.MutableTableDescriptor, error) {
 	var tableDesc *sqlbase.MutableTableDescriptor
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.tableID, catalogkv.Mutable,
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID, catalogkv.Mutable,
 			catalogkv.TableDescriptorKind, true /* required */)
 		if err != nil {
 			return err
@@ -1002,7 +1002,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	readAsOf := sc.clock.Now()
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
-		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
 	}); err != nil {
 		return err

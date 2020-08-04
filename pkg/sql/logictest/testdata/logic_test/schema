@@ -103,8 +103,57 @@ CREATE TEMP TABLE myschema.tmp (x int)
 statement error pq: schema cannot be modified: "pg_catalog"
 CREATE TABLE pg_catalog.bad (x int)
 
+# We shouldn't be able to alter virtual or public schemas.
+statement error pq: cannot modify schema "public"
+ALTER SCHEMA public RENAME TO private
+
+statement error pq: cannot modify schema "pg_catalog"
+ALTER SCHEMA pg_catalog RENAME TO mysql_catalog
+
+# We can't rename a schema to a pg_temp prefixed name.
+statement error pq: unacceptable schema name "pg_temp_not_temp"
+ALTER SCHEMA myschema RENAME TO pg_temp_not_temp
+
+# We can't rename to schemas that already exist.
+statement error pq: schema "public" already exists
+ALTER SCHEMA myschema RENAME TO public
+
+statement ok
+CREATE SCHEMA yourschema
+
+statement error pq: schema "yourschema" already exists
+ALTER SCHEMA myschema RENAME TO yourschema
+
+statement ok
+ALTER SCHEMA myschema RENAME TO myschema2
+
+# We should be able to resolve objects under the new schema name.
+query T
+SELECT * FROM myschema2.tb2
+----
+
+# The names should be drained after executing, so we should be able
+# to make another schema with the old name.
+statement ok
+CREATE SCHEMA myschema
+
+statement ok
+BEGIN
+
+statement ok
+ALTER SCHEMA myschema RENAME TO another_schema
+
+statement ok
+ALTER SCHEMA another_schema RENAME TO another_one
+
+# The names should be draining, so we can't use the old ones
+# anymore.
+statement error pq: schema "myschema" already exists
+ALTER SCHEMA another_one RENAME TO myschema
+
+statement ok
+ROLLBACK
+
 statement error pq: unimplemented: DROP SCHEMA
 DROP SCHEMA myschema
 
-statement error pq: unimplemented: ALTER SCHEMA
-ALTER SCHEMA myschema RENAME TO yourschema

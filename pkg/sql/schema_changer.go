@@ -76,7 +76,7 @@ const (
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
-	tableID           descpb.ID
+	descID            descpb.ID
 	mutationID        descpb.MutationID
 	droppedDatabaseID descpb.ID
 	sqlInstanceID     base.SQLInstanceID
@@ -110,7 +110,7 @@ func NewSchemaChangerForTesting(
 	settings *cluster.Settings,
 ) SchemaChanger {
 	return SchemaChanger{
-		tableID:       tableID,
+		descID:        tableID,
 		mutationID:    mutationID,
 		sqlInstanceID: sqlInstanceID,
 		db:            &db,
@@ -346,7 +346,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 
 func drainNamesForDescriptor(
 	ctx context.Context,
-	descID descpb.ID,
+	desc catalog.Descriptor,
 	leaseMgr *lease.Manager,
 	codec keys.SQLCodec,
 	beforeDrainNames func(),
@@ -356,20 +356,25 @@ func drainNamesForDescriptor(
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
 	var namesToReclaim []descpb.NameInfo
-	_, err := leaseMgr.Publish(
+	descIDs := []descpb.ID{desc.GetID()}
+	_, isSchema := desc.(sqlbase.SchemaDescriptor)
+	if isSchema {
+		descIDs = append(descIDs, desc.GetParentID())
+	}
+
+	_, err := leaseMgr.PublishMultiple(
 		ctx,
-		descID,
-		func(desc catalog.MutableDescriptor) error {
+		descIDs,
+		func(txn *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
 			if beforeDrainNames != nil {
 				beforeDrainNames()
 			}
 			// Free up the old name(s) for reuse.
-			namesToReclaim = desc.GetDrainingNames()
-			desc.SetDrainingNames(nil)
-			return nil
-		},
-		// Reclaim all the old names.
-		func(txn *kv.Txn) error {
+			mutDesc := descs[desc.GetID()]
+			namesToReclaim = mutDesc.GetDrainingNames()
+			mutDesc.SetDrainingNames(nil)
+
+			// Reclaim all old names.
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
 				err := catalogkv.RemoveObjectNamespaceEntry(
@@ -379,8 +384,22 @@ func drainNamesForDescriptor(
 					return err
 				}
 			}
-			return txn.Run(ctx, b)
+			if err := txn.Run(ctx, b); err != nil {
+				return err
+			}
+
+			// If the descriptor to drain is a schema, then we need to delete the
+			// draining names from the parent database's schema mapping.
+			if isSchema {
+				db := descs[desc.GetParentID()].(*sqlbase.MutableDatabaseDescriptor)
+				for _, name := range namesToReclaim {
+					delete(db.Schemas, name.Name)
+				}
+			}
+
+			return nil
 		},
+		func(*kv.Txn) error { return nil },
 	)
 	return err
 }
@@ -415,12 +434,38 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 	buf := &logtags.Buffer{}
 	buf = buf.Add("scExec", nil)
 
-	buf = buf.Add("table", sc.tableID)
+	buf = buf.Add("table", sc.descID)
 	buf = buf.Add("mutation", sc.mutationID)
 	if sc.droppedDatabaseID != descpb.InvalidID {
 		buf = buf.Add("db", sc.droppedDatabaseID)
 	}
 	return buf
+}
+
+// notFirstInLine checks if that this schema changer is at the front of the line
+// to execute if the target descriptor is a table. It returns an error if this
+// schema changer needs to wait.
+func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descriptor) error {
+	if tableDesc, ok := desc.(sqlbase.TableDescriptor); ok {
+		// TODO (lucy): Now that marking a schema change job as succeeded doesn't
+		// happen in the same transaction as removing mutations from a table
+		// descriptor, it seems possible for a job to be resumed after the mutation
+		// has already been removed. If there's a mutation provided, we should check
+		// whether it actually exists on the table descriptor and exit the job if not.
+		for i, mutation := range tableDesc.TableDesc().Mutations {
+			if mutation.MutationID == sc.mutationID {
+				if i != 0 {
+					log.Infof(ctx,
+						"schema change on %q (v%d): another change is still in progress",
+						desc.GetName(), desc.GetVersion(),
+					)
+					return errSchemaChangeNotFirstInLine
+				}
+				break
+			}
+		}
+	}
+	return nil
 }
 
 // Execute the entire schema change in steps.
@@ -432,32 +477,39 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 func (sc *SchemaChanger) exec(ctx context.Context) error {
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
-	// TODO (lucy): Now that marking a schema change job as succeeded doesn't
-	// happen in the same transaction as removing mutations from a table
-	// descriptor, it seems possible for a job to be resumed after the mutation
-	// has already been removed. If there's a mutation provided, we should check
-	// whether it actually exists on the table descriptor and exit the job if not.
-	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
-	if err != nil {
+	// Retrieve the descriptor that is being changed.
+	var desc catalog.Descriptor
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		desc, err = catalogkv.GetDescriptorByID(
+			ctx,
+			txn,
+			sc.execCfg.Codec,
+			sc.descID,
+			catalogkv.Immutable,
+			catalogkv.AnyDescriptorKind,
+			true, /* required */
+		)
+		return err
+	}); err != nil {
 		return err
 	}
-	if notFirst {
-		log.Infof(ctx,
-			"schema change on %q (v%d): another change is still in progress",
-			tableDesc.Name, tableDesc.Version,
-		)
-		return errSchemaChangeNotFirstInLine
+
+	// Check that we aren't queued behind another schema changer.
+	if err := sc.notFirstInLine(ctx, desc); err != nil {
+		return err
 	}
 
 	log.Infof(ctx,
 		"schema change on %q (v%d) starting execution...",
-		tableDesc.Name, tableDesc.Version,
+		desc.GetName(), desc.GetVersion(),
 	)
 
-	if tableDesc.HasDrainingNames() {
+	// If there are any names to drain, then drain them.
+	if len(desc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
 			ctx,
-			sc.tableID,
+			desc,
 			sc.leaseMgr,
 			sc.execCfg.Codec,
 			sc.testingKnobs.OldNamesDrainedNotification,
@@ -466,16 +518,44 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
+	// Wait for the schema change to propagate to all nodes after this function
+	// returns, so that the new schema is live everywhere. This is not needed for
+	// correctness but is done to make the UI experience/tests predictable.
+	waitToUpdateLeases := func(refreshStats bool) error {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				return err
+			}
+			log.Warningf(ctx, "waiting to update leases: %+v", err)
+			// As we are dismissing the error, go through the recording motions.
+			// This ensures that any important error gets reported to Sentry, etc.
+			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+		}
+		// We wait to trigger a stats refresh until we know the leases have been
+		// updated.
+		if refreshStats {
+			sc.refreshStats()
+		}
+		return nil
+	}
+
+	tableDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	if !ok {
+		// If our descriptor is not a table, then just drain leases and return.
+		return waitToUpdateLeases(false /* refreshStats */)
+	}
+
+	// Otherwise, continue with the rest of the schema change state machine.
 	if tableDesc.Dropped() && sc.droppedDatabaseID == descpb.InvalidID {
 		// We've dropped this table, let's kick off a GC job.
 		dropTime := timeutil.Now().UnixNano()
-		if tableDesc.DropTime > 0 {
-			dropTime = tableDesc.DropTime
+		if tableDesc.TableDesc().DropTime > 0 {
+			dropTime = tableDesc.TableDesc().DropTime
 		}
 		gcDetails := jobspb.SchemaChangeGCDetails{
 			Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 				{
-					ID:       tableDesc.ID,
+					ID:       tableDesc.GetID(),
 					DropTime: dropTime,
 				},
 			},
@@ -495,30 +575,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		return err
 	}
 
-	// Wait for the schema change to propagate to all nodes after this function
-	// returns, so that the new schema is live everywhere. This is not needed for
-	// correctness but is done to make the UI experience/tests predictable.
-	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
-				return err
-			}
-			log.Warningf(ctx, "waiting to update leases: %+v", err)
-			// As we are dismissing the error, go through the recording motions.
-			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
-		}
-		// We wait to trigger a stats refresh until we know the leases have been
-		// updated.
-		if refreshStats {
-			sc.refreshStats()
-		}
-		return nil
-	}
-
 	if sc.mutationID == descpb.InvalidMutationID {
 		// Nothing more to do.
-		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
+		isCreateTableAs := tableDesc.Adding() && tableDesc.TableDesc().IsAs()
 		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
 	}
 
@@ -531,7 +590,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(ctx)
+	err := sc.runStateMachineAndBackfill(ctx)
 	if err != nil {
 		return err
 	}
@@ -577,7 +636,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
@@ -612,7 +671,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -675,7 +734,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "stepping through state machine")
 
 	var runStatus jobs.RunningStatus
-	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc catalog.MutableDescriptor) error {
+	if _, err := sc.leaseMgr.Publish(ctx, sc.descID, func(desc catalog.MutableDescriptor) error {
 		tbl := desc.(*MutableTableDescriptor)
 
 		runStatus = ""
@@ -735,7 +794,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "finished stepping through state machine")
 
 	// wait for the state change to propagate to all leases.
-	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID)
+	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
 }
 
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
@@ -771,7 +830,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		interleaveParents = make(map[descpb.ID]struct{})
 
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -826,7 +885,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
@@ -845,9 +904,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		childJobs = nil
 
 		i := 0
-		scDesc, ok := descs[sc.tableID]
+		scDesc, ok := descs[sc.descID]
 		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
 		scTable := scDesc.(*MutableTableDescriptor)
 
@@ -878,7 +937,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 								DropTime: dropTime,
 							},
 						},
-						ParentID: sc.tableID,
+						ParentID: sc.descID,
 					}
 
 					description := sc.job.Payload().Description
@@ -901,7 +960,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// Add backreference on the referenced table (which could be the same table)
 				backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 				if !ok {
-					return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+					return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 				}
 				backrefTable := backrefDesc.(*MutableTableDescriptor)
 				backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
@@ -1036,7 +1095,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			ctx,
 			txn,
 			schemaChangeEventType,
-			int32(sc.tableID),
+			int32(sc.descID),
 			int32(sc.sqlInstanceID),
 			struct {
 				MutationID uint32
@@ -1109,28 +1168,6 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 	return nil
 }
 
-// notFirstInLine returns true whenever the schema change has been queued
-// up for execution after another schema change.
-func (sc *SchemaChanger) notFirstInLine(
-	ctx context.Context,
-) (*sqlbase.ImmutableTableDescriptor, bool, error) {
-	var tableDesc *sqlbase.ImmutableTableDescriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
-		return err
-	}); err != nil {
-		return nil, false, err
-	}
-	notFirst := false
-	for i, mutation := range tableDesc.Mutations {
-		if mutation.MutationID == sc.mutationID {
-			notFirst = i != 0
-			break
-		}
-	}
-	return tableDesc, notFirst, nil
-}
-
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
@@ -1156,7 +1193,7 @@ func (sc *SchemaChanger) refreshStats() {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
-	sc.execCfg.StatsRefresher.NotifyMutation(sc.tableID, math.MaxInt32 /* rowsAffected */)
+	sc.execCfg.StatsRefresher.NotifyMutation(sc.descID, math.MaxInt32 /* rowsAffected */)
 }
 
 // maybeReverseMutations reverses the direction of all the mutations with the
@@ -1175,7 +1212,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	alreadyReversed := false
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1209,7 +1246,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		return nil
 	}
 	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
@@ -1217,9 +1254,9 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	// Create update closure for the table and all other tables with backreferences
 	var droppedMutations map[descpb.MutationID]struct{}
 	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-		scDesc, ok := descs[sc.tableID]
+		scDesc, ok := descs[sc.descID]
 		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
 		scTable := scDesc.(*MutableTableDescriptor)
 		// Keep track of the column mutations being reversed so that indexes
@@ -1259,7 +1296,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 					fk := &constraint.ForeignKey
 					backrefDesc, ok := descs[fk.ReferencedTableID]
 					if !ok {
-						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 					}
 					backrefTable := backrefDesc.(*MutableTableDescriptor)
 					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable.TableDesc()); err != nil {
@@ -1288,7 +1325,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Read the table descriptor from the store. The Version of the
 		// descriptor has already been incremented in the transaction and
 		// this descriptor can be modified without incrementing the version.
-		tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1317,7 +1354,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			ctx,
 			txn,
 			EventLogReverseSchemaChange,
-			int32(sc.tableID),
+			int32(sc.descID),
 			int32(sc.sqlInstanceID),
 			struct {
 				Error      string
@@ -1329,7 +1366,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		return err
 	}
 
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 		return err
 	}
 	for id := range fksByBackrefTable {
@@ -1359,10 +1396,10 @@ func (sc *SchemaChanger) updateJobForRollback(
 	}
 	if err := sc.job.WithTxn(txn).SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
-			TableID:        sc.tableID,
-			MutationID:     sc.mutationID,
-			ResumeSpanList: spanList,
-			FormatVersion:  jobspb.JobResumerFormatVersion,
+			DescID:          sc.descID,
+			TableMutationID: sc.mutationID,
+			ResumeSpanList:  spanList,
+			FormatVersion:   jobspb.JobResumerFormatVersion,
 		},
 	); err != nil {
 		return err
@@ -1716,7 +1753,7 @@ func (r schemaChangeResumer) Resume(
 
 	execSchemaChange := func(tableID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID) error {
 		sc := SchemaChanger{
-			tableID:              tableID,
+			descID:               tableID,
 			mutationID:           mutationID,
 			droppedDatabaseID:    droppedDatabaseID,
 			sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
@@ -1827,11 +1864,11 @@ func (r schemaChangeResumer) Resume(
 			multiTableGCDetails,
 		)
 	}
-	if details.TableID == descpb.InvalidID {
+	if details.DescID == descpb.InvalidID {
 		return errors.AssertionFailedf("schema change has no specified database or table(s)")
 	}
 
-	return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
+	return execSchemaChange(details.DescID, details.TableMutationID, details.DroppedDatabaseID)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
@@ -1843,12 +1880,12 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 		// TODO (lucy): Do we need to do anything here?
 		return nil
 	}
-	if details.TableID == descpb.InvalidID {
+	if details.DescID == descpb.InvalidID {
 		return errors.AssertionFailedf("job has no database ID or table ID")
 	}
 	sc := SchemaChanger{
-		tableID:              details.TableID,
-		mutationID:           details.MutationID,
+		descID:               details.DescID,
+		mutationID:           details.TableMutationID,
 		sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
 		db:                   p.ExecCfg().DB,
 		leaseMgr:             p.ExecCfg().LeaseManager,
@@ -1886,7 +1923,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 				ctx,
 				"descriptor %d not found for rollback of schema change processing mutation %d;"+
 					"assuming it was dropped, and exiting",
-				details.TableID, details.MutationID,
+				details.DescID, details.TableMutationID,
 			)
 		case ctx.Err() != nil:
 			// If the context was canceled, the job registry will retry the job.
@@ -1965,10 +2002,10 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			Username:      sc.job.Payload().Username,
 			DescriptorIDs: descpb.IDs{scDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
-				TableID:        sc.tableID,
-				MutationID:     mutationID,
-				ResumeSpanList: spanList,
-				FormatVersion:  jobspb.JobResumerFormatVersion,
+				DescID:          sc.descID,
+				TableMutationID: mutationID,
+				ResumeSpanList:  spanList,
+				FormatVersion:   jobspb.JobResumerFormatVersion,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,

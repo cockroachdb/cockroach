@@ -180,10 +180,10 @@ func createSchemaChangeJobsFromMutations(
 			Username:      username,
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
-				TableID:        tableDesc.ID,
-				MutationID:     mutationID,
-				ResumeSpanList: spanList,
-				FormatVersion:  jobspb.JobResumerFormatVersion,
+				DescID:          tableDesc.ID,
+				TableMutationID: mutationID,
+				ResumeSpanList:  spanList,
+				FormatVersion:   jobspb.JobResumerFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
