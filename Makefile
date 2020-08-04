@@ -319,9 +319,7 @@ endif
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
 vendor_rebuild: bin/.submodules-initialized
-	# Use -mod=mod, as -mod=vendor will try install from the vendor directory
-	# which may be mismatching upon rebuild.
-	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
+	$(GO_INSTALL) -v github.com/goware/modvendor
 	./build/vendor_rebuild.sh
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe

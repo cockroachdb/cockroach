@@ -2417,7 +2417,7 @@ func cStringToGoString(s C.DBString) string {
 		return ""
 	}
 	// Reinterpret the string as a slice, then cast to string which does a copy.
-	result := string(cSliceToUnsafeGoBytes(C.DBSlice(s)))
+	result := string(cSliceToUnsafeGoBytes(C.DBSlice{s.data, s.len}))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
@@ -2599,7 +2599,7 @@ func dbGetProto(
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
-		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
+		data := cSliceToUnsafeGoBytes(C.DBSlice{data: result.data, len: result.len})
 		err = protoutil.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
