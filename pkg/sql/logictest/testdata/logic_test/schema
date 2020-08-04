@@ -153,7 +153,3 @@ ALTER SCHEMA another_one RENAME TO myschema
 
 statement ok
 ROLLBACK
-
-statement error pq: unimplemented: DROP SCHEMA
-DROP SCHEMA myschema
-
