@@ -16,7 +16,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -207,27 +206,32 @@ func spansForAllTableIndexes(
 	return spans
 }
 
-func optsToKVOptions(opts map[string]string) tree.KVOptions {
-	if len(opts) == 0 {
-		return nil
+// resolveOptionsForRestoreJobDescription is primarily responsible for redacting
+// the passphrase and if need be, resolving the into_db placeholder, before the
+// description is written into the RESTORE job record.
+func resolveOptionsForRestoreJobDescription(
+	opts tree.RestoreOptions, intoDB string,
+) tree.RestoreOptions {
+	if opts.IsDefault() {
+		return opts
 	}
-	sortedOpts := make([]string, 0, len(opts))
-	for k := range opts {
-		sortedOpts = append(sortedOpts, k)
+
+	newOpts := tree.RestoreOptions{
+		SkipMissingFKs:            opts.SkipMissingFKs,
+		SkipMissingSequences:      opts.SkipMissingSequences,
+		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
+		SkipMissingViews:          opts.SkipMissingViews,
 	}
-	sort.Strings(sortedOpts)
-	kvopts := make(tree.KVOptions, 0, len(opts))
-	for _, k := range sortedOpts {
-		opt := tree.KVOption{Key: tree.Name(k)}
-		if v := opts[k]; v != "" {
-			if k == backupOptEncPassphrase {
-				v = "redacted"
-			}
-			opt.Value = tree.NewDString(v)
-		}
-		kvopts = append(kvopts, opt)
+
+	if opts.EncryptionPassphrase != nil {
+		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
 	}
-	return kvopts
+
+	if opts.IntoDB != nil {
+		newOpts.IntoDB = tree.NewDString(intoDB)
+	}
+
+	return newOpts
 }
 
 func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {

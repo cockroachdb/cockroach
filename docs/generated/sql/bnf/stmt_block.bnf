@@ -156,9 +156,9 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
-	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
-	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -477,6 +477,11 @@ reset_csetting_stmt ::=
 list_of_string_or_placeholder_opt_list ::=
 	( string_or_placeholder_opt_list ) ( ( ',' string_or_placeholder_opt_list ) )*
 
+opt_with_restore_options ::=
+	'WITH' restore_options_list
+	| 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 
+
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
 	| 'RESUME' 'JOBS' select_stmt
@@ -783,6 +788,7 @@ unreserved_keyword ::=
 	| 'INJECT'
 	| 'INSERT'
 	| 'INTERLEAVE'
+	| 'INTO_DB'
 	| 'INVERTED'
 	| 'ISOLATION'
 	| 'JOB'
@@ -907,6 +913,10 @@ unreserved_keyword ::=
 	| 'SHOW'
 	| 'SIMPLE'
 	| 'SKIP'
+	| 'SKIP_MISSING_FOREIGN_KEYS'
+	| 'SKIP_MISSING_SEQUENCES'
+	| 'SKIP_MISSING_SEQUENCE_OWNERS'
+	| 'SKIP_MISSING_VIEWS'
 	| 'SNAPSHOT'
 	| 'SPLIT'
 	| 'SQL'
@@ -1271,6 +1281,9 @@ session_var ::=
 var_name ::=
 	name
 	| name attrs
+
+restore_options_list ::=
+	( restore_options ) ( ( ',' restore_options ) )*
 
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
@@ -1714,6 +1727,14 @@ column_name ::=
 
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
+
+restore_options ::=
+	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'INTO_DB' '=' string_or_placeholder
+	| 'SKIP_MISSING_FOREIGN_KEYS'
+	| 'SKIP_MISSING_SEQUENCES'
+	| 'SKIP_MISSING_SEQUENCE_OWNERS'
+	| 'SKIP_MISSING_VIEWS'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
