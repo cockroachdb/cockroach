@@ -3891,3 +3891,11 @@ FROM ( VALUES
 false  true   0   true   true
 false  false  7   true   false
 false  false  97  false  false
+
+# Test for 2+ string arguments for Geometry where one side of the arguments
+# raises an error.
+statement error Unknown type: 'ABC'
+SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
+
+statement error Unknown type: 'ABC'
+SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
