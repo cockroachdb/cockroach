@@ -213,3 +213,14 @@ func (desc *MutableSchemaDescriptor) Immutable() Descriptor {
 func (desc *MutableSchemaDescriptor) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
+
+// SetName sets the name of the schema. It handles installing a draining name
+// for the old name of the descriptor.
+func (desc *MutableSchemaDescriptor) SetName(name string) {
+	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+		ParentID:       desc.ParentID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           desc.Name,
+	})
+	desc.Name = name
+}

@@ -116,7 +116,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
-				TableID:        tableDesc.ID,
+				DescID:         tableDesc.ID,
 				MutationID:     mutationID,
 				ResumeSpanList: spanList,
 				FormatVersion:  jobspb.JobResumerFormatVersion,
@@ -140,7 +140,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		// Update the existing job.
 		oldDetails := job.Details().(jobspb.SchemaChangeDetails)
 		newDetails := jobspb.SchemaChangeDetails{
-			TableID:        tableDesc.ID,
+			DescID:         tableDesc.ID,
 			MutationID:     oldDetails.MutationID,
 			ResumeSpanList: spanList,
 			FormatVersion:  jobspb.JobResumerFormatVersion,
