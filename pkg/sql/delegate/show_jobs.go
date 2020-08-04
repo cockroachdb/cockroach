@@ -13,6 +13,7 @@ package delegate
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -27,7 +28,7 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 				FROM crdb_internal.jobs`
 	)
 	var typePredicate, whereClause, orderbyClause string
-	if n.Jobs == nil {
+	if n.Jobs == nil && n.Schedules == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
 		if n.Automatic {
 			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
@@ -44,9 +45,13 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
-	} else {
+	} else if n.Schedules == nil {
 		// Limit the jobs displayed to the select statement in n.Jobs.
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
+	} else {
+		// Limit the jobs displayed to the ones started by specified schedules.
+		whereClause = fmt.Sprintf(`WHERE created_by_type='%s' and created_by_id in (%s)`,
+			jobs.CreatedByScheduledJobs, n.Schedules.String())
 	}
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)

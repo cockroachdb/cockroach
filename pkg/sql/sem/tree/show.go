@@ -226,6 +226,10 @@ type ShowJobs struct {
 
 	// Whether to block and wait for completion of all running jobs to be displayed.
 	Block bool
+
+	// If non-nil, only display jobs started by the specified
+	// schedules.
+	Schedules *Select
 }
 
 // Format implements the NodeFormatter interface.
@@ -241,6 +245,10 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
+	}
+	if node.Schedules != nil {
+		ctx.WriteString(" FOR SCHEDULES ")
+		node.Schedules.Format(ctx)
 	}
 }
 
