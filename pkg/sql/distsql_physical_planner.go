@@ -2951,7 +2951,7 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 }
 
 func createProjectSetSpec(
-	planCtx *PlanningCtx, n *projectSetNode, indexVarMap []int,
+	planCtx *PlanningCtx, n *projectSetPlanningInfo, indexVarMap []int,
 ) (*execinfrapb.ProjectSetSpec, error) {
 	spec := execinfrapb.ProjectSetSpec{
 		Exprs:            make([]execinfrapb.Expression, len(n.exprs)),
@@ -2981,15 +2981,21 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	if err != nil {
 		return nil, err
 	}
+	err = dsp.addProjectSet(plan, planCtx, &n.projectSetPlanningInfo)
+	return plan, err
+}
+
+// addProjectSet adds a grouping stage consisting of a single
+// projectSetProcessor that is planned on the gateway.
+func (dsp *DistSQLPlanner) addProjectSet(
+	plan *PhysicalPlan, planCtx *PlanningCtx, info *projectSetPlanningInfo,
+) error {
 	numResults := len(plan.ResultTypes)
 
-	indexVarMap := makePlanToStreamColMap(len(n.columns))
-	copy(indexVarMap, plan.PlanToStreamColMap)
-
 	// Create the project set processor spec.
-	projectSetSpec, err := createProjectSetSpec(planCtx, n, indexVarMap)
+	projectSetSpec, err := createProjectSetSpec(planCtx, info, plan.PlanToStreamColMap)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	spec := execinfrapb.ProcessorCoreUnion{
 		ProjectSet: projectSetSpec,
@@ -3007,8 +3013,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	for i := range projectSetSpec.GeneratedColumns {
 		plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, numResults+i)
 	}
-
-	return plan, nil
+	return nil
 }
 
 // isOnlyOnGateway returns true if a physical plan is executed entirely on the

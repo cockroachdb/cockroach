@@ -56,9 +56,7 @@ type projectSetProcessor struct {
 	// thus also whether NULLs should be emitted instead.
 	done []bool
 
-	// emitCount is used to track the number of rows that have been
-	// emitted from Next().
-	emitCount int64
+	cancelChecker *sqlbase.CancelChecker
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
@@ -118,7 +116,9 @@ func newProjectSetProcessor(
 // Start is part of the RowSource interface.
 func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 	ctx = ps.input.Start(ctx)
-	return ps.StartInternal(ctx, projectSetProcName)
+	ctx = ps.StartInternal(ctx, projectSetProcName)
+	ps.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	return ctx
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
@@ -223,17 +223,10 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 
 // Next is part of the RowSource interface.
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	const cancelCheckCount = 10000
-
 	for ps.State == execinfra.StateRunning {
-
-		// Occasionally check for cancellation.
-		ps.emitCount++
-		if ps.emitCount%cancelCheckCount == 0 {
-			if err := ps.Ctx.Err(); err != nil {
-				ps.MoveToDraining(err)
-				return nil, ps.DrainHelper()
-			}
+		if err := ps.cancelChecker.Check(); err != nil {
+			ps.MoveToDraining(err)
+			return nil, ps.DrainHelper()
 		}
 
 		// Start of a new row of input?
