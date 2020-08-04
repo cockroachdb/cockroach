@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -349,6 +350,12 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.LeaseAppliedIndex
+}
+
+// GetTracker returns the min prop tracker that keeps tabs over ongoing command
+// evaluations for the closed timestamp subsystem.
+func (r *Replica) GetTracker() closedts.TrackerI {
+	return r.store.cfg.ClosedTimestamp.Tracker
 }
 
 // Snapshot implements the raft.Storage interface. Snapshot requires that

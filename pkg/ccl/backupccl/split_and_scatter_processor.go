@@ -33,7 +33,7 @@ type splitAndScatterer interface {
 	// splitAndScatterSpan issues a split request at a given key and then scatters
 	// the range around the cluster. It returns the node ID of the leaseholder of
 	// the span after the scatter.
-	splitAndScatterKey(ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.NodeID, error)
+	splitAndScatterKey(ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool) (roachpb.NodeID, error)
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -46,7 +46,7 @@ type dbSplitAndScatterer struct{}
 // to which the span was scattered. If the destination node could not be
 // determined, node ID of 0 is returned.
 func (s dbSplitAndScatterer) splitAndScatterKey(
-	ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key,
+	ctx context.Context, db *kv.DB, kr *storageccl.KeyRewriter, key roachpb.Key, randomizeLeases bool,
 ) (roachpb.NodeID, error) {
 	expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	newSpanKey, err := rewriteBackupSpanKey(kr, key)
@@ -54,26 +54,32 @@ func (s dbSplitAndScatterer) splitAndScatterKey(
 		return 0, err
 	}
 
-	// TODO(dan): Really, this should be splitting the Key of
-	// the _next_ entry.
+	// TODO(pbardea): Really, this should be splitting the Key of the _next_
+	// entry.
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSpanKey)
 	if err := db.AdminSplit(ctx, newSpanKey, expirationTime); err != nil {
 		return 0, errors.Wrapf(err, "splitting key %s", newSpanKey)
 	}
 
 	log.VEventf(ctx, 1, "scattering new key %+v", newSpanKey)
-	var ba roachpb.BatchRequest
-	ba.Header.ReturnRangeInfo = true
-	ba.Add(&roachpb.AdminScatterRequest{
+	req := &roachpb.AdminScatterRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{
 			Key:    newSpanKey,
 			EndKey: newSpanKey.Next(),
 		}),
-	})
+		// This is a bit of a hack, but it seems to be an effective one (see #36665
+		// for graphs). As of the commit that added this, scatter is not very good
+		// at actually balancing leases. This is likely for two reasons: 1) there's
+		// almost certainly some regression in scatter's behavior, it used to work
+		// much better and 2) scatter has to operate by balancing leases for all
+		// ranges in a cluster, but in RESTORE, we really just want it to be
+		// balancing the span being restored into.
+		RandomizeLeases: randomizeLeases,
+	}
 
-	br, pErr := db.NonTransactionalSender().Send(ctx, ba)
+	res, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), req)
 	if pErr != nil {
-		// TODO(dan): Unfortunately, Scatter is still too unreliable to
+		// TODO(pbardea): Unfortunately, Scatter is still too unreliable to
 		// fail the RESTORE when Scatter fails. I'm uncomfortable that
 		// this could break entirely and not start failing the tests,
 		// but on the bright side, it doesn't affect correctness, only
@@ -83,14 +89,23 @@ func (s dbSplitAndScatterer) splitAndScatterKey(
 		return 0, nil
 	}
 
-	return s.findDestination(ctx, br), nil
+	return s.findDestination(res.(*roachpb.AdminScatterResponse)), nil
 }
 
 // findDestination returns the node ID of the node of the destination of the
 // AdminScatter request. If the destination cannot be found, 0 is returned.
-func (s dbSplitAndScatterer) findDestination(
-	_ context.Context, _ *roachpb.BatchResponse,
-) roachpb.NodeID {
+func (s dbSplitAndScatterer) findDestination(res *roachpb.AdminScatterResponse) roachpb.NodeID {
+	// A request from a 20.1 node will not have a RangeInfos with a lease.
+	// For this mixed-version state, we'll report the destination as node 0
+	// and suffer a bit of inefficiency.
+	if len(res.RangeInfos) > 0 {
+		// If the lease is not populated, we return the 0 value anyway. We receive 1
+		// RangeInfo per range that was scattered. Since we send a scatter request
+		// to each range that we make, we are only interested in the first range,
+		// which contains the key at which we're splitting and scattering.
+		return res.RangeInfos[0].Lease.Replica.NodeID
+	}
+
 	return roachpb.NodeID(0)
 }
 
@@ -215,7 +230,7 @@ func runSplitAndScatter(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for _, importSpanChunk := range spec.Chunks {
-			_, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpanChunk.Entries[0].Span.Key)
+			_, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpanChunk.Entries[0].Span.Key, true /* randomizeLeases */)
 			if err != nil {
 				return err
 			}
@@ -229,9 +244,8 @@ func runSplitAndScatter(
 		return nil
 	})
 
-	// TODO(dan): This tries to cover for a bad scatter by having 2 * the number
-	// of nodes in the cluster. Is it necessary?
-	// TODO(pbardea): Run some experiments to tune this knob.
+	// TODO(pbardea): This tries to cover for a bad scatter by having 2 * the
+	// number of nodes in the cluster. Is it necessary?
 	splitScatterWorkers := 2
 	for worker := 0; worker < splitScatterWorkers; worker++ {
 		g.GoCtx(func(ctx context.Context) error {
@@ -239,7 +253,7 @@ func runSplitAndScatter(
 				log.Infof(ctx, "processing a chunk")
 				for _, importSpan := range importSpanChunk {
 					log.Infof(ctx, "processing a span")
-					destination, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpan.Span.Key)
+					destination, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpan.Span.Key, false /* randomizeLeases */)
 					if err != nil {
 						return err
 					}

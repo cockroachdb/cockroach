@@ -127,7 +127,6 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
-
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
