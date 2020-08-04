@@ -10,7 +10,6 @@ requesting data for debug/events... writing: debug/events.json.err.txt
   ^- resulted in ...
 requesting data for debug/rangelog... writing: debug/rangelog.json.err.txt
   ^- resulted in ...
-requesting data for debug/liveness... writing: debug/liveness.json
 requesting data for debug/settings... writing: debug/settings.json
 requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
