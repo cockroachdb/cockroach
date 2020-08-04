@@ -377,7 +377,7 @@ project
  │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geom_idx)
  │    │    │    ├── columns: census.gid:1!null routes:22 subways.geom:27
  │    │    │    ├── inverted-expr
- │    │    │    │    └── st_dwithin(census.geom:10, subways.geom:27, 200.0)
+ │    │    │    │    └── st_dwithin(subways.geom:27, census.geom:10, 200.0)
  │    │    │    ├── immutable
  │    │    │    ├── select
  │    │    │    │    ├── columns: routes:22 subways.geom:27
@@ -448,7 +448,7 @@ sort
       │    │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geom_idx)
       │    │    │    │    ├── columns: census.gid:1!null routes:22 subways.geom:27
       │    │    │    │    ├── inverted-expr
-      │    │    │    │    │    └── st_dwithin(census.geom:10, subways.geom:27, 200.0)
+      │    │    │    │    │    └── st_dwithin(subways.geom:27, census.geom:10, 200.0)
       │    │    │    │    ├── scan subways
       │    │    │    │    │    └── columns: routes:22 subways.geom:27
       │    │    │    │    └── filters (true)
@@ -629,7 +629,7 @@ sort
       │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geom_idx)
       │    │    │    ├── columns: c.gid:1!null name:14!null n.geom:15
       │    │    │    ├── inverted-expr
-      │    │    │    │    └── st_intersects(c.geom:10, n.geom:15)
+      │    │    │    │    └── st_intersects(n.geom:15, c.geom:10)
       │    │    │    ├── select
       │    │    │    │    ├── columns: name:14!null n.geom:15
       │    │    │    │    ├── scan n

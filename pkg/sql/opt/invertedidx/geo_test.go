@@ -12,7 +12,6 @@ package invertedidx_test
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -20,163 +19,223 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
-func TestTryGetInvertedJoinCondFromGeoFunc(t *testing.T) {
+func TestTryJoinGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.NewTestingEvalContext(nil /* st */)
 
+	tc := testcat.New()
+
+	// Create the input table.
+	if _, err := tc.ExecuteDDL(
+		"CREATE TABLE t1 (geom1 GEOMETRY, geog1 GEOGRAPHY, geom11 GEOMETRY, geog11 GEOGRAPHY, " +
+			"inet1 INET)",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create the indexed table.
+	if _, err := tc.ExecuteDDL(
+		"CREATE TABLE t2 (geom2 GEOMETRY, geog2 GEOGRAPHY, inet2 INET, " +
+			"INVERTED INDEX (geom2), INVERTED INDEX (geog2))",
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	var f norm.Factory
-	f.Init(evalCtx, testcat.New())
+	f.Init(evalCtx, tc)
 	md := f.Metadata()
-	md.AddColumn("geom1", types.Geometry)
-	md.AddColumn("geog1", types.Geography)
-	md.AddColumn("geom2", types.Geometry)
-	md.AddColumn("geog2", types.Geography)
+	tn1 := tree.NewUnqualifiedTableName("t1")
+	tn2 := tree.NewUnqualifiedTableName("t2")
+	tab1 := md.AddTable(tc.Table(tn1), tn1)
+	tab2 := md.AddTable(tc.Table(tn2), tn2)
+	geomOrd, geogOrd := 1, 2
 
 	testCases := []struct {
-		inFunc         string
-		commuteArgs    bool
-		expOk          bool
-		expOutFunc     string
-		expInputGeoCol opt.ColumnID
-		expIndexGeoCol opt.ColumnID
+		filters      string
+		indexOrd     int
+		invertedExpr string
 	}{
 		{
-			inFunc:         "st_covers(geom1, geom2)",
-			commuteArgs:    false,
-			expOk:          true,
-			expOutFunc:     "st_covers(geom1, geom2)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			filters:      "st_covers(geom1, geom2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2)",
 		},
 		{
-			inFunc:      "st_covers(geom2, geom1)",
-			commuteArgs: false,
-			expOk:       false,
+			filters:      "st_covers(geom2, geom1)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_coveredby(geom1, geom2)",
 		},
 		{
-			inFunc:      "st_covers(geom1, geom2)",
-			commuteArgs: true,
-			expOk:       false,
+			filters:      "st_coveredby(geog1, geog2)",
+			indexOrd:     geogOrd,
+			invertedExpr: "st_coveredby(geog1, geog2)",
 		},
 		{
-			inFunc:         "st_covers(geom2, geom1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_coveredby(geom1, geom2)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			filters:      "st_coveredby(geog2, geog1)",
+			indexOrd:     geogOrd,
+			invertedExpr: "st_covers(geog1, geog2)",
 		},
 		{
-			inFunc:         "st_coveredby(geog1, geog2)",
-			commuteArgs:    false,
-			expOk:          true,
-			expOutFunc:     "st_coveredby(geog1, geog2)",
-			expInputGeoCol: 2,
-			expIndexGeoCol: 4,
+			filters:      "st_containsproperly(geom2, geom1)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_coveredby(geom1, geom2)",
 		},
 		{
-			inFunc:         "st_coveredby(geog2, geog1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_covers(geog1, geog2)",
-			expInputGeoCol: 2,
-			expIndexGeoCol: 4,
+			filters:      "st_dwithin(geog2, geog1, 1)",
+			indexOrd:     geogOrd,
+			invertedExpr: "st_dwithin(geog1, geog2, 1)",
 		},
 		{
-			inFunc:         "st_containsproperly(geom2, geom1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_coveredby(geom1, geom2)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			filters:      "st_dfullywithin(geom2, geom1, 1)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_dfullywithin(geom1, geom2, 1)",
 		},
 		{
-			inFunc:         "st_dwithin(geog2, geog1, 1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_dwithin(geog2, geog1, 1)",
-			expInputGeoCol: 2,
-			expIndexGeoCol: 4,
+			filters:      "st_intersects(geom1, geom2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(geom1, geom2)",
 		},
 		{
-			inFunc:         "st_dfullywithin(geom2, geom1, 1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_dfullywithin(geom2, geom1, 1)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			filters:      "st_overlaps(geom2, geom1)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(geom1, geom2)",
 		},
 		{
-			inFunc:         "st_intersects(geom1, geom2)",
-			commuteArgs:    false,
-			expOk:          true,
-			expOutFunc:     "st_intersects(geom1, geom2)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			// Wrong index ordinal.
+			filters:      "st_covers(geom1, geom2)",
+			indexOrd:     geogOrd,
+			invertedExpr: "",
 		},
 		{
-			inFunc:         "st_overlaps(geom2, geom1)",
-			commuteArgs:    true,
-			expOk:          true,
-			expOutFunc:     "st_overlaps(geom2, geom1)",
-			expInputGeoCol: 1,
-			expIndexGeoCol: 3,
+			// We can perform a join using two geospatial functions on the same
+			// indexed column, even if the input columns are different.
+			filters:      "st_covers(geom1, geom2) AND st_covers(geom2, geom11)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2) AND st_coveredby(geom11, geom2)",
+		},
+		{
+			// We can perform a join using two geospatial functions on the same
+			// indexed column, even if the input columns are different.
+			filters:      "st_covers(geog2, geog1) AND st_dwithin(geog11, geog2, 10)",
+			indexOrd:     geogOrd,
+			invertedExpr: "st_coveredby(geog1, geog2) AND st_dwithin(geog11, geog2, 10)",
+		},
+		{
+			// We can perform a join using two geospatial functions on the same
+			// indexed column, even if the input columns are different.
+			filters:      "st_covers(geom1, geom2) OR st_covers(geom2, geom11)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2) OR st_coveredby(geom11, geom2)",
+		},
+		{
+			// When functions affecting two different geospatial variables are OR-ed,
+			// we cannot perform an inverted join.
+			filters:      "st_covers(geom1, geom2) OR st_covers(geog1, geog2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:      "st_covers(geom1, geom2) AND st_covers(geog1, geog2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2)",
+		},
+		{
+			// We can constrain either index when the functions are AND-ed.
+			filters:      "st_covers(geom1, geom2) AND st_covers(geog1, geog2)",
+			indexOrd:     geogOrd,
+			invertedExpr: "st_covers(geog1, geog2)",
+		},
+		{
+			// Join conditions can be combined with index constraints.
+			filters: "st_covers(geom1, geom2) AND " +
+				"st_covers(geom2, 'LINESTRING ( 0 0, 0 2 )'::geometry)",
+			indexOrd: geomOrd,
+			invertedExpr: "st_covers(geom1, geom2) AND " +
+				"st_coveredby('LINESTRING ( 0 0, 0 2 )'::geometry, geom2)",
+		},
+		{
+			// Join conditions can be combined with index constraints.
+			filters: "st_covers(geom1, geom2) AND " +
+				"st_covers('LINESTRING ( 0 0, 0 2 )'::geometry, geom2) AND " +
+				"st_covers('LINESTRING ( 0 0, 0 2 )'::geometry, geom1)",
+			indexOrd: geomOrd,
+			invertedExpr: "st_covers(geom1, geom2) AND " +
+				"st_covers('LINESTRING ( 0 0, 0 2 )'::geometry, geom2)",
+		},
+		{
+			// At least one column from the input is required.
+			filters:      "st_covers(geom2, 'LINESTRING ( 0 0, 0 2 )'::geometry)",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
+		{
+			// AND with a non-geospatial function.
+			filters:      "st_covers(geom1, geom2) AND inet_same_family(inet1, inet2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2)",
+		},
+		{
+			// OR with a non-geospatial function.
+			filters:      "st_covers(geom1, geom2) OR inet_same_family(inet1, inet2)",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
+		{
+			// Arbitrarily complex join condition.
+			filters: "st_covers(geog2, geog1) OR (" +
+				"st_dwithin(geog11, geog2, 100) AND st_covers(geom1, geom2) AND " +
+				"st_covers(geog2, 'SRID=4326;POINT(-40.23456 70.456772)'::geography)) AND " +
+				"st_overlaps(geom2, geom1) AND " +
+				"st_covers('SRID=4326;POINT(-42.89456 75.938299)'::geography, geog2)",
+			indexOrd: geogOrd,
+			invertedExpr: "st_coveredby(geog1, geog2) OR (" +
+				"st_dwithin(geog11, geog2, 100) AND " +
+				"st_coveredby('SRID=4326;POINT(-40.23456 70.456772)'::geography, geog2)) AND " +
+				"st_covers('SRID=4326;POINT(-42.89456 75.938299)'::geography, geog2)",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Logf("test case: %v", tc)
-		inFunc, err := buildScalar(tc.inFunc, &semaCtx, evalCtx, &f)
+		filters, err := buildFilters(tc.filters, &semaCtx, evalCtx, &f)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// The only part of inputProps that is used here is the OutputCols.
-		// We just need to make sure the inputGeoCol is part of the OutputCols.
-		inputProps := props.Relational{OutputCols: opt.MakeColSet(1, 2)}
+		var inputCols opt.ColSet
+		for i, n := 0, md.Table(tab1).ColumnCount(); i < n; i++ {
+			inputCols.Add(tab1.ColumnID(i))
+		}
 
-		actOutFunc, actInputGeoCol, actIndexGeoCol, actOk := invertedidx.TryGetInvertedJoinCondFromGeoFunc(
-			&f, inFunc, tc.commuteArgs, &inputProps,
+		actInvertedExpr := invertedidx.TryJoinGeoIndex(
+			evalCtx.Context, &f, filters, tab2, md.Table(tab2).Index(tc.indexOrd), inputCols,
 		)
 
-		if tc.expOk != actOk {
-			t.Fatalf("expected %v, got %v", tc.expOk, actOk)
-		}
-		if !tc.expOk {
+		if actInvertedExpr == nil {
+			if tc.invertedExpr != "" {
+				t.Fatalf("expected %s, got <nil>", tc.invertedExpr)
+			}
 			continue
 		}
 
-		expOutFunc, err := buildScalar(tc.expOutFunc, &semaCtx, evalCtx, &f)
+		if tc.invertedExpr == "" {
+			t.Fatalf("expected <nil>, got %v", actInvertedExpr)
+		}
+
+		expInvertedExpr, err := buildScalar(tc.invertedExpr, &semaCtx, evalCtx, &f)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// We have to test the Args and FunctionPrivate individually, since the
-		// ScalarID may be different (due to building with the ScalarBuilder).
-		if !reflect.DeepEqual(
-			expOutFunc.(*memo.FunctionExpr).Args, actOutFunc.(*memo.FunctionExpr).Args,
-		) {
-			t.Errorf("expected %v, got %v", expOutFunc, actOutFunc)
-		}
-		if !reflect.DeepEqual(
-			expOutFunc.(*memo.FunctionExpr).FunctionPrivate,
-			actOutFunc.(*memo.FunctionExpr).FunctionPrivate,
-		) {
-			t.Errorf("expected %v, got %v", expOutFunc, actOutFunc)
-		}
-		if tc.expInputGeoCol != actInputGeoCol {
-			t.Errorf("expected %v, got %v", tc.expInputGeoCol, actInputGeoCol)
-		}
-		if tc.expIndexGeoCol != actIndexGeoCol {
-			t.Errorf("expected %v, got %v", tc.expIndexGeoCol, actIndexGeoCol)
+		if actInvertedExpr.String() != expInvertedExpr.String() {
+			t.Errorf("expected %v, got %v", expInvertedExpr, actInvertedExpr)
 		}
 	}
 }
@@ -271,7 +330,9 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
-		_, ok := invertedidx.TryConstrainGeoIndex(evalCtx.Context, filters, tab, md.Table(tab).Index(tc.indexOrd))
+		_, ok := invertedidx.TryConstrainGeoIndex(
+			evalCtx.Context, filters, tab, md.Table(tab).Index(tc.indexOrd),
+		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
 		}

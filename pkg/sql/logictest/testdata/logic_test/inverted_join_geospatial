@@ -1,14 +1,18 @@
 statement ok
 CREATE TABLE ltable(
   lk int primary key,
-  geom geometry
+  geom1 geometry,
+  geom2 geometry
 )
 
 statement ok
 INSERT INTO ltable VALUES
-  (1, 'POINT(3.0 3.0)'),
-  (2, 'POINT(4.5 4.5)'),
-  (3, 'POINT(1.5 1.5)')
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)'),
+  (4, NULL, 'POINT(3.0 3.0)'),
+  (5, 'POINT(1.5 1.5)', NULL),
+  (6, NULL, NULL)
 
 statement ok
 CREATE TABLE rtable(
@@ -27,7 +31,7 @@ INSERT INTO rtable VALUES
   (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
 
 query II
-SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 ----
 1  13
 1  16
@@ -35,9 +39,11 @@ SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, r
 2  16
 3  12
 3  16
+5  12
+5  16
 
 query II
-SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom, rtable.geom, 2) ORDER BY (lk, rk)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
 1  12
 1  13
@@ -48,3 +54,113 @@ SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom, rtab
 3  11
 3  12
 3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+5  11
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+
+# Run the same two queries with the primary index to verify that we get the
+# same results.
+query II
+SELECT lk, rk FROM ltable JOIN rtable@primary
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@primary
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+
+query II
+SELECT ltable.lk, rtable.rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
+AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
+----
+1  13

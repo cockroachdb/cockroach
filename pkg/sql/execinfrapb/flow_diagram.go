@@ -300,7 +300,6 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
 	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))
-	details = append(details, fmt.Sprintf("Inverted join on: @%d", ij.LookupColumn+1))
 	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
 	if !ij.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))

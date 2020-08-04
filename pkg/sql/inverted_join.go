@@ -28,10 +28,6 @@ type invertedJoinNode struct {
 	// The inverted expression to evaluate.
 	invertedExpr tree.TypedExpr
 
-	// inputCol identifies the column from the input to be used for the
-	// inverted join.
-	inputCol int32
-
 	// columns are the produced columns, namely the input columns and (unless the
 	// join type is semi or anti join) the columns in the table scanNode.
 	columns sqlbase.ResultColumns

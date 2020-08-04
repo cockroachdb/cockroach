@@ -3,14 +3,15 @@
 statement ok
 CREATE TABLE ltable(
   lk int primary key,
-  geom geometry
+  geom1 geometry,
+  geom2 geometry
 )
 
 statement ok
 INSERT INTO ltable VALUES
-  (1, 'POINT(3.0 3.0)'),
-  (2, 'POINT(4.5 4.5)'),
-  (3, 'POINT(1.5 1.5)')
+  (1, 'POINT(3.0 3.0)', 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)', 'POINT(3.0 3.0)'),
+  (3, 'POINT(1.5 1.5)', 'POINT(3.0 3.0)')
 
 statement ok
 CREATE TABLE rtable(
@@ -43,7 +44,7 @@ NULL       /2       {1}       1
 /3         NULL     {3}       3
 
 query II
-SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 ----
 1  13
 1  16
@@ -54,6 +55,26 @@ SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, r
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
-ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)]
+ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlF9v2jwUxu_fT2Gdq6KaN9iB_slVtpVJqRjpoBebKlRl5KjKCHFmOxMT4rtPSdgglDhBndTeJfZ5zvOco5-8BvUjBgemw9Hwwz3JZEw-TvxP5GH45W70zhuTsxtvej_9POqQbUm8oEQuyqpYB99iJLe-Nyay-HafUCwfoyTEFfHHROnHKNEoFc61OivL_89L6La--OkQf3IznJD3X8lZ2b4zAwqJCHEcLFGB8wAMKHCgYMOMQirFHJUSMr9aF4VeuAKnRyFK0kznxzMKcyERnDXoSMcIDtznjhMMQpRWDyiEqIMoLtqX0dxURstA_gIK0zRIlEO6FofZhoLI9K6v0sETgsM2tL23l_xEqTG8FVGC0rKr9s-WB_SvgnwXUUJE4hCX7x0PV6k82K_LKXH7HaDgZ9ohLqMup65dOwA_ZYA8-HZ3F0fD73Y3EmKRpXu582mf0VCkHVTS1ke1T4k6FVKjtK6rMV12Tl1-XmvRr7XYdRYyRIlhXeMjWcaiK1KL8YqkLsKgEoG1p5m1o9niXat-x-wU9wOe-2-P54YB9ni-fG2eG6JueWa9lwDN29PEW9Jkd1uy1OB9wNLg7bHUMMAeS1evzVJD1D8ssX_1OB7xmKBKRaKw1ZvXy19NDJ-wfGmVyOQc76SYFzblr1_oioMQlS5vWfnjJeVVHnBfzIxibhZzo9g2i22juF8Rs0Nx3zxzg_XAqL4wiy-M4kuz-NIovjKLr16ysWvzxnoNmDRA1kSZGTPWwBkzg3Y4-Wzz3-8AAAD__57-0HM=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElEFv2jAUx-_7FNY7FdUsOIGW5pRtZVIqRjrgsKlCVUaeUEaIM9uZmBDffUrCBqHECeskbnH8_n4_P_3kDcgfEdgwGQwHH6YkFRH5OPY-kafBl8fhO3dEru7dyXTyedgiu5JoSYlYFlWR8r9FSB48d0RE_u0skK-ewzjANfFGRKrnMFYoJM6VvCrK32YljO4C-apFvPH9YEzefyVXxfmtGVCIeYAjf4US7CdgQMEEChbMKCSCz1FKLrKtTV7oBmuwOxTCOElV9ntGYc4Fgr0BFaoIwYZp1nGMfoDC6ACFAJUfRvnxBZuTiHDli19AYZL4sbRJ28iaeqmyicOoY8JsS4Gnat9EKn-BYLMtbQ7ixj9RKAweeBijMKwyy4tRAv2bGKwTcTRWx6TE6bZKmNSxKknNc0gzwt3Ebk5S7ic25HyZJuQ7D2PCY5s42bVeSJDT9kq01ajWOagTLhQK466M6bBr6pjXlS26lS32J3MRoMCg6uATLCPe5onBzFKkCqFXQmDNHWbNHDbMdq7Y2RbXoBxZ3L2gxTWkBxbfXtriGtSdxazzGo3N5g6ZDR2y2v9iUA3IkUG9CxpUQ3pgUP_SBtWg_jGI_a-H8ESPMcqExxIbvW-d7IXEYIHFqyp5Kub4KPg8b1MsvTyX_whQqmKXFQs3LrYywMMw04ZNfdjUhi192NKGu6UwOw539Xeuad3Tpm_04Rtt-FYfvtWG-_pw_zUTu9NPrFOjSY1kdZbpNWM1njG9aMc3n23f_A4AAP__aN3D-Q==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVVFv2jwUff9-hXWfQDUFO9DSPKXfSiUqRjrgYVOFqoxcdVlTO7PN1qnqf5-coJVQsOn60r5h-x7uPcfnOA-gf-QQwnQwGnyYkaXKyfkk_kiuBp8vR6fDMWmcDaez6adRk6xK8ltK1G1VlZvka47kIh6OiSp_Rzco764zkeI9icdEm-tMGFQaF0Y3qpJDW0JX2HLBmiSe2Nr0V2a-ZaKxfkZJDcZt7dlgQv7_QhrVLM05UBAyxXFyhxrCK2BAgQOFAOYUCiUXqLVU9uihLBym9xB2KGSiWBq7PaewkAohfACTmRwhhJltOsEkRdXuAIUUTZLl5d9X40WFyu4S9RsoTItE6JC02rZpvDQhiRiNOMwfKcileWqiTXKDELJHuv8gQ_ETlcH0QmYCVTuoz_JMdqB_EYP7Qm1cQcQpibqbele7lPDDThiG56P4dNZv1qjQKNjJhr-EzVQqg6p9VGcRsQMaBQc7WwQvaWGFWl3cyVaxni5uJOXtsiDfZSaIFCGJrLrPfBv1KIn4VtF6DtF2K9bdSeeJhVQpKky36MStTlt4j2VLFm3Ga5BdI_RqI7D9s8D2y0Kbt0qrvjgNnlE20tB942nwsFml4fg1afC0WEsD67yHOPD9vcj39GLQ-hcnegbZcGLvjTvRw2blxP5rnOhpse5E9h6c6PnOTFAXUmjc673t2Bcb0xusXnktl2qBl0ouyjbVMi5x5UaK2lSnrFoMRXVkB1wHMyeYu8HcCQ7c4MAJ7tbAbBPcdXP2tO450Udu8JETfOwGHzvBfTe4_xrFTtyKdTw28ZjM5zK3zZjHZ8xttE3m88f__gQAAP__5mgOKA==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVFFv2jwUff9-hXWfQDUFO9BSP6XfSiUqRjrgYVOFqoxcdVlTO7PN1qnqf5-SsJVA48C6h_aN-N7je87lHD-A-ZaAgOlgNHg3I0udkPNJ8J5cDT5ejk6HY9I4G05n0w-jJlm1JLeU6NuiK7Hh5wTJRTAcE53_9m9Q3V3HMsJ7EoyJsdextKgNLqxpFO2HWQujK0D-1SSn47OsOfoR2y-xbKzVKCnDeJMEk7PBhPz_iTQKMs05UJAqwnF4hwbEFTCgwIGCB3MKqVYLNEbprPSQNw6jexAdCrFMlzY7nlNYKI0gHsDGNkEQMMumTjCMULc7QCFCG8ZJfn3ByE91fBfqn0BhmobSCNJqZ0ODpRXEZ9TnMH-koJb2aYix4Q2CYI90dyJD-R21xehCxRJ12ytz2do70D-IwX2qN_4Dn1Pid7cWXhxTwg87QojzUXA66zdLWqjvVcrh-8jJZKzWevSslKe1jpS6Xabkq4olUVIQP9O-Zauce29bUo-SrFQpqVqPt4-eqdIWdfukrMVnB9TnB5UjupUjnm5WOkKNUdXFz3AZq5ZK24yXIFUUeiUKbPc0sN3S0Oat3Kx756GGykYeuq89DzVy1vJw_CbyUKNnlQfWeUkg-O5u5Du60Wv9jRdriGx4sffavVgjZ82L_TfhxRo9v73I_tXj_MyMCZpUSYM7vbmd7NXG6AaLl96opV7gpVaLfEzxGeS4_CBCY4sqKz6GsihlBNfBzAnmbjB3gj032HOCuyUw2wR33ZprRvec6CM3-MgJPnaDj53gvhvcf8nGTtwb69TYpMZkdS5z24zV-Iy5jbapfP74368AAAD__39bD4M=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
+AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzsVUFv2jAYve9XWN-lIBmIE6DUp1QrTKlo0gGHTRWqMuJ1WVM7s52uVcV_n5JUKwlgUk27wQnb7_l9ed_35BdQvxKgMB9Pxx8XKJMJmsyCK3Qz_nI9Pfd81Lrw5ov552kbvUKSe4zkfYlKdPgtYegy8Hwki__uHRMPtzGP2BMKfNRS-jbmmknFVlq1Snw3xxD8yihWbXTuXyClb1fikckK0K4CS2R-b_Q9S5Ln37H-EfPWBgSjqgyxrDYKZqhaysl14PmLFulaiHSt9klNZQkYuIiYHz4wBfQGCGCwAYMDSwypFCumlJD50UsB9KInoBaGmKeZzreXGFZCMqAvoGOdMKCwyAVmLIyY7FmAIWI6jJPi-rJkN5XxQyifAcM8DbmiqNOzYbnGIDL9dq_S4R0DSta4ubbHH5nULLoUMWey51Tlt5oH-C9j_JTKeiNdGyN3UO-a6xS7e1pUcop-dC1K6WQanC9Gu1pjEYtYW7-J5Uzq6xNK6adxcDVezL6W2oAhyDRFLsGujV0Hu_29BtrvMTA37rV3w53mvfVuKsR9lqKfIuZIcIrcfl7VVhoKQ4Y7TRzuNXGIUc77jyYOqybut8_Za9-baxkXMmKSRRXLlusdBvuiI9LeWQ24W7pfkSbNY0eaxa5nd3pOw-AdUK8Fr38MXj14BwzcCN7pMXjbwbObT7_dcPqdTsPZP6Bdm_3Bcfbrs3_AwI3ZHx1n3_zo7LBvxlQquGKN3hQrf5RYdMfKF0yJTK7YtRSrQqZcBgWv2IiY0uUpKRceL4_yAjfJxEi2zWTbSHYqZFInO-ayLbN038gemMkDI3loJg__5aNPjeSRWXlkJJ-ZyWfvKnu5_vAnAAD__96MMnU=

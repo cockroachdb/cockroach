@@ -513,18 +513,16 @@ message InvertedJoinerSpec {
   // inverted column, and the the remaining columns are the primary key.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  // Index of the column in the input stream that is to be joined with
-  // the inverted index.
-  optional uint32 lookup_column = 3 [(gogoproto.nullable) = false];
+  reserved 3;
 
   // The join expression is a conjunction of inverted_expr and on_expr.
 
-  // Expression involving only the indexed column and the lookup column.
+  // Expression involving the indexed column and columns from the input.
   // Assuming that the input stream has N columns and the table that has been
   // indexed has M columns, in this expression variables @1 to @N refer to
   // columns of the input stream and variables @(N+1) to @(N+M) refer to
   // columns in the table. Although the numbering includes all columns, only
-  // columns corresponding to the indexed column and the lookup column may be
+  // columns corresponding to the indexed column and the input columns may be
   // present in this expression. Note that the column numbering matches the
   // numbering used below by the on expression.
   //
