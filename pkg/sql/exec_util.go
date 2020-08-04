@@ -698,6 +698,8 @@ type ExecutorConfig struct {
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
+
+	ExternalIODirConfig base.ExternalIODirConfig
 }
 
 // Organization returns the value of cluster.organization.

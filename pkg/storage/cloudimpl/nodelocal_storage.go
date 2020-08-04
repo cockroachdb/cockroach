@@ -18,6 +18,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,8 +30,10 @@ import (
 
 type localFileStorage struct {
 	cfg        roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	ioConf     base.ExternalIODirConfig              // server configurations for the ExternalStorage
 	base       string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
 	blobClient blobs.BlobClient                      // inter-node file sharing service
+	settings   *cluster.Settings                     // cluster settings for the ExternalStorage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
@@ -51,6 +54,7 @@ func makeLocalStorage(
 	cfg roachpb.ExternalStorage_LocalFilePath,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
+	ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
 	if cfg.Path == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
@@ -59,7 +63,8 @@ func makeLocalStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")
 	}
-	return &localFileStorage{base: cfg.Path, cfg: cfg, blobClient: client}, nil
+	return &localFileStorage{base: cfg.Path, cfg: cfg, ioConf: ioConf, blobClient: client,
+		settings: settings}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
@@ -67,6 +72,14 @@ func (l *localFileStorage) Conf() roachpb.ExternalStorage {
 		Provider:  roachpb.ExternalStorageProvider_LocalFile,
 		LocalFile: l.cfg,
 	}
+}
+
+func (l *localFileStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return l.ioConf
+}
+
+func (l *localFileStorage) Settings() *cluster.Settings {
+	return l.settings
 }
 
 func joinRelativePath(filePath string, file string) string {

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -39,6 +40,7 @@ func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
 
 type azureStorage struct {
 	conf      *roachpb.ExternalStorage_Azure
+	ioConf    base.ExternalIODirConfig
 	container azblob.ContainerURL
 	prefix    string
 	settings  *cluster.Settings
@@ -47,7 +49,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings,
+	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings, ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
@@ -64,6 +66,7 @@ func makeAzureStorage(
 	serviceURL := azblob.NewServiceURL(*u, p)
 	return &azureStorage{
 		conf:      conf,
+		ioConf:    ioConf,
 		container: serviceURL.NewContainerURL(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  settings,
@@ -80,6 +83,14 @@ func (s *azureStorage) Conf() roachpb.ExternalStorage {
 		Provider:    roachpb.ExternalStorageProvider_Azure,
 		AzureConfig: s.conf,
 	}
+}
+
+func (s *azureStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return s.ioConf
+}
+
+func (s *azureStorage) Settings() *cluster.Settings {
+	return s.settings
 }
 
 func (s *azureStorage) WriteFile(

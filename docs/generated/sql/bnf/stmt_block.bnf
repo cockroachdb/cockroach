@@ -104,7 +104,7 @@ alter_stmt ::=
 	| alter_role_stmt
 
 backup_stmt ::=
-	'BACKUP' opt_backup_targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_backup_options
+	'BACKUP' opt_backup_targets 'TO' string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -154,8 +154,8 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
-	| 'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
+	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -320,7 +320,7 @@ alter_role_stmt ::=
 opt_backup_targets ::=
 	targets
 
-partitioned_backup ::=
+string_or_placeholder_opt_list ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
 
@@ -373,7 +373,7 @@ create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
 
 create_schedule_for_backup_stmt ::=
-	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'TO' partitioned_backup opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
+	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'TO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
 opt_with_clause ::=
 	with_clause
@@ -466,8 +466,8 @@ reset_session_stmt ::=
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
 
-partitioned_backup_list ::=
-	( partitioned_backup ) ( ( ',' partitioned_backup ) )*
+list_of_string_or_placeholder_opt_list ::=
+	( string_or_placeholder_opt_list ) ( ( ',' string_or_placeholder_opt_list ) )*
 
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -771,6 +771,7 @@ unreserved_keyword ::=
 	| 'JSON'
 	| 'KEY'
 	| 'KEYS'
+	| 'KMS'
 	| 'KV'
 	| 'LANGUAGE'
 	| 'LAST'
@@ -1486,6 +1487,7 @@ backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
+	| 'KMS' '=' string_or_placeholder_opt_list
 
 c_expr ::=
 	d_expr
