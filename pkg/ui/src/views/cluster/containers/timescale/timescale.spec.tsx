@@ -110,7 +110,7 @@ describe("<TimeScaleDropdown>", function () {
     const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
     assert.equal(
       wrapper.find(".trigger .Select-value-label").first().text(),
-      ` ${timeStart} -  ${timeEnd}`,
+      ` ${timeStart} -  ${timeEnd} (UTC)`,
     );
     assert.deepEqual(title, {
       dateStart: "",
@@ -139,7 +139,7 @@ describe("<TimeScaleDropdown>", function () {
     });
     assert.equal(
       wrapper.find(".trigger .Select-value-label").first().text(),
-      `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd}`,
+      `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd} (UTC)`,
     );
     assert.deepEqual(title, {
       dateStart,
