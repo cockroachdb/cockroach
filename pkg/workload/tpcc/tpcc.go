@@ -559,7 +559,9 @@ func (w *tpcc) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *tpcc) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	// It would be nice to remove the need for this and to require that
 	// partitioning and scattering occurs only when the PostLoad hook is
 	// run, but to maintain backward compatibility, it's easiest to allow
@@ -675,7 +677,7 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}

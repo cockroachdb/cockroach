@@ -282,20 +282,20 @@ func ResolveTypeDescByID(
 	codec keys.SQLCodec,
 	id sqlbase.ID,
 	lookupFlags tree.ObjectLookupFlags,
-) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
 	if err != nil {
-		return nil, nil, err
+		return tree.TypeName{}, nil, err
 	}
 	if desc == nil {
 		if lookupFlags.Required {
-			return nil, nil, pgerror.Newf(
+			return tree.TypeName{}, nil, pgerror.Newf(
 				pgcode.UndefinedObject, "type with ID %d does not exist", id)
 		}
-		return nil, nil, nil
+		return tree.TypeName{}, nil, nil
 	}
 	if desc.TypeDesc() == nil {
-		return nil, nil, errors.AssertionFailedf("%s was not a type descriptor", desc)
+		return tree.TypeName{}, nil, errors.AssertionFailedf("%s was not a type descriptor", desc)
 	}
 	// Get the parent database and schema names to create a fully qualified
 	// name for the type.
@@ -304,11 +304,11 @@ func ResolveTypeDescByID(
 	typDesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, codec, typDesc.ParentID)
 	if err != nil {
-		return nil, nil, err
+		return tree.TypeName{}, nil, err
 	}
 	schemaName, err := ResolveSchemaNameByID(ctx, txn, codec, typDesc.ParentID, typDesc.ParentSchemaID)
 	if err != nil {
-		return nil, nil, err
+		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeNewQualifiedTypeName(db.GetName(), schemaName, typDesc.GetName())
 	var ret sqlbase.TypeDescriptorInterface
@@ -322,7 +322,7 @@ func ResolveTypeDescByID(
 	} else {
 		ret = typDesc
 	}
-	return &name, ret, nil
+	return name, ret, nil
 }
 
 // GetForDatabase looks up and returns all available

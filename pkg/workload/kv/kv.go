@@ -205,7 +205,9 @@ func (w *kv) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *kv) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	writeSeq := 0
 	if w.writeSeq != "" {
 		first := w.writeSeq[0]
@@ -227,7 +229,6 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 		}
 	}
 
-	ctx := context.Background()
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

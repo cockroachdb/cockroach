@@ -98,6 +98,11 @@ type MutableTypeDescriptor struct {
 // when used in a read only way.
 type ImmutableTypeDescriptor struct {
 	TypeDescriptor
+
+	// The fields below are used to fill user defined type metadata for ENUMs.
+	logicalReps     []string
+	physicalReps    [][]byte
+	readOnlyMembers []bool
 }
 
 // NewMutableCreatedTypeDescriptor returns a MutableTypeDescriptor from the
@@ -127,7 +132,23 @@ func NewImmutableTypeDescriptor(desc TypeDescriptor) *ImmutableTypeDescriptor {
 }
 
 func makeImmutableTypeDescriptor(desc TypeDescriptor) ImmutableTypeDescriptor {
-	return ImmutableTypeDescriptor{TypeDescriptor: desc}
+	immutDesc := ImmutableTypeDescriptor{TypeDescriptor: desc}
+
+	// Initialize metadata specific to the TypeDescriptor kind.
+	switch immutDesc.Kind {
+	case TypeDescriptor_ENUM:
+		immutDesc.logicalReps = make([]string, len(desc.EnumMembers))
+		immutDesc.physicalReps = make([][]byte, len(desc.EnumMembers))
+		immutDesc.readOnlyMembers = make([]bool, len(desc.EnumMembers))
+		for i := range desc.EnumMembers {
+			member := &desc.EnumMembers[i]
+			immutDesc.logicalReps[i] = member.LogicalRepresentation
+			immutDesc.physicalReps[i] = member.PhysicalRepresentation
+			immutDesc.readOnlyMembers[i] = member.Capability == TypeDescriptor_EnumMember_READ_ONLY
+		}
+	}
+
+	return immutDesc
 }
 
 // DatabaseDesc implements the ObjectDescriptor interface.
@@ -483,16 +504,16 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 // interface as well.
 type TypeDescriptorResolver interface {
 	// GetTypeDescriptor returns the type descriptor for the input ID.
-	GetTypeDescriptor(ctx context.Context, id ID) (*tree.TypeName, TypeDescriptorInterface, error)
+	GetTypeDescriptor(ctx context.Context, id ID) (tree.TypeName, TypeDescriptorInterface, error)
 }
 
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.
-type TypeLookupFunc func(ctx context.Context, id ID) (*tree.TypeName, TypeDescriptorInterface, error)
+type TypeLookupFunc func(ctx context.Context, id ID) (tree.TypeName, TypeDescriptorInterface, error)
 
 // GetTypeDescriptor implements the TypeDescriptorResolver interface.
 func (t TypeLookupFunc) GetTypeDescriptor(
 	ctx context.Context, id ID,
-) (*tree.TypeName, TypeDescriptorInterface, error) {
+) (tree.TypeName, TypeDescriptorInterface, error) {
 	return t(ctx, id)
 }
 
@@ -534,7 +555,7 @@ func HydrateTypesInTableDescriptor(
 			// TODO (rohany): This should be a noop if the hydrated type
 			//  information present in the descriptor has the same version as
 			//  the resolved type descriptor we found here.
-			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, name, res); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, &name, res); err != nil {
 				return err
 			}
 		}
@@ -574,19 +595,10 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 		if typ.Family() != types.EnumFamily {
 			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
 		}
-		logical := make([]string, len(desc.EnumMembers))
-		physical := make([][]byte, len(desc.EnumMembers))
-		isReadOnly := make([]bool, len(desc.EnumMembers))
-		for i := range desc.EnumMembers {
-			member := &desc.EnumMembers[i]
-			logical[i] = member.LogicalRepresentation
-			physical[i] = member.PhysicalRepresentation
-			isReadOnly[i] = member.Capability == TypeDescriptor_EnumMember_READ_ONLY
-		}
 		typ.TypeMeta.EnumData = &types.EnumMetadata{
-			LogicalRepresentations:  logical,
-			PhysicalRepresentations: physical,
-			IsMemberReadOnly:        isReadOnly,
+			LogicalRepresentations:  desc.logicalReps,
+			PhysicalRepresentations: desc.physicalReps,
+			IsMemberReadOnly:        desc.readOnlyMembers,
 		}
 		return nil
 	case TypeDescriptor_ALIAS:
@@ -599,7 +611,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 				if err != nil {
 					return err
 				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, elemTypName, res); err != nil {
+				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, &elemTypName, res); err != nil {
 					return err
 				}
 				return nil

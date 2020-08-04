@@ -619,18 +619,18 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		// It is safe to hydrate directly into MutableTableDescriptor since it is
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
-		getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		getType := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
 			if err != nil {
-				return nil, nil, err
+				return tree.TypeName{}, nil, err
 			}
 			// TODO (lucy): This database access should go through the collection.
 			dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tc.codec(), desc.ParentID)
 			if err != nil {
-				return nil, nil, err
+				return tree.TypeName{}, nil, err
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
-			return &name, desc, nil
+			return name, desc, nil
 		}
 
 		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
@@ -647,18 +647,18 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		//  make a copy. However, we could avoid hitting the cache if any of the
 		//  user defined types have been modified in this transaction.
 
-		getType := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+		getType := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
-				return nil, nil, err
+				return tree.TypeName{}, nil, err
 			}
 			// TODO (lucy): This database access should go through the collection.
 			dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tc.codec(), desc.ParentID)
 			if err != nil {
-				return nil, nil, err
+				return tree.TypeName{}, nil, err
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
-			return &name, desc, nil
+			return name, desc, nil
 		}
 
 		// Make a copy of the underlying descriptor before hydration.
@@ -1032,7 +1032,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			typeLookup := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
 				if dbDesc == nil {
@@ -1041,14 +1041,14 @@ func (tc *Collection) GetAllDescriptors(
 					//  orphaned child type descriptors. That could lead to dbDesc being
 					//  nil here. Once we support drop type, this check does not need to
 					//  be performed.
-					return nil, nil, errors.Newf("database id %d not found", typDesc.ParentID)
+					return tree.TypeName{}, nil, errors.Newf("database id %d not found", typDesc.ParentID)
 				}
 				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.GetID(), typDesc.ParentSchemaID)
 				if err != nil {
-					return nil, nil, err
+					return tree.TypeName{}, nil, err
 				}
 				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), schemaName, typDesc.GetName())
-				return &name, typDesc, nil
+				return name, typDesc, nil
 			}
 			// Now hydrate all table descriptors.
 			for i := range descs {
@@ -1248,13 +1248,13 @@ func (dt *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (
 	if err != nil {
 		return nil, err
 	}
-	return desc.MakeTypesT(ctx, name, dt)
+	return desc.MakeTypesT(ctx, &name, dt)
 }
 
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id sqlbase.ID,
-) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 	desc, err := dt.descriptors.getDescriptorVersionByID(
 		ctx,
 		dt.txn,
@@ -1263,9 +1263,9 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		false, /* setTxnDeadline */
 	)
 	if err != nil {
-		return nil, nil, err
+		return tree.TypeName{}, nil, err
 	}
-	name := tree.NewUnqualifiedTypeName(tree.Name(desc.GetName()))
+	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
 	return name, desc.(*sqlbase.ImmutableTypeDescriptor), nil
 }
 
@@ -1277,7 +1277,7 @@ func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*typ
 			if err != nil {
 				return err
 			}
-			if err := desc.HydrateTypeInfoWithName(ctx, t, name, dt); err != nil {
+			if err := desc.HydrateTypeInfoWithName(ctx, t, &name, dt); err != nil {
 				return err
 			}
 		}

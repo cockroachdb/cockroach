@@ -200,7 +200,9 @@ func (m *roachmart) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (m *roachmart) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (m *roachmart) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

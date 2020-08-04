@@ -141,8 +141,9 @@ func (w *indexes) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *indexes) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
-	ctx := context.Background()
+func (w *indexes) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

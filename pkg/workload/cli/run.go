@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -351,16 +352,39 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	reg := histogram.NewRegistry(*histogramsMaxLatency)
 	var ops workload.QueryLoad
-	for {
-		ops, err = o.Ops(urls, reg)
-		if err == nil {
-			break
+	prepareStart := timeutil.Now()
+	log.Infof(ctx, "creating load generator...")
+	const prepareTimeout = 10 * time.Minute
+	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
+	defer cancel()
+	if prepareErr := func(ctx context.Context) error {
+		retry := retry.StartWithCtx(ctx, retry.Options{})
+		var err error
+		for retry.Next() {
+			if err != nil {
+				log.Warningf(ctx, "retrying after error while creating load: %v", err)
+			}
+			ops, err = o.Ops(ctx, urls, reg)
+			if err == nil {
+				return nil
+			}
+			err = errors.Wrapf(err, "failed to initialize the load generator")
+			if !*tolerateErrors {
+				return err
+			}
 		}
-		if !*tolerateErrors {
-			return err
+		if ctx.Err() != nil {
+			// Don't retry endlessly. Note that this retry loop is not under the
+			// control of --duration, so we're avoiding retrying endlessly.
+			log.Errorf(ctx, "Attempt to create load generator failed. "+
+				"It's been more than %s since we started trying to create the load generator "+
+				"so we're giving up. Last failure: %s", prepareTimeout, err)
 		}
-		log.Infof(ctx, "retrying after error while creating load: %v", err)
+		return err
+	}(prepareCtx); prepareErr != nil {
+		return prepareErr
 	}
+	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Now().Sub(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
