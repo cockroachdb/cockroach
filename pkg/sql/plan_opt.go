@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -221,8 +222,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			// We will fallback to the old path.
 		}
 		if err == nil {
+			// TODO(yuzefovich): think through whether subqueries or
+			// postqueries can be distributed. If that's the case, we might
+			// need to also look at the plan distribution of those.
 			m := plan.(*planTop).main
-			if m.isPartiallyDistributed() && p.SessionData().PartiallyDistributedPlansDisabled {
+			isPartiallyDistributed := m.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
+			if isPartiallyDistributed && p.SessionData().PartiallyDistributedPlansDisabled {
 				// The planning has succeeded, but we've created a partially
 				// distributed plan yet the session variable prohibits such
 				// plan distribution - we need to replan with a new factory

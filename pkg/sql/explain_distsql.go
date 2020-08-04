@@ -79,20 +79,6 @@ func getPlanDistributionForExplainPurposes(
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.Distribution
 	}
-	switch p := plan.planNode.(type) {
-	case *explainDistSQLNode:
-		if p.plan.main.isPhysicalPlan() {
-			return p.plan.main.physPlan.Distribution
-		}
-	case *explainVecNode:
-		if p.plan.isPhysicalPlan() {
-			return p.plan.physPlan.Distribution
-		}
-	case *explainPlanNode:
-		if p.plan.main.isPhysicalPlan() {
-			return p.plan.main.physPlan.Distribution
-		}
-	}
 	if _, ok := plan.planNode.(distSQLExplainable); ok {
 		// This is a special case for plans that will be actually distributed
 		// but are represented using local plan nodes (for example, "create

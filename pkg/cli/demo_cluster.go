@@ -312,6 +312,9 @@ func testServerArgsForTransientCluster(
 		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
 		CacheSize:               demoCtx.cacheSize,
 		NoAutoInitializeCluster: true,
+		// This disables the tenant server. We could enable it but would have to
+		// generate the suitable certs at the caller who wishes to do so.
+		TenantAddr: new(string),
 	}
 
 	if demoCtx.localities != nil {

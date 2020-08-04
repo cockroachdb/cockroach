@@ -111,6 +111,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Config:     testutils.NewNodeTestBaseContext(),
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),

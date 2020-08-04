@@ -45,6 +45,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				SQLMemoryPoolSize:       2 << 10,
 				CacheSize:               1 << 10,
 				NoAutoInitializeCluster: true,
+				TenantAddr:              new(string),
 			},
 		},
 		{
@@ -59,6 +60,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				SQLMemoryPoolSize:       4 << 10,
 				CacheSize:               4 << 10,
 				NoAutoInitializeCluster: true,
+				TenantAddr:              new(string),
 			},
 		},
 	}

@@ -718,10 +718,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		// represented physically. We don't yet have a walker over such
 		// representation, so we simply short-circuit.
 		// TODO(yuzefovich): implement that walker and use it here.
-		if n.plan.planNode == nil {
+		if n.plan.main.planNode == nil {
 			return
 		}
-		n.plan.planNode = v.visit(n.plan.planNode)
+		n.plan.main.planNode = v.visit(n.plan.main.planNode)
 
 	case *ordinalityNode:
 		n.source = v.visit(n.source)

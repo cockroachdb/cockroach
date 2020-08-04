@@ -33,13 +33,20 @@ const (
 	EmbeddedRootKey      = "client.root.key"
 	EmbeddedTestUserCert = "client.testuser.crt"
 	EmbeddedTestUserKey  = "client.testuser.key"
+)
 
-	EmbeddedTenantID           = 123456789
-	EmbeddedTenantCertsDir     = "test_certs/mt"
+// EmbeddedTenantIDs lists the tenants we embed certs for.
+// See 'securitytest/test_certs/regenerate.sh'.
+var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
+
+// Embedded certificates specific to multi-tenancy testing.
+const (
 	EmbeddedTenantServerCACert = "ca-server-tenant.crt"        // CA for tenant server (KV server)
+	EmbeddedTenantServerCAKey  = "ca-server-tenant.key"        // CA for tenant server (KV server)
 	EmbeddedTenantServerCert   = "server-tenant.crt"           // tenant server (KV server) cert
 	EmbeddedTenantServerKey    = "server-tenant.key"           // tenant server (KV server) key
 	EmbeddedTenantClientCACert = "ca-client-tenant.crt"        // CA for client connections (auth broker)
+	EmbeddedTenantClientCAKey  = "ca-client-tenant.key"        // CA for client connections (auth broker)
 	EmbeddedTenantClientCert   = "client-tenant.123456789.crt" // tenant client cert (SQL server)
 	EmbeddedTenantClientKey    = "client-tenant.123456789.key" // tenant client key (SQL server)
 )

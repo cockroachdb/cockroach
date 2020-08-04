@@ -165,7 +165,7 @@ type CertificateMetrics struct {
 	TenantClientExpiration   *metric.Gauge
 }
 
-func makeCertificateManager(certsDir string, opts ...func(*cmOptions)) *CertificateManager {
+func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager {
 	var o cmOptions
 	for _, fn := range opts {
 		fn(&o)
@@ -195,17 +195,20 @@ type cmOptions struct {
 	tenantIdentifier string
 }
 
+// Option is an option to NewCertificateManager.
+type Option func(*cmOptions)
+
 // ForTenant is an option to NewCertificateManager which ties the manager to
 // the provided tenant. Without this option, tenant client certs are not
 // available.
-func ForTenant(tenantIdentifier string) func(*cmOptions) {
+func ForTenant(tenantIdentifier string) Option {
 	return func(opts *cmOptions) {
 		opts.tenantIdentifier = tenantIdentifier
 	}
 }
 
 // NewCertificateManager creates a new certificate manager.
-func NewCertificateManager(certsDir string, opts ...func(*cmOptions)) (*CertificateManager, error) {
+func NewCertificateManager(certsDir string, opts ...Option) (*CertificateManager, error) {
 	cm := makeCertificateManager(certsDir, opts...)
 	return cm, cm.LoadCertificates()
 }
@@ -214,9 +217,7 @@ func NewCertificateManager(certsDir string, opts ...func(*cmOptions)) (*Certific
 // The certsDir is created if it does not exist.
 // This should only be called when generating certificates, the server has
 // no business creating the certs directory.
-func NewCertificateManagerFirstRun(
-	certsDir string, opts ...func(*cmOptions),
-) (*CertificateManager, error) {
+func NewCertificateManagerFirstRun(certsDir string, opts ...Option) (*CertificateManager, error) {
 	cm := makeCertificateManager(certsDir, opts...)
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
 		return nil, err
