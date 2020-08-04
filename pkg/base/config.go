@@ -63,6 +63,11 @@ const (
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
 
+	// defaultRaftHeartbeatIntervalTicks is the default value for
+	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
+	// each heartbeat.
+	defaultRaftHeartbeatIntervalTicks = 5
+
 	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatInterval
 	// used by the rpc context.
 	defaultRPCHeartbeatInterval = 3 * time.Second
@@ -300,6 +305,9 @@ type RaftConfig struct {
 	// unless overridden.
 	RaftElectionTimeoutTicks int
 
+	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
+	RaftHeartbeatIntervalTicks int
+
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
@@ -363,6 +371,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RaftHeartbeatIntervalTicks == 0 {
+		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
 	}
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier

@@ -141,18 +141,18 @@ Output build version information.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Tag:    %s\n", info.Tag)
-		fmt.Fprintf(tw, "Build Time:   %s\n", info.Time)
-		fmt.Fprintf(tw, "Distribution: %s\n", info.Distribution)
-		fmt.Fprintf(tw, "Platform:     %s", info.Platform)
+		fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
+		fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
+		fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
+		fmt.Fprintf(tw, "Platform:         %s", info.Platform)
 		if info.CgoTargetTriple != "" {
 			fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
 		}
 		fmt.Fprintln(tw)
-		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
-		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
-		fmt.Fprintf(tw, "Build SHA-1:  %s\n", info.Revision)
-		fmt.Fprintf(tw, "Build Type:   %s\n", info.Type)
+		fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
+		fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
+		fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
+		fmt.Fprintf(tw, "Build Type:       %s\n", info.Type)
 		return tw.Flush()
 	},
 }
