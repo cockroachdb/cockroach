@@ -43,35 +43,38 @@ func cockroachNodeBinary(c *SyncedCluster, node int) string {
 	if !c.IsLocal() {
 		return "./" + config.Binary
 	}
+	return cockroachLocalNodeLocation(c, node, config.Binary)
+}
 
-	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), config.Binary)
+func cockroachLocalNodeLocation(c *SyncedCluster, node int, checkPath string) string {
+	path := filepath.Join(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), node), checkPath)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
-	// For "local" clusters we have to find the binary to run and translate it to
-	// an absolute path. First, look for the binary in PATH.
-	path, err := exec.LookPath(config.Binary)
+	// For "local" clusters we have to find the checkPath to run and translate it to
+	// an absolute path. First, look for the checkPath in PATH.
+	path, err := exec.LookPath(checkPath)
 	if err != nil {
-		if strings.HasPrefix(config.Binary, "/") {
-			return config.Binary
+		if strings.HasPrefix(checkPath, "/") {
+			return checkPath
 		}
-		// We're unable to find the binary in PATH and "binary" is a relative path:
+		// We're unable to find the checkPath in PATH and checkPath is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return config.Binary
+			return checkPath
 		}
-		path = gopath + "/src/github.com/cockroachdb/cockroach/" + config.Binary
+		path = gopath + "/src/github.com/cockroachdb/cockroach/" + checkPath
 		var err2 error
 		path, err2 = exec.LookPath(path)
 		if err2 != nil {
-			return config.Binary
+			return checkPath
 		}
 	}
 	path, err = filepath.Abs(path)
 	if err != nil {
-		return config.Binary
+		return checkPath
 	}
 	return path
 }
@@ -363,6 +366,13 @@ func (h *crdbStartHelper) generateStartCmd(
 	nodes := h.c.ServerNodes()
 	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
 	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
+	geoLibsFlag := ""
+	if h.c.IsLocal() {
+		geoLibsFlag = fmt.Sprintf(
+			"--geo-libs=%s",
+			cockroachLocalNodeLocation(h.c, nodes[nodeIdx], "lib"),
+		)
+	}
 	keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
 
 	// NB: this is awkward as when the process fails, the test runner will show an
@@ -375,7 +385,7 @@ func (h *crdbStartHelper) generateStartCmd(
 		[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> %[1]s/roachprod.log; %[2]s
 		export ROACHPROD=%[3]d%[4]s;
 		GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 %[5]s \
-		%[6]s %[7]s %[8]s >> %[1]s/cockroach.stdout.log \
+		%[6]s %[7]s %[8]s %[9]s >> %[1]s/cockroach.stdout.log \
 		                 2>> %[1]s/cockroach.stderr.log \
 			|| (x=$?; cat %[1]s/cockroach.stderr.log; exit $x)`,
 		logDir,                  // [1]
@@ -386,6 +396,7 @@ func (h *crdbStartHelper) generateStartCmd(
 		binary,                  // [6]
 		startCmd,                // [7]
 		strings.Join(args, " "), // [8]
+		geoLibsFlag,             // [9]
 	)
 	return cmd, nil
 }
