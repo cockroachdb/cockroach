@@ -34,7 +34,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 					affectsLogDir, affectsDataDir,
 				),
 				Owner:      OwnerKV,
-				MinVersion: "v19.1.0",
+				MinVersion: "v19.2.0",
 				Cluster:    makeClusterSpec(1),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)

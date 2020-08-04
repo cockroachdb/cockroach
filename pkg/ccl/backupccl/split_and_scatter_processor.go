@@ -252,7 +252,7 @@ func runSplitAndScatter(
 			for importSpanChunk := range importSpanChunksCh {
 				log.Infof(ctx, "processing a chunk")
 				for _, importSpan := range importSpanChunk {
-					log.Infof(ctx, "processing a span")
+					log.Infof(ctx, "processing a span [%s,%s)", importSpan.Span.Key, importSpan.Span.EndKey)
 					destination, err := scatterer.splitAndScatterKey(ctx, db, kr, importSpan.Span.Key, false /* randomizeLeases */)
 					if err != nil {
 						return err

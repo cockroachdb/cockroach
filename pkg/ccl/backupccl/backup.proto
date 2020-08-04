@@ -180,4 +180,5 @@ message ScheduledBackupExecutionArgs {
 message RestoreProgress {
   RowCount summary = 1 [(gogoproto.nullable) = false];
   int64 progressIdx = 2;
+  roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
 }

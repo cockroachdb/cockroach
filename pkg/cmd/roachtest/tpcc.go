@@ -893,11 +893,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// Print the result.
 		if failErr == nil {
 			ttycolor.Stdout(ttycolor.Green)
-			t.l.Printf("--- PASS: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+			t.l.Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				warehouses, res.TpmC(), res.Efficiency())
 		} else {
 			ttycolor.Stdout(ttycolor.Red)
-			t.l.Printf("--- FAIL: tpcc %d resulted in %.1f tpmC and failed due to %v",
+			t.l.Printf("--- SEARCH ITER FAIL: TPCC %d resulted in %.1f tpmC and failed due to %v",
 				warehouses, res.TpmC(), failErr)
 		}
 		ttycolor.Stdout(ttycolor.Reset)
