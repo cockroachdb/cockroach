@@ -572,7 +572,22 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		p.results.put(p.curKey, val)
+		// If we're adding a value due to a previous intent, as indicated by the
+		// zero-valued timestamp, we want to populate the timestamp as of current
+		// metaTimestamp. Note that this may be controversial as this maybe be
+		// neither the write timestamp when this intent was written. However, this
+		// was the only case in which a value could have been returned from a read
+		// without an MVCC timestamp.
+		if p.curKey.Timestamp.IsEmpty() {
+			key := MVCCKey{
+				Key:       p.curKey.Key,
+				Timestamp: hlc.Timestamp(p.meta.Timestamp),
+			}
+			p.results.put(key, val)
+		} else {
+			p.results.put(p.curKey, val)
+		}
+
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
