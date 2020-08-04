@@ -97,13 +97,25 @@ func (node Backup) Coverage() DescriptorCoverage {
 	return RequestedDescriptors
 }
 
+// RestoreOptions describes options for the RESTORE execution.
+type RestoreOptions struct {
+	EncryptionPassphrase      Expr
+	IntoDB                    Expr
+	SkipMissingFKs            bool
+	SkipMissingSequences      bool
+	SkipMissingSequenceOwners bool
+	SkipMissingViews          bool
+}
+
+var _ NodeFormatter = &RestoreOptions{}
+
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
 	From               []StringOrPlaceholderOptList
 	AsOf               AsOfClause
-	Options            KVOptions
+	Options            RestoreOptions
 	Subdir             Expr
 }
 
@@ -131,7 +143,7 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
 	}
-	if node.Options != nil {
+	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
 	}
@@ -247,4 +259,100 @@ func (o BackupOptions) IsDefault() bool {
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
 		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase
+}
+
+// Format implements the NodeFormatter interface.
+func (o *RestoreOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
+	if o.EncryptionPassphrase != nil {
+		addSep = true
+		ctx.WriteString("encryption_passphrase=")
+		o.EncryptionPassphrase.Format(ctx)
+	}
+
+	if o.IntoDB != nil {
+		maybeAddSep()
+		ctx.WriteString("into_db=")
+		o.IntoDB.Format(ctx)
+	}
+
+	if o.SkipMissingFKs {
+		maybeAddSep()
+		ctx.WriteString("skip_missing_foreign_keys")
+	}
+
+	if o.SkipMissingSequenceOwners {
+		maybeAddSep()
+		ctx.WriteString("skip_missing_sequence_owners")
+	}
+
+	if o.SkipMissingSequences {
+		maybeAddSep()
+		ctx.WriteString("skip_missing_sequences")
+	}
+
+	if o.SkipMissingViews {
+		maybeAddSep()
+		ctx.WriteString("skip_missing_views")
+	}
+}
+
+// CombineWith merges other backup options into this backup options struct.
+// An error is returned if the same option merged multiple times.
+func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
+	if o.EncryptionPassphrase == nil {
+		o.EncryptionPassphrase = other.EncryptionPassphrase
+	} else if other.EncryptionPassphrase != nil {
+		return errors.New("encryption_passphrase specified multiple times")
+	}
+
+	if o.IntoDB == nil {
+		o.IntoDB = other.IntoDB
+	} else if other.IntoDB != nil {
+		return errors.New("into_db specified multiple times")
+	}
+
+	if o.SkipMissingFKs {
+		if other.SkipMissingFKs {
+			return errors.New("skip_missing_foreign_keys specified multiple times")
+		}
+	} else {
+		o.SkipMissingFKs = other.SkipMissingFKs
+	}
+
+	if o.SkipMissingSequences {
+		if other.SkipMissingSequences {
+			return errors.New("skip_missing_sequences specified multiple times")
+		}
+	} else {
+		o.SkipMissingSequences = other.SkipMissingSequences
+	}
+
+	if o.SkipMissingSequenceOwners {
+		if other.SkipMissingSequenceOwners {
+			return errors.New("skip_missing_sequence_owners specified multiple times")
+		}
+	} else {
+		o.SkipMissingSequenceOwners = other.SkipMissingSequenceOwners
+	}
+
+	if o.SkipMissingViews {
+		if other.SkipMissingViews {
+			return errors.New("skip_missing_views specified multiple times")
+		}
+	} else {
+		o.SkipMissingViews = other.SkipMissingViews
+	}
+	return nil
+}
+
+// IsDefault returns true if this backup options struct has default value.
+func (o RestoreOptions) IsDefault() bool {
+	return o == RestoreOptions{}
 }

@@ -692,3 +692,28 @@ at or near "detached": syntax error: detached option specified multiple times
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH detached, revision_history, detached
                                                      ^
+
+error
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+----
+at or near "key1": syntax error
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+                            ^
+HINT: try \h RESTORE
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+----
+at or near "skip_missing_foreign_keys": syntax error: skip_missing_foreign_keys specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+                                                       ^
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+----
+at or near "skip_missing_sequences": syntax error: skip_missing_sequences specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+                                                                        ^
