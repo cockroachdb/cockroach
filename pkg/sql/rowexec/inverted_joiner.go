@@ -102,10 +102,9 @@ type invertedJoiner struct {
 	keyRowToTableRowMap []int
 
 	// The input being joined using the index.
-	input               execinfra.RowSource
-	inputTypes          []*types.T
-	lookupColumnIdx     uint32
-	datumToInvertedExpr invertedexpr.DatumToInvertedExpr
+	input                execinfra.RowSource
+	inputTypes           []*types.T
+	datumsToInvertedExpr invertedexpr.DatumsToInvertedExpr
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
 
@@ -149,26 +148,25 @@ var _ execinfra.OpNode = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
 
-// newInvertedJoiner constructs an invertedJoiner. The datumToInvertedExpr
+// newInvertedJoiner constructs an invertedJoiner. The datumsToInvertedExpr
 // argument is non-nil only for tests. When nil, the invertedJoiner uses
-// the spec to construct an implementation of DatumToInvertedExpr.
+// the spec to construct an implementation of DatumsToInvertedExpr.
 func newInvertedJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedJoinerSpec,
-	datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
+	datumsToInvertedExpr invertedexpr.DatumsToInvertedExpr,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	ij := &invertedJoiner{
-		desc:                sqlbase.MakeImmutableTableDescriptor(spec.Table),
-		input:               input,
-		inputTypes:          input.OutputTypes(),
-		lookupColumnIdx:     spec.LookupColumn,
-		datumToInvertedExpr: datumToInvertedExpr,
-		joinType:            spec.Type,
-		batchSize:           invertedJoinerBatchSize,
+		desc:                 sqlbase.MakeImmutableTableDescriptor(spec.Table),
+		input:                input,
+		inputTypes:           input.OutputTypes(),
+		datumsToInvertedExpr: datumsToInvertedExpr,
+		joinType:             spec.Type,
+		batchSize:            invertedJoinerBatchSize,
 	}
 	ij.colIdxMap = ij.desc.ColumnIdxMap()
 
@@ -230,12 +228,14 @@ func newInvertedJoiner(
 	}
 	ij.combinedRow = make(sqlbase.EncDatumRow, 0, len(onExprColTypes))
 
-	if ij.datumToInvertedExpr == nil {
+	if ij.datumsToInvertedExpr == nil {
 		var invertedExprHelper execinfra.ExprHelper
 		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 			return nil, err
 		}
-		ij.datumToInvertedExpr, err = invertedidx.NewDatumToInvertedExpr(invertedExprHelper.Expr, ij.index)
+		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
+			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.index,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -383,25 +383,27 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		if row == nil {
 			break
 		}
-		if row[ij.lookupColumnIdx].IsNull() &&
+
+		expr, err := ij.datumsToInvertedExpr.Convert(ij.Ctx, row)
+		if err != nil {
+			ij.MoveToDraining(err)
+			return ijStateUnknown, ij.DrainHelper()
+		}
+		if expr == nil &&
 			(ij.joinType != descpb.LeftOuterJoin && ij.joinType != descpb.LeftAntiJoin) {
-			// There is no expression to evaluate, so the evaluation will be the
-			// empty set. And the join type will emit no row, so don't bother
-			// copying the input row.
+			// One of the input columns was NULL, resulting in a nil expression.
+			// The join type will emit no row since the evaluation result will be
+			// an empty set, so don't bother copying the input row.
 			ij.inputRows = append(ij.inputRows, nil)
 		} else {
 			ij.inputRows = append(ij.inputRows, ij.rowAlloc.CopyRow(row))
 		}
-		if row[ij.lookupColumnIdx].IsNull() {
-			// No expression to evaluate. The nil serves as a marker that will
-			// result in an empty set as the evaluation result.
+		if expr == nil {
+			// One of the input columns was NULL, resulting in a nil expression.
+			// The nil serves as a marker that will result in an empty set as the
+			// evaluation result.
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, nil)
 		} else {
-			expr, err := ij.datumToInvertedExpr.Convert(ij.Ctx, row[ij.lookupColumnIdx])
-			if err != nil {
-				ij.MoveToDraining(err)
-				return ijStateUnknown, ij.DrainHelper()
-			}
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, expr)
 		}
 	}
