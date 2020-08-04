@@ -1,0 +1,116 @@
+Running make with -j8
+GOPATH set to /Users/spas/go
+mkdir -p lib
+rm -f lib/lib{geos,geos_c}.dylib
+cp -L /Users/spas/go/native/x86_64-apple-darwin19.5.0/geos/lib/lib{geos,geos_c}.dylib lib
+GOFLAGS= go test   -mod=vendor -tags ' make x86_64_apple_darwin19.5.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v20.2.0-alpha.1-1352-g24a17f67b7-dirty" -X "github.com/cockroachdb/cockroach/pkg/build.rev=24a17f67b7ee3c8b86f815437b9d8017578c6e1c" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin19.5.0"  ' -run "TestRegistryLifecycle/normal_success"  -timeout 5s ./pkg/jobs -v -show-logs
+I200729 15:43:58.065823 1 rand.go:85  Random seed: -6767386709950557946
+=== RUN   TestRegistryLifecycle
+=== RUN   TestRegistryLifecycle/normal_success
+I200729 15:43:58.068036 55 rpc/tls.go:234  [n?] server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I200729 15:43:58.068073 55 rpc/tls.go:283  [n?] web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+W200729 15:43:58.068197 55 server/status/runtime.go:310  [n?] Could not parse build timestamp: parsing time "" as "2006/01/02 15:04:05": cannot parse "" as "2006"
+I200729 15:43:58.082151 55 server/server.go:820  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I200729 15:43:58.082673 55 server/config.go:600  [n?] 1 storage engine initialized
+I200729 15:43:58.082695 55 server/config.go:603  [n?] Pebble cache size: 128 MiB
+I200729 15:43:58.082705 55 server/config.go:603  [n?] store 0: in-memory, size 0 B
+I200729 15:43:58.085134 55 server/init.go:173  [n?] no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.
+I200729 15:43:58.085159 55 server/init.go:193  [n?] **** cluster c4851464-0289-4b28-80df-7f0041abb11a has been created
+I200729 15:43:58.085230 162 server/server.go:1399  [n1] connecting to gossip network to verify cluster ID "c4851464-0289-4b28-80df-7f0041abb11a"
+I200729 15:43:58.085221 55 gossip/gossip.go:403  [n1] NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:59559" > attrs:<> locality:<> ServerVersion:<major_val:20 minor_val:1 patch:0 unstable:14 > build_tag:"v20.2.0-alpha.1-1352-g24a17f67b7-dirty" started_at:1596037438085204000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:59560" > tenant_address:<network_field:"tcp" address_field:"127.0.0.1:59561" > 
+I200729 15:43:58.086940 55 server/node.go:413  [n1] initialized store [n1,s1]: disk (capacity=512 MiB, available=512 MiB, used=0 B, logicalBytes=18 KiB), ranges=35, leases=0, queries=0.00, writes=0.00, bytesPerReplica={p10=0.00 p25=0.00 p50=0.00 p75=0.00 p90=166.00 pMax=16008.00}, writesPerReplica={p10=0.00 p25=0.00 p50=0.00 p75=0.00 p90=0.00 pMax=0.00}
+I200729 15:43:58.087047 55 kv/kvserver/stores.go:236  [n1] read 0 node addresses from persistent storage
+I200729 15:43:58.087055 162 server/server.go:1402  [n1] node connected via gossip
+I200729 15:43:58.087120 55 server/node.go:469  [n1] node=1: started with [<no-attributes>=<in-mem>] engine(s) and attributes []
+I200729 15:43:58.087192 55 server/server.go:1511  [n1] starting https server at 127.0.0.1:59558 (use: 127.0.0.1:59558)
+W200729 15:43:58.087202 237 kv/kvserver/store.go:1656  [n1,s1,r6/1:/Table/{SystemCon…-11}] could not gossip system config: [NotLeaseHolderError] r6: replica (n1,s1):1 not lease holder; lease holder unknown
+I200729 15:43:58.087220 55 server/server.go:1516  [n1] starting postgres server at 127.0.0.1:59560 (use: 127.0.0.1:59560)
+I200729 15:43:58.087669 55 server/server.go:1518  [n1] starting grpc server at 127.0.0.1:59559
+I200729 15:43:58.087694 55 server/server.go:1519  [n1] advertising CockroachDB node at 127.0.0.1:59559
+I200729 15:43:58.091496 277 sql/temporary_schema.go:473  [n1] running temporary object cleanup background job
+panic: runtime error: invalid memory address or nil pointer dereference [recovered]
+	panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x4b3dcea]
+
+goroutine 287 [running]:
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Recover(0xc00048c480, 0x874f700, 0xc00040c840)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:183 +0x11f
+panic(0x77e27a0, 0xa9ef2b0)
+	/usr/local/go/src/runtime/panic.go:969 +0x166
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker(0x0, 0x874f700, 0xc00040c930, 0xc000159380)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:190 +0x5a
+github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage.NewStorage(0x874f700, 0xc00040c930, 0x0, 0xc0003ba640, 0xc0001ced00, 0x870f200, 0xc000e12900, 0xc0016863e8, 0x7fffffffffffffff, 0xc0005b8a80)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage/slstorage.go:58 +0xf5
+github.com/cockroachdb/cockroach/pkg/sql.(*connExecutor).initEvalCtx(0xc000462000, 0x874f700, 0xc00040c930, 0xc0004624c0, 0xc0004623d8)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:2005 +0x567
+github.com/cockroachdb/cockroach/pkg/sql.(*connExecutor).initPlanner(0xc000462000, 0x874f700, 0xc00040c930, 0xc0004623d8)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:2068 +0x98
+github.com/cockroachdb/cockroach/pkg/sql.(*Server).newConnExecutor(0xc000edb080, 0x874f700, 0xc00040c930, 0xc00018e420, 0x0, 0xc000e128a0, 0x87ceb40, 0xc00040c960, 0xc00071f730, 0xc0008f0b40, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:649 +0xcc5
+github.com/cockroachdb/cockroach/pkg/sql.(*Server).newConnExecutorWithTxn(0xc000edb080, 0x874f700, 0xc00040c930, 0xc00018e420, 0x0, 0xc000e128a0, 0x87ceb40, 0xc00040c960, 0xc000ede8c0, 0xc00071f730, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:677 +0xdf
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).initConnEx(0xc0006adc20, 0x874f700, 0xc00040c930, 0xc000230cf0, 0xc00018e420, 0xc0006d8680, 0xc0006d86a0, 0x2e, 0x2, 0x1, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:155 +0x233
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal(0xc0006adc20, 0x874f700, 0xc00040c930, 0x7cea787, 0xe, 0xc000230cf0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:445 +0x5fd
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).queryInternal(0xc0006adc20, 0x874f700, 0xc00040c840, 0x7cea787, 0xe, 0xc000230cf0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:240 +0xff
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryEx(0xc0006adc20, 0x874f700, 0xc00040c840, 0x7cea787, 0xe, 0xc000230cf0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:215 +0xfc
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowEx(0xc0006adc20, 0x874f700, 0xc00040c840, 0x7cea787, 0xe, 0xc000230cf0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:270 +0xfc
+github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance.(*SQLInstance).createSession.func1(0x874f700, 0xc00040c840, 0xc000230cf0, 0x0, 0x0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance/slinstance.go:94 +0x1ac
+github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn.func1(0x874f700, 0xc00040c840, 0xc000230cf0, 0x3ff0000000000000, 0x87e5a60)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/kv/db.go:705 +0x43
+github.com/cockroachdb/cockroach/pkg/kv.(*Txn).exec(0xc000230cf0, 0x874f700, 0xc00040c840, 0xc001687bb8, 0xc000230cf0, 0x4870709)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn.go:803 +0xd9
+github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn(0xc0001ced00, 0x874f700, 0xc00040c840, 0xc00085fc48, 0xc0006e1c18, 0x410b6fc)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/kv/db.go:704 +0xfa
+github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance.(*SQLInstance).createSession(0xc000113720, 0x874f700, 0xc00040c840, 0x77359400, 0x3ff8000000000000, 0x0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance/slinstance.go:93 +0x128
+github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance.(*SQLInstance).heartbeatLoop(0xc000113720, 0x874f700, 0xc00040c840)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance/slinstance.go:161 +0x642
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc0001592f0, 0xc00048c480, 0xc0001592e0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198 +0xfc
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:191 +0xa8
+panic: runtime error: invalid memory address or nil pointer dereference [recovered]
+	panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x4b3dcea]
+
+goroutine 275 [running]:
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Recover(0xc00048c480, 0x874f640, 0xc00046a1c0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:183 +0x11f
+panic(0x77e27a0, 0xa9ef2b0)
+	/usr/local/go/src/runtime/panic.go:969 +0x166
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker(0x0, 0x874f700, 0xc0002dd3e0, 0xc0004839a0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:190 +0x5a
+github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage.NewStorage(0x874f700, 0xc0002dd3e0, 0x0, 0xc0003ba640, 0xc0001ced00, 0x870f200, 0xc000f2d8c0, 0xc0014f0528, 0x7fffffffffffffff, 0xc0005b8a80)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage/slstorage.go:58 +0xf5
+github.com/cockroachdb/cockroach/pkg/sql.(*connExecutor).initEvalCtx(0xc0014f2000, 0x874f700, 0xc0002dd3e0, 0xc0014f24c0, 0xc0014f23d8)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:2005 +0x567
+github.com/cockroachdb/cockroach/pkg/sql.(*connExecutor).initPlanner(0xc0014f2000, 0x874f700, 0xc0002dd3e0, 0xc0014f23d8)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:2068 +0x98
+github.com/cockroachdb/cockroach/pkg/sql.(*Server).newConnExecutor(0xc000edb080, 0x874f700, 0xc0002dd3e0, 0xc0006ab760, 0x0, 0xc000f2d860, 0x87ceb40, 0xc0002dd410, 0xc00071f730, 0xc0008f0b40, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/conn_executor.go:649 +0xcc5
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).initConnEx(0xc0006adc20, 0x874f700, 0xc0002dd3e0, 0x0, 0xc0006ab760, 0xc000d14660, 0xc000d14680, 0x1c, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:144 +0x3f6
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal(0xc0006adc20, 0x874f700, 0xc0002dd3e0, 0x7ce6721, 0xc, 0x0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:445 +0x5fd
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).queryInternal(0xc0006adc20, 0x874f640, 0xc00046a1c0, 0x7ce6721, 0xc, 0x0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:240 +0xff
+github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryEx(0xc0006adc20, 0x874f640, 0xc00046a1c0, 0x7ce6721, 0xc, 0x0, 0x7cd4377, 0x4, 0x0, 0x0, ...)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/sql/internal.go:215 +0xfc
+github.com/cockroachdb/cockroach/pkg/server.(*Server).clusterVersion(0xc000228000, 0x874f640, 0xc00046a1c0, 0xbd17108, 0xc000086000, 0xa735260, 0xc000d1f148)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/server/server_update.go:168 +0xdc
+github.com/cockroachdb/cockroach/pkg/server.(*Server).upgradeStatus(0xc000228000, 0x874f640, 0xc00046a1c0, 0x6fc23ac00, 0x4000000000000000, 0x0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/server/server_update.go:95 +0x5d
+github.com/cockroachdb/cockroach/pkg/server.(*Server).startAttemptUpgrade.func1(0x874f640, 0xc00046a1c0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/server/server_update.go:51 +0x1c9
+github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1(0xc00048c480, 0x874f640, 0xc00046a1c0, 0xc00002c0c0, 0x14, 0x0, 0x0, 0xc0006d84c0)
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:323 +0xee
+created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask
+	/Users/spas/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:318 +0x131
+FAIL	github.com/cockroachdb/cockroach/pkg/jobs	2.942s
+FAIL

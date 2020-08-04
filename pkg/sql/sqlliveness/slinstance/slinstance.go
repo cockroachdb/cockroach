@@ -18,14 +18,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -37,7 +32,8 @@ import (
 )
 
 var (
-	DefaultTTL = settings.RegisterNonNegativeDurationSetting(
+	DefaultMaxRetriesToExtend = 5
+	DefaultTTL                = settings.RegisterNonNegativeDurationSetting(
 		"server.sqlliveness.ttl",
 		"default sqlliveness session ttl",
 		40*time.Second,
@@ -50,12 +46,12 @@ var (
 )
 
 type session struct {
-	sid sqlliveness.SessionID
+	id  sqlliveness.SessionID
 	exp hlc.Timestamp
 }
 
 // ID implements the Session interface method ID.
-func (s *session) ID() sqlliveness.SessionID { return s.sid }
+func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the Session interface method Expiration.
 func (s *session) Expiration() hlc.Timestamp { return s.exp }
@@ -66,9 +62,8 @@ func (s *session) Expiration() hlc.Timestamp { return s.exp }
 // to replace a session that has expired and deleted from the table.
 type SQLInstance struct {
 	clock   *hlc.Clock
-	db      *kv.DB
-	ex      sqlutil.InternalExecutor
 	stopper *stop.Stopper
+	storage sqlliveness.Storage
 	ttl     func() time.Duration
 	hb      func() time.Duration
 	mu      struct {
@@ -78,7 +73,7 @@ type SQLInstance struct {
 	}
 }
 
-func (l *SQLInstance) getSessionOrBlockCh() (sqlliveness.Session, chan struct{}) {
+func (l *SQLInstance) getSessionOrBlockCh() (*session, chan struct{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.s != nil {
@@ -105,40 +100,17 @@ func (l *SQLInstance) clearSession() {
 func (l *SQLInstance) createSession(ctx context.Context) (*session, error) {
 	id := uuid.MakeV4().GetBytes()
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := l.ex.QueryRowEx(
-			ctx, "create-session", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`INSERT INTO system.sqlliveness VALUES ($1, $2)`,
-			id, tree.TimestampToDecimal(exp),
-		)
-		return err
-	}); err != nil {
-		return nil, errors.Wrapf(err, "Could not create new liveness session")
+	s := &session{id: id, exp: exp}
+	if err := l.storage.Insert(ctx, s); err != nil {
+		return nil, err
 	}
-	return &session{sid: id, exp: exp}, nil
+	return s, nil
 }
 
 func (l *SQLInstance) extendSession(ctx context.Context) error {
 	s, _ := l.getSessionOrBlockCh()
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 1)
-	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		data, err := l.ex.QueryRowEx(
-			ctx, "extend-session", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
-UPDATE system.sqlliveness SET expiration = $1
-WHERE session_id = $2 RETURNING session_id`,
-			tree.TimestampToDecimal(exp), s.ID(),
-		)
-		if err != nil {
-			return errors.Wrapf(err, "Could not extend session: %s with expiration: %+v",
-				s.ID(), s.Expiration())
-		}
-		if sessionExpired := data == nil; sessionExpired {
-			return errors.Errorf("Session %s expired", s.ID())
-		}
-		return nil
-	}); err != nil {
+	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
+	if err := l.storage.Update(ctx, &session{id: s.ID(), exp: exp}); err != nil {
 		return err
 	}
 
@@ -149,9 +121,9 @@ WHERE session_id = $2 RETURNING session_id`,
 }
 
 func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
+	t := timeutil.NewTimer()
+	t.Reset(0)
 	for {
-		t := timeutil.NewTimer()
-		t.Reset(0)
 		select {
 		case <-ctx.Done():
 			return
@@ -159,20 +131,15 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			t.Reset(l.hb())
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
 				MaxBackoff:     2 * time.Second,
 				Multiplier:     1.5,
+				Closer:         l.stopper.ShouldStop(),
 			}
 			everySecond := log.Every(time.Second)
 			if s, _ := l.getSessionOrBlockCh(); s == nil {
 				for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-					select {
-					case <-l.stopper.ShouldStop():
-						return
-					default:
-					}
 					newSession, err := l.createSession(ctx)
 					if err != nil {
 						if everySecond.ShouldLog() {
@@ -180,31 +147,36 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 						}
 						continue
 					}
+					if log.V(2) {
+						log.Infof(ctx, "Created new SQL liveness session %s", newSession.ID())
+					}
 					l.setSession(newSession)
 					break
 				}
 			} else {
-				opts.MaxRetries = 5
+				opts.MaxRetries = DefaultMaxRetriesToExtend
 				var err error
 				for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-					select {
-					// Finish immediately in tests instead of waiting for the retry.;w
-					case <-l.stopper.ShouldStop():
-						return
-					default:
-					}
 					if err = l.extendSession(ctx); err != nil {
+						if log.V(2) {
+							log.Infof(ctx, "Could not extend SQL liveness session %s", s.ID())
+						}
 						continue
 					}
 					break
 				}
 				if err != nil {
-					log.Error(ctx, err.Error())
+					log.Errorf(ctx, "Could not extend session %s: %v", s.ID(), err.Error())
 					l.clearSession()
 					// Start next loop iteration immediately to insert a new session.
 					t.Reset(0)
+					continue
+				}
+				if log.V(2) {
+					log.Infof(ctx, "Extended SQL liveness session %s", s.ID())
 				}
 			}
+			t.Reset(l.hb())
 		}
 	}
 }
@@ -212,14 +184,10 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 // NewSqlInstance returns a new SQLInstance struct and starts its heartbeating
 // loop.
 func NewSqlInstance(
-	stopper *stop.Stopper,
-	clock *hlc.Clock,
-	db *kv.DB,
-	ex sqlutil.InternalExecutor,
-	settings *cluster.Settings,
+	stopper *stop.Stopper, clock *hlc.Clock, storage sqlliveness.Storage, settings *cluster.Settings,
 ) sqlliveness.SQLInstance {
 	l := &SQLInstance{
-		clock: clock, db: db, ex: ex, stopper: stopper,
+		clock: clock, storage: storage, stopper: stopper,
 		ttl: func() time.Duration {
 			return DefaultTTL.Get(&settings.SV)
 		},

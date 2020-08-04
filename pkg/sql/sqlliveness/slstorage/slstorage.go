@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var defaultGCInterval = settings.RegisterNonNegativeDurationSetting(
+var DefaultGCInterval = settings.RegisterNonNegativeDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	time.Second,
@@ -59,7 +59,7 @@ func NewStorage(
 	s := &Storage{
 		stopper: stopper, clock: clock, db: db, ex: ie,
 		gcInterval: func() time.Duration {
-			return defaultGCInterval.Get(&settings.SV)
+			return DefaultGCInterval.Get(&settings.SV)
 		},
 	}
 	s.stopper.RunWorker(ctx, s.deleteSessions)
@@ -83,9 +83,9 @@ SELECT session_id FROM system.sqlliveness WHERE session_id = $1`, sid,
 }
 
 func (s *Storage) deleteSessions(ctx context.Context) {
+	t := timeutil.NewTimer()
+	t.Reset(0)
 	for {
-		t := timeutil.NewTimer()
-		t.Reset(0)
 		select {
 		case <-s.stopper.ShouldStop():
 			return
@@ -93,10 +93,9 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			t.Reset(s.gcInterval())
 			now := s.clock.Now()
 			var n int
-			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				rows, err := s.ex.QueryRow(
 					ctx, "delete-sessions", txn,
 					`DELETE FROM system.sqlliveness WHERE expiration < $1 RETURNING session_id`,
@@ -104,7 +103,9 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 				)
 				n = len(rows)
 				return err
-			}); err != nil {
+			})
+			t.Reset(s.gcInterval())
+			if err != nil {
 				log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
 				continue
 			}
@@ -113,4 +114,38 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := s.ex.QueryRow(
+			ctx, "insert-session", txn,
+			`INSERT INTO system.sqlliveness VALUES ($1, $2)`,
+			session.ID(), tree.TimestampToDecimal(session.Expiration()),
+		)
+		return err
+	}); err != nil {
+		return errors.Wrapf(err, "Could not insert session %s", session.ID())
+	}
+	return nil
+}
+
+func (s *Storage) Update(ctx context.Context, session sqlliveness.Session) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		data, err := s.ex.QueryRow(
+			ctx, "update-session", txn, `
+UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
+			tree.TimestampToDecimal(session.Expiration()), session.ID(),
+		)
+		if err != nil {
+			return errors.Wrapf(err, "Could not update session %s", session.ID())
+		}
+		if sessionExpired := data == nil; sessionExpired {
+			return errors.Errorf("Session %s does not exist", session.ID())
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
 }
