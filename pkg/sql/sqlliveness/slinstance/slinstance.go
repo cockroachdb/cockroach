@@ -18,14 +18,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -50,12 +45,12 @@ var (
 )
 
 type session struct {
-	sid sqlliveness.SessionID
+	id  sqlliveness.SessionID
 	exp hlc.Timestamp
 }
 
 // ID implements the Session interface method ID.
-func (s *session) ID() sqlliveness.SessionID { return s.sid }
+func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the Session interface method Expiration.
 func (s *session) Expiration() hlc.Timestamp { return s.exp }
@@ -66,9 +61,8 @@ func (s *session) Expiration() hlc.Timestamp { return s.exp }
 // to replace a session that has expired and deleted from the table.
 type SQLInstance struct {
 	clock   *hlc.Clock
-	db      *kv.DB
-	ex      sqlutil.InternalExecutor
 	stopper *stop.Stopper
+	storage sqlliveness.Storage
 	ttl     func() time.Duration
 	hb      func() time.Duration
 	mu      struct {
@@ -78,7 +72,7 @@ type SQLInstance struct {
 	}
 }
 
-func (l *SQLInstance) getSessionOrBlockCh() (sqlliveness.Session, chan struct{}) {
+func (l *SQLInstance) getSessionOrBlockCh() (*session, chan struct{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.s != nil {
@@ -102,56 +96,79 @@ func (l *SQLInstance) clearSession() {
 	l.mu.blockCh = make(chan struct{})
 }
 
+// createSession tries until it can create a new session and returns an error
+// only if the heart beat loop should exit.
 func (l *SQLInstance) createSession(ctx context.Context) (*session, error) {
 	id := uuid.MakeV4().GetBytes()
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := l.ex.QueryRowEx(
-			ctx, "create-session", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`INSERT INTO system.sqlliveness VALUES ($1, $2)`,
-			id, tree.TimestampToDecimal(exp),
-		)
-		return err
-	}); err != nil {
-		return nil, errors.Wrapf(err, "Could not create new liveness session")
+	s := &session{id: id, exp: exp}
+
+	opts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     2 * time.Second,
+		Multiplier:     1.5,
+		Closer:         l.stopper.ShouldStop(),
 	}
-	return &session{sid: id, exp: exp}, nil
+	everySecond := log.Every(time.Second)
+	var err error
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err = l.storage.Insert(ctx, s); err != nil {
+			if ctx.Err() != nil {
+				err = errors.Wrap(err, ctx.Err().Error())
+				break
+			}
+			if everySecond.ShouldLog() {
+				log.Error(ctx, err.Error())
+			}
+			continue
+		}
+		break
+	}
+	if err != nil {
+		return nil, err
+	}
+	log.Infof(ctx, "Created new SQL liveness session %s", s.ID())
+	return s, nil
 }
 
-func (l *SQLInstance) extendSession(ctx context.Context) error {
-	s, _ := l.getSessionOrBlockCh()
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 1)
-	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		data, err := l.ex.QueryRowEx(
-			ctx, "extend-session", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
-UPDATE system.sqlliveness SET expiration = $1
-WHERE session_id = $2 RETURNING session_id`,
-			tree.TimestampToDecimal(exp), s.ID(),
-		)
-		if err != nil {
-			return errors.Wrapf(err, "Could not extend session: %s with expiration: %+v",
-				s.ID(), s.Expiration())
+func (l *SQLInstance) extendSession(ctx context.Context, s sqlliveness.Session) (bool, error) {
+	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
+
+	opts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     2 * time.Second,
+		Multiplier:     1.5,
+		Closer:         l.stopper.ShouldStop(),
+	}
+	var err error
+	var found bool
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if found, err = l.storage.Update(ctx, &session{id: s.ID(), exp: exp}); err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+			continue
 		}
-		if sessionExpired := data == nil; sessionExpired {
-			return errors.Errorf("Session %s expired", s.ID())
-		}
-		return nil
-	}); err != nil {
-		return err
+		break
+	}
+	if err != nil {
+		return false, err
+	}
+
+	if !found {
+		return false, nil
 	}
 
 	l.mu.Lock()
 	l.mu.s.exp = exp
 	l.mu.Unlock()
-	return nil
+	return true, nil
 }
 
 func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
+	t := timeutil.NewTimer()
+	t.Reset(0)
 	for {
-		t := timeutil.NewTimer()
-		t.Reset(0)
 		select {
 		case <-ctx.Done():
 			return
@@ -159,52 +176,33 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			t.Reset(l.hb())
-			opts := retry.Options{
-				InitialBackoff: 10 * time.Millisecond,
-				MaxBackoff:     2 * time.Second,
-				Multiplier:     1.5,
-			}
-			everySecond := log.Every(time.Second)
-			if s, _ := l.getSessionOrBlockCh(); s == nil {
-				for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-					select {
-					case <-l.stopper.ShouldStop():
-						return
-					default:
-					}
-					newSession, err := l.createSession(ctx)
-					if err != nil {
-						if everySecond.ShouldLog() {
-							log.Error(ctx, err.Error())
-						}
-						continue
-					}
-					l.setSession(newSession)
-					break
-				}
-			} else {
-				opts.MaxRetries = 5
-				var err error
-				for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-					select {
-					// Finish immediately in tests instead of waiting for the retry.;w
-					case <-l.stopper.ShouldStop():
-						return
-					default:
-					}
-					if err = l.extendSession(ctx); err != nil {
-						continue
-					}
-					break
-				}
+			s, _ := l.getSessionOrBlockCh()
+			if s == nil {
+				newSession, err := l.createSession(ctx)
 				if err != nil {
-					log.Error(ctx, err.Error())
-					l.clearSession()
-					// Start next loop iteration immediately to insert a new session.
-					t.Reset(0)
+					log.Errorf(ctx, "Exiting from heartbeat loop: %v", err)
+					return
 				}
+				l.setSession(newSession)
+				t.Reset(l.hb())
+				continue
 			}
+			found, err := l.extendSession(ctx, s)
+			if err != nil {
+				log.Errorf(ctx, "Exiting from heartbeat loop: %v", err)
+				l.clearSession()
+				return
+			}
+			if !found {
+				l.clearSession()
+				// Start next loop iteration immediately to insert a new session.
+				t.Reset(0)
+				continue
+			}
+			if log.V(2) {
+				log.Infof(ctx, "Extended SQL liveness session %s", s.ID())
+			}
+			t.Reset(l.hb())
 		}
 	}
 }
@@ -212,14 +210,10 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 // NewSqlInstance returns a new SQLInstance struct and starts its heartbeating
 // loop.
 func NewSqlInstance(
-	stopper *stop.Stopper,
-	clock *hlc.Clock,
-	db *kv.DB,
-	ex sqlutil.InternalExecutor,
-	settings *cluster.Settings,
+	stopper *stop.Stopper, clock *hlc.Clock, storage sqlliveness.Storage, settings *cluster.Settings,
 ) sqlliveness.SQLInstance {
 	l := &SQLInstance{
-		clock: clock, db: db, ex: ex, stopper: stopper,
+		clock: clock, storage: storage, stopper: stopper,
 		ttl: func() time.Duration {
 			return DefaultTTL.Get(&settings.SV)
 		},
@@ -231,8 +225,9 @@ func NewSqlInstance(
 	return l
 }
 
-// Start starts the hearbeat loop.
+// Start runs the hearbeat loop.
 func (l *SQLInstance) Start(ctx context.Context) {
+	l.storage.Start(ctx)
 	l.stopper.RunWorker(ctx, l.heartbeatLoop)
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,7 +85,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	// Disable leniency for instant expiration
 	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
 	const cancelInterval = time.Duration(math.MaxInt64)
-	const adoptInterval = time.Nanosecond
+	const adoptInterval = time.Microsecond
 	slinstance.DefaultTTL.Override(&s.ClusterSettings().SV, 2*adoptInterval)
 	slinstance.DefaultHeartBeat.Override(&s.ClusterSettings().SV, adoptInterval)
 
@@ -96,10 +97,10 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		c.Set(ctx, id)
 		idContainer := base.NewSQLIDContainer(0, &c, true /* exposed */)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
-		sqlInstance := slinstance.NewSqlInstance(
-			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
-			s.ClusterSettings(),
+		sqlStorage := slstorage.NewStorage(
+			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor), s.ClusterSettings(),
 		)
+		sqlInstance := slinstance.NewSqlInstance(s.Stopper(), clock, sqlStorage, s.ClusterSettings())
 		r := jobs.MakeRegistry(
 			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db,
 			s.InternalExecutor().(sqlutil.InternalExecutor), idContainer, sqlInstance,

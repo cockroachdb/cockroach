@@ -59,6 +59,15 @@ type Session interface {
 
 // Storage abstracts over the set of sessions in the cluster.
 type Storage interface {
+	// Start runs the storage service.
+	Start(ctx context.Context)
+
+	// Insert stores the input Session.
+	Insert(context.Context, Session) error
+	// Update looks for a Session with the same SessionID as the input Session in
+	// the storage and if found replaces it with the input returning true.
+	// Otherwise it returns false to indicate that the session does not exist.
+	Update(context.Context, Session) (bool, error)
 	// IsAlive is used to query the liveness of a Session typically by another
 	// SQLInstance that is attempting to claim expired resources.
 	IsAlive(context.Context, *kv.Txn, SessionID) (alive bool, err error)

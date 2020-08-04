@@ -482,7 +482,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
-			log.Fatalf(ctx, "job %d: was just created but foun din registered adopted jobs", *j.ID())
+			log.Fatalf(ctx, "job %d: was just created but found in registered adopted jobs", *j.ID())
 		}
 		s, err := r.sqlInstance.Session(ctx)
 		if err != nil {
