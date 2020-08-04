@@ -132,9 +132,7 @@ func (b *Bytes) Set(i int, v []byte) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	b.maybeBackfillOffsets(i)
-	b.data = b.data[:b.offsets[i]]
-	b.offsets[i] = int32(len(b.data))
-	b.data = append(b.data, v...)
+	b.data = append(b.data[:b.offsets[i]], v...)
 	b.offsets[i+1] = int32(len(b.data))
 	b.maxSetIndex = i
 }
@@ -304,9 +302,9 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	b.maybeBackfillOffsets(destIdx)
 	toAppend := srcEndIdx - srcStartIdx
 	if toAppend == 0 {
-		b.maxSetIndex = destIdx + (toAppend - 1)
-		if destIdx == b.Len() {
-			return
+		// We're simply slicing up to destIdx (exclusive).
+		if b.maxSetIndex > destIdx {
+			b.maxSetIndex = destIdx - 1
 		}
 		b.data = b.data[:b.offsets[destIdx]]
 		b.offsets = b.offsets[:destIdx+1]
@@ -348,9 +346,8 @@ func (b *Bytes) AppendVal(v []byte) {
 		panic("AppendVal is called on a window into Bytes")
 	}
 	b.maybeBackfillOffsets(b.Len())
+	b.data = append(b.data[:b.offsets[b.Len()]], v...)
 	b.maxSetIndex = b.Len()
-	b.offsets[b.Len()] = int32(len(b.data))
-	b.data = append(b.data, v...)
 	b.offsets = append(b.offsets, int32(len(b.data)))
 }
 
@@ -386,7 +383,7 @@ func (b *Bytes) ProportionalSize(n int64) uintptr {
 	return FlatBytesOverhead + uintptr(len(b.data[:b.offsets[n]])) + uintptr(n)*sizeOfInt32
 }
 
-var zeroInt32Slice = make([]int32, BatchSize())
+var zeroInt32Slice = make([]int32, BytesInitialAllocationFactor*BatchSize())
 
 // Reset resets the underlying Bytes for reuse. Note that this zeroes out the
 // underlying bytes but doesn't change the length (see #42054 for the
