@@ -48,7 +48,7 @@ gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
 # NB: tar usually stops reading as soon as it sees an empty block but that makes
 # curl unhappy, so passing `i` will cause it to read to the end.
 curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach build/deploy/cockroach
+cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 
 docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
