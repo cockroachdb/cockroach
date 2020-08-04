@@ -294,6 +294,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return z.createJSONOrError(r.pathName+".json", data, err)
 	}
 
+	// NB: we intentionally omit liveness since it's already pulled manually (we
+	// act on the output to special case decommissioned nodes).
 	for _, r := range []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -306,12 +308,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			},
 			pathName: rangelogName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Liveness(ctx, &serverpb.LivenessRequest{})
-			},
-			pathName: livenessName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -371,7 +367,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			lresponse, err = admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if cErr := z.createJSONOrError(base+"/liveness.json", nodes, err); cErr != nil {
+		if cErr := z.createJSONOrError(livenessName+".json", nodes, err); cErr != nil {
 			return cErr
 		}
 		livenessByNodeID := map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{}
