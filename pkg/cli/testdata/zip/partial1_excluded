@@ -8,7 +8,6 @@ using SQL connection URL: postgresql://...
 writing /dev/null
 requesting data for debug/events... writing: debug/events.json
 requesting data for debug/rangelog... writing: debug/rangelog.json
-requesting data for debug/liveness... writing: debug/liveness.json
 requesting data for debug/settings... writing: debug/settings.json
 requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
