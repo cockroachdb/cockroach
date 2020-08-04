@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -553,6 +554,17 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *kv.Txn) er
 	})
 }
 
+func (j *Job) maybeNotifyScheduledJobCompletion(
+	ctx context.Context, md *JobMetadata, txn *kv.Txn,
+) error {
+	if j.createdBy != nil && j.createdBy.Name == CreatedByScheduledJobs {
+		return NotifyJobTermination(
+			ctx, scheduledjobs.ProdJobSchedulerEnv, md,
+			j.createdBy.ID, j.registry.ex, txn)
+	}
+	return nil
+}
+
 // Failed marks the tracked job as having failed with the given error.
 func (j *Job) failed(
 	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
@@ -572,7 +584,7 @@ func (j *Job) failed(
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
-		return nil
+		return j.maybeNotifyScheduledJobCompletion(ctx, &md, txn)
 	})
 }
 
@@ -598,7 +610,7 @@ func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) e
 			FractionCompleted: 1.0,
 		}
 		ju.UpdateProgress(md.Progress)
-		return nil
+		return j.maybeNotifyScheduledJobCompletion(ctx, &md, txn)
 	})
 }
 
