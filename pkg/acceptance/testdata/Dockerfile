@@ -124,6 +124,9 @@ RUN xmlstarlet ed --inplace \
 RUN (cd /testdata/node && yarn install && mv node_modules /usr/lib/node) \
  && apt-get purge --yes yarn
 
+ENV MIX_HOME=/opt/mix
+RUN (cd /testdata/elixir/test_crdb && mix local.hex --force && mix deps.get && cp -R deps /opt/mix/deps)
+
 RUN apt-get purge --yes \
     curl \
     xmlstarlet \

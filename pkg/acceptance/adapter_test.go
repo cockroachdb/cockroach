@@ -60,8 +60,8 @@ func TestDockerElixir(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
-	testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
+	testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && cp -R /opt/mix/deps . && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
+	testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && cp -R /opt/mix/deps . && mix thisshouldfail"})
 }
 
 func TestDockerNodeJS(t *testing.T) {

@@ -58,7 +58,7 @@ func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []str
 const (
 	// Iterating against a locally built version of the docker image can be done
 	// by changing acceptanceImage to the hash of the container.
-	acceptanceImage = "docker.io/cockroachdb/acceptance:20200303-091324"
+	acceptanceImage = "docker.io/cockroachdb/acceptance:20200804-131910"
 )
 
 func testDocker(
