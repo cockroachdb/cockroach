@@ -39,7 +39,7 @@ Existing roachers deploying with the default secure mode will find that they hav
 This will be a user opaque token that can be requested by a cluster operator from any online node and supplied to a fresh unprovisioned node to join it to the cluster.
 
 A `join-token` must contain a means to
- - Confirm the identity of the server (certificate public key fingerprint, plus host)
+ - Confirm the identity of the server (certificate public key fingerprint, plus explicit verification of shared secret)
  - Identify the joining node (shared secret)
  - Establish token uniqueness (for auditing and to avoid reuse)
  - Expire (hygiene)
@@ -63,11 +63,40 @@ My earlier hypothesis did not hold and it looks like the existing init path woul
 
 #### In the case of “joining a cluster”
 
-Upon launch:
-- The new node will be provided a `join-token` containing the hostname of the surrogate node (node that generated the join token) and will attempt to connect to, authenticate, validate, and provision itself from the surrogate.
-- The surrogate will then generate a new node certificate for the joining node and return it as part of a provisioning bundle. The bundle will also include the internode CA (public and private keys), the user certificate CA (if present) and any other initialization information.
-- The surrogate will make the `join-token` as consumed in the cluster registry to avoid reuse.
+**Preparation:**
+Any existing node may be used to generate a `join-token` if the user has appropriate permisisons (let us assume these will be the same as current requirement for adding nodes).
+On existing node:
+- A user or operator invokes a new token request.
+- The node (called the surogate from here forward) generates a token of of the form:
+`<token-uuid>|<surogate-node-ca-public-key-fingerprint>|<shared-secret>|<expiration>`
+- The surogate will place the token in a `join-token`'s table where it's `token-uuid` and `expiration` are noted
+- The new `join-token` is returned to the invoker
+
+**Upon new node launch:**
+- The new node will be provided a `join-token` and the hostname(s) of any active node(s).
+- The new node will attempt to connect to a supplied hostname and upon success will attemp to validate the existing node ("server" from here foreward) through the following two steps:
+    1. Check that the provided certificate of the host was signed by a CA with the expected fingerprint
+    2. Send its `join-token` `token-uuid` and a random plaintext `server-challenge` to the host
+        - The host will:
+            - Look up the token associated with this `token-uuid`
+            - Generate an HMAC using the `server-challenge` and the `shared-secret` contained in the `join-token` with the specified `token-uuid`
+            - Return this HMAC via the existing TLS connection. The server will also return it's own plaintext `node-challenge` for node validation in a later step.**
+- Once the node has validated the server it will perform the same form of HMAC using the `shared-secret` and the server's `node-challenge`. It will present this HMAC to the server as proof that it posesses a valid join token.
+- The server will then generate a new node certificate for the joining node and return it as part of a provisioning bundle. The bundle will also include the internode CA (public and private keys), the user certificate CA (if present) and any other initialization information.
+- The server will mark the `join-token` as consumed in the cluster registry to avoid reuse.
 - The joining node may then use its valid node certificate and gossip to align itself with the rest of the cluster.
+
+** Before checking for `token-uuid` presence in the `join-token`'s table the system checks expiration for all unexpired `join-token`s then proceeds to check node supplied `token-uuid` against available valid tokens. It is expected that this is an infrequent operation and a sparse table allowing us to bear this pruning cost on access as opposed to as part of scheduled maintainence. This check should also probably be atomic to avoid potential pruning races. This pruning process should probably also log and remove expired tokens to keep the table small. 
+
+#### Kubernetes considerations
+Due to the way that Kubernets manages resources, the above approach may result in state brittleness or unncessary complexity. We examine potential patterns to support this below:
+
+##### Startup
+TODO
+
+##### Add/Remove nodes
+TODO
+
 
 ### Success monitoring
 
