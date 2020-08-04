@@ -149,11 +149,6 @@ func (desc *ImmutableSchemaDescriptor) Adding() bool {
 	return false
 }
 
-// Dropped implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) Dropped() bool {
-	return false
-}
-
 // Offline implements the Descriptor interface.
 func (desc *ImmutableSchemaDescriptor) Offline() bool {
 	return false
