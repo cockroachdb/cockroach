@@ -2142,34 +2142,36 @@ project
  │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    │    ├── key: (1,5,6,9-11)
  │    │    │    │    │    ├── fd: (1)-->(2,3), (5,6)-->(7), (9-11)-->(12), (14)-->(15-17), (1,5,6,9-11)-->(14-17)
- │    │    │    │    │    ├── left-join (hash)
+ │    │    │    │    │    ├── left-join (merge)
  │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:5 orders1_.ordernumber:6 orderdate:7 lineitems2_.customerid:9 lineitems2_.ordernumber:10 lineitems2_.productid:11 lineitems2_.quantity:12
+ │    │    │    │    │    │    ├── left ordering: +1
+ │    │    │    │    │    │    ├── right ordering: +5
  │    │    │    │    │    │    ├── key: (1,5,6,9-11)
  │    │    │    │    │    │    ├── fd: (1)-->(2,3), (5,6)-->(7), (9-11)-->(12)
+ │    │    │    │    │    │    ├── scan customer0_
+ │    │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null
+ │    │    │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    │    │    │    │    └── ordering: +1
  │    │    │    │    │    │    ├── left-join (merge)
- │    │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null orders1_.customerid:5 orders1_.ordernumber:6 orderdate:7
- │    │    │    │    │    │    │    ├── left ordering: +1
- │    │    │    │    │    │    │    ├── right ordering: +5
- │    │    │    │    │    │    │    ├── key: (1,5,6)
- │    │    │    │    │    │    │    ├── fd: (1)-->(2,3), (5,6)-->(7)
- │    │    │    │    │    │    │    ├── scan customer0_
- │    │    │    │    │    │    │    │    ├── columns: customer0_.customerid:1!null name:2!null address:3!null
- │    │    │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    │    │    ├── fd: (1)-->(2,3)
- │    │    │    │    │    │    │    │    └── ordering: +1
+ │    │    │    │    │    │    │    ├── columns: orders1_.customerid:5!null orders1_.ordernumber:6!null orderdate:7!null lineitems2_.customerid:9 lineitems2_.ordernumber:10 lineitems2_.productid:11 lineitems2_.quantity:12
+ │    │    │    │    │    │    │    ├── left ordering: +5,+6
+ │    │    │    │    │    │    │    ├── right ordering: +9,+10
+ │    │    │    │    │    │    │    ├── key: (5,6,9-11)
+ │    │    │    │    │    │    │    ├── fd: (5,6)-->(7), (9-11)-->(12)
+ │    │    │    │    │    │    │    ├── ordering: +5
  │    │    │    │    │    │    │    ├── scan orders1_
  │    │    │    │    │    │    │    │    ├── columns: orders1_.customerid:5!null orders1_.ordernumber:6!null orderdate:7!null
  │    │    │    │    │    │    │    │    ├── key: (5,6)
  │    │    │    │    │    │    │    │    ├── fd: (5,6)-->(7)
- │    │    │    │    │    │    │    │    └── ordering: +5
+ │    │    │    │    │    │    │    │    └── ordering: +5,+6
+ │    │    │    │    │    │    │    ├── scan lineitems2_
+ │    │    │    │    │    │    │    │    ├── columns: lineitems2_.customerid:9!null lineitems2_.ordernumber:10!null lineitems2_.productid:11!null lineitems2_.quantity:12
+ │    │    │    │    │    │    │    │    ├── key: (9-11)
+ │    │    │    │    │    │    │    │    ├── fd: (9-11)-->(12)
+ │    │    │    │    │    │    │    │    └── ordering: +9,+10
  │    │    │    │    │    │    │    └── filters (true)
- │    │    │    │    │    │    ├── scan lineitems2_
- │    │    │    │    │    │    │    ├── columns: lineitems2_.customerid:9!null lineitems2_.ordernumber:10!null lineitems2_.productid:11!null lineitems2_.quantity:12
- │    │    │    │    │    │    │    ├── key: (9-11)
- │    │    │    │    │    │    │    └── fd: (9-11)-->(12)
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         ├── orders1_.customerid:5 = lineitems2_.customerid:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
- │    │    │    │    │    │         └── orders1_.ordernumber:6 = lineitems2_.ordernumber:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+ │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    ├── scan product3_
  │    │    │    │    │    │    ├── columns: product3_.productid:14!null product3_.description:15!null product3_.cost:16 product3_.numberavailable:17
  │    │    │    │    │    │    ├── key: (14)
