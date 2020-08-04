@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as  React from "react";
+import * as React from "react";
 import { default as AntTable, ColumnProps } from "antd/es/table";
 import ConfigProvider from "antd/es/config-provider";
 
@@ -27,9 +27,7 @@ export interface TableProps<T> {
 }
 
 const customizeRenderEmpty = (text: string) => () => (
-  <div className="empty-table__message">
-    {text}
-  </div>
+  <div className="empty-table__message">{text}</div>
 );
 
 Table.defaultProps = {
@@ -39,17 +37,24 @@ Table.defaultProps = {
 };
 
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource, noDataMessage, tableLayout, pageSize, className } = props;
+  const {
+    columns,
+    dataSource,
+    noDataMessage,
+    tableLayout,
+    pageSize,
+    className,
+  } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
-    <AntTable<T>
-      className={`crl-table-wrapper ${className}`}
-      columns={columns}
-      dataSource={dataSource}
-      expandRowByClick
-      tableLayout={tableLayout}
-      pagination={{hideOnSinglePage: true, pageSize }}
-    />
+      <AntTable<T>
+        className={`crl-table-wrapper ${className}`}
+        columns={columns}
+        dataSource={dataSource}
+        expandRowByClick
+        tableLayout={tableLayout}
+        pagination={{ hideOnSinglePage: true, pageSize }}
+      />
     </ConfigProvider>
   );
 }

@@ -77,7 +77,9 @@ export const getTimeRangeTitle = (
   currentScale: timewindow.TimeScale,
 ) => {
   if (currentScale.key === "Custom" && currentWindow) {
-    const isSameStartDay = moment.utc(currentWindow.start).isSame(moment(), "day");
+    const isSameStartDay = moment
+      .utc(currentWindow.start)
+      .isSame(moment(), "day");
     const isSameEndDay = moment.utc(currentWindow.end).isSame(moment(), "day");
     return {
       dateStart: isSameStartDay

@@ -9,13 +9,16 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {JobStatusBadge, ProgressBar} from "src/views/jobs/progressBar";
-import {Duration} from "src/views/jobs/duration";
+import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
+import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {cockroach} from "src/js/protos";
-import {JobStatusVisual, jobToVisual} from "src/views/jobs/jobStatusOptions";
+import { cockroach } from "src/js/protos";
+import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
 
-export class JobStatus extends React.PureComponent<{ job: Job, lineWidth?: number }> {
+export class JobStatus extends React.PureComponent<{
+  job: Job;
+  lineWidth?: number;
+}> {
   render() {
     const visualType = jobToVisual(this.props.job);
 
@@ -27,16 +30,20 @@ export class JobStatus extends React.PureComponent<{ job: Job, lineWidth?: numbe
           <div>
             <JobStatusBadge jobStatus={this.props.job.status} />
             <span className="jobs-table__duration">
-              <Duration job={this.props.job}/>
+              <Duration job={this.props.job} />
             </span>
           </div>
         );
       case JobStatusVisual.ProgressBarWithDuration:
         return (
           <div>
-            <ProgressBar job={this.props.job} lineWidth={this.props.lineWidth || 11} showPercentage={true}/>
+            <ProgressBar
+              job={this.props.job}
+              lineWidth={this.props.lineWidth || 11}
+              showPercentage={true}
+            />
             <span className="jobs-table__duration">
-              <Duration job={this.props.job}/>
+              <Duration job={this.props.job} />
             </span>
           </div>
         );

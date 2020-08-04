@@ -14,14 +14,14 @@ import Timeoutable = Cypress.Timeoutable;
 import Withinable = Cypress.Withinable;
 import { addMatchImageSnapshotCommand } from "cypress-image-snapshot/command";
 
-Cypress.Commands.add("decommissionNode", (nodeId: number, wait: boolean = false) => {
+Cypress.Commands.add("decommissionNode", (nodeId: number, wait = false) => {
   Cypress.log({
     displayName: "DECOMMISSION NODE",
     message: [`NodeID: ${nodeId}`],
   });
   const $exec = cy.exec(
-  `make decommission-node NODE_ID=${nodeId} -C ./cypress`,
-  { log: false, timeout: TIME_UNTIL_NODE_DEAD },
+    `make decommission-node NODE_ID=${nodeId} -C ./cypress`,
+    { log: false, timeout: TIME_UNTIL_NODE_DEAD },
   );
   return wait ? cy.wait(TIME_UNTIL_NODE_DEAD) : $exec;
 });
@@ -31,10 +31,10 @@ Cypress.Commands.add("stopNode", (nodeId: number) => {
     displayName: "STOP NODE",
     message: [`NodeID: ${nodeId}`],
   });
-  const $exec = cy.exec(
-  `make stop-node NODE_ID=${nodeId} -C ./cypress`,
-  { log: false, timeout: TIME_UNTIL_NODE_DEAD },
-  );
+  const $exec = cy.exec(`make stop-node NODE_ID=${nodeId} -C ./cypress`, {
+    log: false,
+    timeout: TIME_UNTIL_NODE_DEAD,
+  });
   return $exec;
 });
 
@@ -50,24 +50,30 @@ Cypress.Commands.add("teardown", () => {
     displayName: "Teardown",
     message: [`Stop all nodes`],
   });
-  return cy.exec(`make teardown -C ./cypress`, { log: false, failOnNonZeroExit: false });
+  return cy.exec(`make teardown -C ./cypress`, {
+    log: false,
+    failOnNonZeroExit: false,
+  });
 });
 
-type CommandOptions =  Partial<Loggable & Timeoutable & Withinable>;
+type CommandOptions = Partial<Loggable & Timeoutable & Withinable>;
 
 // Override default GET function to provide custom message for logging
-Cypress.Commands.overwrite("get", (originalFn: typeof cy.get, selector: string, options?: CommandOptions) => {
-  const log = options?.log || true;
-  const logMessage = options?.logMessage || selector;
+Cypress.Commands.overwrite(
+  "get",
+  (originalFn: typeof cy.get, selector: string, options?: CommandOptions) => {
+    const log = options?.log || true;
+    const logMessage = options?.logMessage || selector;
 
-  if (log) {
-    Cypress.log({
-      displayName: "GET",
-      message: [logMessage],
-    });
-  }
-  return originalFn(selector, { log: false });
-});
+    if (log) {
+      Cypress.log({
+        displayName: "GET",
+        message: [logMessage],
+      });
+    }
+    return originalFn(selector, { log: false });
+  },
+);
 
 addMatchImageSnapshotCommand("matchImageSnapshot", {
   capture: "fullPage",

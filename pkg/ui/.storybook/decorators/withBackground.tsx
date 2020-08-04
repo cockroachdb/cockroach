@@ -9,10 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {RenderFunction} from "storybook__react";
+import { RenderFunction } from "storybook__react";
 
-export const withBackgroundFactory = (backgroundColor = "#F5F7FA") => (storyFn: RenderFunction) => (
-  <div style={{backgroundColor}}>
-    {storyFn()}
-  </div>
-);
+export const withBackgroundFactory = (backgroundColor = "#F5F7FA") => (
+  storyFn: RenderFunction,
+) => <div style={{ backgroundColor }}>{storyFn()}</div>;

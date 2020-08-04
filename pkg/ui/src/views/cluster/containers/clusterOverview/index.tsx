@@ -24,7 +24,16 @@ import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
-import { UsedCapacityTooltip, UsableCapacityTooltip, LiveNodesTooltip, SuspectNodesTooltip, DeadNodesTooltip, TotalRangesTooltip, UnderReplicatedRangesTooltip, UnavailableRangesTooltip } from "./tooltips";
+import {
+  UsedCapacityTooltip,
+  UsableCapacityTooltip,
+  LiveNodesTooltip,
+  SuspectNodesTooltip,
+  DeadNodesTooltip,
+  TotalRangesTooltip,
+  UnderReplicatedRangesTooltip,
+  UnavailableRangesTooltip,
+} from "./tooltips";
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -38,26 +47,41 @@ const formatPercentage = d3.format("0.1%");
 
 function renderCapacityUsage(props: CapacityUsageProps) {
   const { usedCapacity, usableCapacity } = props;
-  const usedPercentage = usableCapacity !== 0 ? usedCapacity / usableCapacity : 0;
+  const usedPercentage =
+    usableCapacity !== 0 ? usedCapacity / usableCapacity : 0;
   return [
     <h3 className="capacity-usage cluster-summary__title">Capacity Usage</h3>,
-    <div className="capacity-usage cluster-summary__label storage-percent">Used<br />Percent</div>,
-    <div className="capacity-usage cluster-summary__metric storage-percent">{ formatPercentage(usedPercentage) }</div>,
+    <div className="capacity-usage cluster-summary__label storage-percent">
+      Used
+      <br />
+      Percent
+    </div>,
+    <div className="capacity-usage cluster-summary__metric storage-percent">
+      {formatPercentage(usedPercentage)}
+    </div>,
     <div className="capacity-usage cluster-summary__chart">
       <CapacityChart used={usedCapacity} usable={usableCapacity} />
     </div>,
     <div className="capacity-usage cluster-summary__label storage-used">
       <UsedCapacityTooltip>
-        Used<br />Capacity
+        Used
+        <br />
+        Capacity
       </UsedCapacityTooltip>
     </div>,
-    <div className="capacity-usage cluster-summary__metric storage-used">{ formatBytes(usedCapacity) }</div>,
+    <div className="capacity-usage cluster-summary__metric storage-used">
+      {formatBytes(usedCapacity)}
+    </div>,
     <div className="capacity-usage cluster-summary__label storage-usable">
       <UsableCapacityTooltip>
-        Usable<br />Capacity
+        Usable
+        <br />
+        Capacity
       </UsableCapacityTooltip>
     </div>,
-    <div className="capacity-usage cluster-summary__metric storage-usable">{ formatBytes(usableCapacity) }</div>,
+    <div className="capacity-usage cluster-summary__metric storage-usable">
+      {formatBytes(usableCapacity)}
+    </div>,
   ];
 }
 
@@ -85,8 +109,8 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     "cluster-summary__metric",
     "suspect-nodes",
     {
-      "warning": suspectNodes > 0,
-      "disabled": suspectNodes === 0,
+      warning: suspectNodes > 0,
+      disabled: suspectNodes === 0,
     },
   );
   const deadClasses = classNames(
@@ -94,28 +118,36 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     "cluster-summary__metric",
     "dead-nodes",
     {
-      "alert": deadNodes > 0,
-      "disabled": deadNodes === 0,
+      alert: deadNodes > 0,
+      disabled: deadNodes === 0,
     },
   );
   return [
     <h3 className="node-liveness cluster-summary__title">Node Status</h3>,
-    <div className="node-liveness cluster-summary__metric live-nodes">{ liveNodes }</div>,
+    <div className="node-liveness cluster-summary__metric live-nodes">
+      {liveNodes}
+    </div>,
     <div className="node-liveness cluster-summary__label live-nodes">
       <LiveNodesTooltip>
-        Live<br />Nodes
+        Live
+        <br />
+        Nodes
       </LiveNodesTooltip>
     </div>,
-    <div className={suspectClasses}>{ suspectNodes }</div>,
+    <div className={suspectClasses}>{suspectNodes}</div>,
     <div className="node-liveness cluster-summary__label suspect-nodes">
       <SuspectNodesTooltip>
-        Suspect<br />Nodes
+        Suspect
+        <br />
+        Nodes
       </SuspectNodesTooltip>
     </div>,
-    <div className={deadClasses}>{ deadNodes }</div>,
+    <div className={deadClasses}>{deadNodes}</div>,
     <div className="node-liveness cluster-summary__label dead-nodes">
       <DeadNodesTooltip>
-        Dead<br />Nodes
+        Dead
+        <br />
+        Nodes
       </DeadNodesTooltip>
     </div>,
   ];
@@ -146,8 +178,8 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
     "cluster-summary__metric",
     "under-replicated-ranges",
     {
-      "warning": underReplicatedRanges > 0,
-      "disabled": underReplicatedRanges === 0,
+      warning: underReplicatedRanges > 0,
+      disabled: underReplicatedRanges === 0,
     },
   );
   const unavailableClasses = classNames(
@@ -155,28 +187,38 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
     "cluster-summary__metric",
     "unavailable-ranges",
     {
-      "alert": unavailableRanges > 0,
-      "disabled": unavailableRanges === 0,
+      alert: unavailableRanges > 0,
+      disabled: unavailableRanges === 0,
     },
   );
   return [
-    <h3 className="replication-status cluster-summary__title">Replication Status</h3>,
-    <div className="replication-status cluster-summary__metric total-ranges">{ totalRanges }</div>,
+    <h3 className="replication-status cluster-summary__title">
+      Replication Status
+    </h3>,
+    <div className="replication-status cluster-summary__metric total-ranges">
+      {totalRanges}
+    </div>,
     <div className="replication-status cluster-summary__label total-ranges">
       <TotalRangesTooltip>
-        Total<br />Ranges
+        Total
+        <br />
+        Ranges
       </TotalRangesTooltip>
     </div>,
-    <div className={underReplicatedClasses}>{ underReplicatedRanges }</div>,
+    <div className={underReplicatedClasses}>{underReplicatedRanges}</div>,
     <div className="replication-status cluster-summary__label under-replicated-ranges">
       <UnderReplicatedRangesTooltip>
-        Under-replicated<br />Ranges
+        Under-replicated
+        <br />
+        Ranges
       </UnderReplicatedRangesTooltip>
     </div>,
-    <div className={unavailableClasses}>{ unavailableRanges }</div>,
+    <div className={unavailableClasses}>{unavailableRanges}</div>,
     <div className="replication-status cluster-summary__label unavailable-ranges">
       <UnavailableRangesTooltip>
-        Unavailable<br />Ranges
+        Unavailable
+        <br />
+        Ranges
       </UnavailableRangesTooltip>
     </div>,
   ];
@@ -185,7 +227,11 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
 const mapStateToReplicationStatusProps = createSelector(
   nodesSummarySelector,
   function (nodesSummary: NodesSummary) {
-    const { totalRanges, underReplicatedRanges, unavailableRanges } = nodesSummary.nodeSums;
+    const {
+      totalRanges,
+      underReplicatedRanges,
+      unavailableRanges,
+    } = nodesSummary.nodeSums;
     return {
       totalRanges: totalRanges,
       underReplicatedRanges: underReplicatedRanges,
@@ -205,7 +251,8 @@ interface ClusterSummaryActionsProps {
   refreshNodes: () => void;
 }
 
-type ClusterSummaryProps = ClusterSummaryStateProps & ClusterSummaryActionsProps;
+type ClusterSummaryProps = ClusterSummaryStateProps &
+  ClusterSummaryActionsProps;
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   componentDidMount() {
@@ -234,7 +281,11 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
       );
     }
 
-    return <section className="cluster-summary" children={React.Children.toArray(children)} />;
+    return (
+      <section className="cluster-summary">
+        {React.Children.toArray(children)}
+      </section>
+    );
   }
 }
 
@@ -253,7 +304,10 @@ const actions = {
 };
 
 // tslint:disable-next-line:variable-name
-const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
+const ClusterSummaryConnected = connect(
+  mapStateToClusterSummaryProps,
+  actions,
+)(ClusterSummary);
 
 /**
  * Renders the main content of the cluster visualization page.
@@ -268,7 +322,7 @@ export default class ClusterOverview extends React.Component<any, any> {
           <ClusterSummaryConnected />
         </section>
         <section className="cluster-overview--fixed">
-          { this.props.children }
+          {this.props.children}
         </section>
       </div>
     );

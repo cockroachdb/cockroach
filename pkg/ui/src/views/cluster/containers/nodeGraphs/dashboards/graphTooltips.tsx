@@ -11,11 +11,13 @@
 import React from "react";
 
 import * as docsURL from "src/util/docs";
-import {Anchor} from "src/components";
-import {ReactNode} from "react";
+import { Anchor } from "src/components";
+import { ReactNode } from "react";
 
-export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: ReactNode}> =
-  ({tooltipSelection}) => (<div>
+export const CapacityGraphTooltip: React.FunctionComponent<{
+  tooltipSelection: ReactNode;
+}> = ({ tooltipSelection }) => (
+  <div>
     <dl>
       <dd>
         <p>
@@ -28,22 +30,20 @@ export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: Re
         </p>
       </dd>
     </dl>
-  </div>);
+  </div>
+);
 
-export const LogicalBytesGraphTooltip: React.FunctionComponent =
-  () => (<div>
+export const LogicalBytesGraphTooltip: React.FunctionComponent = () => (
+  <div>
     <dl>
       <dd>
         <p>
           {"Number of logical bytes stored in "}
-          <Anchor href={docsURL.keyValuePairs}>
-            key-value pairs
-          </Anchor>
+          <Anchor href={docsURL.keyValuePairs}>key-value pairs</Anchor>
           {" on each node."}
         </p>
-        <p>
-          This includes historical and deleted data.
-        </p>
+        <p>This includes historical and deleted data.</p>
       </dd>
     </dl>
-  </div>);
+  </div>
+);

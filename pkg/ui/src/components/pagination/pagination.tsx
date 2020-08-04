@@ -33,7 +33,11 @@ PaginationComponent.defaultProps = {
 
 export function PaginationComponent(props: PaginationComponentProps) {
   const { pagination, hideOnSinglePage, onChange } = props;
-  const  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+  const renderPage = (
+    _page: number,
+    type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
+    originalElement: React.ReactNode,
+  ) => {
     switch (type) {
       case "jump-prev":
         return (
@@ -56,7 +60,12 @@ export function PaginationComponent(props: PaginationComponentProps) {
   return (
     <Pagination
       size="small"
-      itemRender={renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+      itemRender={
+        renderPage as (
+          page: number,
+          type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
+        ) => React.ReactNode
+      }
       pageSize={pagination.pageSize}
       current={pagination.current}
       total={pagination.total}
@@ -69,14 +78,26 @@ export function PaginationComponent(props: PaginationComponentProps) {
 const getPageStart = (pageSize: number, current: number) => pageSize * current;
 
 // tslint:disable-next-line: no-shadowed-variable
-export const paginationPageCount = (pagination: PaginationSettings, pageName: string, match?: match<any>, appAttr?: string, search?: string) => {
+export const paginationPageCount = (
+  pagination: PaginationSettings,
+  pageName: string,
+  match?: match<any>,
+  appAttr?: string,
+  search?: string,
+) => {
   const { pageSize, current, total } = pagination;
   const appAttrValue = match && getMatchParamByName(match, appAttr);
   const selectedApp = appAttrValue || "";
-  const start = Math.max(getPageStart(pageSize, current > 0 ? (current - 1) : current), 0);
+  const start = Math.max(
+    getPageStart(pageSize, current > 0 ? current - 1 : current),
+    0,
+  );
   const recountedStart = total > 0 ? start + 1 : start;
   const end = Math.min(getPageStart(pageSize, current), total);
-  const label = (search && search.length > 0) || selectedApp.length > 0 ? "results" : pageName;
+  const label =
+    (search && search.length > 0) || selectedApp.length > 0
+      ? "results"
+      : pageName;
   if (end === 0) {
     return `0 ${label}`;
   }

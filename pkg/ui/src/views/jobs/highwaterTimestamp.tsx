@@ -10,9 +10,9 @@
 
 import React from "react";
 import moment from "moment";
-import {ToolTipWrapper} from "src/views/shared/components/toolTip";
-import {DATE_FORMAT} from "src/util/format";
-import {google} from "src/js/protos";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { DATE_FORMAT } from "src/util/format";
+import { google } from "src/js/protos";
 import ITimestamp = google.protobuf.ITimestamp;
 
 interface HighwaterProps {
@@ -22,7 +22,9 @@ interface HighwaterProps {
 
 export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
   render() {
-    let highwaterMoment = moment(this.props.highwater.seconds.toNumber() * 1000);
+    let highwaterMoment = moment(
+      this.props.highwater.seconds.toNumber() * 1000,
+    );
     // It's possible due to client clock skew that this timestamp could be in
     // the future. To avoid confusion, set a maximum bound of now.
     const now = moment();

@@ -10,7 +10,7 @@
 
 // Exports icons as SVG strings.
 
-export const cockroachIcon: string = `<svg width="38px" height="38px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
+export const cockroachIcon = `<svg width="38px" height="38px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
   <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
   <title>CL Mark</title>
   <desc>Created with Sketch.</desc>
@@ -30,7 +30,7 @@ export const cockroachIcon: string = `<svg width="38px" height="38px" viewBox="0
   </g>
 </svg>`;
 
-export const leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export const leftArrow = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
   <title>Path 2</title>
   <desc>Created with Sketch.</desc>
@@ -44,7 +44,7 @@ export const leftArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 
   </g>
 </svg>`;
 
-export const rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export const rightArrow = `<svg width="7px" height="10px" viewBox="0 0 7 10" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
     <title>Path 2 Copy</title>
     <desc>Created with Sketch.</desc>
@@ -58,7 +58,7 @@ export const rightArrow: string = `<svg width="7px" height="10px" viewBox="0 0 7
     </g>
 </svg>`;
 
-export let criticalIcon: string = `<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export const criticalIcon = `<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 42 (36781) - http://www.bohemiancoding.com/sketch -->
     <title>Group 3</title>
     <desc>Created with Sketch.</desc>
@@ -79,7 +79,7 @@ export let criticalIcon: string = `<svg width="20px" height="20px" viewBox="0 0 
     </g>
 </svg>`;
 
-export let warningIcon: string = `<svg width="21px" height="21px" viewBox="0 0 21 21" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+export const warningIcon = `<svg width="21px" height="21px" viewBox="0 0 21 21" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
     <!-- Generator: Sketch 41.2 (35397) - http://www.bohemiancoding.com/sketch -->
     <title>Group 2</title>
     <desc>Created with Sketch.</desc>
@@ -98,7 +98,7 @@ export let warningIcon: string = `<svg width="21px" height="21px" viewBox="0 0 2
     </g>
 </svg>`;
 
-export let notificationIcon: string = `
+export const notificationIcon = `
   <svg width="22px" height="22px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
     <title>CL Mark</title>

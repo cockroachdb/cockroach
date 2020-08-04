@@ -14,8 +14,8 @@ import { Link, withRouter, RouteComponentProps } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
 import "./navigation-bar.styl";
-import {AdminUIState} from "src/redux/state";
-import {isSingleNodeCluster} from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { isSingleNodeCluster } from "src/redux/nodes";
 
 interface RouteParam {
   path: string;
@@ -58,17 +58,21 @@ export class Sidebar extends React.Component<SidebarProps> {
 
   isActiveNavigationItem = (path: string): boolean => {
     const { pathname } = this.props.location;
-    const { activeFor, ignoreFor = []} = this.routes.find(route => route.path === path);
-    return [...activeFor, path].some(p => {
-      const isMatchedToIgnoredPaths = ignoreFor.some(ignorePath => pathname.startsWith(ignorePath));
+    const { activeFor, ignoreFor = [] } = this.routes.find(
+      (route) => route.path === path,
+    );
+    return [...activeFor, path].some((p) => {
+      const isMatchedToIgnoredPaths = ignoreFor.some((ignorePath) =>
+        pathname.startsWith(ignorePath),
+      );
       const isMatchedToActiveFor = pathname.startsWith(p);
       return isMatchedToActiveFor && !isMatchedToIgnoredPaths;
     });
-  }
+  };
 
   render() {
     const navigationItems = this.routes
-      .filter(route => !route.isHidden || !route.isHidden())
+      .filter((route) => !route.isHidden || !route.isHidden())
       .map(({ path, text }, idx) => (
         <SideNavigation.Item
           isActive={this.isActiveNavigationItem(path)}
@@ -77,11 +81,7 @@ export class Sidebar extends React.Component<SidebarProps> {
           <Link to={path}>{text}</Link>
         </SideNavigation.Item>
       ));
-    return (
-      <SideNavigation>
-        {navigationItems}
-      </SideNavigation>
-    );
+    return <SideNavigation>{navigationItems}</SideNavigation>;
   }
 }
 

@@ -26,14 +26,14 @@ interface LoadingProps {
  * getValidErrorsList eliminates any null Error values, and returns either
  * null or a non-empty list of Errors.
  */
-function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
+function getValidErrorsList(errors?: Error | Error[] | null): Error[] | null {
   if (errors) {
     if (!Array.isArray(errors)) {
       // Put single Error into a list to simplify logic in main Loading component.
       return [errors];
     } else {
       // Remove null values from Error[].
-      const validErrors = errors.filter(e => !!e);
+      const validErrors = errors.filter((e) => !!e);
       if (validErrors.length === 0) {
         return null;
       }
@@ -46,17 +46,18 @@ function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
 /**
  * getDetails produces a hint for the given error object.
  */
-function getDetails (error: Error): ReactNode {
+function getDetails(error: Error): ReactNode {
   if (error instanceof RequestError) {
-     if (error.status === 403) {
-       return (
-         <p>
-           Insufficient privileges to view this resource. <a href={adminUIAccess} target="_blank">
-             Learn more
-           </a>
-         </p>
-       );
-     }
+    if (error.status === 403) {
+      return (
+        <p>
+          Insufficient privileges to view this resource.{" "}
+          <a href={adminUIAccess} target="_blank">
+            Learn more
+          </a>
+        </p>
+      );
+    }
   }
   return <p>no details available</p>;
 }
@@ -69,7 +70,7 @@ export default function Loading(props: LoadingProps) {
   const className = props.className || "loading-image loading-image__spinner";
   const imageURL = props.image || spinner;
   const image = {
-    "backgroundImage": `url(${imageURL})`,
+    backgroundImage: `url(${imageURL})`,
   };
 
   const errors = getValidErrorsList(props.error);
@@ -77,14 +78,19 @@ export default function Loading(props: LoadingProps) {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (errors) {
-    const errorCountMessage = (errors.length > 1) ? "Multiple errors occurred" : "An error was encountered";
+    const errorCountMessage =
+      errors.length > 1
+        ? "Multiple errors occurred"
+        : "An error was encountered";
     return (
       <div className="loading-error">
         <p>{errorCountMessage} while loading this data:</p>
         <ul>
           {errors.map((error, idx) => (
-            <li key={idx}><b>{error.message}</b>
-            {getDetails(error)}</li>
+            <li key={idx}>
+              <b>{error.message}</b>
+              {getDetails(error)}
+            </li>
           ))}
         </ul>
       </div>

@@ -18,7 +18,12 @@ import { AdminUIState } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 
 import "./loginPage.styl";
-import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/components";
+import {
+  CockroachLabsLockupIcon,
+  Button,
+  TextInput,
+  PasswordInput,
+} from "src/components";
 import { Text, TextTypes } from "src/components";
 import ErrorCircle from "assets/error-circle.svg";
 
@@ -48,16 +53,18 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
     this.setState({
       username: value,
     });
-  }
+  };
 
   handleUpdatePassword = (value: string) => {
     this.setState({
       password: value,
     });
-  }
+  };
 
   componentDidUpdate() {
-    const { loginState: { loggedInUser } } = this.props;
+    const {
+      loginState: { loggedInUser },
+    } = this.props;
     if (loggedInUser !== null) {
       const { location, history } = this.props;
       const params = new URLSearchParams(location.search);
@@ -70,12 +77,12 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
   }
 
   handleSubmit = (evt: React.FormEvent<any>) => {
-    const { handleLogin} = this.props;
+    const { handleLogin } = this.props;
     const { username, password } = this.state;
     evt.preventDefault();
 
     handleLogin(username, password);
-  }
+  };
 
   renderError() {
     const { error } = this.props.loginState;
@@ -86,12 +93,12 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
 
     let message = "Invalid username or password.";
     if (error.message !== "Unauthorized") {
-        message = error.message;
+      message = error.message;
     }
     return (
       <div className="login-page__error">
         <img src={ErrorCircle} alt={message} />
-        { message }
+        {message}
       </div>
     );
   }
@@ -108,9 +115,16 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
           <div className="content">
             <section className="section login-page__form">
               <div className="form-container">
-                <Text textType={TextTypes.Heading2}>Log in to the Admin UI</Text>
+                <Text textType={TextTypes.Heading2}>
+                  Log in to the Admin UI
+                </Text>
                 {this.renderError()}
-                <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
+                <form
+                  id="loginForm"
+                  onSubmit={this.handleSubmit}
+                  className="form-internal"
+                  method="post"
+                >
                   <TextInput
                     name="username"
                     onChange={this.handleUpdateUsername}
@@ -125,26 +139,40 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
                     label="Password"
                     value={password}
                   />
-                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress} textAlign={"center"}>
+                  <Button
+                    buttonType="submit"
+                    className="submit-button"
+                    disabled={loginState.inProgress}
+                    textAlign={"center"}
+                  >
                     {loginState.inProgress ? "Logging in..." : "Log in"}
                   </Button>
                 </form>
               </div>
             </section>
             <section className="section login-page__info">
-              <Text textType={TextTypes.Heading3}>A user with a password is required to log in to the Admin UI on secure clusters.</Text>
-              <Text textType={TextTypes.Heading5}>Create a user with this SQL command:</Text>
+              <Text textType={TextTypes.Heading3}>
+                A user with a password is required to log in to the Admin UI on
+                secure clusters.
+              </Text>
+              <Text textType={TextTypes.Heading5}>
+                Create a user with this SQL command:
+              </Text>
               <pre className="login-note-box__sql-command">
-                <span className="sql-keyword">CREATE USER</span>
-                {" "}craig{" "}
-                <span className="sql-keyword">WITH PASSWORD</span>
-                {" "}
+                <span className="sql-keyword">CREATE USER</span> craig{" "}
+                <span className="sql-keyword">WITH PASSWORD</span>{" "}
                 <span className="sql-string">'cockroach'</span>
                 <span className="sql-keyword">;</span>
               </pre>
               <p className="aside">
-                <a href={docsURL.adminUILoginNoVersion} className="login-docs-link" target="_blank">
-                  <span className="login-docs-link__text">Read more about configuring login</span>
+                <a
+                  href={docsURL.adminUILoginNoVersion}
+                  className="login-docs-link"
+                  target="_blank"
+                >
+                  <span className="login-docs-link__text">
+                    Read more about configuring login
+                  </span>
                 </a>
               </p>
             </section>
@@ -156,18 +184,20 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
 }
 
 // tslint:disable-next-line:variable-name
-const LoginPageConnected = withRouter(connect(
-  (state: AdminUIState) => {
-    return {
-      loginState: state.login,
-      location: state.router.location,
-    };
-  },
-  (dispatch) => ({
-    handleLogin: (username: string, password: string) => {
-      return dispatch(doLogin(username, password));
+const LoginPageConnected = withRouter(
+  connect(
+    (state: AdminUIState) => {
+      return {
+        loginState: state.login,
+        location: state.router.location,
+      };
     },
-  }),
-)(LoginPage));
+    (dispatch) => ({
+      handleLogin: (username: string, password: string) => {
+        return dispatch(doLogin(username, password));
+      },
+    }),
+  )(LoginPage),
+);
 
 export default LoginPageConnected;

@@ -17,7 +17,11 @@ import { AdminUIState } from "src/redux/state";
 import { clusterIdSelector } from "src/redux/nodes";
 
 import "./emailSubscription.styl";
-import { loadUIData, RELEASE_NOTES_SIGNUP_DISMISSED_KEY, saveUIData } from "src/redux/uiData";
+import {
+  loadUIData,
+  RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
+  saveUIData,
+} from "src/redux/uiData";
 import { dismissReleaseNotesSignupForm } from "src/redux/uiDataSelectors";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
 
@@ -30,12 +34,12 @@ class EmailSubscription extends React.Component<EmailSubscriptionProps> {
 
   handleEmailSubscriptionSubmit = (email: string) => {
     this.props.signUpForEmailSubscription(this.props.clusterId, email);
-  }
+  };
 
   handlePanelHide = () => {
     this.props.dismissAlertMessage();
     this.props.hidePanel();
-  }
+  };
 
   componentWillUnmount() {
     this.props.dismissAlertMessage();
@@ -53,12 +57,14 @@ class EmailSubscription extends React.Component<EmailSubscriptionProps> {
         <div className="crl-email-subscription">
           <div className="crl-email-subscription__text">
             <div>
-              Keep up-to-date with CockroachDB
-              software releases and best practices.
+              Keep up-to-date with CockroachDB software releases and best
+              practices.
             </div>
           </div>
           <div className="crl-email-subscription__controls">
-            <EmailSubscriptionForm onSubmit={this.handleEmailSubscriptionSubmit} />
+            <EmailSubscriptionForm
+              onSubmit={this.handleEmailSubscriptionSubmit}
+            />
           </div>
           <div
             onClick={this.handlePanelHide}

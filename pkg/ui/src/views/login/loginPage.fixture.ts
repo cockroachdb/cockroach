@@ -13,21 +13,21 @@ import { LoginPageProps } from "./loginPage";
 import { createMemoryHistory } from "history";
 import { RouteComponentProps } from "react-router-dom";
 
-const history = createMemoryHistory({ initialEntries: ["/statements"]});
+const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
 export const loginPagePropsFixture: LoginPageProps & RouteComponentProps = {
   history,
   location: {
-    "pathname": "/login",
-    "search": "",
-    "hash": "",
-    "state": null,
+    pathname: "/login",
+    search: "",
+    hash: "",
+    state: null,
   },
-  "match": {
-    "path": "/login",
-    "url": "/login",
-    "isExact": true,
-    "params": {},
+  match: {
+    path: "/login",
+    url: "/login",
+    isExact: true,
+    params: {},
   },
   loginState: emptyLoginState,
   handleLogin: (() => {}) as any,

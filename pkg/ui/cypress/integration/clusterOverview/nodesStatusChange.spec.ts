@@ -20,60 +20,55 @@ describe("Nodes status change", () => {
   describe("from Live to Decommissioned", () => {
     it("changes to Decommissioned status", () => {
       const nodeIdToDecommission = 2;
-      cy
-        .log("Validate all 4 nodes are Live")
+      cy.log("Validate all 4 nodes are Live")
         .get(
           ".nodes-overview__live-nodes-table tbody tr td span span:contains(Live)",
-          {logMessage: "Node List table > rows with Live status"},
+          { logMessage: "Node List table > rows with Live status" },
         )
         .should("have.length", 4);
 
-      cy
-        .log("Cluster summary section displays 4 live nodes")
-        .get(
-          ".node-liveness.cluster-summary__metric.live-nodes",
-          {logMessage: "Cluster Summary > get Live Nodes value"},
-        )
+      cy.log("Cluster summary section displays 4 live nodes")
+        .get(".node-liveness.cluster-summary__metric.live-nodes", {
+          logMessage: "Cluster Summary > get Live Nodes value",
+        })
         .should("contain", 4);
 
       cy.decommissionNode(nodeIdToDecommission);
       cy.stopNode(nodeIdToDecommission);
 
-      cy
-        .log("Validate that only 3 live nodes remain")
+      cy.log("Validate that only 3 live nodes remain")
         .get(
           ".nodes-overview__live-nodes-table tbody tr td span span:contains(Live)",
           { logMessage: "Node List table > rows with Live status" },
         )
         .should("have.length", 3);
 
-      cy
-        .log("...and 1 node is Decommissioning table")
-        .get(
-          ".nodes-overview__live-nodes-table",
-          {logMessage: "Node List table > rows with Decommissioning status"},
-        )
+      cy.log("...and 1 node is Decommissioning table")
+        .get(".nodes-overview__live-nodes-table", {
+          logMessage: "Node List table > rows with Decommissioning status",
+        })
         .find("tbody tr:contains(Decommissioning)")
         .should("have.length", 1);
 
-      cy
-        .log("...and Cluster summary shows that 1 node is suspected")
-        .get(
-          ".node-liveness.cluster-summary__metric.suspect-nodes",
-          {logMessage: "Cluster Summary > get Suspected Nodes value"},
-        )
+      cy.log("...and Cluster summary shows that 1 node is suspected")
+        .get(".node-liveness.cluster-summary__metric.suspect-nodes", {
+          logMessage: "Cluster Summary > get Suspected Nodes value",
+        })
         .should("contain", 1);
 
       cy.wait(TIME_UNTIL_NODE_DEAD);
 
-      cy
-        .log("Validate that Decommissioned node table exists and contains one record")
-        .get(
-          ".nodes-overview__decommissioned-nodes-table",
-          { logMessage: "Decommissioned Nodes table exists" },
-        )
+      cy.log(
+        "Validate that Decommissioned node table exists and contains one record",
+      )
+        .get(".nodes-overview__decommissioned-nodes-table", {
+          logMessage: "Decommissioned Nodes table exists",
+        })
         .should("exist")
-        .contains("tbody tr .status-column.status-column--color-decommissioned > span", "Decommissioned")
+        .contains(
+          "tbody tr .status-column.status-column--color-decommissioned > span",
+          "Decommissioned",
+        )
         .should("exist");
     });
   });

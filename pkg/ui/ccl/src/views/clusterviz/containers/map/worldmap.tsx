@@ -23,14 +23,14 @@ export class WorldMap extends React.Component<WorldMapProps> {
     return (
       <g>
         <g>
-          {shapes.features.map((feature: any, i: number) =>
+          {shapes.features.map((feature: any, i: number) => (
             <path
               key={i}
               className="geopath"
               id={`world-${feature.id}`}
               d={pathGen(feature)}
-            />,
-          )}
+            />
+          ))}
         </g>
       </g>
     );

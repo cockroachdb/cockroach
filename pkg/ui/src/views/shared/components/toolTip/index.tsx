@@ -39,7 +39,7 @@ export const ToolTipWrapper = (props: ToolTipWrapperProps) => {
   const overlayClassName = cx("tooltip-wrapper", "tooltip__preset--white");
   return (
     <Tooltip
-      title={ text }
+      title={text}
       placement={placement}
       overlayClassName={overlayClassName}
       {...props}

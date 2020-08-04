@@ -308,10 +308,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when there are multiple attributes with same key", () => {
@@ -343,10 +340,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when attribute key/value is `spans FULL SCAN`", () => {
@@ -374,10 +368,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when keys are unsorted", () => {
@@ -418,10 +409,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
 });

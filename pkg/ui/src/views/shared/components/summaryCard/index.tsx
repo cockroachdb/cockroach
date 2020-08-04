@@ -10,7 +10,7 @@
 
 import React from "react";
 import classnames from "classnames/bind";
-import styles from  "./summaryCard.module.styl";
+import styles from "./summaryCard.module.styl";
 
 interface ISummaryCardProps {
   children: React.ReactNode;
@@ -20,8 +20,7 @@ interface ISummaryCardProps {
 const cx = classnames.bind(styles);
 
 // tslint:disable-next-line: variable-name
-export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className = "" }) => (
-  <div className={`${cx("summary--card")} ${className}`}>
-    {children}
-  </div>
-);
+export const SummaryCard: React.FC<ISummaryCardProps> = ({
+  children,
+  className = "",
+}) => <div className={`${cx("summary--card")} ${className}`}>{children}</div>;

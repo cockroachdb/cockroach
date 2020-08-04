@@ -21,25 +21,41 @@ export default function (props: GraphDashboardProps) {
   return [
     <LineGraph title="Slow Raft Proposals" sources={storeSources}>
       <Axis label="proposals">
-        <Metric name="cr.store.requests.slow.raft" title="Slow Raft Proposals" downsampleMax />
+        <Metric
+          name="cr.store.requests.slow.raft"
+          title="Slow Raft Proposals"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Slow DistSender RPCs" sources={storeSources}>
       <Axis label="proposals">
-        <Metric name="cr.node.requests.slow.distsender" title="Slow DistSender RPCs" downsampleMax />
+        <Metric
+          name="cr.node.requests.slow.distsender"
+          title="Slow DistSender RPCs"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Slow Lease Acquisitions" sources={storeSources}>
       <Axis label="lease acquisitions">
-        <Metric name="cr.store.requests.slow.lease" title="Slow Lease Acquisitions" downsampleMax />
+        <Metric
+          name="cr.store.requests.slow.lease"
+          title="Slow Lease Acquisitions"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Slow Latch Acquisitions" sources={storeSources}>
       <Axis label="latch acquisitions">
-        <Metric name="cr.store.requests.slow.latch" title="Slow Latch Acquisitions" downsampleMax />
+        <Metric
+          name="cr.store.requests.slow.latch"
+          title="Slow Latch Acquisitions"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
   ];

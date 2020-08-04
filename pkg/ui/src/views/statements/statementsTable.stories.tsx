@@ -10,9 +10,12 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import {makeStatementsColumns, StatementsSortedTable} from "./statementsTable";
+import {
+  makeStatementsColumns,
+  StatementsSortedTable,
+} from "./statementsTable";
 import statementsPagePropsFixture from "src/views/statements/statementsPage.fixture";
-import {withRouterProvider} from ".storybook/decorators";
+import { withRouterProvider } from ".storybook/decorators";
 
 const { statements } = statementsPagePropsFixture;
 
@@ -22,12 +25,7 @@ storiesOf("StatementsSortedTable", module)
     <StatementsSortedTable
       className="statements-table"
       data={statements}
-      columns={
-        makeStatementsColumns(
-          statements,
-          "(internal)",
-        )
-      }
+      columns={makeStatementsColumns(statements, "(internal)")}
       sortSetting={{
         ascending: false,
         sortKey: 3,
@@ -38,6 +36,4 @@ storiesOf("StatementsSortedTable", module)
       }}
     />
   ))
-  .add("empty table", () => (
-    <StatementsSortedTable />
-  ));
+  .add("empty table", () => <StatementsSortedTable />);

@@ -17,9 +17,5 @@ const cx = classNames.bind(styles);
 
 // tslint:disable-next-line: variable-name
 export const BackIcon = () => (
-  <img
-    src={Back}
-    alt="back"
-    className={cx("root")}
-  />
+  <img src={Back} alt="back" className={cx("root")} />
 );

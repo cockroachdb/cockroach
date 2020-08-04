@@ -64,8 +64,8 @@ describe("ClusterVisualization", () => {
 
       wrapper.update();
       const expectedTiers = [
-        { key: "region", value: "us-west"},
-        { key: "az", value: "a"},
+        { key: "region", value: "us-west" },
+        { key: "az", value: "a" },
       ];
       assert.deepEqual(wrapper.find(Breadcrumbs).prop("tiers"), expectedTiers);
     });

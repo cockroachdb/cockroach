@@ -46,7 +46,10 @@ interface TableSectionState {
   isCollapsed: boolean;
 }
 
-class TableSection extends React.Component<TableSectionProps & MapStateToProps & MapDispatchToProps, TableSectionState> {
+class TableSection extends React.Component<
+  TableSectionProps & MapStateToProps & MapDispatchToProps,
+  TableSectionState
+> {
   static defaultProps: Partial<TableSectionProps> = {
     isCollapsible: false,
     footer: null,
@@ -66,7 +69,7 @@ class TableSection extends React.Component<TableSectionProps & MapStateToProps &
       isCollapsed: !this.state.isCollapsed,
     });
     this.props.saveExpandedState(!this.state.isCollapsed);
-  }
+  };
 
   getCollapseSectionToggle = () => {
     const { isCollapsible } = this.props;
@@ -81,50 +84,43 @@ class TableSection extends React.Component<TableSectionProps & MapStateToProps &
         <span>{isCollapsed ? "Show" : "Hide"}</span>
         <Icon
           className="collapse-toggle__icon"
-          type={isCollapsed ? "caret-left" : "caret-down"} />
+          type={isCollapsed ? "caret-left" : "caret-down"}
+        />
       </div>
     );
-  }
+  };
 
   render() {
     const { children, title, footer, className } = this.props;
     const { isCollapsed } = this.state;
     const rootClass = cn("table-section", className);
-    const contentClass = cn(
-      "table-section__content",
-      {
-        "table-section__content--collapsed": isCollapsed,
-      },
-    );
+    const contentClass = cn("table-section__content", {
+      "table-section__content--collapsed": isCollapsed,
+    });
     const collapseToggleButton = this.getCollapseSectionToggle();
 
     return (
       <div className={rootClass}>
-        <section
-          className="table-section__heading table-section__heading--justify-end">
+        <section className="table-section__heading table-section__heading--justify-end">
           <Text textType={TextTypes.Heading3}>{title}</Text>
           {collapseToggleButton}
         </section>
         <div className={contentClass}>
           {children}
-          {
-            footer && (
-              <div className="table-section__footer">
-                {footer}
-              </div>
-            )
-          }
+          {footer && <div className="table-section__footer">{footer}</div>}
         </div>
       </div>
     );
   }
 }
 
-const getTableSectionKey = (id: string) => `cluster_overview/table_section/${id}/is_expanded`;
+const getTableSectionKey = (id: string) =>
+  `cluster_overview/table_section/${id}/is_expanded`;
 
 const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
   const tableSectionState = new LocalSetting<AdminUIState, boolean>(
-    getTableSectionKey(props.id), (s) => s.localSettings,
+    getTableSectionKey(props.id),
+    (s) => s.localSettings,
   );
 
   return {
@@ -132,7 +128,10 @@ const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>, props: TableSectionProps) => ({
+const mapDispatchToProps = (
+  dispatch: Dispatch<Action, AdminUIState>,
+  props: TableSectionProps,
+) => ({
   saveExpandedState: (isCollapsed: boolean) => {
     const tableSectionKey = getTableSectionKey(props.id);
     dispatch(setLocalSetting(tableSectionKey, isCollapsed));

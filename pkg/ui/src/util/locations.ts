@@ -40,7 +40,10 @@ export function hasLocation(locations: LocationTree, tier: LocalityTier) {
  * applies, and thus begins searching from the end of the list of tiers for a
  * tier with a matching location.  Returns null if none is found.
  */
-export function findMostSpecificLocation(locations: LocationTree, tiers: LocalityTier[]) {
+export function findMostSpecificLocation(
+  locations: LocationTree,
+  tiers: LocalityTier[],
+) {
   let currentIndex = tiers.length - 1;
   while (currentIndex >= 0) {
     const currentTier = tiers[currentIndex];
@@ -61,7 +64,10 @@ export function findMostSpecificLocation(locations: LocationTree, tiers: Localit
  * no location assigned to the locality itself, calculate the centroid of the
  * children.
  */
-export function findOrCalculateLocation(locations: LocationTree, locality: LocalityTree) {
+export function findOrCalculateLocation(
+  locations: LocationTree,
+  locality: LocalityTree,
+) {
   // If a location is assigned to this locality, return it.
   const thisTier = locality.tiers[locality.tiers.length - 1];
   const thisLocation = getLocation(locations, thisTier);
@@ -95,7 +101,9 @@ export function findOrCalculateLocation(locations: LocationTree, locality: Local
 
   // Calculate the centroid of the child locations.
   let centroid: [number, number] = [0, 0];
-  childLocations.forEach((loc) => centroid = vector.add(centroid, [loc.longitude, loc.latitude]));
+  childLocations.forEach(
+    (loc) => (centroid = vector.add(centroid, [loc.longitude, loc.latitude])),
+  );
   centroid = vector.mult(centroid, 1 / childLocations.length);
   return { longitude: centroid[0], latitude: centroid[1] };
 }

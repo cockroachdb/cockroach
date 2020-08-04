@@ -9,20 +9,18 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {TimestampToMoment} from "src/util/convert";
+import { TimestampToMoment } from "src/util/convert";
 import {
   JOB_STATUS_PENDING,
-  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
+  JOB_STATUS_RUNNING,
+  JOB_STATUS_SUCCEEDED,
   jobHasOneOfStatuses,
 } from "src/views/jobs/jobStatusOptions";
-import {
-  formatDuration,
-
-} from "src/views/jobs/index";
+import { formatDuration } from "src/views/jobs/index";
 import _ from "lodash";
 import moment from "moment";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 
 export class Duration extends React.PureComponent<{ job: Job }> {
   render() {
@@ -36,11 +34,16 @@ export class Duration extends React.PureComponent<{ job: Job }> {
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
         const remaining = duration / fractionCompleted - duration;
-        return <span
-          className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
+        return (
+          <span className="jobs-table__duration--right">
+            {formatDuration(moment.duration(remaining)) + " remaining"}
+          </span>
+        );
       }
     } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
-      return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
+      return (
+        "Duration: " + formatDuration(moment.duration(finished.diff(started)))
+      );
     }
     return null;
   }

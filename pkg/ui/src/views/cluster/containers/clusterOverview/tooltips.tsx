@@ -135,18 +135,15 @@ export const TotalRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
 );
 
 export const UnderReplicatedRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-    children,
-  }) => (
-    <Tooltip
+  children,
+}) => (
+  <Tooltip
     placement="bottom"
     title={
       <div className="tooltip__table--title">
         <p>
           {"Number of "}
-          <Anchor
-            href={reviewOfCockroachTerminology}
-            target="_blank"
-          >
+          <Anchor href={reviewOfCockroachTerminology} target="_blank">
             under-replicated ranges
           </Anchor>
           {" in the cluster. A non-zero number indicates an unstable cluster."}
@@ -154,23 +151,20 @@ export const UnderReplicatedRangesTooltip: React.FC<React.PropsWithChildren<{}>>
       </div>
     }
   >
-      {children}
-    </Tooltip>
-  );
+    {children}
+  </Tooltip>
+);
 
-export const  UnavailableRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-    children,
-  }) => (
-    <Tooltip
+export const UnavailableRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
+  children,
+}) => (
+  <Tooltip
     placement="bottom"
     title={
       <div className="tooltip__table--title">
         <p>
           {"Number of "}
-          <Anchor
-            href={reviewOfCockroachTerminology}
-            target="_blank"
-          >
+          <Anchor href={reviewOfCockroachTerminology} target="_blank">
             unavailable ranges
           </Anchor>
           {" in the cluster. A non-zero number indicates an unstable cluster."}
@@ -178,6 +172,6 @@ export const  UnavailableRangesTooltip: React.FC<React.PropsWithChildren<{}>> = 
       </div>
     }
   >
-      {children}
-    </Tooltip>
-  );
+    {children}
+  </Tooltip>
+);

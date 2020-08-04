@@ -13,9 +13,6 @@ import { storiesOf } from "@storybook/react";
 
 import { SortableTable } from "./";
 
-storiesOf("Sortable table", module)
-  .add("Empty state", () => (
-    <SortableTable
-        empty
-    />
-  ));
+storiesOf("Sortable table", module).add("Empty state", () => (
+  <SortableTable empty />
+));

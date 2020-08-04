@@ -42,11 +42,14 @@ describe("NonTableSummary", () => {
           stats: null,
         },
       });
-      const wrapper = shallow(<NonTableSummary
-        nonTableStats={tableStatsData}
-        nonTableStatsValid={true}
-        refreshNonTableStats={noop as typeof refreshNonTableStats}
-        lastError={undefined} />);
+      const wrapper = shallow(
+        <NonTableSummary
+          nonTableStats={tableStatsData}
+          nonTableStatsValid={true}
+          refreshNonTableStats={noop as typeof refreshNonTableStats}
+          lastError={undefined}
+        />,
+      );
       const loadingWrapper = wrapper.find(Loading).dive();
       assert.isTrue(loadingWrapper.find(".database-summary-table").exists());
     });
@@ -56,11 +59,14 @@ describe("NonTableSummary", () => {
         name: "Forbidden",
         message: "Insufficient privileges to view this resource",
       };
-      const wrapper = shallow(<NonTableSummary
-        nonTableStats={null}
-        nonTableStatsValid={true}
-        refreshNonTableStats={noop as typeof refreshNonTableStats}
-        lastError={error} />);
+      const wrapper = shallow(
+        <NonTableSummary
+          nonTableStats={null}
+          nonTableStatsValid={true}
+          refreshNonTableStats={noop as typeof refreshNonTableStats}
+          lastError={error}
+        />,
+      );
 
       const loadingWrapper = wrapper.find(Loading).dive();
       assert.isTrue(loadingWrapper.exists());

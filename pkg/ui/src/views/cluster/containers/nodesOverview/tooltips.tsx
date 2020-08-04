@@ -214,15 +214,13 @@ export const VersionTooltip: React.FC<React.PropsWithChildren<{}>> = ({
   children,
 }) => (
   <Tooltip
-  placement="bottom"
-  title={
-    <div className="tooltip__table--title">
-      <p>
-        Build tag of the CockroachDB version installed on the node.
-      </p>
-    </div>
-  }
->
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>Build tag of the CockroachDB version installed on the node.</p>
+      </div>
+    }
+  >
     {children}
   </Tooltip>
 );
@@ -231,14 +229,15 @@ export const StatusTooltip: React.FC<React.PropsWithChildren<{}>> = ({
   children,
 }) => (
   <Tooltip
-  placement="bottom"
-  title={
-    <div className="tooltip__table--title">
-      <p>
-        Node status can be live, suspect, dead, decommissioning, or decommissioned. Hover over the status for each node to learn more.
-      </p>
-    </div>
-  }
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>
+          Node status can be live, suspect, dead, decommissioning, or
+          decommissioned. Hover over the status for each node to learn more.
+        </p>
+      </div>
+    }
   >
     {children}
   </Tooltip>

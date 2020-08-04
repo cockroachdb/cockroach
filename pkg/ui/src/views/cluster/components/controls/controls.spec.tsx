@@ -17,7 +17,6 @@ import TimeFrameControls from "../../components/controls";
 import { RangeSelectProps } from "./index";
 
 describe("<TimeFrameControls>", function () {
-
   const makeTimeScaleDropdown = (props: RangeSelectProps) =>
     shallow(<TimeFrameControls {...props} />);
 

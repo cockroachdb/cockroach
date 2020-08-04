@@ -19,20 +19,28 @@ export default class Layout extends React.Component<{}, {}> {
   render() {
     // TODO(mrtracy): this outer div is used to spare the children
     // `nav-container's styling. Should those styles apply only to `nav`?
-    return <div>
-      <Helmet title="Raft | Debug" />
-      <section className="section"><h1 className="base-heading">Raft</h1></section>
-      <div className="nav-container">
-        <ul className="nav">
-          <li className="normal">
-            <NavLink to="/raft/ranges" activeClassName="active">Ranges</NavLink>
-          </li>
-          <li className="normal">
-            <NavLink to="/raft/messages/all" activeClassName="active">Messages</NavLink>
-          </li>
-        </ul>
+    return (
+      <div>
+        <Helmet title="Raft | Debug" />
+        <section className="section">
+          <h1 className="base-heading">Raft</h1>
+        </section>
+        <div className="nav-container">
+          <ul className="nav">
+            <li className="normal">
+              <NavLink to="/raft/ranges" activeClassName="active">
+                Ranges
+              </NavLink>
+            </li>
+            <li className="normal">
+              <NavLink to="/raft/messages/all" activeClassName="active">
+                Messages
+              </NavLink>
+            </li>
+          </ul>
+        </div>
+        {this.props.children}
       </div>
-      { this.props.children }
-    </div>;
+    );
   }
 }

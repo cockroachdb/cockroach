@@ -12,15 +12,15 @@ import { Location } from "history";
 import { match as Match } from "react-router-dom";
 
 /*
-* parseSplatParams function returns remaining part of the path
-* after matched part.
-* ```
-* For example:
-* match.path: `overview/map`
-* location.path: `overview/map/region=us-west/zone=a`
-* result: region=us-west/zone=a
-* ```
-*/
+ * parseSplatParams function returns remaining part of the path
+ * after matched part.
+ * ```
+ * For example:
+ * match.path: `overview/map`
+ * location.path: `overview/map/region=us-west/zone=a`
+ * result: region=us-west/zone=a
+ * ```
+ */
 export function parseSplatParams(match: Match, location: Location) {
   let splat = location.pathname.replace(`${match.path}`, "");
   if (splat.startsWith("/")) {
