@@ -28,7 +28,7 @@ import (
 // FollowerReadTimestampFunctionName is the name of the function which can be
 // used with AOST clauses to generate a timestamp likely to be safe for follower
 // reads.
-const FollowerReadTimestampFunctionName = "experimental_follower_read_timestamp"
+const FollowerReadTimestampFunctionName = "follower_read_timestamp"
 
 var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expressions or " +
 	FollowerReadTimestampFunctionName + " are allowed")
