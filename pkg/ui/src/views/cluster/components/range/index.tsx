@@ -54,6 +54,7 @@ interface RangeSelectState {
   custom: boolean;
   selectMonthStart: Nullable<moment.Moment>;
   selectMonthEnd: Nullable<moment.Moment>;
+  currentDateTime: moment.Moment;
 }
 
 class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
@@ -63,6 +64,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     custom: false,
     selectMonthStart: null as moment.Moment,
     selectMonthEnd: null as moment.Moment,
+    currentDateTime: moment.utc(),
   };
 
   private rangeContainer = React.createRef<HTMLDivElement>();
@@ -104,9 +106,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
       changeDate(moment.utc(date), direction);
     } else {
       if (direction === DateTypes.DATE_TO) {
-        changeDate(moment(value.start).add(10, "minute"), direction);
+        changeDate(moment.utc(value.start).add(10, "minute"), direction);
       } else {
-        changeDate(moment(value.end).add(-10, "minute"), direction);
+        changeDate(moment.utc(value.end).add(-10, "minute"), direction);
       }
       notification.info({
         message: "The timeframe has been set to a 10 minute range",
@@ -115,9 +117,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     }
   }
 
-  renderTimePickerAddon = (direction: DateTypes) => () => <Button type="default" onClick={() => this.onChangeDate(direction)(moment())} size="small">Now</Button>;
+  renderTimePickerAddon = (direction: DateTypes) => () => <Button type="default" onClick={() => this.onChangeDate(direction)(moment.utc())} size="small">Now</Button>;
 
-  renderDatePickerAddon = (direction: DateTypes) => <div className="calendar-today-btn"><Button type="default" onClick={() => this.onChangeDate(direction)(moment())} size="small">Today</Button></div>;
+  renderDatePickerAddon = (direction: DateTypes) => <div className="calendar-today-btn"><Button type="default" onClick={() => this.onChangeDate(direction)(moment.utc())} size="small">Today</Button></div>;
 
   clearPanelValues = () => this.setState({ selectMonthEnd: null, selectMonthStart: null });
 
@@ -127,7 +129,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     onChange(option);
   }
 
-  toggleCustomPicker = (custom: boolean) => () => this.setState({ custom }, this.clearPanelValues);
+  toggleCustomPicker = (custom: boolean) => () => {
+    this.setState({ custom, currentDateTime: moment.utc() }, this.clearPanelValues);
+  }
 
   toggleDropDown = () => {
     this.setState(
@@ -180,7 +184,13 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     return value && value.label !== "Custom" ? (
       <span className="Select-value-label">{value.label}</span>
     ) : (
-      <span className="Select-value-label">{selected.dateStart} <span className="_label-time">{selected.timeStart}</span> - {selected.dateEnd} <span className="_label-time">{selected.timeEnd}</span></span>
+      <span className="Select-value-label">
+        {selected.dateStart}{"\u0020"}
+        <span className="_label-time">{selected.timeStart}</span>{"\u0020"}
+        - {selected.dateEnd}{"\u0020"}
+        <span className="_label-time">{selected.timeEnd}</span>{"\u0020"}
+        <span className="Select-value-label__sufix">(UTC)</span>
+      </span>
     );
   }
 
@@ -189,7 +199,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     const start = Number(moment.utc(value.start).format("HH"));
     const end = Number(moment.utc(value.end).format("HH"));
     const hours = [];
-    for (let i = 0 ; i < (isStart ? moment().hour() : start); i++) {
+    for (let i = 0 ; i < (isStart ? moment.utc().hour() : start); i++) {
       if (isStart) {
         hours.push((end + 1) + i);
       } else {
@@ -207,7 +217,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     const endMinutes = Number(moment.utc(value.end).format("mm"));
     const minutes = [];
     if (startHour === endHour) {
-      for (let i = 0 ; i < (isStart ? moment().minute() : startMinutes); i++) {
+      for (let i = 0 ; i < (isStart ? moment.utc().minute() : startMinutes); i++) {
         if (isStart) {
           minutes.push((endMinutes + 1) + i);
         } else {
@@ -228,7 +238,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     const endSeconds = Number(moment.utc(value.end).format("ss"));
     const seconds = [];
     if (startHour === endHour && startMinutes === endMinutes) {
-      for (let i = 0 ; i < (isStart ? moment().second() : startSeconds + 1); i++) {
+      for (let i = 0 ; i < (isStart ? moment.utc().second() : startSeconds + 1); i++) {
         if (isStart) {
           seconds.push(endSeconds + i);
         } else {
@@ -241,9 +251,19 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   headerRender = (item: any) => (
     <div className="calendar-month-picker">
-      <Button type="default" onClick={() => item.onChange(moment(item.value).subtract(1, "months"))}><Icon type="left" /></Button>
-      <span>{moment(item.value).format("MMM YYYY")}</span>
-      <Button type="default" onClick={() => item.onChange(moment(item.value).add(1, "months"))}><Icon type="right" /></Button>
+      <Button
+        type="default"
+        onClick={() => item.onChange(moment.utc(item.value).subtract(1, "months"))}
+      >
+        <Icon type="left" />
+      </Button>
+      <span>{moment.utc(item.value).format("MMM YYYY")}</span>
+      <Button
+        type="default"
+        onClick={() => item.onChange(moment.utc(item.value).add(1, "months"))}
+      >
+        <Icon type="right" />
+      </Button>
     </div>
   )
 
@@ -258,13 +278,13 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   renderContent = () => {
     const { value, useTimeRange } = this.props;
-    const { custom , selectMonthStart, selectMonthEnd } = this.state;
-    const start = useTimeRange ? moment.utc(value.start) : null;
-    const end = useTimeRange ? moment.utc(value.end) : null;
-    const timePickerFormat = "h:mm:ss A";
-    const isSameDate = useTimeRange && moment(start).isSame(end, "day");
-    const calendarStartValue = selectMonthStart ? selectMonthStart : start ? start : moment();
-    const calendarEndValue = selectMonthEnd ? selectMonthEnd : end ? end : moment();
+    const { custom , selectMonthStart, selectMonthEnd, currentDateTime } = this.state;
+    const start = useTimeRange ? moment.utc(value.start) : currentDateTime;
+    const end = useTimeRange ? moment.utc(value.end) : currentDateTime;
+    const timePickerFormat = "h:mm:ss A (UTC)";
+    const isSameDate = useTimeRange && moment.utc(start).isSame(end, "day");
+    const calendarStartValue = selectMonthStart ? selectMonthStart : start ? start : moment.utc();
+    const calendarEndValue = selectMonthEnd ? selectMonthEnd : end ? end : moment.utc();
 
     if (!custom) {
       return <div className="_quick-view">{this.renderOptions()}</div>;
@@ -278,7 +298,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             <Calendar
               fullscreen={false}
               value={calendarStartValue}
-              disabledDate={(currentDate) => (currentDate > (end || moment()))}
+              disabledDate={(currentDate) => (currentDate > (end || moment.utc()))}
               headerRender={this.headerRender}
               onSelect={this.onChangeDate(DateTypes.DATE_FROM)}
               onPanelChange={this.onPanelChange(DateTypes.DATE_FROM)}
@@ -288,7 +308,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           <TimePicker
             value={start}
             allowClear={false}
-            format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
+            format={timePickerFormat}
             use12Hours
             onChange={this.onChangeDate(DateTypes.DATE_FROM)}
             disabledHours={isSameDate && this.getDisabledHours(true) || undefined}
@@ -302,7 +322,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             <Calendar
               fullscreen={false}
               value={calendarEndValue}
-              disabledDate={(currentDate) => (currentDate > moment() || currentDate < (start || moment()))}
+              disabledDate={(currentDate) => (currentDate > moment.utc() || currentDate < (start || moment.utc()))}
               headerRender={this.headerRender}
               onSelect={this.onChangeDate(DateTypes.DATE_TO)}
               onPanelChange={this.onPanelChange(DateTypes.DATE_TO)}
@@ -312,7 +332,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           <TimePicker
             value={end}
             allowClear={false}
-            format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
+            format={timePickerFormat}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
             onChange={this.onChangeDate(DateTypes.DATE_TO)}
