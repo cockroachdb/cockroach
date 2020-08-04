@@ -120,7 +120,8 @@ type pebbleMVCCScanner struct {
 	keyBuf                   []byte
 	savedBuf                 []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
-	// updateCurrent.
+	// updateCurrent. Note that the timestamp can be clobbered in the case of
+	// adding an intent from the intent history but is otherwise meaningful.
 	curKey   MVCCKey
 	curValue []byte
 	results  pebbleResults
@@ -426,6 +427,16 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
 		if value, found := p.getFromIntentHistory(); found {
+			// If we're adding a value due to a previous intent, we want to populate
+			// the timestamp as of current metaTimestamp. Note that this may be
+			// controversial as this maybe be neither the write timestamp when this
+			// intent was written. However, this was the only case in which a value
+			// could have been returned from a read without an MVCC timestamp.
+			//
+			// Note: this assumes that it is safe to corrupt curKey here because we're
+			// about to advance. If this proves to be a problem later, we can extend
+			// addAndAdvance to take an MVCCKey explicitly.
+			p.curKey.Timestamp = metaTS
 			return p.addAndAdvance(value)
 		}
 		// 11. If no value in the intent history has a sequence number equal to
