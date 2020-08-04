@@ -380,14 +380,7 @@ significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: millennium, century, decade, year, quarter, month,
 week, day, hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
-<tr><td><a name="experimental_follower_read_timestamp"></a><code>experimental_follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a timestamp which is very likely to be safe to perform
-against a follower replica.</p>
-<p>This function is intended to be used with an AS OF SYSTEM TIME clause to perform
-historical reads against a time which is recent but sufficiently old for reads
-to be performed against the closest replica as opposed to the currently
-leaseholder for a given range.</p>
-<p>Note that this function requires an enterprise license on a CCL distribution to
-return without an error.</p>
+<tr><td><a name="experimental_follower_read_timestamp"></a><code>experimental_follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Same as follower_read_timestamp. This name is deprecated.</p>
 </span></td></tr>
 <tr><td><a name="experimental_strftime"></a><code>experimental_strftime(input: <a href="date.html">date</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
 </span></td></tr>
@@ -427,6 +420,15 @@ timezone, timezone_hour, timezone_minute</p>
 <tr><td><a name="extract_duration"></a><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
 Compatible elements: hour, minute, second, millisecond, microsecond.
 This is deprecated in favor of <code>extract</code> which supports duration.</p>
+</span></td></tr>
+<tr><td><a name="follower_read_timestamp"></a><code>follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a timestamp which is very likely to be safe to perform
+against a follower replica.</p>
+<p>This function is intended to be used with an AS OF SYSTEM TIME clause to perform
+historical reads against a time which is recent but sufficiently old for reads
+to be performed against the closest replica as opposed to the currently
+leaseholder for a given range.</p>
+<p>Note that this function requires an enterprise license on a CCL distribution to
+return without an error.</p>
 </span></td></tr>
 <tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
