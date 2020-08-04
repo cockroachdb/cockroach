@@ -36,14 +36,13 @@ type explainVecNode struct {
 	optColumnsSlot
 
 	options *tree.ExplainOptions
-	plan    planMaybePhysical
+	plan    planComponents
 
 	run struct {
 		lines []string
 		// The current row returned by the node.
 		values tree.Datums
 	}
-	subqueryPlans []subquery
 }
 
 type flowWithNode struct {
@@ -56,17 +55,17 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistributionForExplainPurposes(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
+		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
 	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.subqueryPlans, distribution)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan)
+	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
 	if err != nil {
-		if len(n.subqueryPlans) > 0 {
+		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
 				"unsupported because of the presence of subqueries")
 		}
@@ -206,5 +205,5 @@ func (n *explainVecNode) Next(runParams) (bool, error) {
 
 func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.plan.close(ctx)
 }

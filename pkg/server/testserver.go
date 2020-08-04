@@ -217,9 +217,16 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAddr = params.SQLAddr
 		cfg.SQLAdvertiseAddr = params.SQLAddr
 	}
-	if params.TenantAddr != "" {
-		cfg.TenantAddr = params.TenantAddr
-		cfg.TenantAdvertiseAddr = params.TenantAddr
+	if params.TenantAddr != nil {
+		addr := *params.TenantAddr
+		if addr == "" {
+			// Empty address disables the tenant server.
+			cfg.SplitListenTenant = false
+			cfg.TenantAddr = ""
+		} else {
+			cfg.TenantAddr = addr
+			cfg.TenantAdvertiseAddr = addr
+		}
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
@@ -462,6 +469,7 @@ func makeSQLServerArgs(
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   sqlCfg.TenantID,
 		AmbientCtx: baseCfg.AmbientCtx,
 		Config:     baseCfg.Config,
 		Clock:      clock,
@@ -612,7 +620,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
-	sqlCfg.TenantKVAddrs = []string{ts.RPCAddr()}
+	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
 	return StartTenant(
 		ctx,
 		ts.Stopper(),

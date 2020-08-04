@@ -349,12 +349,6 @@ func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// distSQLSpecExecFactory still constructs some of the planNodes (for
-	// example, some variants of EXPLAIN), and we need to be able to add a
-	// simple projection on top of them.
-	if p, ok := n.(planNode); ok {
-		return constructSimpleProjectForPlanNode(p, cols, colNames, reqOrdering)
-	}
 	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
 	for i := range cols {
@@ -711,18 +705,7 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) ConstructRenameColumns(
 	input exec.Node, colNames []string,
 ) (exec.Node, error) {
-	var inputCols sqlbase.ResultColumns
-	// distSQLSpecExecFactory still constructs some of the planNodes (for
-	// example, some variants of EXPLAIN), and we need to be able to rename
-	// the columns on them.
-	switch plan := input.(type) {
-	case planMaybePhysical:
-		inputCols = plan.physPlan.ResultColumns
-	case planNode:
-		inputCols = planMutableColumns(plan)
-	default:
-		panic("unexpected node")
-	}
+	inputCols := input.(planMaybePhysical).physPlan.ResultColumns
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
 	}
@@ -748,7 +731,31 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
-	return constructExplainPlanNode(options, stmtType, plan.(*planTop), e.planner)
+	p := plan.(*planTop)
+	explain, err := constructExplainPlanNode(options, stmtType, p, e.planner)
+	if err != nil {
+		return nil, err
+	}
+	explainNode := explain.(planNode)
+	if _, isExplainPlan := explainNode.(*explainPlanNode); isExplainPlan {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain (plan)")
+	}
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode)
+	if err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = planColumns(explainNode)
+	// Plan distribution of an explain node is considered to be the same as of
+	// the query being explained.
+	// TODO(yuzefovich): we might also need to look at the distribution of
+	// subqueries and postqueries.
+	physPlan.Distribution = p.main.physPlan.Distribution
+	return planMaybePhysical{
+		physPlan: &physicalPlanTop{
+			PhysicalPlan:     physPlan,
+			planNodesToClose: []planNode{explainNode},
+		},
+	}, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(

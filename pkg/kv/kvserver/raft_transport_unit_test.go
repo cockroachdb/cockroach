@@ -44,6 +44,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	rpcC := rpc.NewContext(rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
 		Config:   &base.Config{Insecure: true},
 		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
 		Stopper:  stopper,

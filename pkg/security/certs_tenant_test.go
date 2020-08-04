@@ -91,8 +91,8 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		certsDir, cleanup = makeTenantCerts(t, tenant)
 		defer cleanup()
 	} else {
-		certsDir = security.EmbeddedTenantCertsDir
-		tenant = fmt.Sprint(security.EmbeddedTenantID)
+		certsDir = security.EmbeddedCertsDir
+		tenant = fmt.Sprint(security.EmbeddedTenantIDs()[0])
 	}
 
 	// Now set up the config a server would use. The client will trust it based on
@@ -113,6 +113,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	// server (which will validate them using the tenant CA).
 	clientTLSConfig, err := cm.GetTenantClientTLSConfig()
 	require.NoError(t, err)
+	require.NotNil(t, clientTLSConfig)
 
 	// Set up a HTTPS server using server TLS config, set up a http client using the
 	// client TLS config, make a request.

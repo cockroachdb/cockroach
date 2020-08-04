@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -655,7 +656,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			sCtx := rpc.MakeSecurityContext(serverCfg.Config)
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config, roachpb.SystemTenantID)
 			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
@@ -828,7 +829,7 @@ If problems persist, please see %s.`
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			sCtx := rpc.MakeSecurityContext(serverCfg.Config)
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config, roachpb.SystemTenantID)
 			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
@@ -1366,6 +1367,7 @@ func getClientGRPCConn(
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: log.AmbientContext{Tracer: cfg.Settings.Tracer},
 		Config:     cfg.Config,
 		Clock:      clock,

@@ -443,6 +443,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return shouldDistribute, nil
 
+	case *ordinalityNode:
+		// WITH ORDINALITY never gets distributed so that the gateway node can
+		// always number each row in order.
+		return cannotDistribute, nil
+
 	case *projectSetNode:
 		return checkSupportForPlanNode(n.source)
 
