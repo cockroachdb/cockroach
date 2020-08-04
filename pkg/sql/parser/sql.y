@@ -4241,7 +4241,8 @@ opt_cluster:
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
 // %Text:
-// SHOW [AUTOMATIC] JOBS
+// SHOW [AUTOMATIC] JOBS [select clause]
+// SHOW JOBS FOR SCHEDULES [select clause]
 // SHOW JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
@@ -4262,6 +4263,10 @@ show_jobs_stmt:
 | SHOW JOBS WHEN COMPLETE select_stmt
   {
     $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true}
+  }
+| SHOW JOBS for_schedules_clause
+  {
+    $$.val = &tree.ShowJobs{Schedules: $3.slct()}
   }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
