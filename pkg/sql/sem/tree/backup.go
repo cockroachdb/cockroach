@@ -10,7 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
+)
 
 // DescriptorCoverage specifies whether or not a subset of descriptors were
 // requested or if all the descriptors were requested, so all the descriptors
@@ -36,6 +39,7 @@ type BackupOptions struct {
 	CaptureRevisionHistory bool
 	EncryptionPassphrase   Expr
 	Detached               bool
+	EncryptionKMSURI       StringOrPlaceholderOptList
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -44,10 +48,14 @@ var _ NodeFormatter = &BackupOptions{}
 type Backup struct {
 	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
-	To                 PartitionedBackup
-	IncrementalFrom    Exprs
-	AsOf               AsOfClause
-	Options            BackupOptions
+	// StringOrPlaceholderOptList is a list of destination URIs for a single
+	// BACKUP. A single URI corresponds to the special case of a regular backup,
+	// and multiple URIs correspond to a partitioned backup whose locality
+	// configuration is specified by LOCALITY url params.
+	To              StringOrPlaceholderOptList
+	IncrementalFrom Exprs
+	AsOf            AsOfClause
+	Options         BackupOptions
 }
 
 var _ Statement = &Backup{}
@@ -80,7 +88,7 @@ func (node *Backup) Format(ctx *FmtCtx) {
 type Restore struct {
 	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
-	From               []PartitionedBackup
+	From               []StringOrPlaceholderOptList
 	AsOf               AsOfClause
 	Options            KVOptions
 }
@@ -135,14 +143,11 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 	}
 }
 
-// PartitionedBackup is a list of destination URIs for a single BACKUP. A single
-// URI corresponds to the special case of a regular backup, and multiple URIs
-// correspond to a partitioned backup whose locality configuration is
-// specified by LOCALITY url params.
-type PartitionedBackup []Expr
+// StringOrPlaceholderOptList is a list of strings or placeholders.
+type StringOrPlaceholderOptList []Expr
 
 // Format implements the NodeFormatter interface.
-func (node *PartitionedBackup) Format(ctx *FmtCtx) {
+func (node *StringOrPlaceholderOptList) Format(ctx *FmtCtx) {
 	if len(*node) > 1 {
 		ctx.WriteString("(")
 	}
@@ -176,6 +181,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("detached")
 	}
+
+	if o.EncryptionKMSURI != nil {
+		maybeAddSep()
+		ctx.WriteString("kms=")
+		o.EncryptionKMSURI.Format(ctx)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -203,10 +214,19 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.Detached = other.Detached
 	}
 
+	if o.EncryptionKMSURI == nil {
+		o.EncryptionKMSURI = other.EncryptionKMSURI
+	} else if other.EncryptionKMSURI != nil {
+		return errors.New("kms specified multiple times")
+	}
+
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (o BackupOptions) IsDefault() bool {
-	return o == BackupOptions{}
+	options := BackupOptions{}
+	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
+		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
+		o.EncryptionPassphrase == options.EncryptionPassphrase
 }

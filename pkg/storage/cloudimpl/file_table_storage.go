@@ -20,8 +20,10 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
@@ -31,16 +33,23 @@ import (
 const defaultUserfileScheme = "userfile"
 
 type fileTableStorage struct {
-	fs     *filetable.FileToTableSystem
-	cfg    roachpb.ExternalStorage_FileTable
-	db     *kv.DB
-	prefix string // relative filepath
+	fs       *filetable.FileToTableSystem
+	cfg      roachpb.ExternalStorage_FileTable
+	ioConf   base.ExternalIODirConfig
+	db       *kv.DB
+	prefix   string // relative filepath
+	settings *cluster.Settings
 }
 
 var _ cloud.ExternalStorage = &fileTableStorage{}
 
 func makeFileTableStorage(
-	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, ie *sql.InternalExecutor, db *kv.DB,
+	ctx context.Context,
+	cfg roachpb.ExternalStorage_FileTable,
+	ie *sql.InternalExecutor,
+	db *kv.DB,
+	settings *cluster.Settings,
+	ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
 	if cfg.User == "" || cfg.QualifiedTableName == "" {
 		return nil, errors.Errorf("FileTable storage requested but username or qualified table name" +
@@ -70,10 +79,12 @@ func makeFileTableStorage(
 		return nil, err
 	}
 	return &fileTableStorage{
-		fs:     fileToTableSystem,
-		cfg:    cfg,
-		db:     db,
-		prefix: cfg.Path,
+		fs:       fileToTableSystem,
+		cfg:      cfg,
+		ioConf:   ioConf,
+		db:       db,
+		prefix:   cfg.Path,
+		settings: settings,
 	}, nil
 }
 
@@ -91,9 +102,11 @@ func MakeSQLConnFileTableStorage(
 		return nil, err
 	}
 	return &fileTableStorage{
-		fs:     fileToTableSystem,
-		cfg:    cfg,
-		prefix: cfg.Path,
+		fs:       fileToTableSystem,
+		cfg:      cfg,
+		ioConf:   base.ExternalIODirConfig{},
+		prefix:   cfg.Path,
+		settings: nil,
 	}, nil
 }
 
@@ -124,6 +137,16 @@ func (f *fileTableStorage) Conf() roachpb.ExternalStorage {
 		Provider:        roachpb.ExternalStorageProvider_FileTable,
 		FileTableConfig: f.cfg,
 	}
+}
+
+// ExternalIOConf implements the ExternalStorage interface and returns the
+// server configuration for the ExternalStorage implementation.
+func (f *fileTableStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return f.ioConf
+}
+
+func (f *fileTableStorage) Settings() *cluster.Settings {
+	return f.settings
 }
 
 // Userfile storage does not provide file system semantics and thus to prevent

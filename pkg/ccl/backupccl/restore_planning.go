@@ -879,11 +879,11 @@ func restoreJobDescription(
 		AsOf:    restore.AsOf,
 		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
-		From:    make([]tree.PartitionedBackup, len(restore.From)),
+		From:    make([]tree.StringOrPlaceholderOptList, len(restore.From)),
 	}
 
 	for i, backup := range from {
-		r.From[i] = make(tree.PartitionedBackup, len(backup))
+		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
 		for j, uri := range backup {
 			sf, err := cloudimpl.SanitizeExternalStorageURI(uri, nil /* extraParams */)
 			if err != nil {

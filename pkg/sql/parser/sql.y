@@ -508,11 +508,11 @@ func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReferen
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
 }
-func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
-    return u.val.(tree.PartitionedBackup)
+func (u *sqlSymUnion) stringOrPlaceholderOptList() tree.StringOrPlaceholderOptList {
+    return u.val.(tree.StringOrPlaceholderOptList)
 }
-func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
-    return u.val.([]tree.PartitionedBackup)
+func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlaceholderOptList {
+    return u.val.([]tree.StringOrPlaceholderOptList)
 }
 func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
     return u.val.(*tree.FullBackupClause)
@@ -602,7 +602,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
-%token <str> KEY KEYS KV
+%token <str> KEY KEYS KMS KV
 
 %token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
@@ -798,8 +798,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
 %type <tree.Statement> drop_schedule_stmt
 %type <tree.Statement> restore_stmt
-%type <tree.PartitionedBackup> partitioned_backup
-%type <[]tree.PartitionedBackup> partitioned_backup_list
+%type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
+%type <[]tree.StringOrPlaceholderOptList> list_of_string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
@@ -2052,14 +2052,15 @@ alter_attribute_action:
 // Options:
 //    revision_history: enable revision history
 //    encryption_passphrase="secret": encrypt backups
-//    detached: execute backup job asynchronously, without waiting for its completion.
+//    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
+//    detached: execute backup job asynchronously, without waiting for its completion
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP opt_backup_targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_backup_options
+  BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
   {
     backup := &tree.Backup{
-      To:              $4.partitionedBackup(),
+      To:              $4.stringOrPlaceholderOptList(),
       IncrementalFrom: $6.exprs(),
       AsOf:            $5.asOfClause(),
       Options:         *$7.backupOptions(),
@@ -2130,7 +2131,10 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{Detached: true}
   }
-
+| KMS '=' string_or_placeholder_opt_list
+	{
+    $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
+	}
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
@@ -2207,14 +2211,14 @@ backup_options:
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
   CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets TO
-  /*$8=*/partitioned_backup /*$9=*/opt_with_backup_options
+  /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
     $$.val = &tree.ScheduledBackup{
       ScheduleName:     $3.expr(),
       Recurrence:       $10.expr(),
       FullBackup:       $11.fullBackupClause(),
-      To:               $8.partitionedBackup(),
+      To:               $8.stringOrPlaceholderOptList(),
       Targets:          $6.targetListPtr(),
       BackupOptions:    *($9.backupOptions()),
       ScheduleOptions:  $12.kvOptions(),
@@ -2306,34 +2310,34 @@ opt_with_schedule_options:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM partitioned_backup_list opt_as_of_clause opt_with_options
+  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{DescriptorCoverage: tree.AllDescriptors, From: $3.partitionedBackups(), AsOf: $4.asOfClause(), Options: $5.kvOptions()}
+    $$.val = &tree.Restore{DescriptorCoverage: tree.AllDescriptors, From: $3.listOfStringOrPlaceholderOptList(), AsOf: $4.asOfClause(), Options: $5.kvOptions()}
   }
-| RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options
+| RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.listOfStringOrPlaceholderOptList(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 | RESTORE error // SHOW HELP: RESTORE
 
-partitioned_backup:
+string_or_placeholder_opt_list:
   string_or_placeholder
   {
-    $$.val = tree.PartitionedBackup{$1.expr()}
+    $$.val = tree.StringOrPlaceholderOptList{$1.expr()}
   }
 | '(' string_or_placeholder_list ')'
   {
-    $$.val = tree.PartitionedBackup($2.exprs())
+    $$.val = tree.StringOrPlaceholderOptList($2.exprs())
   }
 
-partitioned_backup_list:
-  partitioned_backup
+list_of_string_or_placeholder_opt_list:
+  string_or_placeholder_opt_list
   {
-    $$.val = []tree.PartitionedBackup{$1.partitionedBackup()}
+    $$.val = []tree.StringOrPlaceholderOptList{$1.stringOrPlaceholderOptList()}
   }
-| partitioned_backup_list ',' partitioned_backup
+| list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
   {
-    $$.val = append($1.partitionedBackups(), $3.partitionedBackup())
+    $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
   }
 
 import_format:
@@ -10903,6 +10907,7 @@ unreserved_keyword:
 | JSON
 | KEY
 | KEYS
+| KMS
 | KV
 | LANGUAGE
 | LAST

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -272,6 +273,14 @@ func (es *generatorExternalStorage) ListFiles(ctx context.Context, _ string) ([]
 
 func (es *generatorExternalStorage) Delete(ctx context.Context, basename string) error {
 	return errors.New("unsupported")
+}
+
+func (es *generatorExternalStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return base.ExternalIODirConfig{}
+}
+
+func (es *generatorExternalStorage) Settings() *cluster.Settings {
+	return cluster.NoSettings
 }
 
 // generatedStorage is a factory (cloud.ExternalStorageFactory)

@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -45,10 +46,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -70,6 +74,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
+
+func init() {
+	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
+}
 
 func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2974,13 +2982,7 @@ func TestBackupLevelDB(t *testing.T) {
 	}
 }
 
-func TestBackupEncrypted(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
-	defer cleanupFn()
-
+func setupBackupEncryptedTest(ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner) {
 	// Create a table with a name and content that we never see in cleartext in a
 	// backup. And while the content and name are user data and metadata, by also
 	// partitioning the table at the sentinel value, we can ensure it also appears
@@ -3013,49 +3015,32 @@ func TestBackupEncrypted(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER neverappears`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
 	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM neverappears.neverappears`)
+}
 
-	// Full cluster-backup to capture all possible metadata.
-	backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
-	backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-	backupLoc1inc := LocalFoo + "/inc1/x?COCKROACH_LOCALITY=default"
-	backupLoc2inc := LocalFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-
-	plainBackupLoc1 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=default"
-	plainBackupLoc2 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
-
-	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
-
-	sqlDB.Exec(t, `BACKUP TO ($1, $2) WITH encryption_passphrase='abcdefg'`, backupLoc1, backupLoc2)
-	// Add the actual content with our sentinel too.
-	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
-	sqlDB.Exec(t, `BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH encryption_passphrase='abcdefg'`,
-		backupLoc1inc, backupLoc2inc, backupLoc1)
-
-	t.Run("check-stats-encrypted", func(t *testing.T) {
-		partitionMatcher := regexp.MustCompile(`BACKUP-STATISTICS`)
-		subDir := path.Join(rawDir, "foo")
-		err := filepath.Walk(subDir, func(fName string, info os.FileInfo, err error) error {
+func checkBackupStatsEncrypted(t *testing.T, rawDir string) {
+	partitionMatcher := regexp.MustCompile(`BACKUP-STATISTICS`)
+	subDir := path.Join(rawDir, "foo")
+	err := filepath.Walk(subDir, func(fName string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if partitionMatcher.MatchString(fName) {
+			statsBytes, err := ioutil.ReadFile(fName)
 			if err != nil {
 				return err
 			}
-			if partitionMatcher.MatchString(fName) {
-				statsBytes, err := ioutil.ReadFile(fName)
-				if err != nil {
-					return err
-				}
-				if strings.Contains(fName, "foo/cleartext") {
-					assert.False(t, storageccl.AppearsEncrypted(statsBytes))
-				} else {
-					assert.True(t, storageccl.AppearsEncrypted(statsBytes))
-				}
+			if strings.Contains(fName, "foo/cleartext") {
+				assert.False(t, storageccl.AppearsEncrypted(statsBytes))
+			} else {
+				assert.True(t, storageccl.AppearsEncrypted(statsBytes))
 			}
-			return nil
-		})
-		require.NoError(t, err)
+		}
+		return nil
 	})
+	require.NoError(t, err)
+}
 
-	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
-
+func checkBackupFilesEncrypted(t *testing.T, rawDir string) {
 	checkedFiles := 0
 	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() && !strings.Contains(path, "foo/cleartext") {
@@ -3075,18 +3060,327 @@ func TestBackupEncrypted(t *testing.T) {
 	if checkedFiles == 0 {
 		t.Fatal("test didn't didn't check any files")
 	}
+}
 
-	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+func getAWSKMSURI(t *testing.T) (string, string) {
+	// If environment credentials are not present, we want to
+	// skip all AWS KMS tests, including auth-implicit, even though
+	// it is not used in auth-implicit.
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	}
 
-	sqlDB.Exec(t, `SHOW BACKUP $1 WITH encryption_passphrase='abcdefg'`, backupLoc1)
-	sqlDB.ExpectErr(t, `cipher: message authentication failed`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, backupLoc1)
-	sqlDB.ExpectErr(t, `file appears encrypted -- try specifying "encryption_passphrase"`, `SHOW BACKUP $1`, backupLoc1)
-	sqlDB.ExpectErr(t, `could not find or read encryption information`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, plainBackupLoc1)
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
+		"AWS_REGION":            cloudimpl.KMSRegionParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
 
-	sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
-		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
+	// Get AWS Key ARN from env variable.
+	// TODO(adityamaru): Check if there is a way to specify this in the default
+	// role and if we can derive it from there instead?
+	keyARN := os.Getenv("AWS_KEY_ARN")
+	if keyARN == "" {
+		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+	}
 
-	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+	// Set AUTH to implicit
+	q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
+	incorrectURI := fmt.Sprintf("aws:///%s?%s", "gibberish", q.Encode())
+
+	return correctURI, incorrectURI
+}
+
+func TestEncryptedBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name   string
+		useKMS bool
+	}{
+		{
+			"encrypted-with-kms",
+			true,
+		},
+		{
+			"encrypted-with-passphrase",
+			false,
+		},
+	} {
+		var encryptionOption string
+		var incorrectEncryptionOption string
+		if tc.useKMS {
+			correctKMSURI, incorrectKeyARNURI := getAWSKMSURI(t)
+			encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
+			incorrectEncryptionOption = fmt.Sprintf("kms='%s'", incorrectKeyARNURI)
+		} else {
+			encryptionOption = "encryption_passphrase='abcdefg'"
+			incorrectEncryptionOption = "encryption_passphrase='wrongpassphrase'"
+		}
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+			defer cleanupFn()
+
+			setupBackupEncryptedTest(ctx, t, sqlDB)
+
+			// Full cluster-backup to capture all possible metadata.
+			backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
+			backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+			backupLoc1inc := LocalFoo + "/inc1/x?COCKROACH_LOCALITY=default"
+			backupLoc2inc := LocalFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+			plainBackupLoc1 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=default"
+			plainBackupLoc2 := LocalFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+			sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
+
+			sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) WITH %s`, encryptionOption), backupLoc1,
+				backupLoc2)
+			// Add the actual content with our sentinel too.
+			sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
+			sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH %s`,
+				encryptionOption), backupLoc1inc, backupLoc2inc, backupLoc1)
+
+			t.Run("check-stats-encrypted", func(t *testing.T) {
+				checkBackupStatsEncrypted(t, rawDir)
+			})
+
+			before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+
+			checkBackupFilesEncrypted(t, rawDir)
+
+			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+
+			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), backupLoc1)
+
+			var expectedShowError string
+			if tc.useKMS {
+				expectedShowError = `one of the provided URIs was not used when encrypting the base BACKUP`
+			} else {
+				expectedShowError = `cipher: message authentication failed`
+			}
+			sqlDB.ExpectErr(t, expectedShowError,
+				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, incorrectEncryptionOption), backupLoc1)
+			sqlDB.ExpectErr(t,
+				`file appears encrypted -- try specifying one of "encryption_passphrase" or "kms"`,
+				`SHOW BACKUP $1`, backupLoc1)
+			sqlDB.ExpectErr(t, `could not find or read encryption information`,
+				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), plainBackupLoc1)
+
+			// TODO(adityamaru): Delete if condition once RESTORE is taught about KMS.
+			if !tc.useKMS {
+				sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='abcdefg'`,
+					backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
+
+				sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+			}
+		})
+	}
+
+}
+
+type testKMSEnv struct {
+	settings         *cluster.Settings
+	externalIOConfig *base.ExternalIODirConfig
+}
+
+var _ cloud.KMSEnv = &testKMSEnv{}
+
+func (e *testKMSEnv) ClusterSettings() *cluster.Settings {
+	return e.settings
+}
+
+func (e *testKMSEnv) KMSConfig() *base.ExternalIODirConfig {
+	return e.externalIOConfig
+}
+
+type testKMS struct {
+	uri string
+}
+
+var _ cloud.KMS = &testKMS{}
+
+func (k *testKMS) MasterKeyID() (string, error) {
+	kmsURL, err := url.ParseRequestURI(k.uri)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimPrefix(kmsURL.Path, "/"), nil
+}
+
+// Encrypt appends the KMS URI master key ID to data.
+func (k *testKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
+	kmsURL, err := url.ParseRequestURI(k.uri)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(string(data) + strings.TrimPrefix(kmsURL.Path, "/")), nil
+}
+
+// Decrypt strips the KMS URI master key ID from data.
+func (k *testKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
+	kmsURL, err := url.ParseRequestURI(k.uri)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(strings.TrimSuffix(string(data), strings.TrimPrefix(kmsURL.Path, "/"))), nil
+}
+
+func (k *testKMS) Close() error {
+	return nil
+}
+
+func MakeTestKMS(uri string, _ cloud.KMSEnv) (cloud.KMS, error) {
+	return &testKMS{uri}, nil
+}
+
+func constructMockKMSURIsWithKeyID(keyIDs []string) []string {
+	q := make(url.Values)
+	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+	q.Add(cloudimpl.KMSRegionParam, "blah")
+
+	var uris []string
+	for _, keyID := range keyIDs {
+		uris = append(uris, fmt.Sprintf("testkms:///%s?%s", keyID, q.Encode()))
+	}
+
+	return uris
+}
+
+// TestValidateKMSURIsAgainstFullBackup tests validateKMSURIsAgainstFullBackup()
+// which ensures that the KMS URIs provided to an incremental BACKUP are a
+// subset of those used during the full BACKUP.
+func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name                  string
+		fullBackupURIs        []string
+		incrementalBackupURIs []string
+		expectError           bool
+	}{
+		{
+			name:                  "inc-full-matching-set",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"def", "abc"}),
+			expectError:           false,
+		},
+		{
+			name:                  "inc-subset-of-full",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}),
+			expectError:           false,
+		},
+		{
+			name:                  "inc-expands-set-of-full",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def", "ghi"}),
+			expectError:           true,
+		},
+		{
+			name:                  "inc-has-mismatch",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "ghi"}),
+			expectError:           true,
+		},
+	} {
+		masterKeyIDToDataKey := newEncryptedDataKeyMap()
+
+		var defaultEncryptedDataKey []byte
+		for _, uri := range tc.fullBackupURIs {
+			url, err := url.ParseRequestURI(uri)
+			require.NoError(t, err)
+			keyID := strings.TrimPrefix(url.Path, "/")
+
+			masterKeyIDToDataKey.addEncryptedDataKey(plaintextMasterKeyID(keyID),
+				[]byte("efgh-"+tc.name))
+
+			if defaultEncryptedDataKey == nil {
+				defaultEncryptedDataKey = []byte("efgh-" + tc.name)
+			}
+		}
+
+		kmsInfo, err := validateKMSURIsAgainstFullBackup(
+			tc.incrementalBackupURIs, masterKeyIDToDataKey,
+			&testKMSEnv{cluster.NoSettings, &base.ExternalIODirConfig{}})
+		if tc.expectError {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, tc.incrementalBackupURIs[0], kmsInfo.Uri)
+			require.True(t, bytes.Equal(defaultEncryptedDataKey, kmsInfo.EncryptedDataKey))
+		}
+	}
+}
+
+// TestGetEncryptedDataKeyByKMSMasterKeyID tests
+// getEncryptedDataKeyByKMSMasterKeyID() which constructs a mapping
+// {MasterKeyID : EncryptedDataKey} for each KMS URI.
+// It also returns the default KMSInfo to be used for encryption/decryption
+// thereafter, which defaults to the first URI.
+func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	plaintextDataKey := []byte("supersecret")
+	for _, tc := range []struct {
+		name           string
+		fullBackupURIs []string
+	}{
+		{
+			name:           "single-uri",
+			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}),
+		},
+		{
+			name:           "multiple-unique-uris",
+			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+		},
+	} {
+		expectedMap := newEncryptedDataKeyMap()
+		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+		for _, uri := range tc.fullBackupURIs {
+			testKMS, err := MakeTestKMS(uri, nil)
+			require.NoError(t, err)
+
+			masterKeyID, err := testKMS.MasterKeyID()
+			require.NoError(t, err)
+
+			encryptedDataKey, err := testKMS.Encrypt(ctx, plaintextDataKey)
+			require.NoError(t, err)
+
+			if defaultKMSInfo == nil {
+				defaultKMSInfo = &jobspb.BackupEncryptionOptions_KMSInfo{
+					Uri:              uri,
+					EncryptedDataKey: encryptedDataKey,
+				}
+			}
+
+			expectedMap.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID), encryptedDataKey)
+		}
+
+		gotMap, gotDefaultKMSInfo, err := getEncryptedDataKeyByKMSMasterKeyID(ctx, tc.fullBackupURIs,
+			plaintextDataKey, nil)
+		require.NoError(t, err)
+		require.Equal(t, *expectedMap, *gotMap)
+		require.Equal(t, defaultKMSInfo.Uri, gotDefaultKMSInfo.Uri)
+		require.True(t, bytes.Equal(defaultKMSInfo.EncryptedDataKey,
+			gotDefaultKMSInfo.EncryptedDataKey))
+	}
 }
 
 func TestRestoredPrivileges(t *testing.T) {

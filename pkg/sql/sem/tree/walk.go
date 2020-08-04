@@ -1031,7 +1031,7 @@ func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Restore) copyNode() *Restore {
 	stmtCopy := *stmt
-	stmtCopy.From = append([]PartitionedBackup(nil), stmt.From...)
+	stmtCopy.From = append([]StringOrPlaceholderOptList(nil), stmt.From...)
 	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
 	return &stmtCopy
 }
