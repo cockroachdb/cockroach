@@ -38,8 +38,6 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		if n.run.rowsNeeded {
 			return planReqOrdering(n.source)
 		}
-	case *projectSetNode:
-		return n.reqOrdering
 
 	case *filterNode:
 		return n.reqOrdering

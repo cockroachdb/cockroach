@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
+	"github.com/twpayne/go-geom"
 )
 
 // s2GeographyIndex is an implementation of GeographyIndex that uses the S2 geometry
@@ -53,13 +54,66 @@ func DefaultGeographyIndexConfig() *Config {
 	}
 }
 
+// geogCovererWithBBoxFallback first computes the covering for the provided
+// regions (which were computed using g), and if the covering is too broad
+// (contains top-level cells from all faces), falls back to using the bounding
+// box of g to compute the covering.
+type geogCovererWithBBoxFallback struct {
+	rc *s2.RegionCoverer
+	g  *geo.Geography
+}
+
+var _ covererInterface = geogCovererWithBBoxFallback{}
+
+func toDeg(radians float64) float64 {
+	return s1.Angle(radians).Degrees()
+}
+
+func (rc geogCovererWithBBoxFallback) covering(regions []s2.Region) s2.CellUnion {
+	cu := simpleCovererImpl{rc: rc.rc}.covering(regions)
+	if isBadGeogCovering(cu) {
+		bbox := rc.g.SpatialObject().BoundingBox
+		if bbox == nil {
+			return cu
+		}
+		flatCoords := []float64{
+			toDeg(bbox.LoX), toDeg(bbox.LoY), toDeg(bbox.HiX), toDeg(bbox.LoY),
+			toDeg(bbox.HiX), toDeg(bbox.HiY), toDeg(bbox.LoX), toDeg(bbox.HiY),
+			toDeg(bbox.LoX), toDeg(bbox.LoY)}
+		bboxT := geom.NewPolygonFlat(geom.XY, flatCoords, []int{len(flatCoords)})
+		bboxRegions, err := geo.S2RegionsFromGeomT(bboxT, geo.EmptyBehaviorOmit)
+		if err != nil {
+			return cu
+		}
+		bboxCU := simpleCovererImpl{rc: rc.rc}.covering(bboxRegions)
+		if !isBadGeogCovering(bboxCU) {
+			cu = bboxCU
+		}
+	}
+	return cu
+}
+
+func isBadGeogCovering(cu s2.CellUnion) bool {
+	const numFaces = 6
+	if len(cu) != numFaces {
+		return false
+	}
+	numFaceCells := 0
+	for _, c := range cu {
+		if c.Level() == 0 {
+			numFaceCells++
+		}
+	}
+	return numFaces == numFaceCells
+}
+
 // InvertedIndexKeys implements the GeographyIndex interface.
 func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
-	return invertedIndexKeys(c, simpleCovererImpl{rc: i.rc}, r), nil
+	return invertedIndexKeys(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), nil
 }
 
 // Covers implements the GeographyIndex interface.
@@ -68,7 +122,7 @@ func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKey
 	if err != nil {
 		return nil, err
 	}
-	return covers(c, simpleCovererImpl{rc: i.rc}, r), nil
+	return covers(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), nil
 }
 
 // CoveredBy implements the GeographyIndex interface.
@@ -86,7 +140,7 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 	if err != nil {
 		return nil, err
 	}
-	return intersects(c, simpleCovererImpl{rc: i.rc}, r), nil
+	return intersects(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), nil
 }
 
 func (i *s2GeographyIndex) DWithin(
@@ -113,7 +167,7 @@ func (i *s2GeographyIndex) DWithin(
 	// desire.
 	//
 	// Construct the cell covering for the shape.
-	gCovering := simpleCovererImpl{rc: i.rc}.covering(r)
+	gCovering := geogCovererWithBBoxFallback{rc: i.rc, g: g}.covering(r)
 	// Convert the distanceMeters to an angle, in order to expand the cell covering
 	// on the sphere by the angle.
 	multiplier := 1.0
