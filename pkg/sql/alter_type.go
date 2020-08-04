@@ -56,13 +56,19 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params, n, t)
+		err = params.p.addEnumValue(params.ctx, n, t, tree.AsStringWithFQNames(n.n, params.Ann()))
 	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params, n, t.OldVal, t.NewVal)
+		err = params.p.renameTypeValue(
+			params.ctx, n, t.OldVal, t.NewVal, tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 	case *tree.AlterTypeRename:
-		err = params.p.renameType(params, n, t.NewName)
+		err = params.p.renameType(
+			params.ctx, n, t.NewName, tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 	case *tree.AlterTypeSetSchema:
-		err = params.p.setTypeSchema(params, n, t.Schema)
+		err = params.p.setTypeSchema(
+			params.ctx, n, t.Schema, tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -73,18 +79,23 @@ func (n *alterTypeNode) startExec(params runParams) error {
 }
 
 func (p *planner) addEnumValue(
-	params runParams, n *alterTypeNode, node *tree.AlterTypeAddValue,
+	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeAddValue, jobDesc string,
 ) error {
 	if err := n.desc.AddEnumValue(node); err != nil {
 		return err
 	}
-	return p.writeTypeChange(params.ctx, n.desc, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return p.writeTypeChange(ctx, n.desc, jobDesc)
 }
 
-func (p *planner) renameType(params runParams, n *alterTypeNode, newName string) error {
+func (p *planner) renameType(
+	ctx context.Context,
+	n *alterTypeNode,
+	newName string,
+	jobDesc string,
+) error {
 	// See if there is a name collision with the new name.
 	exists, id, err := sqlbase.LookupObjectID(
-		params.ctx,
+		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
 		n.desc.ParentID,
@@ -93,7 +104,7 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetDescriptorByID(params.ctx, p.txn, p.ExecCfg().Codec, id)
+		desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
@@ -104,17 +115,17 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 
 	// Rename the base descriptor.
 	if err := p.performRenameTypeDesc(
-		params.ctx,
+		ctx,
 		n.desc,
 		newName,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		jobDesc,
 	); err != nil {
 		return err
 	}
 
 	// Now rename the array type.
 	newArrayName, err := findFreeArrayTypeName(
-		params.ctx,
+		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
 		n.desc.ParentID,
@@ -124,15 +135,15 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	if err != nil {
 		return err
 	}
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(params.ctx, p.txn, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 	if err := p.performRenameTypeDesc(
-		params.ctx,
+		ctx,
 		arrayDesc,
 		newArrayName,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		jobDesc,
 	); err != nil {
 		return err
 	}
@@ -164,7 +175,7 @@ func (p *planner) performRenameTypeDesc(
 }
 
 func (p *planner) renameTypeValue(
-	params runParams, n *alterTypeNode, oldVal string, newVal string,
+	ctx context.Context, n *alterTypeNode, oldVal string, newVal string, jobDesc string,
 ) error {
 	enumMemberIndex := -1
 
@@ -189,14 +200,18 @@ func (p *planner) renameTypeValue(
 	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
 
 	return p.writeTypeChange(
-		params.ctx,
+		ctx,
 		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		jobDesc,
 	)
 }
 
-func (p *planner) setTypeSchema(params runParams, n *alterTypeNode, schema string) error {
-	ctx := params.ctx
+func (p *planner) setTypeSchema(
+	ctx context.Context,
+	n *alterTypeNode,
+	schema string,
+	jobDesc string,
+) error {
 	typeDesc := n.desc
 	schemaID := typeDesc.GetParentSchemaID()
 	databaseID := typeDesc.GetParentID()
@@ -217,9 +232,7 @@ func (p *planner) setTypeSchema(params runParams, n *alterTypeNode, schema strin
 	// Set the tableDesc's new schema id to the desired schema's id.
 	typeDesc.SetParentSchemaID(desiredSchemaID)
 
-	if err := p.writeTypeChange(
-		ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
+	if err := p.writeTypeChange(ctx, typeDesc, jobDesc); err != nil {
 		return err
 	}
 
@@ -227,7 +240,7 @@ func (p *planner) setTypeSchema(params runParams, n *alterTypeNode, schema strin
 		databaseID, desiredSchemaID, typeDesc.Name).Key(p.ExecCfg().Codec)
 
 	b := &kv.Batch{}
-	if params.p.extendedEvalCtx.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, typeDesc.ID)
 	}
 	b.CPut(newKey, typeDesc.ID, nil)
