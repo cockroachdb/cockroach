@@ -253,7 +253,7 @@ func NewProcessor(
 		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, outputs[0])
 	}
 	if core.SplitAndScatter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		if NewSplitAndScatterProcessor == nil {
