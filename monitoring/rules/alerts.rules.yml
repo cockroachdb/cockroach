@@ -17,17 +17,38 @@ groups:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
         down for more than 15 minutes.'
       summary: Instance {{ $labels.instance }} dead
+  # Alert for any instance that is not ready for a while.
+  - alert: InstanceNotReady
+    expr: kube_statefulset_status_replicas_ready{statefulset="cockroachdb"} != kube_statefulset_status_replicas{statefulset="cockroachdb"}
+    for: 45m
+    labels:
+      priority: P4
+    annotations:
+      description: 'there has been an unready replica for cluster {{ $labels.cluster }}
+        for more than 15 minutes.'
+      summary: Instance not ready
   # Alert on instance restarts.
   - alert: InstanceRestart
-    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 0 and resets(sys_uptime{job="cockroachdb"}[10m])
-      < 5
+    expr: resets(sys_uptime{job="cockroachdb"}[24h]) > 1
+    labels:
+      priority: P4
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
-        {{ $value }} time(s) in 10m'
+        {{ $value }} time(s) in 24h'
       summary: Instance {{ $labels.instance }} restarted
   # Alert on flapping instances (frequent restarts).
+  - alert: InstancesFlapping
+    # Aggregated. We commit to not updating so fast this is triggered except in emergency.
+    # Update automation sleeps 3m between pod updates!
+    expr: sum by (cluster)(resets(sys_uptime{job="cockroachdb"}[5m])) > 2
+    annotations:
+      description: 'instances in cluster {{ $labels.cluster }} restarted
+        {{ $value }} time(s) in 5m'
+      summary: Instances in {{ $labels.cluster }} flapping
+  # Alert on flapping instances (frequent restarts).
   - alert: InstanceFlapping
-    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 5
+    # Un-aggregated.
+    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 1
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
         {{ $value }} time(s) in 10m'
@@ -44,12 +65,14 @@ groups:
       description: Prometheus and {{ $labels.instance }} disagree on liveness
       summary: Liveness mismatch for {{ $labels.instance }}
   # Alert on version mismatch.
-  # This alert is intentionally loose (30 minutes) to allow for rolling upgrades.
+  # This alert is intentionally loose (4 hours) to allow for rolling upgrades.
   # This may need to be adjusted for large clusters.
   - alert: VersionMismatch
     expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroachdb"}))
       > 1
-    for: 30m
+    for: 4h
+    labels:
+      priority: P4
     annotations:
       description: Cluster {{ $labels.cluster }} running {{ $value }} different versions
       summary: Binary version mismatch on {{ $labels.cluster }}
@@ -74,10 +97,16 @@ groups:
   - alert: UnavailableRanges
     expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroachdb"})) > 0
     for: 10m
-    labels:
-      severity: testing
     annotations:
       summary: Instance {{ $labels.instance }} has {{ $value }} unavailable ranges
+  # Cockroach-measured clock offset nearing limit (by default, servers kill themselves at 400ms from the mean, so alert at 300ms)
+  - alert: ClockOffsetNearMax
+    expr: clock_offset_meannanos{job="cockroachdb"} > 300 * 1000 * 1000
+    for: 5m
+    labels:
+      priority: P4
+    annotations:
+      summary: Clock on {{ $labels.instance }} as measured by cockroach is offset by {{ $value }} nanoseconds from the cluster mean
   # Leader-not-leaseholder ranges.
   - alert: NoLeaseRanges
     expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroachdb"}))
@@ -88,18 +117,12 @@ groups:
     annotations:
       summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
   # Certificate expiration. Alerts are per node.
-  - alert: CACertificateExpiresSoon
-    expr: (security_certificate_expiration_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ca{job="cockroachdb"}
-      - time()) < 86400 * 366
-    labels:
-      frequency: daily
-    annotations:
-      summary: CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: ClientCACertificateExpiresSoon
     expr: (security_certificate_expiration_client_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_client_ca{job="cockroachdb"}
       - time()) < 86400 * 366
     labels:
       frequency: daily
+      priority: P4
     annotations:
       summary: Client CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: UICACertificateExpiresSoon
@@ -107,6 +130,7 @@ groups:
       - time()) < 86400 * 366
     labels:
       frequency: daily
+      priority: P4
     annotations:
       summary: UI CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: NodeCertificateExpiresSoon
@@ -114,6 +138,7 @@ groups:
       - time()) < 86400 * 183
     labels:
       frequency: daily
+      priority: P4
     annotations:
       summary: Node certificate for {{ $labels.instance }} expires in less than six months
   - alert: NodeClientCertificateExpiresSoon
@@ -121,21 +146,31 @@ groups:
       - time()) < 86400 * 183
     labels:
       frequency: daily
+      priority: P4
     annotations:
       summary: Client certificate for {{ $labels.instance }} expires in less than six months
   - alert: UICertificateExpiresSoon
     expr: (security_certificate_expiration_ui{job="cockroachdb"} > 0) and (security_certificate_expiration_ui{job="cockroachdb"}
-      - time()) < 86400 * 30
+      - time()) < 86400 * 20
     labels:
       frequency: daily
+      priority: P4
     annotations:
-      summary: UI certificate for {{ $labels.instance }} expires in less than 30 days
+      summary: UI certificate for {{ $labels.instance }} expires in less than 20 days
   # Getting close to open file descriptor limit.
   - alert: HighOpenFDCount
     expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} > 0.8
     for: 10m
-    labels:
-      severity: testing
     annotations:
       summary: 'Too many open file descriptors on {{ $labels.instance }}: {{ $value
         }} fraction used'
+  # Prometheus disk getting full.
+  - alert: PrometheusDiskLow
+    expr: node_filesystem_free{cluster="prometheus",job="node_exporter_prometheus",mountpoint="/data"}
+      / node_filesystem_size{cluster="prometheus",job="node_exporter_prometheus",mountpoint="/data"}
+      < 0.2
+    for: 10m
+    labels:
+      severity: testing
+    annotations:
+      summary: 'Prometheus storage is almost full: {{ $value }} fraction free'
