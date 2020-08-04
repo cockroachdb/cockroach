@@ -56,6 +56,8 @@ func TestDockerJava(t *testing.T) {
 }
 
 func TestDockerElixir(t *testing.T) {
+	t.Skip("Elixir requires network to run, which can flake. When attempting to update this (#52341), the new Elixir version does not work with CRDB/TLS.")
+
 	s := log.Scope(t)
 	defer s.Close(t)
 
