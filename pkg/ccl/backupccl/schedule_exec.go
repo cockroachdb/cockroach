@@ -114,12 +114,7 @@ func (se *scheduledBackupExecutor) ExecuteJob(
 
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (se *scheduledBackupExecutor) NotifyJobTermination(
-	ctx context.Context,
-	cfg *scheduledjobs.JobExecutionConfig,
-	env scheduledjobs.JobSchedulerEnv,
-	md *jobs.JobMetadata,
-	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
+	ctx context.Context, md *jobs.JobMetadata, schedule *jobs.ScheduledJob, txn *kv.Txn,
 ) error {
 	return errors.New("unimplemented yet")
 }

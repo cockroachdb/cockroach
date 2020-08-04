@@ -39,12 +39,7 @@ func (s *statusTrackingExecutor) ExecuteJob(
 }
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
-	md *JobMetadata,
-	_ *ScheduledJob,
-	_ *kv.Txn,
+	ctx context.Context, md *JobMetadata, schedule *ScheduledJob, txn *kv.Txn,
 ) error {
 	s.counts[md.Status]++
 	return nil
@@ -54,23 +49,6 @@ var _ ScheduledJobExecutor = &statusTrackingExecutor{}
 
 func newStatusTrackingExecutor() *statusTrackingExecutor {
 	return &statusTrackingExecutor{counts: make(map[Status]int)}
-}
-
-func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, s := range []Status{
-		StatusPending, StatusRunning, StatusPaused, StatusReverting,
-		StatusCancelRequested, StatusPauseRequested,
-	} {
-		md := &JobMetadata{
-			ID:     123,
-			Status: s,
-		}
-		require.Error(t, NotifyJobTermination(
-			context.Background(), nil, nil, md, 321, nil))
-	}
 }
 
 func TestScheduledJobExecutorRegistration(t *testing.T) {
@@ -108,7 +86,8 @@ func TestJobTerminationNotification(t *testing.T) {
 			Status:  s,
 			Payload: &jobspb.Payload{},
 		}
-		require.NoError(t, NotifyJobTermination(ctx, h.cfg, h.env, md, schedule.ScheduleID(), nil))
+		require.NoError(t, NotifyJobTermination(
+			ctx, h.env, md, schedule.ScheduleID(), h.cfg.InternalExecutor, nil))
 	}
 
 	// Verify counts.

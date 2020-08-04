@@ -63,7 +63,8 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 				Status: "failed",
 			}
 
-			require.NoError(t, NotifyJobTermination(ctx, h.cfg, h.env, md, j.ScheduleID(), nil))
+			require.NoError(t, NotifyJobTermination(
+				ctx, h.env, md, j.ScheduleID(), h.cfg.InternalExecutor, nil))
 
 			// Verify nextRun updated
 			loaded := h.loadSchedule(t, j.ScheduleID())
