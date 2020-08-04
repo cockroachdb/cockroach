@@ -336,6 +336,14 @@ func (ts *TestServer) Clock() *hlc.Clock {
 	return nil
 }
 
+// SQLLivenessStorage returns the *sqlliveness.Storage as an interface{}.
+func (ts *TestServer) SQLLivenessStorage() interface{} {
+	if ts != nil {
+		return ts.sqlServer.execCfg.SQLLivenessStorage
+	}
+	return nil
+}
+
 // JobRegistry returns the *jobs.Registry as an interface{}.
 func (ts *TestServer) JobRegistry() interface{} {
 	if ts != nil {
