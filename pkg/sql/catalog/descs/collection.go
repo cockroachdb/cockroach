@@ -305,7 +305,8 @@ func (tc *Collection) ResolveSchema(
 ) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, sqlbase.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: tree.PublicSchema}, nil
 	}
 
 	type schemaCacheKey struct {
@@ -1157,6 +1158,11 @@ func (tc *Collection) DatabaseCache() *database.Cache {
 // ResetDatabaseCache resets the table collection's database.Cache.
 func (tc *Collection) ResetDatabaseCache(dbCache *database.Cache) {
 	tc.databaseCache = dbCache
+}
+
+// TODO (rohany): Delete this once the collection uses lease manager
+func (tc *Collection) ResetSchemaCache() {
+	tc.schemaCache = sync.Map{}
 }
 
 // MigrationSchemaChangeRequiredContext flags a schema change as necessary to

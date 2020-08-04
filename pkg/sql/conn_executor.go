@@ -1190,6 +1190,7 @@ func (ex *connExecutor) resetExtraTxnState(
 	ex.extraTxnState.descCollection.ReleaseAll(ctx)
 
 	ex.extraTxnState.descCollection.ResetDatabaseCache(dbCacheHolder.getDatabaseCache())
+	ex.extraTxnState.descCollection.ResetSchemaCache()
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {

@@ -1781,13 +1781,24 @@ func (r schemaChangeResumer) Resume(
 		return nil
 	}
 
+	// TODO (rohany): Can figure out where to put this.
+	// Drop any schemas that have been requested to be dropped.
+	for _, id := range details.DroppedSchemas {
+		// TODO (rohany): This needs to be wrapped with a retry. Or, we can just
+		//  hook into the schema changer after alter type rename lands??
+		if err := drainNamesForDescriptor(ctx, id, p.LeaseMgr(), p.ExecCfg().Codec, nil); err != nil {
+			return err
+		}
+		// TODO (rohany): Finally delete the descriptor here.
+	}
+
 	// If a database is being dropped, handle this separately by draining names
 	// for all the tables and types.
 	//
 	// This also covers other cases where we have a leftover 19.2 job that drops
 	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
 	// it's possible for DroppedDatabaseID to be unset.
-	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 {
+	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 || len(details.DroppedSchemas) > 0 {
 		// Drop all of the types in the database.
 		for i := range details.DroppedTypes {
 			ts := &typeSchemaChanger{
