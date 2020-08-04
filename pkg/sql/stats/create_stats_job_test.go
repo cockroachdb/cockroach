@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -146,6 +147,10 @@ func TestCreateStatsLivenessWithRestart(t *testing.T) {
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 20, Minor: 1},
+			roachpb.Version{Major: 20, Minor: 1},
+			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
 		},
@@ -256,6 +261,10 @@ func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 20, Minor: 1},
+			roachpb.Version{Major: 20, Minor: 1},
+			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
 		},

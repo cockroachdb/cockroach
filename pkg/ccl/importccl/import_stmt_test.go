@@ -3773,6 +3773,10 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 20, Minor: 1},
+			roachpb.Version{Major: 20, Minor: 1},
+			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
 		},
@@ -3904,6 +3908,10 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 20, Minor: 1},
+			roachpb.Version{Major: 20, Minor: 1},
+			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
 		},

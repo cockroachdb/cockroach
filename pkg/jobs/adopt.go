@@ -24,10 +24,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// SQL WHERE filter for jobs that could be adopted.
-var statusIsAdoptable = fmt.Sprintf("status IN ('%s', '%s', '%s', '%s')",
-	StatusRunning, StatusCancelRequested, StatusPauseRequested, StatusReverting)
-
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
