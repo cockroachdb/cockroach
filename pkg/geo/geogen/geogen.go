@@ -185,8 +185,8 @@ func RandomGeomT(
 
 // RandomGeometry generates a random Geometry with the given SRID.
 func RandomGeometry(rng *rand.Rand, srid geopb.SRID) *geo.Geometry {
-	minX, maxX := -math.MaxFloat64, math.MaxFloat64
-	minY, maxY := -math.MaxFloat64, math.MaxFloat64
+	minX, maxX := -math.MaxFloat32, math.MaxFloat32
+	minY, maxY := -math.MaxFloat32, math.MaxFloat32
 	proj, ok := geoprojbase.Projections[srid]
 	if ok {
 		minX, maxX = proj.Bounds.MinX, proj.Bounds.MaxX
