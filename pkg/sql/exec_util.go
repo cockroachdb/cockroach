@@ -661,21 +661,22 @@ type ExecutorConfig struct {
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
-	StatusServer      serverpb.OptionalStatusServer
-	MetricsRecorder   nodeStatusGenerator
-	SessionRegistry   *SessionRegistry
-	SQLLivenessReader sqlliveness.Reader
-	JobRegistry       *jobs.Registry
-	VirtualSchemas    *VirtualSchemaHolder
-	DistSQLPlanner    *DistSQLPlanner
-	TableStatsCache   *stats.TableStatisticsCache
-	StatsRefresher    *stats.Refresher
-	ExecLogger        *log.SecondaryLogger
-	AuditLogger       *log.SecondaryLogger
-	SlowQueryLogger   *log.SecondaryLogger
-	AuthLogger        *log.SecondaryLogger
-	InternalExecutor  *InternalExecutor
-	QueryCache        *querycache.C
+	StatusServer            serverpb.OptionalStatusServer
+	MetricsRecorder         nodeStatusGenerator
+	SessionRegistry         *SessionRegistry
+	SQLLivenessReader       sqlliveness.Reader
+	JobRegistry             *jobs.Registry
+	VirtualSchemas          *VirtualSchemaHolder
+	DistSQLPlanner          *DistSQLPlanner
+	TableStatsCache         *stats.TableStatisticsCache
+	StatsRefresher          *stats.Refresher
+	ExecLogger              *log.SecondaryLogger
+	AuditLogger             *log.SecondaryLogger
+	SlowQueryLogger         *log.SecondaryLogger
+	SlowInternalQueryLogger *log.SecondaryLogger
+	AuthLogger              *log.SecondaryLogger
+	InternalExecutor        *InternalExecutor
+	QueryCache              *querycache.C
 
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
