@@ -162,14 +162,26 @@ func outputOp(op opt.Operator) string {
 	case opt.InnerJoinOp:
 		return "inner"
 
+	case opt.InnerJoinApplyOp:
+		return "inner-apply"
+
 	case opt.SemiJoinOp:
 		return "semi"
+
+	case opt.SemiJoinApplyOp:
+		return "semi-apply"
 
 	case opt.AntiJoinOp:
 		return "anti"
 
+	case opt.AntiJoinApplyOp:
+		return "anti-apply"
+
 	case opt.LeftJoinOp:
 		return "left"
+
+	case opt.LeftJoinApplyOp:
+		return "left-apply"
 
 	case opt.FullJoinOp:
 		return "full"
