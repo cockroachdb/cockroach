@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -61,10 +62,11 @@ func TestRegistryCancelation(t *testing.T) {
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		roachpb.Version{Major: 19, Minor: 2},
-		roachpb.Version{Major: 19, Minor: 2},
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
 		true)
-	sqlInstance := slinstance.NewSqlInstance(stopper, clock, db, nil, settings)
+	sqlStorage := slstorage.NewStorage(stopper, clock, db, nil, settings)
+	sqlInstance := slinstance.NewSqlInstance(stopper, clock, sqlStorage, settings)
 	registry := MakeRegistry(
 		log.AmbientContext{},
 		stopper,
