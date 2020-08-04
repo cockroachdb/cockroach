@@ -383,6 +383,7 @@ bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
 		github.com/mattn/goveralls \
 		github.com/mibk/dupl \
 		github.com/mmatczuk/go_generics/cmd/go_generics \
+		github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc \
 		github.com/wadey/gocovmerge \
 		golang.org/x/lint/golint \
 		golang.org/x/perf/cmd/benchstat \
@@ -850,7 +851,7 @@ SQLPARSER_TARGETS = \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources bin/.cpp_ccl_protobuf_sources
 
-DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_safe.md
+DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_safe.md bin/.docgen_http
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -1555,6 +1556,14 @@ bin/.docgen_bnfs: bin/docgen
 
 bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
+	touch $@
+
+bin/.docgen_http: bin/docgen $(PROTOC)
+	docgen http \
+		--protoc $(PROTOC) \
+		--gendoc ./bin/protoc-gen-doc \
+		--out docs/generated/http \
+		--protobuf pkg:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH):$(ERRORS_PATH)
 	touch $@
 
 .PHONY: docs/generated/redact_safe.md
