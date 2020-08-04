@@ -8,21 +8,23 @@
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
 
-/pkg/sql/opt/                @cockroachdb/sql-opt-prs
-/pkg/sql/stats/              @cockroachdb/sql-opt-prs
+/pkg/sql/opt/                @cockroachdb/sql-optimizer
+/pkg/sql/stats/              @cockroachdb/sql-optimizer
 
 /pkg/cli/                    @cockroachdb/cli-prs
 
-/pkg/ccl/backupccl/          @cockroachdb/bulk-prs
-/pkg/ccl/importccl/          @cockroachdb/bulk-prs
-/pkg/ccl/storageccl/         @cockroachdb/bulk-prs
-/pkg/ccl/changefeedccl/      @cockroachdb/bulk-prs
-/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
-/pkg/cli/dump.go             @cockroachdb/bulk-prs
+/pkg/ccl/backupccl/          @cockroachdb/bulk-io
+/pkg/ccl/importccl/          @cockroachdb/bulk-io
+/pkg/ccl/storageccl/         @cockroachdb/bulk-io
+/pkg/ccl/changefeedccl/      @cockroachdb/bulk-io
+/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-io
+/pkg/cli/dump.go             @cockroachdb/bulk-io
 
-/pkg/geo                     @cockroachdb/geospatial
+/pkg/geo/                     @cockroachdb/geospatial
 
 /pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
 /pkg/ui/src/js/protos.js
+
+/pkg/kv/ @cockroachdb/kv
