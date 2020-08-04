@@ -217,11 +217,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 
 		cfg.sqlLivenessStorage = slstorage.NewStorage(
-			ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
 		)
 
 		cfg.sqlInstance = slinstance.NewSqlInstance(
-			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+			cfg.stopper, cfg.clock, cfg.sqlLivenessStorage, cfg.Settings,
 		)
 
 		*jobRegistry = *jobs.MakeRegistry(
@@ -417,7 +417,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	sqllivenessStorage := slstorage.NewStorage(
-		ctx, cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+		cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
 	)
 
 	*execCfg = sql.ExecutorConfig{
