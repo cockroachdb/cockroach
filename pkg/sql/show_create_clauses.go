@@ -100,13 +100,12 @@ func ShowCreateView(
 // showComments prints out the COMMENT statements sufficient to populate a
 // table's comments, including its index and column comments.
 func showComments(
-	table *sqlbase.ImmutableTableDescriptor, tc *tableComments, buf *bytes.Buffer,
+	tn *tree.TableName, table *sqlbase.ImmutableTableDescriptor, tc *tableComments, buf *bytes.Buffer,
 ) error {
 	if tc == nil {
 		return nil
 	}
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	tn := tree.MakeUnqualifiedTableName(tree.Name(table.Name))
 	un := tn.ToUnresolvedObjectName()
 	if tc.comment != nil {
 		f.WriteString(";\n")
@@ -141,7 +140,7 @@ func showComments(
 		f.WriteString(";\n")
 		f.FormatNode(&tree.CommentOnIndex{
 			Index: tree.TableIndexName{
-				Table: tn,
+				Table: *tn,
 				Index: tree.UnrestrictedName(idx.Name),
 			},
 			Comment: &indexComment.comment,

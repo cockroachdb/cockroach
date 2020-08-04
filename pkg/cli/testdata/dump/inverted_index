@@ -40,7 +40,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (a, b, c, d, e, f, rowid)
 );
 
-INSERT INTO t (a, b, c, d, e, f) VALUES
+INSERT INTO public.t (a, b, c, d, e, f) VALUES
 	('{"a": "b"}', '{"c": "d"}', ARRAY[1], ARRAY[2], '0101000020E6100000000000000000F03F000000000000F03F', '0101000020E6100000000000000000F03F000000000000F03F');
 ----
 ----

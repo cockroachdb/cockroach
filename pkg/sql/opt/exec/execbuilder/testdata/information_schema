@@ -3,10 +3,10 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-·              distribution  local             ·                                                                  ·
-·              vectorized    false             ·                                                                  ·
-virtual table  ·             ·                 (catalog_name, schema_name, default_character_set_name, sql_path)  ·
-·              source        schemata@primary  ·                                                                  ·
+·              distribution  local             ·                                                                                        ·
+·              vectorized    false             ·                                                                                        ·
+virtual table  ·             ·                 (catalog_name, schema_name, default_character_set_name, sql_path, crdb_is_user_defined)  ·
+·              source        schemata@primary  ·                                                                                        ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'

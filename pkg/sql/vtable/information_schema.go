@@ -121,7 +121,8 @@ CREATE TABLE information_schema.schemata (
 	CATALOG_NAME               STRING NOT NULL,
 	SCHEMA_NAME                STRING NOT NULL,
 	DEFAULT_CHARACTER_SET_NAME STRING,
-	SQL_PATH                   STRING
+	SQL_PATH                   STRING,
+	CRDB_IS_USER_DEFINED       STRING
 )`
 
 // InformationSchemaTables describes the schema of the
