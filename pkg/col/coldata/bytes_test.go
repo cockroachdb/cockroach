@@ -317,6 +317,24 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "hello again", string(b1.Get(1)))
 	})
 
+	t.Run("AppendZeroSlice", func(t *testing.T) {
+		// This test makes sure that b.maxSetIndex is updated correctly when we
+		// create a long flat bytes vector but not set all the values and then
+		// truncate the vector. The expected behavior is that offsets must be
+		// backfilled, and once a new value is appended, it should be
+		// retrievable.
+		b := NewBytes(5)
+		b.Set(0, []byte("zero"))
+		require.Equal(t, 5, b.Len())
+		b.AppendSlice(b, 3, 0, 0)
+		require.Equal(t, 3, b.Len())
+		b.AppendVal([]byte("three"))
+		require.Equal(t, 4, b.Len())
+		require.Equal(t, "zero", string(b.Get(0)))
+		require.Equal(t, "three", string(b.Get(3)))
+		b.AssertOffsetsAreNonDecreasing(b.Len())
+	})
+
 	t.Run("Copy", func(t *testing.T) {
 		b1 := NewBytes(0)
 		b2 := NewBytes(0)
