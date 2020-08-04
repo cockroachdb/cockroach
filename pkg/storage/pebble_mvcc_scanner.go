@@ -242,7 +242,17 @@ func (p *pebbleMVCCScanner) getFromIntentHistory() bool {
 	}
 	intent := p.meta.IntentHistory[upIdx-1]
 	if len(intent.Value) > 0 || p.tombstones {
-		p.results.put(p.curMVCCKey(), intent.Value)
+		key := p.curMVCCKey()
+		// If we're adding a value due to a previous intent, as indicated by the
+		// zero-valued timestamp, we want to populate the timestamp as of current
+		// metaTimestamp. Note that this may be controversial as this maybe be
+		// neither the write timestamp when this intent was written. However, this
+		// was the only case in which a value could have been returned from a read
+		// without an MVCC timestamp.
+		if key.Timestamp.IsEmpty() {
+			key.Timestamp = hlc.Timestamp(p.meta.Timestamp)
+		}
+		p.results.put(key, intent.Value)
 	}
 	return true
 }
