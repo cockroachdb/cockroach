@@ -918,6 +918,7 @@ func joinTypeStr(t descpb.JoinType) string {
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterIndexNode{}):          "alter index",
 	reflect.TypeOf(&alterSequenceNode{}):       "alter sequence",
+	reflect.TypeOf(&alterSchemaNode{}):         "alter schema",
 	reflect.TypeOf(&alterTableNode{}):          "alter table",
 	reflect.TypeOf(&alterTableSetSchemaNode{}): "alter table set schema",
 	reflect.TypeOf(&alterTypeNode{}):           "alter type",
@@ -949,6 +950,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropDatabaseNode{}):        "drop database",
 	reflect.TypeOf(&dropIndexNode{}):           "drop index",
 	reflect.TypeOf(&dropSequenceNode{}):        "drop sequence",
+	reflect.TypeOf(&dropSchemaNode{}):          "drop schema",
 	reflect.TypeOf(&dropTableNode{}):           "drop table",
 	reflect.TypeOf(&dropTypeNode{}):            "drop type",
 	reflect.TypeOf(&DropRoleNode{}):            "drop user/role",
