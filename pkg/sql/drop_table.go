@@ -244,12 +244,12 @@ func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyRef
 
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
-// dropped due to `cascade` behavior. droppingDatabase indicates whether this
-// table is being dropped as part of a `DROP DATABASE CASCADE` operation.
+// dropped due to `cascade` behavior. droppingParent indicates whether this
+// table's parent (either database or schema) is being dropped.
 func (p *planner) dropTableImpl(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	droppingDatabase bool,
+	droppingParent bool,
 	jobDesc string,
 ) ([]string, error) {
 	var droppedViews []string
@@ -297,7 +297,7 @@ func (p *planner) dropTableImpl(
 
 	// Drop sequences that the columns of the table own.
 	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingDatabase); err != nil {
+		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -315,7 +315,7 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingDatabase, "dropping dependent view", tree.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingParent, "dropping dependent view", tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -331,13 +331,13 @@ func (p *planner) dropTableImpl(
 	// Remove any references to types that this table has if a job is meant to be
 	// queued. If not, then the job that is handling the drop table will also
 	// clean up all of the types to be dropped.
-	if !droppingDatabase {
+	if !droppingParent {
 		if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
 			return droppedViews, err
 		}
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, !droppingDatabase, jobDesc, true /* drain name */)
+	err = p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc, true /* drain name */)
 	return droppedViews, err
 }
 

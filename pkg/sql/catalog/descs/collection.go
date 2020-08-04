@@ -307,7 +307,8 @@ func (tc *Collection) ResolveSchema(
 ) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, sqlbase.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: tree.PublicSchema}, nil
 	}
 
 	type schemaCacheKey struct {
@@ -326,6 +327,10 @@ func (tc *Collection) ResolveSchema(
 	exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
 		return exists, sqlbase.ResolvedSchema{}, err
+	}
+
+	if resolved.Kind == sqlbase.SchemaUserDefined && resolved.Desc.Dropped() {
+		return false, sqlbase.ResolvedSchema{}, nil
 	}
 
 	tc.schemaCache.Store(key, resolved)
