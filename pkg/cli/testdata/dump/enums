@@ -26,7 +26,7 @@ CREATE TABLE public.tt (
 	FAMILY "primary" (x, y, z, rowid)
 );
 
-INSERT INTO tt (x, y, z) VALUES
+INSERT INTO public.tt (x, y, z) VALUES
 	('dump', ARRAY['dump'], 1),
 	('cli', ARRAY['cli'], 2);
 ----
@@ -45,7 +45,7 @@ CREATE TABLE public.tt (
 	FAMILY "primary" (x, y, z, rowid)
 );
 
-INSERT INTO tt (x, y, z) VALUES
+INSERT INTO public.tt (x, y, z) VALUES
 	('dump', ARRAY['dump'], 1),
 	('cli', ARRAY['cli'], 2);
 ----
@@ -56,7 +56,7 @@ noroundtrip
 ----
 ----
 
-INSERT INTO tt (x, y, z) VALUES
+INSERT INTO public.tt (x, y, z) VALUES
 	('dump', ARRAY['dump'], 1),
 	('cli', ARRAY['cli'], 2);
 ----

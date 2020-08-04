@@ -50,10 +50,10 @@ CREATE TABLE public.t2 (
 	FAMILY "primary" (a, b)
 );
 
-INSERT INTO t3 (a, b) VALUES
+INSERT INTO public.t3 (a, b) VALUES
 	(3, 4);
 
-INSERT INTO t2 (a, b) VALUES
+INSERT INTO public.t2 (a, b) VALUES
 	(1, 2);
 
 CREATE INDEX b_idx ON public.t2 (a ASC, b ASC) INTERLEAVE IN PARENT public.t3 (a);

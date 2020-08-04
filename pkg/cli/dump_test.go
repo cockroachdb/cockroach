@@ -403,7 +403,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (i, rowid)
 );
 
-INSERT INTO t (i) VALUES
+INSERT INTO public.t (i) VALUES
 	(1);
 `
 	if dump1 != want1 {
@@ -419,6 +419,7 @@ INSERT INTO t (i) VALUES
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	const want2 = `dump d t
 CREATE TABLE public.t (
 	i INT8 NULL,
@@ -426,7 +427,7 @@ CREATE TABLE public.t (
 	FAMILY "primary" (i, rowid, j)
 );
 
-INSERT INTO t (i, j) VALUES
+INSERT INTO public.t (i, j) VALUES
 	(1, 2),
 	(3, 4);
 `
@@ -446,7 +447,7 @@ INSERT INTO t (i, j) VALUES
 
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(out, `relation d.public.t does not exist`) {
+	} else if !strings.Contains(out, `database d does not exist`) {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -656,7 +657,7 @@ CREATE TABLE public.t1 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t1 (id, pkey) VALUES
+INSERT INTO public.t1 (id, pkey) VALUES
 	(1, 'db1-aaaa'),
 	(2, 'db1-bbbb');
 
@@ -670,7 +671,7 @@ CREATE TABLE public.t2 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t2 (id, pkey) VALUES
+INSERT INTO public.t2 (id, pkey) VALUES
 	(1, 'db2-aaaa'),
 	(2, 'db2-bbbb');
 `,
@@ -694,11 +695,11 @@ INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
 INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
 `,
 			expected: `
-INSERT INTO t1 (id, pkey) VALUES
+INSERT INTO public.t1 (id, pkey) VALUES
 	(1, 'db1-aaaa'),
 	(2, 'db1-bbbb');
 
-INSERT INTO t2 (id, pkey) VALUES
+INSERT INTO public.t2 (id, pkey) VALUES
 	(1, 'db2-aaaa'),
 	(2, 'db2-bbbb');
 `,
@@ -740,7 +741,7 @@ CREATE TABLE public.account (
 	FAMILY "primary" (id, person_id, accountno)
 );
 
-INSERT INTO account (id, person_id, accountno) VALUES
+INSERT INTO public.account (id, person_id, accountno) VALUES
 	(1, 1, 1111),
 	(2, 2, 2222);
 
@@ -754,7 +755,7 @@ CREATE TABLE public.person (
 	FAMILY "primary" (id, name)
 );
 
-INSERT INTO person (id, name) VALUES
+INSERT INTO public.person (id, name) VALUES
 	(1, 'John Smith'),
 	(2, 'Joe Dow');
 
@@ -800,7 +801,7 @@ CREATE TABLE public.bar (
 	FAMILY "primary" (id, rowid)
 );
 
-INSERT INTO bar (id) VALUES
+INSERT INTO public.bar (id) VALUES
 	(1),
 	(2);
 
@@ -812,7 +813,7 @@ CREATE TABLE public.foo (
 	FAMILY "primary" (id, rowid)
 );
 
-INSERT INTO foo (id) VALUES
+INSERT INTO public.foo (id) VALUES
 	(1),
 	(2),
 	(3);
@@ -907,7 +908,7 @@ CREATE TEMP TABLE tmpbar (id int primary key);
 	FAMILY "primary" (id, text)
 );
 
-INSERT INTO bar (id, text) VALUES
+INSERT INTO public.bar (id, text) VALUES
 	(1, 'a');
 `,
 			args: []string{"foo"},
@@ -924,7 +925,7 @@ CREATE TABLE bar (id INT PRIMARY KEY);
 CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
 INSERT INTO tmpbar VALUES (1);
 `,
-			expected: "ERROR: cannot dump temp table tmpbar\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpbar does not exist\n",
 			args:     []string{"foo", "bar", "tmpbar"},
 		},
 		{
@@ -938,7 +939,7 @@ CREATE TABLE bar (id INT PRIMARY KEY);
 		
 CREATE TEMP VIEW tmpview (id) AS SELECT id FROM bar;
 `,
-			expected: "ERROR: cannot dump temp table tmpview\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpview does not exist\n",
 			args:     []string{"foo", "tmpview"},
 		},
 		{
@@ -950,7 +951,7 @@ USE foo;
 
 CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
 `,
-			expected: "ERROR: cannot dump temp table tmpseq\n",
+			expected: "ERROR: getBasicMetadata: relation foo.public.tmpseq does not exist\n",
 			args:     []string{"foo", "tmpseq"},
 		},
 		{
@@ -981,7 +982,7 @@ CREATE TABLE public.t1 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t1 (id, pkey) VALUES
+INSERT INTO public.t1 (id, pkey) VALUES
 	(1, 'db1-aaaa');
 
 CREATE DATABASE IF NOT EXISTS db2;
@@ -994,7 +995,7 @@ CREATE TABLE public.t3 (
 	FAMILY "primary" (id, pkey)
 );
 
-INSERT INTO t3 (id, pkey) VALUES
+INSERT INTO public.t3 (id, pkey) VALUES
 	(1, 'db2-aaaa');
 `,
 			args: []string{"--dump-all"},

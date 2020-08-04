@@ -87,30 +87,30 @@ CREATE TABLE public.s_tbl (
 	FAMILY "primary" (id, v)
 );
 
-INSERT INTO b (i) VALUES
+INSERT INTO public.b (i) VALUES
 	(1);
 
-INSERT INTO a (i) VALUES
+INSERT INTO public.a (i) VALUES
 	(1);
 
-INSERT INTO e (i) VALUES
+INSERT INTO public.e (i) VALUES
 	(1);
 
-INSERT INTO g (i) VALUES
+INSERT INTO public.g (i) VALUES
 	(1);
 
-INSERT INTO f (i, g) VALUES
+INSERT INTO public.f (i, g) VALUES
 	(1, 1);
 
-INSERT INTO d (i, e, f) VALUES
+INSERT INTO public.d (i, e, f) VALUES
 	(1, 1, 1);
 
-INSERT INTO c (i) VALUES
+INSERT INTO public.c (i) VALUES
 	(1);
 
 SELECT setval('s', 3, false);
 
-INSERT INTO s_tbl (id, v) VALUES
+INSERT INTO public.s_tbl (id, v) VALUES
 	(1, 10),
 	(2, 11);
 
@@ -150,10 +150,10 @@ CREATE TABLE public.d (
 	FAMILY "primary" (i, e, f)
 );
 
-INSERT INTO e (i) VALUES
+INSERT INTO public.e (i) VALUES
 	(1);
 
-INSERT INTO d (i, e, f) VALUES
+INSERT INTO public.d (i, e, f) VALUES
 	(1, 1, 1);
 
 ALTER TABLE public.d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES public.e(i);

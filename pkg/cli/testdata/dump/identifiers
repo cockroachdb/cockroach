@@ -17,7 +17,7 @@ CREATE TABLE public.";" (
 	FAMILY "primary" (";", rowid)
 );
 
-INSERT INTO ";" (";") VALUES
+INSERT INTO public.";" (";") VALUES
 	(1);
 ----
 ----

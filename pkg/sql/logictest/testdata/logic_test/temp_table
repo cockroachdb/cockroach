@@ -255,3 +255,9 @@ CREATE TABLE persistent_48233(a int)
 
 statement error pq: cannot change schema of table with RENAME
 ALTER TABLE persistent_48233 RENAME TO pg_temp.pers_48233
+
+# Ensure that temporary schemas don't appear as user defined in the
+# information_schema.schemata vtable.
+query T
+SELECT schema_name FROM information_schema.schemata WHERE crdb_is_user_defined = 'YES'
+----

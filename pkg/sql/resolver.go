@@ -567,10 +567,6 @@ func newInternalLookupCtx(
 			}
 		case *sqlbase.ImmutableSchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
-			if prefix == nil || prefix.GetID() == desc.ParentID {
-				// Only make the schema visible for iteration if the prefix was included.
-				typIDs = append(typIDs, desc.GetID())
-			}
 		}
 	}
 	return &internalLookupCtx{

@@ -16,6 +16,6 @@ CREATE TABLE public."t   t" (
 	CONSTRAINT "primary" PRIMARY KEY ("x'" ASC),
 	FAMILY "primary" ("x'")
 );
-COMMENT ON TABLE "t   t" IS e'has \' quotes';
-COMMENT ON COLUMN "t   t"."x'" IS e'i \' just \' love \' quotes';
-COMMENT ON INDEX "t   t"@primary IS e'has \' more \' quotes';
+COMMENT ON TABLE public."t   t" IS e'has \' quotes';
+COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
+COMMENT ON INDEX public."t   t"@primary IS e'has \' more \' quotes';
