@@ -11,10 +11,16 @@
 package sqlbase
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -212,4 +218,27 @@ func (desc *MutableSchemaDescriptor) Immutable() Descriptor {
 // IsNew implements the MutableDescriptor interface.
 func (desc *MutableSchemaDescriptor) IsNew() bool {
 	return desc.ClusterVersion == nil
+}
+
+// SetName sets the name of the schema. It handles installing a draining name
+// for the old name of the descriptor.
+func (desc *MutableSchemaDescriptor) SetName(name string) {
+	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+		ParentID:       desc.ParentID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           desc.Name,
+	})
+	desc.Name = name
+}
+
+// IsSchemaNameValid returns whether the input name is valid for a user defined
+// schema.
+func IsSchemaNameValid(name string) error {
+	// Schemas starting with "pg_" are not allowed.
+	if strings.HasPrefix(name, sessiondata.PgSchemaPrefix) {
+		err := pgerror.Newf(pgcode.ReservedName, "unacceptable schema name %q", name)
+		err = errors.WithDetail(err, `The prefix "pg_" is reserved for system schemas.`)
+		return err
+	}
+	return nil
 }
