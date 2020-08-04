@@ -122,37 +122,21 @@
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate $on $private)
 
-# GenerateGeoLookupJoins creates GeoLookupJoin operators for all geospatial
-# indexes (of the Scan table) which allow it. See the GenerateGeoLookupJoins
+# GenerateInvertedJoins creates InvertedJoin operators for all inverted
+# indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
 # custom function for more details.
 # TODO(rytaft): Add support for LeftJoin.
-[GenerateGeoLookupJoins, Explore]
+[GenerateInvertedJoins, Explore]
 (InnerJoin | SemiJoin | AntiJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
         (HasInvertedIndexes $scanPrivate)
-    $on:[
-        ...
-        (FiltersItem
-            $fn:(Function) &
-                (IsGeoIndexFunction $fn) &
-                (FirstArgIsVariable $fn) &
-                (SecondArgIsVariable $fn)
-        )
-        ...
-    ]
+    $on:*
     $private:*
 )
 =>
-(GenerateGeoLookupJoins
-    (OpName)
-    $left
-    $scanPrivate
-    $on
-    $private
-    $fn
-)
+(GenerateInvertedJoins (OpName) $left $scanPrivate $on $private)
 
 # GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
 # Scan table) where the prefix column(s) of both indexes is/are fixed to

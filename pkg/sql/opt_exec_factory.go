@@ -700,7 +700,6 @@ func (ef *execFactory) ConstructInvertedJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	// The OutputOrdering is ignored since the inverted join always maintains
@@ -727,7 +726,6 @@ func (ef *execFactory) ConstructInvertedJoin(
 		table:        tableScan,
 		joinType:     joinType,
 		invertedExpr: invertedExpr,
-		inputCol:     int32(inputCol),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond

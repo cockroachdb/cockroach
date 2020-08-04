@@ -45,7 +45,7 @@ import (
 //
 // Join expression: The left side of the join is simply integers. This is not
 // realistic since the left side should be the same type as the corresponding
-// column on the right side. But the DatumToInvertedExpr hook allows us to
+// column on the right side. But the DatumsToInvertedExpr hook allows us to
 // convert any left side value into a SpanExpression for the join, so we
 // utilize that to simplify the test. The SpanExpressions are defined below.
 const numRows = 99
@@ -60,12 +60,12 @@ const numRows = 99
 // 50, since 50%10 = 0, 50/10 = 5.
 type arrayIntersectionExpr struct{}
 
-var _ invertedexpr.DatumToInvertedExpr = &arrayIntersectionExpr{}
+var _ invertedexpr.DatumsToInvertedExpr = &arrayIntersectionExpr{}
 
 func (arrayIntersectionExpr) Convert(
-	ctx context.Context, datum sqlbase.EncDatum,
+	ctx context.Context, datums sqlbase.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
-	d := int64(*(datum.Datum.(*tree.DInt)))
+	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d / 10))
 	d2Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d % 10))
 	// The tightness only affects the optimizer, so arbitrarily use true.
@@ -80,12 +80,12 @@ func (arrayIntersectionExpr) Convert(
 // match a right side row with row index d.
 type jsonIntersectionExpr struct{}
 
-var _ invertedexpr.DatumToInvertedExpr = &jsonIntersectionExpr{}
+var _ invertedexpr.DatumsToInvertedExpr = &jsonIntersectionExpr{}
 
 func (jsonIntersectionExpr) Convert(
-	ctx context.Context, datum sqlbase.EncDatum,
+	ctx context.Context, datums sqlbase.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
-	d := int64(*(datum.Datum.(*tree.DInt)))
+	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
 	d2 := d % 10
 	j, err := json.ParseJSON(fmt.Sprintf(`{"c1": %d, "c2": %d}`, d1, d2))
@@ -113,12 +113,12 @@ func (jsonIntersectionExpr) Convert(
 // {1..9, 15, 25, 35, ..., 95}.
 type jsonUnionExpr struct{}
 
-var _ invertedexpr.DatumToInvertedExpr = &jsonUnionExpr{}
+var _ invertedexpr.DatumsToInvertedExpr = &jsonUnionExpr{}
 
 func (jsonUnionExpr) Convert(
-	ctx context.Context, datum sqlbase.EncDatum,
+	ctx context.Context, datums sqlbase.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
-	d := int64(*(datum.Datum.(*tree.DInt)))
+	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
 	d2 := d % 10
 	j, err := json.ParseJSON(fmt.Sprintf(`{"c1": %d, "c2": %d}`, d1, d2))
@@ -175,8 +175,7 @@ func TestInvertedJoiner(t *testing.T) {
 		post        execinfrapb.PostProcessSpec
 		onExpr      string
 		input       [][]tree.Datum
-		lookupCol   uint32
-		datumToExpr invertedexpr.DatumToInvertedExpr
+		datumToExpr invertedexpr.DatumsToInvertedExpr
 		joinType    sqlbase.JoinType
 		inputTypes  []*types.T
 		outputTypes []*types.T
@@ -186,7 +185,6 @@ func TestInvertedJoiner(t *testing.T) {
 	// so can share initialization of some fields.
 	initCommonFields := func(c testCase) testCase {
 		c.post.Projection = true
-		c.lookupCol = 0
 		c.inputTypes = sqlbase.OneIntCol
 		return c
 	}
@@ -412,11 +410,10 @@ func TestInvertedJoiner(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.InvertedJoinerSpec{
-				Table:        *td,
-				IndexIdx:     c.indexIdx,
-				LookupColumn: c.lookupCol,
+				Table:    *td,
+				IndexIdx: c.indexIdx,
 				// The invertedJoiner does not look at InvertedExpr since that information
-				// is encapsulated in the DatumToInvertedExpr parameter.
+				// is encapsulated in the DatumsToInvertedExpr parameter.
 				InvertedExpr: execinfrapb.Expression{},
 				OnExpr:       execinfrapb.Expression{Expr: c.onExpr},
 				Type:         c.joinType,

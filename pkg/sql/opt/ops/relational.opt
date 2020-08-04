@@ -362,7 +362,7 @@ define InvertedJoinPrivate {
     JoinType Operator
 
     # InvertedExpr is the inverted join condition. It is used to get the keys
-    # to lookup in the inverted index based on the value of the input column.
+    # to lookup in the inverted index based on the values of the input columns.
     InvertedExpr ScalarExpr
 
     # Table identifies the table do to lookups in.
@@ -375,11 +375,6 @@ define InvertedJoinPrivate {
     # InvertedCol is the inverted column in the index that is referenced by
     # InvertedExpr.
     InvertedCol ColumnID
-
-    # InputCol is the column (produced by the input) that will be bound to
-    # InvertedExpr and used to determine the keys to scan in the inverted
-    # index.
-    InputCol ColumnID
 
     # Cols is the set of columns produced by the inverted join. This set can
     # contain columns from the input and columns from the index. Any columns

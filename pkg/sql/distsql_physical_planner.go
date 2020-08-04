@@ -2133,7 +2133,6 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	if err != nil {
 		return nil, err
 	}
-	invertedJoinerSpec.LookupColumn = uint32(plan.PlanToStreamColMap[n.inputCol])
 
 	numInputNodeCols, planToStreamColMap, post, types :=
 		mappingHelperForLookupJoins(plan, n.input, n.table)

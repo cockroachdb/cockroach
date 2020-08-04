@@ -1610,7 +1610,6 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		input.root,
 		tab,
 		idx,
-		input.getNodeColumnOrdinal(join.InputCol),
 		lookupOrdinals,
 		onExpr,
 		res.reqOrdering(join),

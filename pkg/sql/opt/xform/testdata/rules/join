@@ -2652,7 +2652,7 @@ anti-join (hash)
       └── n:2 = c:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # --------------------------------------------------
-# GenerateGeospatialLookupJoins
+# GenerateInvertedJoins
 # --------------------------------------------------
 
 exec-ddl
@@ -2723,7 +2723,7 @@ ALTER TABLE nyc_neighborhoods INJECT STATISTICS '[
 
 # This query calculates the population density of two different neighborhoods
 # in New York City.
-opt expect=GenerateGeoLookupJoins
+opt expect=GenerateInvertedJoins
 SELECT
   n.name,
   Sum(c.popn_total) / (ST_Area(n.geom) / 1000000.0) AS popn_per_sqkm
@@ -2769,7 +2769,7 @@ project
  └── projections
       └── sum:17 / (st_area(n.geom:15) / 1e+06) [as=popn_per_sqkm:18, outer=(15,17), immutable]
 
-memo expect=GenerateGeoLookupJoins
+memo expect=GenerateInvertedJoins
 SELECT
   n.name,
   Sum(c.popn_total) / (ST_Area(n.geom) / 1000000.0) AS popn_per_sqkm
@@ -2836,7 +2836,7 @@ memo (optimized, ~23KB, required=[presentation: name:14,popn_per_sqkm:18])
  ├── G32: (const 'Upper West Side')
  └── G33: (const 'Upper East Side')
 
-opt expect=GenerateGeoLookupJoins
+opt expect=GenerateInvertedJoins
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
@@ -2862,7 +2862,7 @@ project
            └── st_dwithin(c.geom:10, n.geom:15, 50.0) [outer=(10,15), immutable]
 
 # Same test as above, but with arguments commuted.
-opt expect=GenerateGeoLookupJoins
+opt expect=GenerateInvertedJoins
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
@@ -2880,14 +2880,14 @@ project
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(n.geom:15, c.geom:10, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:15, 50.0)
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
            └── st_dwithin(n.geom:15, c.geom:10, 50.0) [outer=(10,15), immutable]
 
-opt expect=GenerateGeoLookupJoins
+opt expect=GenerateInvertedJoins
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
@@ -2913,7 +2913,7 @@ project
            └── st_covers(c.geom:10, n.geom:15) [outer=(10,15), immutable]
 
 # Same test as above, but with arguments commuted.
-opt expect=GenerateGeoLookupJoins
+opt expect=GenerateInvertedJoins
 SELECT
   n.name, c.boroname
 FROM nyc_census_blocks AS c
@@ -2937,6 +2937,34 @@ project
       │    └── filters (true)
       └── filters
            └── st_covers(n.geom:15, c.geom:10) [outer=(10,15), immutable]
+
+# Complex join filter.
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_Covers(n.geom, c.geom)
+  AND (ST_DWithin(c.geom, n.geom, 50) OR ST_Intersects(n.geom, 'LINESTRING ( 0 0, 0 2 )'::geometry))
+----
+project
+ ├── columns: name:14 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
+      ├── key columns: [12] = [12]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── inverted-expr
+      │    │    └── st_coveredby(c.geom:10, n.geom:15) AND (st_dwithin(c.geom:10, n.geom:15, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:15))
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           ├── st_covers(n.geom:15, c.geom:10) [outer=(10,15), immutable]
+           └── st_dwithin(c.geom:10, n.geom:15, 50.0) OR st_intersects(n.geom:15, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,15), immutable]
 
 # --------------------------------------------------
 # GenerateZigZagJoins

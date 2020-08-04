@@ -1888,66 +1888,42 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	}
 }
 
-// GenerateGeoLookupJoins is similar to GenerateLookupJoins, but instead
-// of generating lookup joins with regular indexes, it generates geospatial
-// lookup joins with inverted geospatial indexes. Since these indexes are not
-// covering, all geospatial lookup joins must be wrapped in an index join with
-// the primary index of the table. See the description of Case 2 in the comment
-// above GenerateLookupJoins for details about how this works.
-// TODO(rytaft): generalize this function to be GenerateInvertedJoins and add
-//  support for JSON and array inverted indexes.
-// TODO(rytaft): handle more complicated geo-spatial expressions
-//  e.g. ST_Intersects(x, y) AND ST_Covers(x, y) where y is the indexed value.
-func (c *CustomFuncs) GenerateGeoLookupJoins(
+// GenerateInvertedJoins is similar to GenerateLookupJoins, but instead
+// of generating lookup joins with regular indexes, it generates lookup joins
+// with inverted indexes. Similar to GenerateLookupJoins, there are two cases
+// depending on whether or not the index is covering. See the comment above
+// GenerateLookupJoins for details.
+// TODO(rytaft): add support for JSON and array inverted indexes.
+func (c *CustomFuncs) GenerateInvertedJoins(
 	grp memo.RelExpr,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
-	fn opt.ScalarExpr,
 ) {
 	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
 		return
 	}
 
-	// Geospatial lookup joins are not covering, so we must wrap them in an
-	// index join.
-	if scanPrivate.Flags.NoIndexJoin {
-		return
-	}
-
-	inputProps := input.Relational()
-	function := fn.(*memo.FunctionExpr)
-
-	// Try to extract an inverted join condition from the given function. If
-	// unsuccessful, try to extract a join condition from an equivalent function
-	// in which the arguments are commuted. For example:
-	//
-	//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
-	//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
-	//
-	// See TryGetInvertedJoinCondFromGeoFunc for more details.
-	fn, inputGeoCol, indexGeoCol, ok := invertedidx.TryGetInvertedJoinCondFromGeoFunc(
-		c.e.f, function, false /* commuteArgs */, inputProps,
-	)
-	if !ok {
-		fn, inputGeoCol, indexGeoCol, ok = invertedidx.TryGetInvertedJoinCondFromGeoFunc(
-			c.e.f, function, true /* commuteArgs */, inputProps,
-		)
-		if !ok {
-			// This function cannot serve as a join condition.
-			return
-		}
-	}
-
+	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
 
 	// TODO(mgartner): Use partial indexes for geolookup joins when the
 	// predicate is implied by the on filter.
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes|rejectPartialIndexes)
 	for iter.Next() {
-		if scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal) != indexGeoCol {
+		// Check whether the filter can constrain the index.
+		invertedExpr := invertedidx.TryJoinGeoIndex(
+			c.e.evalCtx.Context, c.e.f, on, scanPrivate.Table, iter.Index(), inputCols,
+		)
+		if invertedExpr == nil {
+			continue
+		}
+
+		// Geospatial lookup joins are not covering, so we must wrap them in an
+		// index join.
+		if scanPrivate.Flags.NoIndexJoin {
 			continue
 		}
 
@@ -1960,9 +1936,9 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 			}
 		}
 
-		// Though the index is marked as containing the geospatial column being
-		// indexed, it doesn't actually, and it is only valid to extract the
-		// primary key columns from it.
+		// Though the index is marked as containing the column being indexed, it
+		// doesn't actually, and it is only valid to extract the primary key
+		// columns from it.
 		indexCols := pkCols.ToSet()
 
 		lookupJoin := memo.InvertedJoinExpr{Input: input}
@@ -1970,10 +1946,9 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.IndexOrdinal()
-		lookupJoin.InvertedExpr = fn
-		lookupJoin.InvertedCol = indexGeoCol
-		lookupJoin.InputCol = inputGeoCol
-		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
+		lookupJoin.InvertedExpr = invertedExpr
+		lookupJoin.InvertedCol = scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+		lookupJoin.Cols = indexCols.Union(inputCols)
 
 		var indexJoin memo.LookupJoinExpr
 
@@ -1992,40 +1967,12 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		indexJoin.Table = scanPrivate.Table
 		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
-		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
 
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	}
-}
-
-// IsGeoIndexFunction returns true if the given function is a geospatial
-// function that can be index-accelerated.
-func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
-	return invertedidx.IsGeoIndexFunction(fn)
-}
-
-// FirstArgIsVariable returns true if the first argument to the given
-// function is a variable.
-func (c *CustomFuncs) FirstArgIsVariable(fn opt.ScalarExpr) bool {
-	return argNumIsVariable(fn, 0)
-}
-
-// SecondArgIsVariable returns true if the second argument to the given
-// function is a variable.
-func (c *CustomFuncs) SecondArgIsVariable(fn opt.ScalarExpr) bool {
-	return argNumIsVariable(fn, 1)
-}
-
-func argNumIsVariable(fn opt.ScalarExpr, index int) bool {
-	function := fn.(*memo.FunctionExpr)
-	numArgs := function.Args.ChildCount()
-	if index >= numArgs {
-		return false
-	}
-	_, ok := function.Args.Child(index).(*memo.VariableExpr)
-	return ok
 }
 
 // findConstantFilter tries to find a filter that is exactly equivalent to
