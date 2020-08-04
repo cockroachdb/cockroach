@@ -74,6 +74,13 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 	}}
 }
 
+// MakeUnqualifiedTypeName returns a new type name.
+func MakeUnqualifiedTypeName(typ Name) TypeName {
+	return TypeName{objName{
+		ObjectName: typ,
+	}}
+}
+
 // MakeNewQualifiedTypeName creates a fully qualified type name.
 func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	return TypeName{objName{
