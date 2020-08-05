@@ -280,7 +280,7 @@ func runSplitAndScatter(
 func routingDatumsForNode(nodeID roachpb.NodeID) (sqlbase.EncDatum, sqlbase.EncDatum) {
 	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
 	startDatum := sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.PrefixEnd())))
+	endDatum := sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
 }
 
