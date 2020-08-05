@@ -449,6 +449,11 @@ func restore(
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
 
+	// If there weren't any spans requested, then return early.
+	if len(spans) == 0 {
+		return RowCount{}, nil
+	}
+
 	mu := struct {
 		syncutil.Mutex
 		highWaterMark     int
@@ -629,10 +634,14 @@ func loadBackupSQLDescs(
 }
 
 type restoreResumer struct {
-	job                *jobs.Job
-	settings           *cluster.Settings
-	databases          []*sqlbase.ImmutableDatabaseDescriptor
-	tables             []sqlbase.TableDescriptorInterface
+	job       *jobs.Job
+	settings  *cluster.Settings
+	databases []*sqlbase.ImmutableDatabaseDescriptor
+	tables    []sqlbase.TableDescriptorInterface
+	// writtenTypes is the set of types that are restored from the backup into
+	// the database. Note that this is not always the set of types within the
+	// backup, as some types might be remapped to existing types in the database.
+	writtenTypes       []sqlbase.TypeDescriptorInterface
 	descriptorCoverage tree.DescriptorCoverage
 	latestStats        []*stats.TableStatisticProto
 	execCfg            *sql.ExecutorConfig
@@ -742,18 +751,16 @@ func isDatabaseEmpty(
 func createImportingDescriptors(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
 ) (
-	[]*sqlbase.ImmutableDatabaseDescriptor,
-	[]sqlbase.TableDescriptorInterface,
-	[]sqlbase.ID,
-	[]roachpb.Span,
-	error,
+	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	tables []sqlbase.TableDescriptorInterface,
+	oldTableIDs []sqlbase.ID,
+	writtenTypes []sqlbase.TypeDescriptorInterface,
+	spans []roachpb.Span,
+	err error,
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var databases []*sqlbase.ImmutableDatabaseDescriptor
-	var tables []sqlbase.TableDescriptorInterface
 	var types []sqlbase.TypeDescriptorInterface
-	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 			table := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc)
@@ -784,7 +791,7 @@ func createImportingDescriptors(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans := spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
+	spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
 
 	log.Eventf(ctx, "starting restore for %d tables", len(tables))
 
@@ -795,14 +802,13 @@ func createImportingDescriptors(
 		tableDescs[i] = table.TableDesc()
 	}
 	if err := RewriteTableDescs(tableDescs, details.DescriptorRewrites, details.OverrideDB); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	// We might be remapping some types to existing types in the cluster. In that
-	// case, we don't want to create namespace and descriptor entries for those
-	// types. So collect only the types that we need to write here.
+	// For each type, we might be writing the type in the backup, or we could be
+	// remapping to an existing type descriptor. Split up the descriptors into
+	// these two groups.
 	var typesToWrite []sqlbase.TypeDescriptorInterface
-	// We need to know what existing types we are remapping to, so collect them.
 	existingTypeIDs := make(map[sqlbase.ID]struct{})
 	for i := range types {
 		typ := types[i]
@@ -820,7 +826,7 @@ func createImportingDescriptors(
 		typDescs[i] = typ.TypeDesc()
 	}
 	if err := rewriteTypeDescs(typDescs, details.DescriptorRewrites); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	for _, desc := range tableDescs {
@@ -902,18 +908,18 @@ func createImportingDescriptors(
 			return err
 		})
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 
 		// Wait for one version on any existing changed types.
 		for existing := range existingTypeIDs {
 			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, nil, nil, err
+				return nil, nil, nil, nil, nil, err
 			}
 		}
 	}
 
-	return databases, tables, oldTableIDs, spans, nil
+	return databases, tables, oldTableIDs, typesToWrite, spans, nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -942,11 +948,12 @@ func (r *restoreResumer) Resume(
 		return err
 	}
 
-	databases, tables, oldTableIDs, spans, err := createImportingDescriptors(ctx, p, sqlDescs, r)
+	databases, tables, oldTableIDs, writtenTypes, spans, err := createImportingDescriptors(ctx, p, sqlDescs, r)
 	if err != nil {
 		return err
 	}
 	r.tables = tables
+	r.writtenTypes = writtenTypes
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
@@ -956,7 +963,7 @@ func (r *restoreResumer) Resume(
 	}
 	r.latestStats = remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
-	if len(r.tables) == 0 && len(details.Tenants) == 0 {
+	if len(r.tables) == 0 && len(details.Tenants) == 0 && len(r.writtenTypes) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
@@ -995,7 +1002,7 @@ func (r *restoreResumer) Resume(
 		return errors.Wrap(err, "inserting table statistics")
 	}
 
-	if err := r.publishTables(ctx); err != nil {
+	if err := r.publishDescriptors(ctx); err != nil {
 		return err
 	}
 
@@ -1063,15 +1070,15 @@ func (r *restoreResumer) insertStats(ctx context.Context) error {
 	return nil
 }
 
-// publishTables updates the RESTORED tables status from OFFLINE to PUBLIC.
-func (r *restoreResumer) publishTables(ctx context.Context) error {
+// publishDescriptors updates the RESTORED tables status from OFFLINE to PUBLIC.
+func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.TablesPublished {
 		return nil
 	}
 	log.Event(ctx, "making tables live")
 
-	newSchemaChangeJobs := make([]*jobs.StartableJob, 0)
+	newDescriptorChangeJobs := make([]*jobs.StartableJob, 0)
 	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
@@ -1088,7 +1095,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
+			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl.TableDesc())
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
@@ -1105,6 +1112,18 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			return errors.Wrap(err, "publishing tables")
 		}
 
+		// For all of the newly created types, make type schema change jobs for any
+		// type descriptors that were backed up in the middle of a type schema change.
+		for _, typ := range r.writtenTypes {
+			if typ.HasPendingSchemaChanges() {
+				typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
+				if err != nil {
+					return err
+				}
+				newDescriptorChangeJobs = append(newDescriptorChangeJobs, typJob)
+			}
+		}
+
 		for _, tenant := range details.Tenants {
 			if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
 				return err
@@ -1115,7 +1134,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 		details.TablesPublished = true
 		details.TableDescs = newTables
 		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-			for _, newJob := range newSchemaChangeJobs {
+			for _, newJob := range newDescriptorChangeJobs {
 				if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
 					log.Warningf(ctx, "failed to clean up job %d: %v", newJob.ID(), cleanupErr)
 				}
@@ -1130,7 +1149,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	}
 
 	// Start the schema change jobs we created.
-	for _, newJob := range newSchemaChangeJobs {
+	for _, newJob := range newDescriptorChangeJobs {
 		if _, err := newJob.Start(ctx); err != nil {
 			return err
 		}
@@ -1142,9 +1161,6 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	for i := range r.tables {
 		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].GetID(), math.MaxInt32 /* rowsAffected */)
 	}
-
-	// TODO (rohany): Once types have type schema change jobs, we need to create
-	//  jobs for pending type changes here.
 
 	return nil
 }
