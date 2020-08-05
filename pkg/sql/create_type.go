@@ -78,6 +78,14 @@ func resolveNewTypeName(
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (typeKey sqlbase.DescriptorKey, schemaID sqlbase.ID, err error) {
+	// Account for geometry and geography being a PostgreSQL extension
+	// whose types live in the public schema.
+	if name.Schema() == string(tree.PublicSchemaName) {
+		switch name.Object() {
+		case "geometry", "geography":
+			return nil, 0, sqlbase.NewTypeAlreadyExistsError(name.String())
+		}
+	}
 	// Get the ID of the schema the type is being created in.
 	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.ID, name.Schema())
 	if err != nil {

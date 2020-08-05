@@ -131,6 +131,17 @@ func ResolveType(
 		}
 		return types.MakeArray(typ), nil
 	case *UnresolvedObjectName:
+		// Account for geometry and geography being a PostgreSQL extension
+		// whose types live in the public schema.
+		if t.Schema() == string(PublicSchemaName) {
+			switch t.Object() {
+			case "geometry":
+				return types.Geometry, nil
+			case "geography":
+				return types.Geography, nil
+			}
+		}
+
 		if resolver == nil {
 			// If we don't have a resolver, we can't actually resolve this
 			// name into a type.
