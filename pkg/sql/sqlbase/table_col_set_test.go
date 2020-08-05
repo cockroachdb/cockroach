@@ -29,7 +29,7 @@ func BenchmarkColSet(b *testing.B) {
 			}
 		}
 	})
-	b.Run("colset", func(b *testing.B) {
+	b.Run("tablecolset", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var c TableColSet
 			for j := 0; j < n; j++ {

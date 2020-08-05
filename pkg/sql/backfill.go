@@ -1390,7 +1390,7 @@ func runSchemaChangesInTxn(
 				doneColumnBackfill = true
 
 			case *descpb.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), immutDesc, traceKV); err != nil {
+				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -1720,11 +1720,12 @@ func indexBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)

@@ -25,6 +25,7 @@ import (
 // The length of the result slice matches the length of the input column descriptors.
 // For every column that has no default expression, a NULL expression is reported
 // as default.
+// TODO(mgartner): Move this to the schemaexpr package.
 func MakeDefaultExprs(
 	ctx context.Context,
 	cols []descpb.ColumnDescriptor,

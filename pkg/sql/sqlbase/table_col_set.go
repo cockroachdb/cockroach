@@ -46,8 +46,11 @@ func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })
 }
 
-// Ordered returns a slice with all the descpb.ColumnIDs in the set, in increasing
-// order.
+// UnionWith adds all the columns from rhs to this set.
+func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
+
+// Ordered returns a slice with all the descpb.ColumnIDs in the set, in
+// increasing order.
 func (s TableColSet) Ordered() []descpb.ColumnID {
 	if s.Empty() {
 		return nil

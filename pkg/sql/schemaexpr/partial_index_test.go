@@ -37,7 +37,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	validator := NewIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
+	validator := MakeIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
 
 	testData := []struct {
 		expr          string
