@@ -73,6 +73,24 @@ func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
 	}
 }
 
+func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.WaitPolicy {
+	const key = "wait-policy"
+	if !required && !d.HasArg(key) {
+		return lock.WaitPolicy_Block
+	}
+	var policy string
+	d.ScanArgs(t, key, &policy)
+	switch policy {
+	case "block":
+		return lock.WaitPolicy_Block
+	case "error":
+		return lock.WaitPolicy_Error
+	default:
+		d.Fatalf(t, "unknown wait policy: %s", policy)
+		return 0
+	}
+}
+
 func scanSingleRequest(
 	t *testing.T, d *datadriven.TestData, line string, txns map[string]*roachpb.Transaction,
 ) roachpb.Request {
