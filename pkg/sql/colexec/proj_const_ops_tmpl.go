@@ -212,16 +212,17 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -231,11 +232,11 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
+	c := GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
-	c = GetDatumToPhysicalFn(leftType)(constArg)
+	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
-	c = GetDatumToPhysicalFn(rightType)(constArg)
+	leftType, rightType := inputTypes[colIdx], constType
 	// {{end}}
 	switch op.(type) {
 	case tree.BinaryOperator:
@@ -321,7 +322,15 @@ func GetProjection_CONST_SIDEConstOperator(
 				}
 				// {{end}}
 			}
-			// {{end}}
+		// {{end}}
+		default:
+			return &defaultCmp_CONST_SIDEConstProjOp{
+				projConstOpBase:     projConstOpBase,
+				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+				constArg:            constArg,
+				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+				datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			}, nil
 		}
 		// {{end}}
 	}

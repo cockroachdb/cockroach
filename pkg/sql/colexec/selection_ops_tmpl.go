@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -269,19 +268,19 @@ func (p *_OP_NAME) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	leftType *types.T,
-	constType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
-	binFn *tree.BinOp,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		colIdx:         colIdx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
 	}
 	switch cmpOp {
 	// {{range .CmpOps}}
@@ -309,25 +308,30 @@ func GetSelectionConstOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, constType.Name())
+	return &defaultCmpConstSelOp{
+		selConstOpBase:   selConstOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		constArg:         constArg,
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+	}, nil
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	leftType *types.T,
-	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
-	binFn *tree.BinOp,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		col1Idx:        col1Idx,
-		col2Idx:        col2Idx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
 	}
 	switch cmpOp {
 	// {{range .CmpOps}}
@@ -355,5 +359,9 @@ func GetSelectionOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, rightType.Name())
+	return &defaultCmpSelOp{
+		selOpBase:        selOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+	}, nil
 }

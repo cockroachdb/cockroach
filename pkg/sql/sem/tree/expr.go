@@ -398,7 +398,7 @@ const (
 	// operator. Instead, a secondary ComparisonOperator is optionally included in
 	// ComparisonExpr for the cases where these operators are the primary op.
 	//
-	// ComparisonOperator.hasSubOperator returns true for ops in this group.
+	// ComparisonOperator.HasSubOperator returns true for ops in this group.
 	Any
 	Some
 	All
@@ -454,8 +454,8 @@ func (i ComparisonOperator) Inverse() (ComparisonOperator, bool) {
 	return inverse, ok
 }
 
-// hasSubOperator returns if the ComparisonOperator is used with a sub-operator.
-func (i ComparisonOperator) hasSubOperator() bool {
+// HasSubOperator returns if the ComparisonOperator is used with a sub-operator.
+func (i ComparisonOperator) HasSubOperator() bool {
 	switch i {
 	case Any:
 	case Some:
@@ -473,7 +473,7 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn *CmpOp
+	Fn *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -489,7 +489,7 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	} else if node.Operator == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
-	if node.Operator.hasSubOperator() {
+	if node.Operator.HasSubOperator() {
 		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
 		binExprFmtWithParen(ctx, node.Left, opStr, node.Right, true)
@@ -560,12 +560,12 @@ func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
 }
 
 func (node *ComparisonExpr) memoizeFn() {
-	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
+	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator {
 	case Any, Some, All:
 		// Array operators memoize the SubOperator's CmpOp.
-		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
+		fOp, _, _, _, _ = FoldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
 		switch rightRet.Family() {
 		case types.ArrayFamily:
@@ -589,7 +589,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.fn = fn
+	node.Fn = fn
 }
 
 // TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.

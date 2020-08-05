@@ -107,12 +107,14 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	binOp := tree.Mult
 	var input colexecbase.Operator
 	colIdx := 3
+	inputTypes := make([]*types.T, colIdx+1)
+	inputTypes[colIdx] = types.Float
 	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Float, types.Float, types.Float, binOp, input,
-		colIdx, constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
+		testAllocator, inputTypes, types.Float, types.Float, binOp, input, colIdx,
+		constArg, outputIdx, nil /* evalCtx */, nil /* binFn */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -134,15 +136,17 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	binOp := tree.GE
+	cmpOp := tree.GE
 	var input colexecbase.Operator
 	colIdx := 3
+	inputTypes := make([]*types.T, colIdx+1)
+	inputTypes[colIdx] = types.Int
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Int, types.Int2, types.Int, binOp, input, colIdx,
-		constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
+		testAllocator, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
+		constArg, outputIdx, nil /* evalCtx */, nil /* binFn */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -264,10 +268,13 @@ func TestGetProjectionOperator(t *testing.T) {
 	var input colexecbase.Operator
 	col1Idx := 5
 	col2Idx := 7
+	inputTypes := make([]*types.T, col2Idx+1)
+	inputTypes[col1Idx] = typ
+	inputTypes[col2Idx] = typ
 	outputIdx := 9
 	op, err := GetProjectionOperator(
-		testAllocator, typ, typ, types.Int2, binOp, input, col1Idx, col2Idx,
-		outputIdx, nil /* binFn */, nil, /* evalCtx */
+		testAllocator, inputTypes, types.Int2, binOp, input, col1Idx, col2Idx,
+		outputIdx, nil /* evalCtx */, nil /* binFn */, nil, /* cmpExpr */
 	)
 	if err != nil {
 		t.Error(err)
@@ -289,19 +296,14 @@ func TestGetProjectionOperator(t *testing.T) {
 func benchmarkProjOp(
 	b *testing.B,
 	name string,
-	makeProjOp func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error),
+	makeProjOp func(source *colexecbase.RepeatableBatchSource) (colexecbase.Operator, error),
+	inputTypes []*types.T,
 	useSelectionVector bool,
 	hasNulls bool,
-	rightConst bool,
 ) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
-
-	typs := []*types.T{types.Int, types.Int}
-	if rightConst {
-		typs = typs[:1]
-	}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatch(inputTypes)
 	nullProb := 0.0
 	if hasNulls {
 		nullProb = nullProbability
@@ -327,13 +329,13 @@ func benchmarkProjOp(
 			sel[i] = i
 		}
 	}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := makeProjOp(source, types.Int, types.Int)
+	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
+	op, err := makeProjOp(source)
 	require.NoError(b, err)
 	op.Init()
 
 	b.Run(name, func(b *testing.B) {
-		b.SetBytes(int64(len(typs) * 8 * coldata.BatchSize()))
+		b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
 		for i := 0; i < b.N; i++ {
 			op.Next(ctx)
 		}
@@ -371,21 +373,21 @@ func BenchmarkProjOp(b *testing.B) {
 			for _, hasNulls := range []bool{false, true} {
 				for _, rightConst := range []bool{false, true} {
 					kind := ""
+					inputTypes := []*types.T{types.Int, types.Int}
 					if rightConst {
 						kind = "Const"
+						inputTypes = inputTypes[:1]
 					}
 					name := fmt.Sprintf("proj%sInt64Int64%s/useSel=%t/hasNulls=%t", opName, kind, useSel, hasNulls)
-					benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
+					benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource) (colexecbase.Operator, error) {
 						expr := fmt.Sprintf("@1 %s @2", opInfixForm)
-						typs := []*types.T{left, right}
 						if rightConst {
 							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
-							typs = typs[:1]
 						}
 						return createTestProjectingOperator(
-							ctx, flowCtx, source, typs, expr, false, /* canFallbackToRowexec */
+							ctx, flowCtx, source, inputTypes, expr, false, /* canFallbackToRowexec */
 						)
-					}, useSel, hasNulls, rightConst)
+					}, inputTypes, useSel, hasNulls)
 				}
 			}
 		}

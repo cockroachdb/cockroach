@@ -49125,16 +49125,17 @@ func (p projGEDatumDatumConstOp) Init() {
 // projection operator for the given left and right column types and operation.
 func GetProjectionRConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -49144,8 +49145,8 @@ func GetProjectionRConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
-	c = GetDatumToPhysicalFn(rightType)(constArg)
+	c := GetDatumToPhysicalFn(constType)(constArg)
+	leftType, rightType := inputTypes[colIdx], constType
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
@@ -52873,6 +52874,14 @@ func GetProjectionRConstOperator(
 					}
 				}
 			}
+		default:
+			return &defaultCmpRConstProjOp{
+				projConstOpBase:     projConstOpBase,
+				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+				constArg:            constArg,
+				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+				datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			}, nil
 		}
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
