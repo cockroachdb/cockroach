@@ -1,0 +1,35 @@
+{
+  "extends": ["@cockroachlabs/eslint-config", "prettier"],
+  "plugins": ["prettier"],
+  "rules": {
+    "prettier/prettier": ["error"],
+    "camelcase": "off",
+    "@typescript-eslint/camelcase": "off",
+    "@typescript-eslint/no-use-before-define": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "react/jsx-key": "off",
+    "@typescript-eslint/no-empty-interface": "off",
+    "@typescript-eslint/interface-name-prefix": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "react/require-render-return": "off",
+    "@typescript-eslint/triple-slash-reference": "off",
+    "no-case-declarations": "off",
+    "@typescript-eslint/no-namespace": "off",
+    "react/jsx-no-target-blank": "off",
+    "react/no-unescaped-entities": "off",
+    "react/no-children-prop": "off",
+    "require-yield": "off",
+    "no-useless-escape": "off",
+    "no-prototype-builtins": "off",
+    "@typescript-eslint/ban-types": [
+      "error",
+      {
+        "types": {
+          "{}": false,
+          "Object": false,
+          "Function": false
+        }
+      }
+    ]
+  }
+}
