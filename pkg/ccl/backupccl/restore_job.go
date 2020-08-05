@@ -460,10 +460,11 @@ func restore(
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
+	emptyRowCount := RowCount{}
 
 	// If there weren't any spans requested, then return early.
 	if len(spans) == 0 {
-		return RowCount{}, nil
+		return emptyRowCount, nil
 	}
 
 	mu := struct {
@@ -496,7 +497,7 @@ func restore(
 	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo,
 		highWaterMark, user, errOnMissingRange)
 	if err != nil {
-		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
+		return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
 
 	for i := range importSpans {
@@ -592,14 +593,14 @@ func restore(
 		endTime,
 		progCh,
 	); err != nil {
-		return mu.res, err
+		return emptyRowCount, err
 	}
 
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
 	return mu.res, nil
