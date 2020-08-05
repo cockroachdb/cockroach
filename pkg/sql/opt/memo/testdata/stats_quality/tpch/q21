@@ -80,32 +80,32 @@ limit
  │         ├── stats: [rows=8389.30056, distinct(2)=8389.30056, null(2)=0, distinct(75)=8389.30056, null(75)=0]
  │         ├── key: (2)
  │         ├── fd: (2)-->(75)
- │         ├── inner-join (lookup orders)
+ │         ├── anti-join (lookup lineitem)
  │         │    ├── save-table-name: q21_lookup_join_4
  │         │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) o_orderkey:26(int!null) o_orderstatus:28(char!null) n_nationkey:36(int!null) n_name:37(char!null)
- │         │    ├── key columns: [9] = [26]
- │         │    ├── lookup columns are key
+ │         │    ├── key columns: [9] = [58]
  │         │    ├── stats: [rows=17924.776, distinct(1)=8350.92287, null(1)=0, distinct(2)=8389.30056, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=17713.0676, null(9)=0, distinct(11)=8350.92287, null(11)=0, distinct(20)=2464.51974, null(20)=0, distinct(21)=2552.02044, null(21)=0, distinct(26)=17713.0676, null(26)=0, distinct(28)=1, null(28)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
  │         │    ├── fd: ()-->(28,37), (1)-->(2,4), (9)==(26), (26)==(9), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
- │         │    ├── anti-join (lookup lineitem)
+ │         │    ├── semi-join (lookup lineitem)
  │         │    │    ├── save-table-name: q21_lookup_join_5
- │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) n_nationkey:36(int!null) n_name:37(char!null)
- │         │    │    ├── key columns: [9] = [58]
- │         │    │    ├── stats: [rows=17924.776, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=17924.776, null(9)=0, distinct(11)=399.934613, null(11)=0, distinct(20)=2465.98023, null(20)=0, distinct(21)=2553.96876, null(21)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
- │         │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    ├── semi-join (lookup lineitem)
+ │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) o_orderkey:26(int!null) o_orderstatus:28(char!null) n_nationkey:36(int!null) n_name:37(char!null)
+ │         │    │    ├── key columns: [9] = [41]
+ │         │    │    ├── stats: [rows=20161.2903, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=19761.1976, null(9)=0, distinct(11)=399.934613, null(11)=0, distinct(20)=2465.30633, null(20)=0, distinct(21)=2553.04781, null(21)=0, distinct(26)=19761.1976, null(26)=0, distinct(28)=1, null(28)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
+ │         │    │    ├── fd: ()-->(28,37), (1)-->(2,4), (4)==(36), (36)==(4), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
+ │         │    │    ├── inner-join (lookup orders)
  │         │    │    │    ├── save-table-name: q21_lookup_join_6
- │         │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) n_nationkey:36(int!null) n_name:37(char!null)
- │         │    │    │    ├── key columns: [9] = [41]
- │         │    │    │    ├── stats: [rows=26887.164, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=26887.164, null(9)=0, distinct(11)=399.934613, null(11)=0, distinct(20)=2465.99571, null(20)=0, distinct(21)=2553.99299, null(21)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
- │         │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
+ │         │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) o_orderkey:26(int!null) o_orderstatus:28(char!null) n_nationkey:36(int!null) n_name:37(char!null)
+ │         │    │    │    ├── key columns: [9] = [26]
+ │         │    │    │    ├── lookup columns are key
+ │         │    │    │    ├── stats: [rows=33144.2984, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=32071.1941, null(9)=0, distinct(11)=399.934613, null(11)=0, distinct(20)=2465.99641, null(20)=0, distinct(21)=2553.9941, null(21)=0, distinct(26)=32071.1941, null(26)=0, distinct(28)=1, null(28)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
+ │         │    │    │    ├── fd: ()-->(28,37), (1)-->(2,4), (4)==(36), (36)==(4), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
  │         │    │    │    ├── inner-join (lookup lineitem)
  │         │    │    │    │    ├── save-table-name: q21_lookup_join_7
  │         │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_commitdate:20(date!null) l1.l_receiptdate:21(date!null) n_nationkey:36(int!null) n_name:37(char!null)
  │         │    │    │    │    ├── key columns: [9 12] = [9 12]
  │         │    │    │    │    ├── lookup columns are key
- │         │    │    │    │    ├── stats: [rows=80661.4919, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=78049.9358, null(9)=0, distinct(11)=399.934613, null(11)=0, distinct(20)=2466, null(20)=0, distinct(21)=2554, null(21)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
- │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
+ │         │    │    │    │    ├── stats: [rows=80661.4919, distinct(1)=9917.5305, null(1)=0, distinct(2)=9987.36419, null(2)=0, distinct(4)=1, null(4)=0, distinct(9)=78972.5618, null(9)=0, distinct(11)=9917.5305, null(11)=0, distinct(20)=2466, null(20)=0, distinct(21)=2554, null(21)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
+ │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
  │         │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
  │         │    │    │    │    │    ├── save-table-name: q21_lookup_join_8
  │         │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:9(int!null) l1.l_suppkey:11(int!null) l1.l_linenumber:12(int!null) n_nationkey:36(int!null) n_name:37(char!null)
@@ -150,12 +150,12 @@ limit
  │         │    │    │    │    └── filters
  │         │    │    │    │         └── l1.l_receiptdate:21 > l1.l_commitdate:20 [type=bool, outer=(20,21), constraints=(/20: (/NULL - ]; /21: (/NULL - ])]
  │         │    │    │    └── filters
- │         │    │    │         └── l2.l_suppkey:43 != l1.l_suppkey:11 [type=bool, outer=(11,43), constraints=(/11: (/NULL - ]; /43: (/NULL - ])]
+ │         │    │    │         └── o_orderstatus:28 = 'F' [type=bool, outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
  │         │    │    └── filters
- │         │    │         ├── l3.l_suppkey:60 != l1.l_suppkey:11 [type=bool, outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
- │         │    │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [type=bool, outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
+ │         │    │         └── l2.l_suppkey:43 != l1.l_suppkey:11 [type=bool, outer=(11,43), constraints=(/11: (/NULL - ]; /43: (/NULL - ])]
  │         │    └── filters
- │         │         └── o_orderstatus:28 = 'F' [type=bool, outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
+ │         │         ├── l3.l_suppkey:60 != l1.l_suppkey:11 [type=bool, outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
+ │         │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [type=bool, outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
  │         └── aggregations
  │              └── count-rows [as=count_rows:75, type=int]
  └── 100 [type=int]
@@ -221,50 +221,58 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 stats table=q21_lookup_join_5
 ----
 column_names     row_count  distinct_count  null_count
-{l_commitdate}   8357       2357            0
-{l_orderkey}     8357       8343            0
-{l_receiptdate}  8357       2379            0
-{l_suppkey}      8357       411             0
-{n_name}         8357       1               0
-{n_nationkey}    8357       1               0
-{s_name}         8357       411             0
-{s_nationkey}    8357       1               0
-{s_suppkey}      8357       411             0
+{l_commitdate}   73089      1242            0
+{l_orderkey}     73089      69412           0
+{l_receiptdate}  73089      1255            0
+{l_suppkey}      73089      411             0
+{n_name}         73089      1               0
+{n_nationkey}    73089      1               0
+{o_orderkey}     73089      69412           0
+{o_orderstatus}  73089      1               0
+{s_name}         73089      411             0
+{s_nationkey}    73089      1               0
+{s_suppkey}      73089      411             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_commitdate}   17925.00       2.14 <==       2466.00             1.05                0.00            1.00
-{l_orderkey}     17925.00       2.14 <==       17925.00            2.15 <==            0.00            1.00
-{l_receiptdate}  17925.00       2.14 <==       2554.00             1.07                0.00            1.00
-{l_suppkey}      17925.00       2.14 <==       400.00              1.03                0.00            1.00
-{n_name}         17925.00       2.14 <==       1.00                1.00                0.00            1.00
-{n_nationkey}    17925.00       2.14 <==       1.00                1.00                0.00            1.00
-{s_name}         17925.00       2.14 <==       400.00              1.03                0.00            1.00
-{s_nationkey}    17925.00       2.14 <==       1.00                1.00                0.00            1.00
-{s_suppkey}      17925.00       2.14 <==       400.00              1.03                0.00            1.00
+{l_commitdate}   20161.00       3.63 <==       2465.00             1.98 <==            0.00            1.00
+{l_orderkey}     20161.00       3.63 <==       19761.00            3.51 <==            0.00            1.00
+{l_receiptdate}  20161.00       3.63 <==       2553.00             2.03 <==            0.00            1.00
+{l_suppkey}      20161.00       3.63 <==       400.00              1.03                0.00            1.00
+{n_name}         20161.00       3.63 <==       1.00                1.00                0.00            1.00
+{n_nationkey}    20161.00       3.63 <==       1.00                1.00                0.00            1.00
+{o_orderkey}     20161.00       3.63 <==       19761.00            3.51 <==            0.00            1.00
+{o_orderstatus}  20161.00       3.63 <==       1.00                1.00                0.00            1.00
+{s_name}         20161.00       3.63 <==       400.00              1.03                0.00            1.00
+{s_nationkey}    20161.00       3.63 <==       1.00                1.00                0.00            1.00
+{s_suppkey}      20161.00       3.63 <==       400.00              1.03                0.00            1.00
 
 stats table=q21_lookup_join_6
 ----
 column_names     row_count  distinct_count  null_count
-{l_commitdate}   151237     2464            0
-{l_orderkey}     151237     144608          0
-{l_receiptdate}  151237     2512            0
-{l_suppkey}      151237     411             0
-{n_name}         151237     1               0
-{n_nationkey}    151237     1               0
-{s_name}         151237     411             0
-{s_nationkey}    151237     1               0
-{s_suppkey}      151237     411             0
+{l_commitdate}   75871      1245            0
+{l_orderkey}     75871      71921           0
+{l_receiptdate}  75871      1255            0
+{l_suppkey}      75871      411             0
+{n_name}         75871      1               0
+{n_nationkey}    75871      1               0
+{o_orderkey}     75871      71921           0
+{o_orderstatus}  75871      1               0
+{s_name}         75871      411             0
+{s_nationkey}    75871      1               0
+{s_suppkey}      75871      411             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_commitdate}   26887.00       5.62 <==       2466.00             1.00                0.00            1.00
-{l_orderkey}     26887.00       5.62 <==       26887.00            5.38 <==            0.00            1.00
-{l_receiptdate}  26887.00       5.62 <==       2554.00             1.02                0.00            1.00
-{l_suppkey}      26887.00       5.62 <==       400.00              1.03                0.00            1.00
-{n_name}         26887.00       5.62 <==       1.00                1.00                0.00            1.00
-{n_nationkey}    26887.00       5.62 <==       1.00                1.00                0.00            1.00
-{s_name}         26887.00       5.62 <==       400.00              1.03                0.00            1.00
-{s_nationkey}    26887.00       5.62 <==       1.00                1.00                0.00            1.00
-{s_suppkey}      26887.00       5.62 <==       400.00              1.03                0.00            1.00
+{l_commitdate}   33144.00       2.29 <==       2466.00             1.98 <==            0.00            1.00
+{l_orderkey}     33144.00       2.29 <==       32071.00            2.24 <==            0.00            1.00
+{l_receiptdate}  33144.00       2.29 <==       2554.00             2.04 <==            0.00            1.00
+{l_suppkey}      33144.00       2.29 <==       400.00              1.03                0.00            1.00
+{n_name}         33144.00       2.29 <==       1.00                1.00                0.00            1.00
+{n_nationkey}    33144.00       2.29 <==       1.00                1.00                0.00            1.00
+{o_orderkey}     33144.00       2.29 <==       32071.00            2.24 <==            0.00            1.00
+{o_orderstatus}  33144.00       2.29 <==       1.00                1.00                0.00            1.00
+{s_name}         33144.00       2.29 <==       400.00              1.03                0.00            1.00
+{s_nationkey}    33144.00       2.29 <==       1.00                1.00                0.00            1.00
+{s_suppkey}      33144.00       2.29 <==       400.00              1.03                0.00            1.00
 
 stats table=q21_lookup_join_7
 ----
@@ -281,14 +289,14 @@ column_names     row_count  distinct_count  null_count
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_commitdate}   80661.00       1.94 <==       2466.00             1.00                0.00            1.00
-{l_orderkey}     80661.00       1.94 <==       78050.00            1.92 <==            0.00            1.00
+{l_orderkey}     80661.00       1.94 <==       78973.00            1.90                0.00            1.00
 {l_receiptdate}  80661.00       1.94 <==       2554.00             1.02                0.00            1.00
-{l_suppkey}      80661.00       1.94 <==       400.00              1.03                0.00            1.00
+{l_suppkey}      80661.00       1.94 <==       9918.00             24.13 <==           0.00            1.00
 {n_name}         80661.00       1.94 <==       1.00                1.00                0.00            1.00
 {n_nationkey}    80661.00       1.94 <==       1.00                1.00                0.00            1.00
-{s_name}         80661.00       1.94 <==       400.00              1.03                0.00            1.00
+{s_name}         80661.00       1.94 <==       9987.00             24.30 <==           0.00            1.00
 {s_nationkey}    80661.00       1.94 <==       1.00                1.00                0.00            1.00
-{s_suppkey}      80661.00       1.94 <==       400.00              1.03                0.00            1.00
+{s_suppkey}      80661.00       1.94 <==       9918.00             24.13 <==           0.00            1.00
 
 stats table=q21_lookup_join_8
 ----

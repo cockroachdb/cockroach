@@ -166,12 +166,12 @@ New expression 2 of 2:
   sort
    └── project
         └── inner-join (hash)
-             ├── scan child
              ├── inner-join (hash)
              │    ├── scan grandchild
              │    ├── scan parent
              │    └── filters
              │         └── grandchild.pid = parent.pid
+             ├── scan child
              └── filters
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid

@@ -158,8 +158,8 @@ type OnAddJoinFunc func(left, right, all, refs []memo.RelExpr, op opt.Operator)
 // being considered.
 //
 // In addition to the TES, 'conflict rules' are also required to detect invalid
-// plans. For details, see the methods: calculateTES, addJoins,
-// checkNonInnerJoin, and checkInnerJoin.
+// plans. For details, see the methods: calculateTES,
+// emitConnectedComplementPair, checkNonInnerJoin, and checkInnerJoin.
 //
 // Special handling of inner joins
 // -------------------------------
@@ -282,7 +282,7 @@ type JoinOrderBuilder struct {
 	// ((xy, ab), uv), (ab, (xy, uv)), etc.
 	//
 	// The group for a single base relation is simply the base relation itself.
-	plans map[vertexSet]memo.RelExpr
+	plans map[vertexSet]plan
 
 	// joinCount counts the number of joins that have been added to the join
 	// graph. It is used to ensure that the number of joins that are reordered at
@@ -305,7 +305,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 	jb.edges = []edge{}
 	jb.nonInnerEdges = edgeSet{}
 	jb.innerEdges = edgeSet{}
-	jb.plans = map[vertexSet]memo.RelExpr{}
+	jb.plans = map[vertexSet]plan{}
 	jb.joinCount = 0
 }
 
@@ -327,14 +327,18 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		// the best plan.
 		jb.ensureClosure(join)
 
+		for key, plan := range jb.plans {
+			jb.plans[key] = plan.setEdges(jb)
+		}
+
 		if jb.onReorderFunc != nil {
 			// Hook for testing purposes.
 			jb.callOnReorderFunc(join)
 		}
 
-		// Execute the DPSube algorithm. Enumerate all join orderings and add any
-		// valid ones to the memo.
-		jb.dpSube()
+		// Execute the DPHyp algorithm. Enumerate all valid join orderings and add
+		// them to the memo.
+		jb.dpHyp()
 
 	default:
 		panic(errors.AssertionFailedf("%v cannot be reordered", t.Op()))
@@ -397,7 +401,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 
 		// Initialize the plan for this join. This allows any new joins with the
 		// same set of input relations to be added to the same memo group.
-		jb.plans[leftVertexes.union(rightVertexes)] = t
+		jb.plans[leftVertexes.union(rightVertexes)] = plan{memoGroup: t}
 
 	default:
 		jb.addBaseRelation(t)
@@ -439,55 +443,133 @@ func (jb *JoinOrderBuilder) ensureClosure(join memo.RelExpr) {
 	}
 }
 
-// dpSube carries out the DPSube algorithm (citations: [8] figure 4). All
-// disjoint pairs of subsets of base relations are enumerated and checked for
-// validity. If valid, the pair of subsets is used along with the edges
-// connecting them to create a new join operator, which is added to the memo.
-// TODO(drewk): implement DPHyp (or a similar algorithm).
-func (jb *JoinOrderBuilder) dpSube() {
-	subsets := jb.allVertexes()
-	for subset := vertexSet(1); subset <= subsets; subset++ {
-		if subset.isSingleton() {
-			// This subset has only one set bit, which means it only represents one
-			// relation. We need at least two relations in order to create a new join.
-			continue
-		}
-		// Enumerate all possible pairwise-disjoint binary partitions of the subset,
-		// s1 AND s2. These represent sets of relations that may be joined together.
-		//
-		// Only iterate s1 up to subset/2 to avoid enumerating duplicate partitions.
-		// This works because s1 and s2 are always disjoint, and subset will always
-		// be equal to s1 + s2. Therefore, any pair of subsets where s1 > s2 will
-		// already have been handled when s2 < s1. Also note that for subset = 1111
-		// (in binary), subset / 2 = 0111 (integer division).
-		for s1 := vertexSet(1); s1 <= subset/2; s1++ {
-			if !s1.isSubsetOf(subset) {
-				continue
-			}
-			s2 := subset.difference(s1)
-			jb.addJoins(s1, s2)
-		}
+// dpHyp executes the DPHyp algorithm. DPHyp enumerates all pairs of connected
+// complement pairs and uses them to add new joins to the memo.
+//
+// Citations: [9]
+func (jb *JoinOrderBuilder) dpHyp() {
+	for i := len(jb.vertexes) - 1; i >= 0; i-- {
+		idx := vertexIndex(i)
+		set := vertexSet(0).add(idx)
+
+		// Enumerate joins where this vertex is one of the inputs.
+		jb.emitConnectedSubGraph(set)
+
+		// Expand this vertex into a connected sub-graph and enumerate joins where
+		// the sub-graph is one of the inputs.
+		jb.enumerateConnectedSubGraphs(set, vertexSet(0).setAllSmaller(idx))
 	}
 }
 
-// addJoins iterates through the edges of the join graph and checks whether any
-// joins can be constructed between the memo groups for the two given sets of
-// base relations without creating an invalid plan or introducing cross joins.
-// If any valid joins are found, they are added to the memo.
-func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
-	if jb.plans[s1] == nil || jb.plans[s2] == nil {
-		// Both inputs must have plans.
-		return
+// enumerateConnectedSubGraphs expands the given set to include connected
+// vertexes that are not in the exclusion set. For each newly expanded
+// sub-graph, if a plan exists, joins are considered where the sub-graph plan is
+// one of the inputs. Next, enumerateConnectedSubGraphs is called recursively to
+// further expand the connected sub-graph.
+func (jb *JoinOrderBuilder) enumerateConnectedSubGraphs(set, exclude vertexSet) {
+	neighbors := jb.neighbors(set, exclude)
+	for n, ok := neighbors.nextSubset(0); ok; n, ok = neighbors.nextSubset(n) {
+		newSubGraph := set.union(n)
+		if jb.plans[newSubGraph].memoGroup != nil {
+			// The union of set and n induces a connected sub-graph, so attempt to
+			// find joins between the sub-graph and any neighboring nodes.
+			jb.emitConnectedSubGraph(newSubGraph)
+		}
 	}
+	for n, ok := neighbors.nextSubset(0); ok; n, ok = neighbors.nextSubset(n) {
+		// Recursively expand the union between set and n in an attempt to induce
+		// new connected sub-graphs.
+		jb.enumerateConnectedSubGraphs(set.union(n), exclude.union(neighbors))
+	}
+}
+
+// emitConnectedSubGraph attempts to produce joins between the given connected
+// sub-graph and connected vertexes.
+func (jb *JoinOrderBuilder) emitConnectedSubGraph(s1 vertexSet) {
+	exclude := s1.union(vertexSet(0).setAllSmaller(vertexIndex(s1.min())))
+	neighbors := jb.neighbors(s1, exclude)
+	for i := len(jb.vertexes) - 1; i >= 0; i-- {
+		s2 := vertexSet(0).add(vertexIndex(i))
+		if !s2.isSubsetOf(neighbors) {
+			continue
+		}
+		if jb.plans[s1].interestingEdges.Intersects(jb.plans[s2].interestingEdges) {
+			// The connected sub-graph s1 is connected to the vertex contained in s2
+			// (they form a connected-complement pair), so join may be valid.
+			jb.emitConnectedComplementPair(s1, s2)
+		}
+
+		// Forbid any vertexes that will be explored later. This prevents
+		// enumeration of duplicate orderings.
+		additionalExclude := vertexSet(0).setAllSmaller(vertexIndex(s2.min())).intersection(neighbors)
+
+		// Expand s2 in hopes of finding connected complements that can be used to
+		// produce joins.
+		jb.enumerateConnectedComplements(s1, s2, exclude.union(additionalExclude))
+	}
+}
+
+// enumerateConnectedComplements expands the set s2 in an attempt to find
+// connected-complement pairs that can be used to construct valid joins.
+func (jb *JoinOrderBuilder) enumerateConnectedComplements(s1, s2, exclude vertexSet) {
+	neighbors := jb.neighbors(s2, exclude)
+	for n, ok := neighbors.nextSubset(0); ok; n, ok = neighbors.nextSubset(n) {
+		complement := s2.union(n)
+		if jb.plans[complement].memoGroup != nil &&
+			jb.plans[s1].interestingEdges.Intersects(jb.plans[complement].interestingEdges) {
+			// If the set containing all the vertexes from s2 as well as from n has a
+			// plan and is connected to s1, we have found a connected-complement pair.
+			jb.emitConnectedComplementPair(s1, complement)
+		}
+	}
+	for n, ok := neighbors.nextSubset(0); ok; n, ok = neighbors.nextSubset(n) {
+		// Recursively expand the s2 vertexSet to include its neighbors.
+		jb.enumerateConnectedComplements(s1, s2.union(n), exclude.union(neighbors))
+	}
+}
+
+// neighbors returns a set of 'seed' vertexes that represent all vertexSets that
+// can be reached from the given set by an edge. Representatives are not
+// included for any vertexSets that intersect the exclusion set; this is used to
+// prevent enumeration of duplicate orderings.
+func (jb *JoinOrderBuilder) neighbors(set, exclude vertexSet) (n vertexSet) {
+	edges := jb.plans[set].interestingEdges
+	for i, ok := edges.Next(0); ok; i, ok = edges.Next(i + 1) {
+		edge := &jb.edges[i]
+		leftTES := edge.op.leftVertexes.intersection(edge.tes)
+		rightTES := edge.op.rightVertexes.intersection(edge.tes)
+		if leftTES.isSubsetOf(set) && !rightTES.intersects(set) && !rightTES.intersects(exclude) {
+			n = n.add(vertexIndex(rightTES.min()))
+		} else if rightTES.isSubsetOf(set) && !leftTES.intersects(set) && !leftTES.intersects(exclude) {
+			n = n.add(vertexIndex(leftTES.min()))
+		}
+	}
+	return n
+}
+
+// emitConnectedComplementPair is called on a pair of vertexSets which are known
+// to form a connected-complement pair; which is to say that both s1 and s2
+// induce connected sub-graphs and there is at least one edge that connects s1
+// and s2. Connecting edges are checked for conflicts, and are used to construct
+// a join if none are found.
+func (jb *JoinOrderBuilder) emitConnectedComplementPair(s1, s2 vertexSet) {
+	leftPlan := jb.plans[s1]
+	rightPlan := jb.plans[s2]
+	interestingEdges := leftPlan.interestingEdges.Intersection(rightPlan.interestingEdges)
+	if interestingEdges.Empty() {
+		panic(errors.AssertionFailedf("left and right plans are not connected"))
+	}
+	innerEdges := interestingEdges.Intersection(jb.innerEdges)
+	nonInnerEdges := interestingEdges.Intersection(jb.nonInnerEdges)
 
 	var fds props.FuncDepSet
-	fds.AddEquivFrom(&jb.plans[s1].Relational().FuncDeps)
-	fds.AddEquivFrom(&jb.plans[s2].Relational().FuncDeps)
+	fds.AddEquivFrom(&leftPlan.memoGroup.Relational().FuncDeps)
+	fds.AddEquivFrom(&rightPlan.memoGroup.Relational().FuncDeps)
 
-	// Gather all inner edges that connect the left and right relation sets.
+	// Gather all inner edges that reference the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
 	var addInnerJoin bool
-	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
+	for i, ok := innerEdges.Next(0); ok; i, ok = innerEdges.Next(i + 1) {
 		e := &jb.edges[i]
 
 		// Ensure that this edge forms a valid connection between the two sets. See
@@ -503,10 +585,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		}
 	}
 
-	// Iterate through the non-inner edges and attempt to construct joins from
-	// them.
-	for i, ok := jb.nonInnerEdges.Next(0); ok; i, ok = jb.nonInnerEdges.Next(i + 1) {
-		e := &jb.edges[i]
+	// If there is an applicable non-inner edge, use it to construct a join.
+	for idx, ok := nonInnerEdges.Next(0); ok; idx, ok = nonInnerEdges.Next(idx + 1) {
+		e := &jb.edges[idx]
 
 		// Ensure that this edge forms a valid connection between the two sets. See
 		// the checkNonInnerJoin and checkInnerJoin comments for more information.
@@ -522,8 +603,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// s1, s2 join fails, because commutation (for full joins) is handled by
 			// the CommuteJoin rule.
 			//
-			// This is necessary because we only iterate s1 up to subset / 2 in
-			// DPSube(). Take this transformation as an example:
+			// This is necessary because DPHyp enumerates any given pair of vertexes
+			// only once; if s1, s2 is enumerated, s2, s1 is not. Take this
+			// transformation as an example:
 			//
 			//    SELECT *
 			//    FROM (SELECT * FROM xy LEFT JOIN ab ON x = a)
@@ -662,13 +744,13 @@ func (jb *JoinOrderBuilder) addJoin(
 		// Hook for testing purposes.
 		jb.callOnAddJoinFunc(s1, s2, joinFilters, op)
 	}
-	left := jb.plans[s1]
-	right := jb.plans[s2]
+	left := jb.plans[s1].memoGroup
+	right := jb.plans[s2].memoGroup
 	union := s1.union(s2)
-	if jb.plans[union] != nil {
-		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
+	if jb.plans[union].memoGroup != nil {
+		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union].memoGroup)
 	} else {
-		jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+		jb.plans[union] = plan{memoGroup: jb.memoize(op, left, right, joinFilters, selectFilters)}.setEdges(jb)
 	}
 }
 
@@ -839,7 +921,7 @@ func (jb *JoinOrderBuilder) addBaseRelation(rel memo.RelExpr) {
 	// Initialize the plan for this vertex.
 	idx := vertexIndex(len(jb.vertexes) - 1)
 	relSet := vertexSet(0).add(idx)
-	jb.plans[relSet] = rel
+	jb.plans[relSet] = plan{memoGroup: rel}
 }
 
 // checkSize panics if the number of relations is greater than or equal to
@@ -904,6 +986,39 @@ func (jb *JoinOrderBuilder) getRelationSlice(relations vertexSet) (relSlice []me
 		relSlice = append(relSlice, jb.vertexes[idx])
 	}
 	return relSlice
+}
+
+// plan contains a pointer to the memo group containing all valid plans for a
+// given set of vertexes, as well as the set of edges that reference one or
+// more of the vertexes.
+type plan struct {
+	// memoGroup is a pointer to the first expression of the memo group for the
+	// plan.
+	memoGroup memo.RelExpr
+
+	// interestingEdges is the set of all hyper-edges that connect the vertexes
+	// that are joined by this plan to a disjoint set of vertexes. It is used to
+	// filter out candidates for connected-complement pairs during execution of
+	// DPHyp.
+	interestingEdges edgeSet
+}
+
+// setEdges returns a new plan with the interestingEdges set initialized with
+// all edges that reference the vertexes that are joined by the plan.
+func (p plan) setEdges(jb *JoinOrderBuilder) plan {
+	vertexes := jb.getRelations(p.memoGroup.Relational().OutputCols)
+	var interestingEdges edgeSet
+	for i := range jb.edges {
+		if jb.edges[i].tes.intersects(vertexes) {
+			// Add all edges that reference vertexes that are joined under this plan.
+			// For non-inner joins, we could further restrict this to check whether
+			// the left-TES or rightTES is a subset of the vertexes, but doing so
+			// would restrict the search space for inner joins.
+			interestingEdges.Add(i)
+		}
+	}
+	p.interestingEdges = interestingEdges
+	return p
 }
 
 // edge represents an edge in the join graph. It holds the information needed
@@ -1583,13 +1698,8 @@ func (s bitSet) isSubsetOf(o bitSet) bool {
 	return s.union(o) == o
 }
 
-// isSingleton returns true if the set has exactly one element.
-func (s bitSet) isSingleton() bool {
-	return s > 0 && (s&(s-1)) == 0
-}
-
-// next returns the next element in the set after the given start index, and
-// a bool indicating whether such an element exists.
+// next returns the first element in the set that is >= startVal, and a bool
+// indicating whether such an element exists.
 func (s bitSet) next(startVal uint64) (elem uint64, ok bool) {
 	if startVal < maxSetSize {
 		if ntz := bits.TrailingZeros64(uint64(s >> startVal)); ntz < 64 {
@@ -1599,7 +1709,34 @@ func (s bitSet) next(startVal uint64) (elem uint64, ok bool) {
 	return uint64(math.MaxInt64), false
 }
 
+// nextSubset returns the next subset > the given subset, in the order that
+// would be obtained by incrementing lastSubset by one until a subset is
+// reached. Also returns a bool indicating whether such a subset exists.
+func (s bitSet) nextSubset(last bitSet) (bitSet, bool) {
+	if last >= s || s == 0 {
+		return 0, false
+	}
+	return ((last | ^s) + 1) & s, true
+}
+
 // len returns the number of elements in the set.
 func (s bitSet) len() int {
 	return bits.OnesCount64(uint64(s))
+}
+
+// min returns the position of the rightmost element in the set (the position of
+// the element with the smallest ordinal number). For example, '1010110'.min()
+// would return 1.
+func (s bitSet) min() int {
+	return bits.TrailingZeros64(uint64(s))
+}
+
+// setAllSmaller sets all bits less than or equal to the given index and returns
+// the result.
+func (s bitSet) setAllSmaller(idx uint64) bitSet {
+	if idx >= maxSetSize {
+		// Set all bits.
+		return ^bitSet(0)
+	}
+	return s | ((1 << (idx + 1)) - 1)
 }
