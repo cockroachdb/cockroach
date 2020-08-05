@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -145,11 +146,23 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
+	exists, id, err := sqlbase.LookupPublicTableID(
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	)
+	if err == nil && exists {
+		// Try and see what kind of object we collided with.
+		desc, err := catalogkv.GetAnyDescriptorByID(
+			params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
+		if err != nil {
+			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+		}
+		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+	} else if err != nil {
+		return err
+	}
+
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
-
-	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
@@ -170,22 +183,6 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// We update the descriptor to the new name, but also leave the mapping of the
-	// old name to the id, so that the name is not reused until the schema changer
-	// has made sure it's not in use any more.
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
-	}
-	err := catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc)
-	if err != nil {
-		return err
-	}
-
-	exists, id, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
-	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
@@ -197,8 +194,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	b.CPut(newTbKey, descID, nil)
-	return p.txn.Run(ctx, b)
+	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
+		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
+
+	return p.writeNameKeyToBatch(
+		ctx, newTbKey, descID, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	)
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
@@ -229,4 +230,17 @@ func (p *planner) dependentViewError(
 		sqlbase.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
 			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
+}
+
+// writeNameKeyToBatch writes a name key to a batch and runs the batch.
+func (p *planner) writeNameKeyToBatch(
+	ctx context.Context, key roachpb.Key, ID descpb.ID, tracingEnabled bool,
+) error {
+	b := &kv.Batch{}
+	if tracingEnabled {
+		log.VEventf(ctx, 2, "CPut %s -> %d", key, ID)
+	}
+	b.CPut(key, ID, nil)
+
+	return p.txn.Run(ctx, b)
 }
