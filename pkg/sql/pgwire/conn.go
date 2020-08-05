@@ -1277,7 +1277,7 @@ func (c *conn) writeRowDescription(
 		typ := pgTypeForParserType(column.Typ)
 		c.msgBuilder.putInt32(int32(column.TableID))        // Table OID (optional).
 		c.msgBuilder.putInt16(int16(column.PGAttributeNum)) // Column attribute ID (optional).
-		c.msgBuilder.putInt32(int32(mapResultOid(typ.oid)))
+		c.msgBuilder.putInt32(int32(typ.oid))
 		c.msgBuilder.putInt16(int16(typ.size))
 		c.msgBuilder.putInt32(column.GetTypeModifier()) // Type modifier
 		if formatCodes == nil {
