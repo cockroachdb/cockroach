@@ -51,6 +51,7 @@ type cliTest struct {
 	*server.TestServer
 	certsDir    string
 	cleanupFunc func() error
+	prevStderr  *os.File
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
@@ -162,6 +163,7 @@ func newCLITest(params cliTestParams) cliTest {
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
 	// captured.
+	c.prevStderr = stderr
 	stderr = os.Stdout
 
 	return c
@@ -223,7 +225,7 @@ func (c *cliTest) cleanup() {
 	}()
 
 	// Restore stderr.
-	stderr = log.OrigStderr
+	stderr = c.prevStderr
 
 	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
