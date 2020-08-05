@@ -281,6 +281,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Timestamp:       ba.Timestamp,
 			Priority:        ba.UserPriority,
 			ReadConsistency: ba.ReadConsistency,
+			WaitPolicy:      ba.WaitPolicy,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans,
 			LockSpans:       lockSpans,

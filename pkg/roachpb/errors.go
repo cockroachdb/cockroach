@@ -364,6 +364,11 @@ func (e *RangeNotFoundError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
 
+// IsRangeNotFoundError returns true if err contains a *RangeNotFoundError.
+func IsRangeNotFoundError(err error) bool {
+	return errors.HasType(err, (*RangeNotFoundError)(nil))
+}
+
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
 //
 // desc and lease represent info about the range that the request was
@@ -924,8 +929,3 @@ func (e *IndeterminateCommitError) message(pErr *Error) string {
 }
 
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
-
-// IsRangeNotFoundError returns true if err contains a *RangeNotFoundError.
-func IsRangeNotFoundError(err error) bool {
-	return errors.HasType(err, (*RangeNotFoundError)(nil))
-}
