@@ -120,3 +120,5 @@ check out [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/
   - [Trust, But Verify: How CockroachDB Checks Replication](https://www.cockroachlabs.com/blog/trust-but-verify-cockroachdb-checks-replication/)
   - [Living Without Atomic Clocks](https://www.cockroachlabs.com/blog/living-without-atomic-clocks/)
   - [The CockroachDB Architecture Document](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
+
+(No-op diff.)
