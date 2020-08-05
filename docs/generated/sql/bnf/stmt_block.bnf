@@ -1730,6 +1730,7 @@ attrs ::=
 
 restore_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INTO_DB' '=' string_or_placeholder
 	| 'SKIP_MISSING_FOREIGN_KEYS'
 	| 'SKIP_MISSING_SEQUENCES'

@@ -100,6 +100,7 @@ func (node Backup) Coverage() DescriptorCoverage {
 // RestoreOptions describes options for the RESTORE execution.
 type RestoreOptions struct {
 	EncryptionPassphrase      Expr
+	DecryptionKMSURI          StringOrPlaceholderOptList
 	IntoDB                    Expr
 	SkipMissingFKs            bool
 	SkipMissingSequences      bool
@@ -276,6 +277,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		o.EncryptionPassphrase.Format(ctx)
 	}
 
+	if o.DecryptionKMSURI != nil {
+		maybeAddSep()
+		ctx.WriteString("kms=")
+		o.DecryptionKMSURI.Format(ctx)
+	}
+
 	if o.IntoDB != nil {
 		maybeAddSep()
 		ctx.WriteString("into_db=")
@@ -310,6 +317,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.EncryptionPassphrase = other.EncryptionPassphrase
 	} else if other.EncryptionPassphrase != nil {
 		return errors.New("encryption_passphrase specified multiple times")
+	}
+
+	if o.DecryptionKMSURI == nil {
+		o.DecryptionKMSURI = other.DecryptionKMSURI
+	} else if other.DecryptionKMSURI != nil {
+		return errors.New("kms specified multiple times")
 	}
 
 	if o.IntoDB == nil {
