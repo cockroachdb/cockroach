@@ -26,7 +26,7 @@ func runDumpBackwardsCompat(ctx context.Context, t *test, c *cluster, predecesso
 	FAMILY "primary" (x, y, rowid)
 );
 
-INSERT INTO t (x, y) VALUES
+INSERT INTO public.t (x, y) VALUES
 	(1, 1),
 	(2, 2);`
 	roachNodes := c.All()
