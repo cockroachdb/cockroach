@@ -186,37 +186,34 @@ func TestDistinct(t *testing.T) {
 
 	for _, tc := range tcs {
 		for _, numOfBuckets := range []uint64{1, 3, 5, HashTableNumBuckets} {
-			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
-				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return NewUnorderedDistinct(
-							testAllocator, input[0], tc.distinctCols, tc.typs,
-							numOfBuckets), nil
-					})
-			})
+			log.Infof(context.Background(), "unordered/numOfBuckets=%d", numOfBuckets)
+			runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					return NewUnorderedDistinct(
+						testAllocator, input[0], tc.distinctCols, tc.typs,
+						numOfBuckets), nil
+				})
 		}
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
-				t.Run(fmt.Sprintf("partiallyOrdered/ordCols=%d", numOrderedCols), func(t *testing.T) {
-					orderedCols := make([]uint32, numOrderedCols)
-					for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
-						orderedCols[i] = tc.distinctCols[j]
-					}
-					runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-							return newPartiallyOrderedDistinct(
-								testAllocator, input[0], tc.distinctCols,
-								orderedCols, tc.typs,
-							)
-						})
-				})
-			}
-			t.Run("ordered", func(t *testing.T) {
+				log.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
+				orderedCols := make([]uint32, numOrderedCols)
+				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
+					orderedCols[i] = tc.distinctCols[j]
+				}
 				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+						return newPartiallyOrderedDistinct(
+							testAllocator, input[0], tc.distinctCols,
+							orderedCols, tc.typs,
+						)
 					})
-			})
+			}
+			log.Info(context.Background(), "ordered")
+			runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+				})
 		}
 	}
 }

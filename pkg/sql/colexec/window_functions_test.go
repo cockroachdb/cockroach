@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -282,40 +281,39 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 		} {
-			t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String()), func(t *testing.T) {
-				var semsToCheck []semaphore.Semaphore
-				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-					tc.init()
-					ct := make([]*types.T, len(tc.tuples[0]))
-					for i := range ct {
-						ct[i] = types.Int
-					}
-					spec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
-						Core: execinfrapb.ProcessorCoreUnion{
-							Windower: &tc.windowerSpec,
-						},
-					}
-					sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
-					args := &NewColOperatorArgs{
-						Spec:                spec,
-						Inputs:              inputs,
-						StreamingMemAccount: testMemAcc,
-						DiskQueueCfg:        queueCfg,
-						FDSemaphore:         sem,
-					}
-					semsToCheck = append(semsToCheck, sem)
-					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-					args.TestingKnobs.NumForcedRepartitions = maxNumberFDs
-					result, err := TestNewColOperator(ctx, flowCtx, args)
-					accounts = append(accounts, result.OpAccounts...)
-					monitors = append(monitors, result.OpMonitors...)
-					return result.Op, err
-				})
-				for i, sem := range semsToCheck {
-					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
+			var semsToCheck []semaphore.Semaphore
+			runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+				tc.init()
+				ct := make([]*types.T, len(tc.tuples[0]))
+				for i := range ct {
+					ct[i] = types.Int
 				}
+				spec := &execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: ct}},
+					Core: execinfrapb.ProcessorCoreUnion{
+						Windower: &tc.windowerSpec,
+					},
+				}
+				sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
+				args := &NewColOperatorArgs{
+					Spec:                spec,
+					Inputs:              inputs,
+					StreamingMemAccount: testMemAcc,
+					DiskQueueCfg:        queueCfg,
+					FDSemaphore:         sem,
+				}
+				semsToCheck = append(semsToCheck, sem)
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+				args.TestingKnobs.NumForcedRepartitions = maxNumberFDs
+				result, err := TestNewColOperator(ctx, flowCtx, args)
+				accounts = append(accounts, result.OpAccounts...)
+				monitors = append(monitors, result.OpMonitors...)
+				return result.Op, err
 			})
+			for i, sem := range semsToCheck {
+				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+			}
 		}
 	}
 
