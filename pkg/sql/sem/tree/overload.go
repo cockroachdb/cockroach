@@ -516,10 +516,22 @@ func typeCheckOverloadedExprs(
 	// Filter out overloads on resolved types.
 	for _, i := range s.resolvableIdxs {
 		paramDesired := types.Any
-		if len(s.overloadIdxs) == 1 {
-			// Once we get down to a single overload candidate, begin desiring its
-			// parameter types for the corresponding argument expressions.
-			paramDesired = s.overloads[s.overloadIdxs[0]].params().GetAt(i)
+
+		// If all remaining candidates require the same type for this parameter,
+		// begin desiring that type for the corresponding argument expression.
+		// Note that this is always the case when we have a single overload left.
+		var sameType *types.T
+		for _, ovIdx := range s.overloadIdxs {
+			typ := s.overloads[ovIdx].params().GetAt(i)
+			if sameType == nil {
+				sameType = typ
+			} else if !typ.Identical(sameType) {
+				sameType = nil
+				break
+			}
+		}
+		if sameType != nil {
+			paramDesired = sameType
 		}
 		typ, err := exprs[i].TypeCheck(ctx, semaCtx, paramDesired)
 		if err != nil {
