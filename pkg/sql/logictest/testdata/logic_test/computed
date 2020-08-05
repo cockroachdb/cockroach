@@ -700,6 +700,17 @@ SELECT * FROM x ORDER BY a
 3 6 7
 6 12 10
 
+# Multiple ADD COLUMNs can only reference columns that are defined previously.
+statement error pq: column "t" does not exist, referenced in "lower\(t\)"
+ALTER TABLE x
+    ADD COLUMN s STRING AS (lower(t)) STORED,
+    ADD COLUMN t STRING
+
+statement ok
+ALTER TABLE x
+    ADD COLUMN s STRING,
+    ADD COLUMN t STRING AS (lower(s)) STORED
+
 # Verify a bad statement fails.
 statement error pq: could not parse "a" as type int
 ALTER TABLE x ADD COLUMN d INT AS (a + 'a') STORED
