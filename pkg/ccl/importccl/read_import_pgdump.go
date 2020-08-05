@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -126,7 +127,9 @@ func (p *postgreStream) Next() (interface{}, error) {
 	}
 	if err := p.s.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			err = errors.HandledWithMessage(err, "line too long")
+			err = wrapWithLineTooLongHint(
+				errors.HandledWithMessage(err, "line too long"),
+			)
 		}
 		return nil, err
 	}
@@ -771,4 +774,12 @@ func (m *pgDumpReader) readFile(
 		}
 	}
 	return nil
+}
+
+func wrapWithLineTooLongHint(err error) error {
+	return errors.WithHintf(
+		err,
+		"use `max_row_size` to increase the maximum line limit (default: %s).",
+		humanizeutil.IBytes(defaultScanBuffer),
+	)
 }
