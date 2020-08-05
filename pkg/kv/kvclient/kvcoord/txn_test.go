@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -721,4 +722,67 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 
 	require.NoError(t, txn.Put(ctx, "a", "b'"))
 	require.NoError(t, txn.Commit(ctx))
+}
+
+func TestTxnWaitPolicies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "highPriority", func(t *testing.T, highPriority bool) {
+		key := []byte("b")
+		txn := s.DB.NewTxn(ctx, "test txn")
+		require.NoError(t, txn.Put(ctx, key, "new value"))
+
+		pri := roachpb.NormalUserPriority
+		if highPriority {
+			pri = roachpb.MaxUserPriority
+		}
+
+		// Block wait policy.
+		blockC := make(chan error)
+		go func() {
+			var b kv.Batch
+			b.Header.UserPriority = pri
+			b.Header.WaitPolicy = lock.WaitPolicy_Block
+			b.Get(key)
+			blockC <- s.DB.Run(ctx, &b)
+		}()
+
+		if highPriority {
+			// Should push txn and not block.
+			require.NoError(t, <-blockC)
+		} else {
+			// Should block.
+			select {
+			case err := <-blockC:
+				t.Fatalf("blocking wait policy unexpected returned with err=%v", err)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+
+		// Error wait policy.
+		errorC := make(chan error)
+		go func() {
+			var b kv.Batch
+			b.Header.UserPriority = pri
+			b.Header.WaitPolicy = lock.WaitPolicy_Error
+			b.Get(key)
+			errorC <- s.DB.Run(ctx, &b)
+		}()
+
+		// Should return error immediately, without blocking.
+		// Priority does not matter.
+		err := <-errorC
+		require.NotNil(t, err)
+		require.IsType(t, &roachpb.WriteIntentError{}, err)
+
+		// Let blocked requests proceed.
+		require.NoError(t, txn.Commit(ctx))
+		if !highPriority {
+			require.NoError(t, <-blockC)
+		}
+	})
 }

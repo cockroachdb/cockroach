@@ -15855,12 +15855,6 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::google::protobuf::int32 gateway_node_id() const;
   void set_gateway_node_id(::google::protobuf::int32 value);
 
-  // int64 target_bytes = 15;
-  void clear_target_bytes();
-  static const int kTargetBytesFieldNumber = 15;
-  ::google::protobuf::int64 target_bytes() const;
-  void set_target_bytes(::google::protobuf::int64 value);
-
   // bool distinct_spans = 9;
   void clear_distinct_spans();
   static const int kDistinctSpansFieldNumber = 9;
@@ -15885,6 +15879,18 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool can_forward_read_timestamp() const;
   void set_can_forward_read_timestamp(bool value);
 
+  // .cockroach.kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  void clear_wait_policy();
+  static const int kWaitPolicyFieldNumber = 18;
+  ::cockroach::kv::kvserver::concurrency::lock::WaitPolicy wait_policy() const;
+  void set_wait_policy(::cockroach::kv::kvserver::concurrency::lock::WaitPolicy value);
+
+  // int64 target_bytes = 15;
+  void clear_target_bytes();
+  static const int kTargetBytesFieldNumber = 15;
+  ::google::protobuf::int64 target_bytes() const;
+  void set_target_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
 
@@ -15898,11 +15904,12 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::google::protobuf::int64 max_span_request_keys_;
   int read_consistency_;
   ::google::protobuf::int32 gateway_node_id_;
-  ::google::protobuf::int64 target_bytes_;
   bool distinct_spans_;
   bool return_range_info_;
   bool async_consensus_;
   bool can_forward_read_timestamp_;
+  int wait_policy_;
+  ::google::protobuf::int64 target_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -34369,6 +34376,20 @@ inline void Header::set_read_consistency(::cockroach::roachpb::ReadConsistencyTy
   
   read_consistency_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.read_consistency)
+}
+
+// .cockroach.kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+inline void Header::clear_wait_policy() {
+  wait_policy_ = 0;
+}
+inline ::cockroach::kv::kvserver::concurrency::lock::WaitPolicy Header::wait_policy() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.wait_policy)
+  return static_cast< ::cockroach::kv::kvserver::concurrency::lock::WaitPolicy >(wait_policy_);
+}
+inline void Header::set_wait_policy(::cockroach::kv::kvserver::concurrency::lock::WaitPolicy value) {
+  
+  wait_policy_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.wait_policy)
 }
 
 // int64 max_span_request_keys = 8;
