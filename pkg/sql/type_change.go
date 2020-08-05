@@ -29,10 +29,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// writeTypeChange should be called on a mutated type descriptor to ensure that
+// writeTypeSchemaChange should be called on a mutated type descriptor to ensure that
 // the descriptor gets written to a batch, as well as ensuring that a job is
 // created to perform the schema change on the type.
-func (p *planner) writeTypeChange(
+func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string,
 ) error {
 	// Check if there is an active job for this type, otherwise create one.
@@ -68,6 +68,12 @@ func (p *planner) writeTypeChange(
 		log.Infof(ctx, "queued new type change job %d for type %d", *newJob.ID(), typeDesc.ID)
 	}
 
+	return p.writeTypeDesc(ctx, typeDesc)
+}
+
+func (p *planner) writeTypeDesc(
+	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor,
+) error {
 	// Maybe increment the type's version.
 	typeDesc.MaybeIncrementVersion()
 
@@ -213,6 +219,39 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	return nil
 }
 
+// execWithRetry is a wrapper around exec that retries the type schema change
+// on retryable errors.
+func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
+	// Set up the type changer to be retried.
+	opts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     20 * time.Second,
+		Multiplier:     1.5,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		tcErr := t.exec(ctx)
+		switch {
+		case tcErr == nil:
+			return nil
+		case errors.Is(tcErr, sqlbase.ErrDescriptorNotFound):
+			// If the descriptor for the ID can't be found, we assume that another
+			// job executed already and dropped the type.
+			log.Infof(
+				ctx,
+				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
+				t.typeID,
+			)
+			return nil
+		case !isPermanentSchemaChangeError(tcErr):
+			// If this isn't a permanent error, then retry.
+			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
+		default:
+			return tcErr
+		}
+	}
+	return nil
+}
+
 func (t *typeSchemaChanger) logTags() *logtags.Buffer {
 	buf := &logtags.Buffer{}
 	buf.Add("typeChangeExec", nil)
@@ -233,34 +272,7 @@ func (t *typeChangeResumer) Resume(
 		typeID:  t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
 		execCfg: phs.(*planner).execCfg,
 	}
-	// Set up the type changer to be retried.
-	opts := retry.Options{
-		InitialBackoff: 100 * time.Millisecond,
-		MaxBackoff:     20 * time.Second,
-		Multiplier:     1.5,
-	}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		tcErr := tc.exec(ctx)
-		switch {
-		case tcErr == nil:
-			return nil
-		case errors.Is(tcErr, sqlbase.ErrDescriptorNotFound):
-			// If the descriptor for the ID can't be found, we assume that another
-			// job executed already and dropped the type.
-			log.Infof(
-				ctx,
-				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
-				tc.typeID,
-			)
-			return nil
-		case !isPermanentSchemaChangeError(tcErr):
-			// If this isn't a permanent error, then retry.
-			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
-		default:
-			return tcErr
-		}
-	}
-	return nil
+	return tc.execWithRetry(ctx)
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
