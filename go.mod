@@ -13,7 +13,7 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DataDog/zstd v1.4.4 // indirect
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
-	github.com/PuerkitoBio/goquery v1.5.0
+	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.22.2-0.20190604114437-cd910a683f9f
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
