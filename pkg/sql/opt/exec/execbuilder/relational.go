@@ -347,7 +347,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	// Wrap the expression in a render expression if presentation requires it.
 	if p := e.RequiredPhysical(); !p.Presentation.Any() {
-		ep, err = b.applyPresentation(ep, p)
+		ep, err = b.applyPresentation(ep, p.Presentation)
 	}
 	return ep, err
 }
@@ -608,7 +608,7 @@ func (b *Builder) applySimpleProject(
 	})
 	var err error
 	res.root, err = b.factory.ConstructSimpleProject(
-		input.root, colList, nil /* colNames */, exec.OutputOrdering(res.sqlOrdering(providedOrd)),
+		input.root, colList, exec.OutputOrdering(res.sqlOrdering(providedOrd)),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1255,9 +1255,7 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	if input.outputCols.Len() == outCols.Len() {
 		return ep, nil
 	}
-	return b.ensureColumns(
-		ep, opt.ColSetToList(outCols), nil /* colNames */, distinct.ProvidedPhysical().Ordering,
-	)
+	return b.ensureColumns(ep, opt.ColSetToList(outCols), distinct.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
@@ -1309,9 +1307,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 
 	input.outputCols = newOutputCols
 	reqOrdering := input.reqOrdering(groupByInput)
-	input.root, err = b.factory.ConstructSimpleProject(
-		input.root, cols, nil /* colNames */, reqOrdering,
-	)
+	input.root, err = b.factory.ConstructSimpleProject(input.root, cols, reqOrdering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1351,15 +1347,11 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	// Note that (unless this is part of a larger query) the presentation property
 	// will ensure that the columns are presented correctly in the output (i.e. in
 	// the order `b, c, a`).
-	left, err = b.ensureColumns(
-		left, private.LeftCols, nil /* colNames */, leftExpr.ProvidedPhysical().Ordering,
-	)
+	left, err = b.ensureColumns(left, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
-	right, err = b.ensureColumns(
-		right, private.RightCols, nil /* colNames */, rightExpr.ProvidedPhysical().Ordering,
-	)
+	right, err = b.ensureColumns(right, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1759,7 +1751,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	}
 
 	// Make sure we have the columns in the correct order.
-	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* colNames */, nil /* ordering */)
+	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* ordering */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1794,9 +1786,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 			return nil, err
 		}
 		// Ensure columns are output in the same order.
-		plan, err = innerBld.ensureColumns(
-			plan, rec.RecursiveCols, nil /* colNames */, nil, /* ordering */
-		)
+		plan, err = innerBld.ensureColumns(plan, rec.RecursiveCols, opt.Ordering{})
 		if err != nil {
 			return nil, err
 		}
@@ -1856,7 +1846,7 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 			res.outputCols.Set(int(withScan.OutCols[i]), i)
 		}
 		res.root, err = b.factory.ConstructSimpleProject(
-			res.root, cols, nil, /* colNames */
+			res.root, cols,
 			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
 		)
 		if err != nil {
@@ -2031,7 +2021,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
 	// way to alleviate this.
-	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
+	input, err = b.ensureColumns(input, desiredCols, opt.Ordering{})
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -2257,18 +2247,10 @@ func (b *Builder) needProjection(
 // ensureColumns applies a projection as necessary to make the output match the
 // given list of columns; colNames is optional.
 func (b *Builder) ensureColumns(
-	input execPlan, colList opt.ColList, colNames []string, provided opt.Ordering,
+	input execPlan, colList opt.ColList, provided opt.Ordering,
 ) (execPlan, error) {
 	cols, needProj := b.needProjection(input, colList)
 	if !needProj {
-		// No projection necessary.
-		if colNames != nil {
-			var err error
-			input.root, err = b.factory.ConstructRenameColumns(input.root, colNames)
-			if err != nil {
-				return execPlan{}, err
-			}
-		}
 		return input, nil
 	}
 	var res execPlan
@@ -2277,24 +2259,24 @@ func (b *Builder) ensureColumns(
 	}
 	reqOrdering := exec.OutputOrdering(res.sqlOrdering(provided))
 	var err error
-	res.root, err = b.factory.ConstructSimpleProject(input.root, cols, colNames, reqOrdering)
+	res.root, err = b.factory.ConstructSimpleProject(input.root, cols, reqOrdering)
 	return res, err
 }
 
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
-func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execPlan, error) {
-	pres := p.Presentation
-	colList := make(opt.ColList, len(pres))
+func (b *Builder) applyPresentation(input execPlan, pres physical.Presentation) (execPlan, error) {
+	cols := make([]exec.NodeColumnOrdinal, len(pres))
 	colNames := make([]string, len(pres))
+	var res execPlan
 	for i := range pres {
-		colList[i] = pres[i].ID
+		cols[i] = input.getNodeColumnOrdinal(pres[i].ID)
+		res.outputCols.Set(int(pres[i].ID), i)
 		colNames[i] = pres[i].Alias
 	}
-	// The ordering is not useful for a top-level projection (it is used by the
-	// distsql planner for internal nodes); we might not even be able to represent
-	// it because it can refer to columns not in the presentation.
-	return b.ensureColumns(input, colList, colNames, nil /* provided */)
+	var err error
+	res.root, err = b.factory.ConstructSerializingProject(input.root, cols, colNames)
+	return res, err
 }
 
 // getEnvData consolidates the information that must be presented in
