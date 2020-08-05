@@ -158,6 +158,10 @@ type copyTxnOpt struct {
 	txnTimestamp  time.Time
 	stmtTimestamp time.Time
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
+
+	// resetExecutor should be called upon completing a batch from the copy
+	// machine when the copy machine handles its own transaction.
+	resetExtraTxnState func(ctx context.Context) error
 }
 
 // run consumes all the copy-in data from the network connection and inserts it
@@ -309,8 +313,17 @@ func (p *planner) preparePlannerForCopy(
 	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
 	p.autoCommit = autoCommit
 
-	return func(ctx context.Context, err error) error {
-		if err == nil {
+	return func(ctx context.Context, prevErr error) (err error) {
+		// Ensure that we clean up any accumulated extraTxnState state if we've
+		// been handed a mechanism to do so.
+		if txnOpt.resetExtraTxnState != nil {
+			defer func() {
+				// Note: combine errors will return nil if both are nil and the
+				// non-nil error in the case that there's just one.
+				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx))
+			}()
+		}
+		if prevErr == nil {
 			// Ensure that the txn is committed if the copyMachine is in charge of
 			// committing its transactions and the execution didn't already commit it
 			// (through the planner.autoCommit optimization).
@@ -319,8 +332,8 @@ func (p *planner) preparePlannerForCopy(
 			}
 			return nil
 		}
-		txn.CleanupOnError(ctx, err)
-		return err
+		txn.CleanupOnError(ctx, prevErr)
+		return prevErr
 	}
 }
 
