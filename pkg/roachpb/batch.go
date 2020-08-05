@@ -590,6 +590,9 @@ func (ba BatchRequest) String() string {
 	if ba.Txn != nil {
 		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.Short()))
 	}
+	if ba.WaitPolicy != lock.WaitPolicy_Block {
+		str = append(str, fmt.Sprintf("[wait-policy: %s]", ba.WaitPolicy))
+	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
