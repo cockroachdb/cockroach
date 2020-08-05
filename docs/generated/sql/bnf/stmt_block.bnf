@@ -1174,8 +1174,7 @@ opt_description ::=
 	| 
 
 cron_expr ::=
-	'RECURRING' 'NEVER'
-	| 'RECURRING' sconst_or_placeholder
+	'RECURRING' sconst_or_placeholder
 
 opt_full_backup_clause ::=
 	'FULL' 'BACKUP' sconst_or_placeholder
