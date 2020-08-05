@@ -190,21 +190,14 @@ func (it *spanResolverIterator) Error() error {
 func (it *spanResolverIterator) Seek(
 	ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection,
 ) {
-	var key, endKey roachpb.RKey
-	var err error
-	if key, err = keys.Addr(span.Key); err != nil {
+	rSpan, err := keys.SpanAddr(span)
+	if err != nil {
 		it.err = err
 		return
 	}
-	if endKey, err = keys.Addr(span.EndKey); err != nil {
-		it.err = err
-		return
-	}
+
 	oldDir := it.dir
-	it.curSpan = roachpb.RSpan{
-		Key:    key,
-		EndKey: endKey,
-	}
+	it.curSpan = rSpan
 	it.dir = scanDir
 
 	var seekKey roachpb.RKey

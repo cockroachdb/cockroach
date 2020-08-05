@@ -4,13 +4,14 @@
 
 # Prepare the environment.
 send
-Query {"String": "DROP VIEW IF EXISTS v; DROP TABLE IF EXISTS tab3; DROP TABLE IF EXISTS tab2; DROP TABLE IF EXISTS tab1"}
+Query {"String": "DROP VIEW IF EXISTS v; DROP TABLE IF EXISTS tab4; DROP TABLE IF EXISTS tab3; DROP TABLE IF EXISTS tab2; DROP TABLE IF EXISTS tab1"}
 ----
 
 until ignore=NoticeResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DROP VIEW"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
@@ -209,6 +210,65 @@ until
 DataRow
 ----
 {"Type":"DataRow","Values":[{"text":"hello   "},{"text":"1"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# tab4 is a regression test for #51360 -- verify that VARCHAR(n) columns
+# have the correct DataTypeOID in RowDescription.
+send
+Query {"String": "CREATE TABLE tab4 (a INT8 PRIMARY KEY, b VARCHAR(256)[] NOT NULL)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO tab4 VALUES(4, ARRAY['hello', 'goodbye'])"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s2", "Query": "SELECT b FROM tab4"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
+Describe {"ObjectType": 80, "Name": "p2"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+BindComplete
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"{hello,goodbye}"}]}
 
 until
 ReadyForQuery

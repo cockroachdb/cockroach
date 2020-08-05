@@ -193,7 +193,13 @@ func (ef *execFactory) ConstructInvertedFilter(
 
 // ConstructSimpleProject is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	return constructSimpleProjectForPlanNode(n.(planNode), cols, nil /* colNames */, reqOrdering)
+}
+
+func constructSimpleProjectForPlanNode(
+	n planNode, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	// If the top node is already a renderNode, just rearrange the columns. But
 	// we don't want to duplicate a rendering expression (in case it is expensive
@@ -250,6 +256,31 @@ func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
 	return false
 }
 
+// ConstructSerializingProject is part of the exec.Factory interface.
+func (ef *execFactory) ConstructSerializingProject(
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
+) (exec.Node, error) {
+	node := n.(planNode)
+	// If we are just renaming columns, we can do that in place.
+	if len(cols) == len(planColumns(node)) {
+		identity := true
+		for i := range cols {
+			if cols[i] != exec.NodeColumnOrdinal(i) {
+				identity = false
+				break
+			}
+		}
+		if identity {
+			inputCols := planMutableColumns(node)
+			for i := range inputCols {
+				inputCols[i].Name = colNames[i]
+			}
+			return n, nil
+		}
+	}
+	return constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+}
+
 // ConstructRender is part of the exec.Factory interface.
 // N.B.: The input exprs will be modified.
 func (ef *execFactory) ConstructRender(
@@ -265,15 +296,6 @@ func (ef *execFactory) ConstructRender(
 	}
 	rb.setOutput(exprs, columns)
 	return rb.res, nil
-}
-
-// ConstructRenameColumns is part of the exec.Factory interface.
-func (ef *execFactory) ConstructRenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
-	inputCols := planMutableColumns(n.(planNode))
-	for i := range inputCols {
-		inputCols[i].Name = colNames[i]
-	}
-	return n, nil
 }
 
 // ConstructHashJoin is part of the exec.Factory interface.

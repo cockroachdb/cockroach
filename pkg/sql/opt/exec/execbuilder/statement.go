@@ -35,13 +35,7 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 		// Impose ordering and naming on input columns, so that they match the
 		// order and names of the table columns into which values will be
 		// inserted.
-		colList := make(opt.ColList, len(ct.InputCols))
-		colNames := make([]string, len(ct.InputCols))
-		for i := range ct.InputCols {
-			colList[i] = ct.InputCols[i].ID
-			colNames[i] = ct.InputCols[i].Alias
-		}
-		input, err = b.ensureColumns(input, colList, colNames, nil /* provided */)
+		input, err = b.applyPresentation(input, ct.InputCols)
 		if err != nil {
 			return execPlan{}, err
 		}

@@ -11,6 +11,7 @@
 package roachpb
 
 import (
+	"context"
 	"math"
 	"strconv"
 )
@@ -76,3 +77,19 @@ func checkValid(id uint64) {
 func IsSystemTenantID(id uint64) bool {
 	return id == SystemTenantID.ToUint64()
 }
+
+type tenantKey struct{}
+
+// NewContextForTenant creates a new context with tenant information attached.
+func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
+	return context.WithValue(ctx, tenantKey{}, tenID)
+}
+
+// TenantFromContext returns the tenant information in ctx if it exists.
+func TenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
+	tenID, ok = ctx.Value(tenantKey{}).(TenantID)
+	return
+}
+
+// Silence unused warning.
+var _ = TenantFromContext

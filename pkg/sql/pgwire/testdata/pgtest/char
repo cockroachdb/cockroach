@@ -4,7 +4,7 @@ send
 Query {"String": "DROP TABLE IF EXISTS a"}
 ----
 
-until
+until ignore=NoticeResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
