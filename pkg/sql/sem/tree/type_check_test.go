@@ -176,6 +176,9 @@ func TestTypeCheck(t *testing.T) {
 		{`((ROW (1) AS a)).*`, `((1:::INT8,) AS a)`},
 		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING || '':::STRING, 1:::INT8 + 1:::INT8) AS a, b)`},
 
+		{`'{"x": "bar"}' -> 'x'`, `'{"x": "bar"}':::JSONB->'x':::STRING`},
+		{`('{"x": "bar"}') -> 'x'`, `'{"x": "bar"}':::JSONB->'x':::STRING`},
+
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
