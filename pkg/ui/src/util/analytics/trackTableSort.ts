@@ -8,17 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
-import { SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
 
 export const track = (fn: Function) => (
-  name?: String,
-  col?: SortableColumn,
-  sortSetting?: SortSetting,
+  tableName = "",
+  columnName = "",
+  sortDirection: "asc" | "desc" = undefined,
 ) => {
-  const tableName = name || "";
-  const columnName = col && col.title || "";
-  const sortDirection = sortSetting && (sortSetting.ascending) ? "asc" : "desc";
-
   fn({
     event: "Table Sort",
     properties: {
@@ -30,10 +25,11 @@ export const track = (fn: Function) => (
 };
 
 export default function trackTableSort(
-  name?: String,
-  col?: SortableColumn,
-  sortSetting?: SortSetting,
+  tableName?: string,
+  columnTitle?: string,
+  ascending?: boolean,
 ) {
   const boundTrack = analytics.track.bind(analytics);
-  track(boundTrack)(name, col, sortSetting);
+  const sortDirection = ascending && ascending ? "asc" : "desc";
+  track(boundTrack)(tableName, columnTitle, sortDirection);
 }

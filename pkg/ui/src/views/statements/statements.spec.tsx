@@ -13,6 +13,7 @@ import Long from "long";
 import moment from "moment";
 import { RouteComponentProps } from "react-router-dom";
 import * as H from "history";
+import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
@@ -21,6 +22,7 @@ import { appAttr, statementAttr } from "src/util/constants";
 import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset } from "./statementsPage";
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 
@@ -462,8 +464,9 @@ function makeEmptySensitiveInfo(): ISensitiveInfo {
   };
 }
 
-function makeInvalidState() {
-  return {
+function makeInvalidState(): AdminUIState {
+  const store = createAdminUIStore(H.createMemoryHistory());
+  return merge(store.getState(), {
     cachedData: {
       statements: {
         inFlight: true,
@@ -474,11 +477,12 @@ function makeInvalidState() {
         valid: false,
       },
     },
-  };
+  });
 }
 
 function makeStateWithStatementsAndLastReset(statements: CollectedStatementStatistics[], lastReset: number) {
-  return {
+  const store = createAdminUIStore(H.createMemoryHistory());
+  return merge(store.getState(), {
     cachedData: {
       statements: {
         data: protos.cockroach.server.serverpb.StatementsResponse.fromObject({
@@ -497,7 +501,7 @@ function makeStateWithStatementsAndLastReset(statements: CollectedStatementStati
         valid: false,
       },
     },
-  };
+  });
 }
 
 function makeStateWithStatements(statements: CollectedStatementStatistics[]) {
