@@ -172,7 +172,7 @@ var validationMap = []struct {
 			"ComputeExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"LogicalColumnID": {
+			"PGAttributeNum": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},

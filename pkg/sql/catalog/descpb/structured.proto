@@ -129,14 +129,13 @@ message ColumnDescriptor {
   // have been serialized in a internal format. Instead, format the result
   // of DeserializeTableDescExpr.
   optional string compute_expr = 11;
-  // LogicalColumnID must be accessed through the accessor, since it is set
+  // PGAttributeNum must be accessed through the accessor, since it is set
   // lazily, it is incorrect to access it directly.
-  // LogicalColumnID represents a column's number in catalog tables.
+  // PGAttributeNum represents a column's number in catalog tables.
   // This only differs from ID when the Column order is swapped or
   // the ColumnDescriptor must be remade while remaining visual ordering.
   // This does not exist in TableDescriptors pre 20.2.
-  optional uint32 logical_id = 13 [(gogoproto.nullable) = false,
-   (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
+  optional uint32 pg_attribute_num = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "PGAttributeNum"];
   // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
   optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
 
