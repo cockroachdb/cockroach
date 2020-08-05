@@ -282,22 +282,28 @@ func GetSelectionConstOperator(
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
-	switch cmpOp {
-	// {{range .CmpOps}}
-	case tree._NAME:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-		// {{range .LeftFamilies}}
-		case _LEFT_CANONICAL_TYPE_FAMILY:
-			switch leftType.Width() {
-			// {{range .LeftWidths}}
-			case _LEFT_TYPE_WIDTH:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
-				// {{range .RightFamilies}}
-				case _RIGHT_CANONICAL_TYPE_FAMILY:
-					switch constType.Width() {
-					// {{range .RightWidths}}
-					case _RIGHT_TYPE_WIDTH:
-						return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
+		// Tuple comparison has special null-handling semantics, so we will
+		// fallback to the default comparison operator if either of the
+		// input vectors is of a tuple type.
+		switch cmpOp {
+		// {{range .CmpOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch constType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+							// {{end}}
+						}
 						// {{end}}
 					}
 					// {{end}}
@@ -306,7 +312,6 @@ func GetSelectionConstOperator(
 			}
 			// {{end}}
 		}
-		// {{end}}
 	}
 	return &defaultCmpConstSelOp{
 		selConstOpBase:   selConstOpBase,
@@ -333,22 +338,28 @@ func GetSelectionOperator(
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}
-	switch cmpOp {
-	// {{range .CmpOps}}
-	case tree._NAME:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-		// {{range .LeftFamilies}}
-		case _LEFT_CANONICAL_TYPE_FAMILY:
-			switch leftType.Width() {
-			// {{range .LeftWidths}}
-			case _LEFT_TYPE_WIDTH:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-				// {{range .RightFamilies}}
-				case _RIGHT_CANONICAL_TYPE_FAMILY:
-					switch rightType.Width() {
-					// {{range .RightWidths}}
-					case _RIGHT_TYPE_WIDTH:
-						return &_OP_NAME{selOpBase: selOpBase}, nil
+	if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+		// Tuple comparison has special null-handling semantics, so we will
+		// fallback to the default comparison operator if either of the
+		// input vectors is of a tuple type.
+		switch cmpOp {
+		// {{range .CmpOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch rightType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_NAME{selOpBase: selOpBase}, nil
+							// {{end}}
+						}
 						// {{end}}
 					}
 					// {{end}}
@@ -357,7 +368,6 @@ func GetSelectionOperator(
 			}
 			// {{end}}
 		}
-		// {{end}}
 	}
 	return &defaultCmpSelOp{
 		selOpBase:        selOpBase,

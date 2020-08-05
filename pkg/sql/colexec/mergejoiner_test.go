@@ -1824,6 +1824,8 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		skip.IgnoreLintf(t, "this test is too slow with relatively big batch size")
 	}
 	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 	nTuples := 2*coldata.BatchSize() + 1
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -1900,7 +1902,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 						hjOutputTuples = append(hjOutputTuples, getTupleFromBatch(b, i))
 					}
 				}
-				err = assertTuplesSetsEqual(hjOutputTuples, mjOutputTuples)
+				err = assertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
 				// Note that the error message can be extremely verbose (it
 				// might contain all output tuples), so we manually check that
 				// comparing err to nil returns true (if we were to use
