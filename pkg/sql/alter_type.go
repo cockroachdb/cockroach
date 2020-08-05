@@ -13,13 +13,11 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -155,7 +153,6 @@ func (p *planner) performRenameTypeDesc(
 		return err
 	}
 	// Construct the new namespace key.
-	b := p.txn.NewBatch()
 	key := sqlbase.MakeObjectNameKey(
 		ctx,
 		p.ExecCfg().Settings,
@@ -163,7 +160,11 @@ func (p *planner) performRenameTypeDesc(
 		desc.ParentSchemaID,
 		newName,
 	).Key(p.ExecCfg().Codec)
-	b.CPut(key, desc.ID, nil /* expected */)
+
+	b := sqlbase.WriteNameKeyToBatch(
+		ctx, key, desc.ID, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	)
+
 	return p.txn.Run(ctx, b)
 }
 
@@ -229,11 +230,10 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	newKey := sqlbase.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, typeDesc.Name).Key(p.ExecCfg().Codec)
 
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, typeDesc.ID)
-	}
-	b.CPut(newKey, typeDesc.ID, nil)
+	b := sqlbase.WriteNameKeyToBatch(
+		ctx, newKey, typeDesc.ID, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	)
+
 	return p.txn.Run(ctx, b)
 }
 

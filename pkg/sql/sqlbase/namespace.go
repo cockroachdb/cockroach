@@ -228,3 +228,16 @@ func LookupDatabaseID(
 ) (bool, ID, error) {
 	return LookupObjectID(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, name)
 }
+
+// WriteNameKeyToBatch writes a name key to a batch and returns the batch.
+func WriteNameKeyToBatch(
+	ctx context.Context, key roachpb.Key, ID ID, tracingEnabled bool,
+) *kv.Batch {
+	b := &kv.Batch{}
+	if tracingEnabled {
+		log.VEventf(ctx, 2, "CPut %s -> %d", key, ID)
+	}
+	b.CPut(key, ID, nil)
+
+	return b
+}

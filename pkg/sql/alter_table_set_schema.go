@@ -13,13 +13,11 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type alterTableSetSchemaNode struct {
@@ -111,12 +109,9 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	newTbKey := sqlbase.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, tableDesc.Name).Key(p.ExecCfg().Codec)
 
-	b := &kv.Batch{}
-	if params.p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, tableDesc.ID)
-	}
-
-	b.CPut(newTbKey, tableDesc.ID, nil)
+	b := sqlbase.WriteNameKeyToBatch(
+		ctx, newTbKey, tableDesc.ID, params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	)
 
 	return p.txn.Run(ctx, b)
 }

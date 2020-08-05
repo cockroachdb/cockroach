@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -144,11 +143,22 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
+	exists, id, err := sqlbase.LookupPublicTableID(
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	)
+	if err == nil && exists {
+		// Try and see what kind of object we collided with.
+		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
+		if err != nil {
+			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+		}
+		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+	} else if err != nil {
+		return err
+	}
+
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
-
-	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
@@ -164,34 +174,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// We update the descriptor to the new name, but also leave the mapping of the
-	// old name to the id, so that the name is not reused until the schema changer
-	// has made sure it's not in use any more.
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
-	}
-	err := catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc)
-	if err != nil {
-		return err
-	}
+	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
+		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
-	exists, id, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	b := sqlbase.WriteNameKeyToBatch(
+		ctx, newTbKey, descID, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
-		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
-	} else if err != nil {
-		return err
-	}
 
-	b.CPut(newTbKey, descID, nil)
 	return p.txn.Run(ctx, b)
 }
 
