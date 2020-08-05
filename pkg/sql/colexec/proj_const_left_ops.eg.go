@@ -23704,16 +23704,17 @@ func (p projJSONFetchValDatumConstInt64Op) Init() {
 // projection operator for the given left and right column types and operation.
 func GetProjectionLConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -23723,8 +23724,8 @@ func GetProjectionLConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
-	c = GetDatumToPhysicalFn(leftType)(constArg)
+	c := GetDatumToPhysicalFn(constType)(constArg)
+	leftType, rightType := constType, inputTypes[colIdx]
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {

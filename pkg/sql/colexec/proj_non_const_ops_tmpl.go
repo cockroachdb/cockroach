@@ -220,16 +220,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // given left and right column types and operation.
 func GetProjectionOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -241,6 +241,7 @@ func GetProjectionOperator(
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
 
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
@@ -294,7 +295,14 @@ func GetProjectionOperator(
 				}
 				// {{end}}
 			}
-			// {{end}}
+		// {{end}}
+		default:
+			return &defaultCmpProjOp{
+				projOpBase:          projOpBase,
+				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+				datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			}, nil
 		}
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

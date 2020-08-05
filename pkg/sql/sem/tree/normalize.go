@@ -840,7 +840,7 @@ func operatorIsImmutable(expr Expr) bool {
 		return t.Fn.Volatility <= VolatilityImmutable
 
 	case *ComparisonExpr:
-		return t.fn.Volatility <= VolatilityImmutable
+		return t.Fn.Volatility <= VolatilityImmutable
 
 	default:
 		return true
