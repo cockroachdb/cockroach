@@ -198,6 +198,9 @@ CREATE TABLE constraint_db.t1 (
   e BIT(5),
   f DECIMAL(10,7),
   g INT AS (a * b) STORED,
+  h CHAR(12)[],
+  i VARCHAR(20)[],
+  j "char",
   UNIQUE INDEX index_key(b, c)
 )
 
@@ -356,7 +359,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
-t1            false      r        8         0          false       true
+t1            false      r        11        0          false       true
 primary       false      i        1         0          false       false
 t1_a_key      false      i        1         0          false       false
 index_key     false      i        2         0          false       false
@@ -405,6 +408,9 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 55          t1            e        1560      0              -1      6       0         -1
 55          t1            f        1700      0              -1      7       0         -1
 55          t1            g        20        0              8       8       0         -1
+55          t1            h        1014      0              -1      9       0         -1
+55          t1            i        1015      0              -1      10      0         -1
+55          t1            j        18        0              1       11      0         -1
 450499963   primary       p        701       0              8       1       0         -1
 450499960   t1_a_key      a        20        0              8       2       0         -1
 450499961   index_key     b        20        0              8       3       0         -1
@@ -441,6 +447,9 @@ t1            d        9          NULL      NULL        NULL      false       fa
 t1            e        5          NULL      NULL        NULL      false       false
 t1            f        655371     NULL      NULL        NULL      false       false
 t1            g        -1         NULL      NULL        NULL      false       false                   s
+t1            h        16         NULL      NULL        NULL      false       false
+t1            i        24         NULL      NULL        NULL      false       false
+t1            j        -1         NULL      NULL        NULL      false       false
 primary       p        -1         NULL      NULL        NULL      true        false
 t1_a_key      a        -1         NULL      NULL        NULL      false       false
 index_key     b        -1         NULL      NULL        NULL      false       false
@@ -477,6 +486,9 @@ t1            d        false         true        0            NULL    NULL      
 t1            e        false         true        0            NULL    NULL        NULL
 t1            f        false         true        0            NULL    NULL        NULL
 t1            g        false         true        0            NULL    NULL        NULL
+t1            h        false         true        0            NULL    NULL        NULL
+t1            i        false         true        0            NULL    NULL        NULL
+t1            j        false         true        0            NULL    NULL        NULL
 primary       p        false         true        0            NULL    NULL        NULL
 t1_a_key      a        false         true        0            NULL    NULL        NULL
 index_key     b        false         true        0            NULL    NULL        NULL
@@ -545,9 +557,12 @@ JOIN pg_catalog.pg_collation k ON a.attcollation = k.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname  attname  typname  attcollation  collname
-t1       d        varchar  3903121477    en-US
-t3       c        text     3903121477    en-US
+relname  attname  typname   attcollation  collname
+t1       d        varchar   3903121477    en-US
+t1       h        _bpchar   3903121477    en-US
+t1       i        _varchar  3903121477    en-US
+t1       j        char      3903121477    en-US
+t3       c        text      3903121477    en-US
 
 
 ## pg_catalog.pg_am

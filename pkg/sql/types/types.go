@@ -1139,9 +1139,13 @@ func (t *T) Precision() int32 {
 // TypeModifier returns the type modifier of the type. This corresponds to the
 // pg_attribute.atttypmod column. atttypmod records type-specific data supplied
 // at table creation time (for example, the maximum length of a varchar column).
+// Array types have the same type modifier as the contents of the array.
 // The value will be -1 for types that do not need atttypmod.
 func (t *T) TypeModifier() int32 {
 	typeModifier := int32(-1)
+	if t.Family() == ArrayFamily {
+		return t.ArrayContents().TypeModifier()
+	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
 		case StringFamily:
