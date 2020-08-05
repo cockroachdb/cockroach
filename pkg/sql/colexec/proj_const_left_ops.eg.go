@@ -23700,20 +23700,75 @@ func (p projJSONFetchValDatumConstInt64Op) Init() {
 	p.input.Init()
 }
 
+type defaultCmpLConstProjOp struct {
+	projConstOpBase
+
+	adapter             comparisonExprAdapter
+	constArg            tree.Datum
+	toDatumConverter    *vecToDatumConverter
+	datumToVecConverter func(tree.Datum) interface{}
+}
+
+var _ colexecbase.Operator = &defaultCmpLConstProjOp{}
+
+func (d *defaultCmpLConstProjOp) Init() {
+	d.input.Init()
+}
+
+func (d *defaultCmpLConstProjOp) Next(ctx context.Context) coldata.Batch {
+	batch := d.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	output := batch.ColVec(d.outputIdx)
+	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
+		d.toDatumConverter.convertBatchAndDeselect(batch)
+		nonConstColumn := d.toDatumConverter.getDatumColumn(d.colIdx)
+		for i := 0; i < n; i++ {
+			// Note that we performed a conversion with deselection, so there
+			// is no need to check whether sel is non-nil.
+			res, err := d.adapter.eval(d.constArg, nonConstColumn[i])
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			// Convert the datum into a physical type and write it out.
+			// TODO(yuzefovich): this code block is repeated in several places.
+			// Refactor it.
+			if res == tree.DNull {
+				output.Nulls().SetNull(rowIdx)
+			} else {
+				converted := d.datumToVecConverter(res)
+				coldata.SetValueAt(output, converted, rowIdx)
+			}
+		}
+	})
+	// Although we didn't change the length of the batch, it is necessary to set
+	// the length anyway (this helps maintaining the invariant of flat bytes).
+	batch.SetLength(n)
+	return batch
+}
+
 // GetProjectionLConstOperator returns the appropriate constant
 // projection operator for the given left and right column types and operation.
 func GetProjectionLConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -23723,8 +23778,8 @@ func GetProjectionLConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
-	c = GetDatumToPhysicalFn(leftType)(constArg)
+	c := GetDatumToPhysicalFn(constType)(constArg)
+	leftType, rightType := constType, inputTypes[colIdx]
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
