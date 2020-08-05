@@ -589,6 +589,34 @@ SELECT * FROM j@a_gt_5_idx WHERE a > 5
 ----
 6  6
 
+# Truncate "removes" all entries from a partial index (technically a new table
+# is created). The partial index is preserved correctly in the new table.
+
+statement ok
+CREATE TABLE k (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX a_b_gt_5 (a) WHERE b > 5
+)
+
+statement ok
+INSERT INTO k VALUES (1, 1), (6, 6)
+
+statement ok
+TRUNCATE k
+
+query II
+SELECT * FROM k@a_b_gt_5 WHERE b > 5
+----
+
+statement ok
+INSERT INTO k VALUES (1, 1), (7, 7)
+
+query II
+SELECT * FROM k@a_b_gt_5 WHERE b > 5
+----
+7  7
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 
