@@ -28,8 +28,8 @@ type ResultColumn struct {
 	// TableID/PGAttributeNum identify the source of the column, if it is a simple
 	// reference to a column of a base table (or view). If it is not a simple
 	// reference, these fields are zeroes.
-	TableID        descpb.ID       // OID of column's source table (pg_attribute.attrelid).
-	PGAttributeNum descpb.ColumnID // Column's number in source table (pg_attribute.attnum).
+	TableID        descpb.ID // OID of column's source table (pg_attribute.attrelid).
+	PGAttributeNum uint32    // Column's number in source table (pg_attribute.attnum).
 }
 
 // ResultColumns is the type used throughout the sql module to
@@ -69,7 +69,7 @@ func resultColumnsFromColDescs(
 			Typ:            typ,
 			Hidden:         colDesc.Hidden,
 			TableID:        tableID,
-			PGAttributeNum: colDesc.GetLogicalColumnID(),
+			PGAttributeNum: colDesc.GetPGAttributeNum(),
 		}
 	}
 	return cols
