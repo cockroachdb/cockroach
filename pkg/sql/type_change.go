@@ -108,6 +108,9 @@ type typeSchemaChanger struct {
 type TypeSchemaChangerTestingKnobs struct {
 	// RunBeforeExec runs at the start of the typeSchemaChanger.
 	RunBeforeExec func() error
+	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
+	// readable to all permissions in the typeSchemaChanger.
+	RunBeforeEnumMemberPromotion func()
 }
 
 // ModuleTestingKnobs implements the ModuleTestingKnobs interface.
@@ -169,6 +172,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 		}
 		if hasNonPublic {
+			if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
+				fn()
+			}
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up.
 			update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {

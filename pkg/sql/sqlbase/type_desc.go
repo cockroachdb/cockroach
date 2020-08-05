@@ -56,6 +56,7 @@ type TypeDescriptorInterface interface {
 	TypeDesc() *TypeDescriptor
 	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
+	HasPendingSchemaChanges() bool
 }
 
 var _ TypeDescriptorInterface = (*ImmutableTypeDescriptor)(nil)
@@ -660,6 +661,24 @@ func (desc *TypeDescriptor) IsCompatibleWith(other *TypeDescriptor) error {
 		return nil
 	default:
 		return errors.Newf("compatibility comparison unsupported for type kind %s", desc.Kind.String())
+	}
+}
+
+// HasPendingSchemaChanges returns whether or not this descriptor has schema
+// changes that need to be completed.
+func (desc *TypeDescriptor) HasPendingSchemaChanges() bool {
+	switch desc.Kind {
+	case TypeDescriptor_ENUM:
+		// If there are any non-public enum members, then a type schema change is
+		// needed to promote the members.
+		for i := range desc.EnumMembers {
+			if desc.EnumMembers[i].Capability != TypeDescriptor_EnumMember_ALL {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 

@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -1651,6 +1652,75 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 			sqlDB.ExpectErr(t, `pq: type "d3.farewell" does not exist`, `CREATE TABLE d3.t (x d3.farewell)`)
 		}
 	})
+}
+
+func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Protects typeChangeStarted.
+	var mu syncutil.Mutex
+	typeChangeStarted := make(chan struct{})
+	waitForBackup := make(chan struct{})
+	typeChangeFinished := make(chan struct{})
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitNone, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					RunBeforeEnumMemberPromotion: func() {
+						mu.Lock()
+						defer mu.Unlock()
+						if typeChangeStarted != nil {
+							close(typeChangeStarted)
+							<-waitForBackup
+							typeChangeStarted = nil
+						}
+					},
+				},
+			},
+		},
+	})
+	defer cleanupFn()
+
+	// Create a database with a type.
+	sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+`)
+
+	// Start an ALTER TYPE statement that will block.
+	go func() {
+		// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
+		if _, err := sqlDB.DB.ExecContext(context.Background(), `ALTER TYPE d.greeting ADD VALUE 'cheers'`); err != nil {
+			t.Error(err)
+		}
+		close(typeChangeFinished)
+	}()
+
+	// Wait on the type change to start.
+	<-typeChangeStarted
+
+	// Now create a backup while the type change job is blocked so that greeting
+	// is backed up with 'cheers' in the READ_ONLY state.
+	sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+	// Let the type change finish.
+	close(waitForBackup)
+	<-typeChangeFinished
+
+	// Now drop the database and restore.
+	sqlDB.Exec(t, `DROP DATABASE d`)
+	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+
+	// The type change job should be scheduled and succeed. Note that we can't use
+	// sqlDB.CheckQueryResultsRetry as it Fatal's upon an error. The case below
+	// will error until the job completes.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sqlDB.DB.ExecContext(context.Background(), `SELECT 'cheers'::d.greeting`)
+		return err
+	})
+	sqlDB.CheckQueryResults(t, `SELECT 'cheers'::d.greeting`, [][]string{{"cheers"}})
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
