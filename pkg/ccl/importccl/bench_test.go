@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -54,7 +54,7 @@ func BenchmarkImportWorkload(b *testing.B) {
 	ts := timeutil.Now()
 	var tableSSTs []tableSSTable
 	for i, table := range g.Tables() {
-		tableID := sqlbase.ID(keys.MinUserDescID + 1 + i)
+		tableID := descpb.ID(keys.MinUserDescID + 1 + i)
 		sst, err := format.ToSSTable(table, tableID, ts)
 		require.NoError(b, err)
 
@@ -158,7 +158,7 @@ func BenchmarkConvertToKVs(b *testing.B) {
 
 func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	ctx := context.Background()
-	const tableID = sqlbase.ID(keys.MinUserDescID)
+	const tableID = descpb.ID(keys.MinUserDescID)
 	ts := timeutil.Now()
 
 	var bytes int64
@@ -202,7 +202,7 @@ func BenchmarkConvertToSSTable(b *testing.B) {
 }
 
 func benchmarkConvertToSSTable(b *testing.B, g workload.Generator) {
-	const tableID = sqlbase.ID(keys.MinUserDescID)
+	const tableID = descpb.ID(keys.MinUserDescID)
 	now := timeutil.Now()
 
 	var totalBytes int64

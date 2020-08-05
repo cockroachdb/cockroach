@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -84,21 +86,21 @@ var (
 )
 
 func (p *planner) getOrCreateTemporarySchema(
-	ctx context.Context, dbID sqlbase.ID,
-) (sqlbase.ID, error) {
+	ctx context.Context, dbID descpb.ID,
+) (descpb.ID, error) {
 	tempSchemaName := p.TemporarySchemaName()
 	sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
 	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
 		return 0, err
-	} else if schemaID == sqlbase.InvalidID {
+	} else if schemaID == descpb.InvalidID {
 		// The temporary schema has not been created yet.
 		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
-			return sqlbase.InvalidID, err
+			return descpb.InvalidID, err
 		}
 		if err := p.createSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), id); err != nil {
-			return sqlbase.InvalidID, err
+			return descpb.InvalidID, err
 		}
 		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
 		return id, nil
@@ -107,7 +109,7 @@ func (p *planner) getOrCreateTemporarySchema(
 }
 
 func (p *planner) createSchemaNamespaceEntry(
-	ctx context.Context, schemaNameKey roachpb.Key, schemaID sqlbase.ID,
+	ctx context.Context, schemaNameKey roachpb.Key, schemaID descpb.ID,
 ) error {
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", schemaNameKey, schemaID)
@@ -149,7 +151,7 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 // getTemporaryObjectNames returns all the temporary objects under the
 // temporary schema of the given dbID.
 func getTemporaryObjectNames(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, tempSchemaName string,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, tempSchemaName string,
 ) (TableNames, error) {
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
 	if err != nil {
@@ -215,7 +217,7 @@ func cleanupSchemaObjects(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	dbID sqlbase.ID,
+	dbID descpb.ID,
 	schemaName string,
 ) error {
 	tbNames, err := getTemporaryObjectNames(ctx, txn, codec, dbID, schemaName)
@@ -224,19 +226,19 @@ func cleanupSchemaObjects(
 	}
 	a := catalogkv.UncachedPhysicalAccessor{}
 
-	searchPath := sqlbase.DefaultSearchPath.WithTemporarySchemaName(schemaName)
+	searchPath := catconstants.DefaultSearchPath.WithTemporarySchemaName(schemaName)
 	override := sqlbase.InternalExecutorSessionDataOverride{
 		SearchPath: &searchPath,
 		User:       security.RootUser,
 	}
 
 	// TODO(andrei): We might want to accelerate the deletion of this data.
-	var tables sqlbase.IDs
-	var views sqlbase.IDs
-	var sequences sqlbase.IDs
+	var tables descpb.IDs
+	var views descpb.IDs
+	var sequences descpb.IDs
 
-	descsByID := make(map[sqlbase.ID]*TableDescriptor, len(tbNames))
-	tblNamesByID := make(map[sqlbase.ID]tree.TableName, len(tbNames))
+	descsByID := make(map[descpb.ID]*TableDescriptor, len(tbNames))
+	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
 		objDesc, err := a.GetObjectDesc(
 			ctx,
@@ -251,9 +253,11 @@ func cleanupSchemaObjects(
 		if err != nil {
 			return err
 		}
-		desc := objDesc.TableDesc()
+		// TODO(ajwerner): Deal with temporary types or ensure that they cannot
+		// exist.
+		desc := objDesc.(*ImmutableTableDescriptor)
 
-		descsByID[desc.ID] = desc
+		descsByID[desc.ID] = desc.TableDesc()
 		tblNamesByID[desc.ID] = tbName
 
 		if desc.SequenceOpts != nil {
@@ -269,10 +273,10 @@ func cleanupSchemaObjects(
 		// typeName is the type of table being deleted, e.g. view, table, sequence
 		typeName string
 		// ids represents which ids we wish to remove.
-		ids sqlbase.IDs
+		ids descpb.IDs
 		// preHook is used to perform any operations needed before calling
 		// delete on all the given ids.
-		preHook func(sqlbase.ID) error
+		preHook func(descpb.ID) error
 	}{
 		// Drop views before tables to avoid deleting required dependencies.
 		{"VIEW", views, nil},
@@ -282,7 +286,7 @@ func cleanupSchemaObjects(
 		{
 			"SEQUENCE",
 			sequences,
-			func(id sqlbase.ID) error {
+			func(id descpb.ID) error {
 				desc := descsByID[id]
 				// For any dependent tables, we need to drop the sequence dependencies.
 				// This can happen if a permanent table references a temporary table.
@@ -292,11 +296,11 @@ func cleanupSchemaObjects(
 					if _, ok := descsByID[d.ID]; ok {
 						continue
 					}
-					dTableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, d.ID)
+					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, codec, dTableDesc.GetParentID())
+					db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -484,7 +488,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	txn := kv.NewTxn(ctx, c.db, 0)
 
 	// Build a set of all session IDs with temporary objects.
-	var dbIDs []sqlbase.ID
+	var dbIDs []descpb.ID
 	if err := retryFunc(ctx, func() error {
 		var err error
 		dbIDs, err = catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
@@ -495,7 +499,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 
 	sessionIDs := make(map[ClusterWideID]struct{})
 	for _, dbID := range dbIDs {
-		var schemaNames map[sqlbase.ID]string
+		var schemaNames map[descpb.ID]string
 		if err := retryFunc(ctx, func() error {
 			var err error
 			schemaNames, err = resolver.GetForDatabase(ctx, txn, c.codec, dbID)

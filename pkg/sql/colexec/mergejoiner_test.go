@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -743,7 +743,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT OUTER JOIN test, L and R exhausted at the same time",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {2}, {3}, {4}, {4}},
@@ -756,7 +756,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT OUTER JOIN test, R exhausted first",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {3}, {5}, {6}, {7}},
@@ -769,7 +769,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT OUTER JOIN test, L exhausted first",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{3}, {5}, {6}, {7}},
@@ -782,7 +782,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi output column LEFT OUTER JOIN test with nulls",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -795,7 +795,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "null in equality column LEFT OUTER JOIN",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil}, {nil}, {1}, {3}},
@@ -808,7 +808,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column LEFT OUTER JOIN test with nulls",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
@@ -821,7 +821,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column (long runs on left) LEFT OUTER JOIN test with nulls",
-		joinType:     sqlbase.LeftOuterJoin,
+		joinType:     descpb.LeftOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
@@ -834,7 +834,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT OUTER JOIN test with nulls DESC ordering",
-		joinType:        sqlbase.LeftOuterJoin,
+		joinType:        descpb.LeftOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
@@ -849,7 +849,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT OUTER JOIN test with nulls mixed ordering",
-		joinType:        sqlbase.LeftOuterJoin,
+		joinType:        descpb.LeftOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
@@ -864,7 +864,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "single column DESC with nulls on the left LEFT OUTER JOIN",
-		joinType:        sqlbase.LeftOuterJoin,
+		joinType:        descpb.LeftOuterJoin,
 		leftTypes:       []*types.T{types.Int},
 		rightTypes:      []*types.T{types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
@@ -879,7 +879,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic RIGHT OUTER JOIN test, L and R exhausted at the same time",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{-1}, {2}, {3}, {4}, {4}},
@@ -892,7 +892,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic RIGHT OUTER JOIN test, R exhausted first",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {3}, {5}, {6}, {7}},
@@ -905,7 +905,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic RIGHT OUTER JOIN test, L exhausted first",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{3}, {5}, {6}, {7}},
@@ -918,7 +918,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi output column RIGHT OUTER JOIN test with nulls",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, nil}, {3, 13}, {4, 14}},
@@ -931,7 +931,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "null in equality column RIGHT OUTER JOIN",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
@@ -944,7 +944,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column RIGHT OUTER JOIN test with nulls",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
@@ -957,7 +957,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column (long runs on right) RIGHT OUTER JOIN test with nulls",
-		joinType:     sqlbase.RightOuterJoin,
+		joinType:     descpb.RightOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
@@ -970,7 +970,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column RIGHT OUTER JOIN test with nulls DESC ordering",
-		joinType:        sqlbase.RightOuterJoin,
+		joinType:        descpb.RightOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
@@ -985,7 +985,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column RIGHT OUTER JOIN test with nulls mixed ordering",
-		joinType:        sqlbase.RightOuterJoin,
+		joinType:        descpb.RightOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
@@ -1000,7 +1000,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "single column DESC with nulls on the right RIGHT OUTER JOIN",
-		joinType:        sqlbase.RightOuterJoin,
+		joinType:        descpb.RightOuterJoin,
 		leftTypes:       []*types.T{types.Int},
 		rightTypes:      []*types.T{types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
@@ -1015,7 +1015,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic FULL OUTER JOIN test, L and R exhausted at the same time",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{-1}, {2}, {3}, {4}, {4}},
@@ -1028,7 +1028,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic FULL OUTER JOIN test, R exhausted first",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {3}, {5}, {6}, {7}},
@@ -1041,7 +1041,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic FULL OUTER JOIN test, L exhausted first",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{3}, {5}, {6}, {7}},
@@ -1054,7 +1054,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi output column FULL OUTER JOIN test with nulls",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, nil}, {3, 13}, {4, 14}},
@@ -1067,7 +1067,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "null in equality column FULL OUTER JOIN",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
@@ -1080,7 +1080,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column FULL OUTER JOIN test with nulls",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
@@ -1093,7 +1093,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column (long runs on right) FULL OUTER JOIN test with nulls",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
@@ -1106,7 +1106,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column FULL OUTER JOIN test with nulls DESC ordering",
-		joinType:        sqlbase.FullOuterJoin,
+		joinType:        descpb.FullOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
@@ -1121,7 +1121,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column FULL OUTER JOIN test with nulls mixed ordering",
-		joinType:        sqlbase.FullOuterJoin,
+		joinType:        descpb.FullOuterJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
@@ -1136,7 +1136,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "single column DESC with nulls on the right FULL OUTER JOIN",
-		joinType:        sqlbase.FullOuterJoin,
+		joinType:        descpb.FullOuterJoin,
 		leftTypes:       []*types.T{types.Int},
 		rightTypes:      []*types.T{types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
@@ -1151,7 +1151,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "FULL OUTER JOIN test with nulls and Bytes",
-		joinType:     sqlbase.FullOuterJoin,
+		joinType:     descpb.FullOuterJoin,
 		leftTypes:    []*types.T{types.Int, types.Bytes},
 		rightTypes:   []*types.T{types.Int, types.Bytes},
 		leftTuples:   tuples{{nil, "0"}, {1, "10"}, {2, "20"}, {3, nil}, {4, "40"}},
@@ -1164,7 +1164,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT SEMI JOIN test, L and R exhausted at the same time",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {2}, {3}, {4}, {4}},
@@ -1177,7 +1177,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT SEMI JOIN test, R exhausted first",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {3}, {5}, {6}, {7}},
@@ -1190,7 +1190,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT SEMI JOIN test, L exhausted first",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{3}, {5}, {6}, {7}},
@@ -1203,7 +1203,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi output column LEFT SEMI JOIN test with nulls",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -1216,7 +1216,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "null in equality column LEFT SEMI JOIN",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil}, {nil}, {1}, {3}},
@@ -1229,7 +1229,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column LEFT SEMI JOIN test with nulls",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
@@ -1242,7 +1242,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column (long runs on left) LEFT SEMI JOIN test with nulls",
-		joinType:     sqlbase.LeftSemiJoin,
+		joinType:     descpb.LeftSemiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {1, 11}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
@@ -1255,7 +1255,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT SEMI JOIN test with nulls DESC ordering",
-		joinType:        sqlbase.LeftSemiJoin,
+		joinType:        descpb.LeftSemiJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
@@ -1273,7 +1273,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT SEMI JOIN test with nulls mixed ordering",
-		joinType:        sqlbase.LeftSemiJoin,
+		joinType:        descpb.LeftSemiJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
@@ -1291,7 +1291,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "single column DESC with nulls on the left LEFT SEMI JOIN",
-		joinType:        sqlbase.LeftSemiJoin,
+		joinType:        descpb.LeftSemiJoin,
 		leftTypes:       []*types.T{types.Int},
 		rightTypes:      []*types.T{types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
@@ -1306,7 +1306,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT ANTI JOIN test, L and R exhausted at the same time",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {2}, {3}, {4}, {4}},
@@ -1319,7 +1319,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT ANTI JOIN test, R exhausted first",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {3}, {5}, {6}, {7}},
@@ -1332,7 +1332,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "basic LEFT ANTI JOIN test, L exhausted first",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{3}, {5}, {6}, {7}},
@@ -1345,7 +1345,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi output column LEFT ANTI JOIN test with nulls",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -1358,7 +1358,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "null in equality column LEFT ANTI JOIN",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil}, {nil}, {1}, {3}},
@@ -1371,7 +1371,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column LEFT ANTI JOIN test with nulls",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
@@ -1384,7 +1384,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "multi equality column (long runs on left) LEFT ANTI JOIN test with nulls",
-		joinType:     sqlbase.LeftAntiJoin,
+		joinType:     descpb.LeftAntiJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {1, 11}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
@@ -1397,7 +1397,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT ANTI JOIN test with nulls DESC ordering",
-		joinType:        sqlbase.LeftAntiJoin,
+		joinType:        descpb.LeftAntiJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC},
@@ -1412,7 +1412,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "3 equality column LEFT ANTI JOIN test with nulls mixed ordering",
-		joinType:        sqlbase.LeftAntiJoin,
+		joinType:        descpb.LeftAntiJoin,
 		leftTypes:       []*types.T{types.Int, types.Int, types.Int},
 		rightTypes:      []*types.T{types.Int, types.Int, types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_DESC, execinfrapb.Ordering_Column_ASC},
@@ -1427,7 +1427,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:     "single column DESC with nulls on the left LEFT ANTI JOIN",
-		joinType:        sqlbase.LeftAntiJoin,
+		joinType:        descpb.LeftAntiJoin,
 		leftTypes:       []*types.T{types.Int},
 		rightTypes:      []*types.T{types.Int},
 		leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
@@ -1442,7 +1442,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INNER JOIN test with ON expression (filter only on left)",
-		joinType:     sqlbase.InnerJoin,
+		joinType:     descpb.InnerJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -1456,7 +1456,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INNER JOIN test with ON expression (filter only on right)",
-		joinType:     sqlbase.InnerJoin,
+		joinType:     descpb.InnerJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -1470,7 +1470,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INNER JOIN test with ON expression (filter on both)",
-		joinType:     sqlbase.InnerJoin,
+		joinType:     descpb.InnerJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
@@ -1484,7 +1484,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INTERSECT ALL join basic",
-		joinType:     sqlbase.IntersectAllJoin,
+		joinType:     descpb.IntersectAllJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {2}, {2}, {3}},
@@ -1497,7 +1497,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INTERSECT ALL join with mixed ordering with NULLs",
-		joinType:     sqlbase.IntersectAllJoin,
+		joinType:     descpb.IntersectAllJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{4, nil}, {4, 1}, {1, nil}, {1, 2}, {0, 2}, {0, 3}, {nil, 1}, {nil, 2}, {nil, 2}, {nil, 3}},
@@ -1516,7 +1516,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INTERSECT ALL join with mixed ordering with NULLs on the left",
-		joinType:     sqlbase.IntersectAllJoin,
+		joinType:     descpb.IntersectAllJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, 3}, {nil, nil}, {9, 6}, {9, 0}, {9, nil}},
@@ -1535,7 +1535,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "INTERSECT ALL join on booleans",
-		joinType:     sqlbase.IntersectAllJoin,
+		joinType:     descpb.IntersectAllJoin,
 		leftTypes:    []*types.T{types.Bool},
 		rightTypes:   []*types.T{types.Bool},
 		leftTuples:   tuples{{nil}, {nil}, {false}, {false}, {true}, {true}, {true}},
@@ -1548,7 +1548,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "EXCEPT ALL join basic",
-		joinType:     sqlbase.ExceptAllJoin,
+		joinType:     descpb.ExceptAllJoin,
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
@@ -1561,7 +1561,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "EXCEPT ALL join with mixed ordering with NULLs",
-		joinType:     sqlbase.ExceptAllJoin,
+		joinType:     descpb.ExceptAllJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{4, nil}, {4, 1}, {1, nil}, {1, 2}, {0, 2}, {0, 3}, {nil, 1}, {nil, 2}, {nil, 2}, {nil, 3}},
@@ -1580,7 +1580,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "EXCEPT ALL join with mixed ordering with NULLs on the left",
-		joinType:     sqlbase.ExceptAllJoin,
+		joinType:     descpb.ExceptAllJoin,
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{nil, 3}, {nil, nil}, {9, 6}, {9, 0}, {9, nil}},
@@ -1599,7 +1599,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description:  "EXCEPT ALL join on booleans",
-		joinType:     sqlbase.ExceptAllJoin,
+		joinType:     descpb.ExceptAllJoin,
 		leftTypes:    []*types.T{types.Bool},
 		rightTypes:   []*types.T{types.Bool},
 		leftTuples:   tuples{{nil}, {nil}, {false}, {false}, {true}, {true}, {true}},
@@ -1612,7 +1612,7 @@ var mjTestCases = []*joinTestCase{
 	},
 	{
 		description: "FULL OUTER join on mixed-type equality columns",
-		joinType:    sqlbase.FullOuterJoin,
+		joinType:    descpb.FullOuterJoin,
 		leftTuples: tuples{
 			{8398534516657654136},
 			{932352552525192296},
@@ -1672,7 +1672,7 @@ func TestMergeJoiner(t *testing.T) {
 					output.input.Init()
 				}
 				verify := output.Verify
-				if tc.joinType == sqlbase.FullOuterJoin {
+				if tc.joinType == descpb.FullOuterJoin {
 					// FULL OUTER JOIN doesn't guarantee any ordering on its output (since
 					// it is ambiguous), so we're comparing the outputs as sets.
 					verify = output.VerifyAnyOrder
@@ -1758,7 +1758,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 				rightSource := newChunkingBatchSource(typs, colsRight, nTuples)
 				a, err := NewMergeJoinOp(
 					testAllocator, defaultMemoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.FullOuterJoin,
+					colexecbase.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1867,7 +1867,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 				rightHJSource := newChunkingBatchSource(typs, colsRight, nTuples)
 				mj, err := NewMergeJoinOp(
 					testAllocator, defaultMemoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+					colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftMJSource, rightMJSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1879,7 +1879,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 				mj.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
 				hj := NewHashJoiner(
 					testAllocator, HashJoinerSpec{
-						joinType: sqlbase.InnerJoin,
+						joinType: descpb.InnerJoin,
 						left: hashJoinerSourceSpec{
 							eqCols: []uint32{0}, sourceTypes: typs,
 						},
@@ -1937,7 +1937,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 
 					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2018,7 +2018,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 
 					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2148,7 +2148,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 
 					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2251,7 +2251,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
 					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
+					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					testDiskAcc,
@@ -2282,7 +2282,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
 					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
+					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					testDiskAcc,
@@ -2315,7 +2315,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
 					colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), defaultMemoryLimit, queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit),
-					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
+					descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					testDiskAcc,

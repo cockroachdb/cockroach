@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -146,7 +146,7 @@ func verifySystemJob(
 	}
 
 	for _, id := range rawDescriptorIDs {
-		actual.DescriptorIDs = append(actual.DescriptorIDs, sqlbase.ID(id))
+		actual.DescriptorIDs = append(actual.DescriptorIDs, descpb.ID(id))
 	}
 	sort.Sort(actual.DescriptorIDs)
 	sort.Sort(expected.DescriptorIDs)

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -277,7 +278,7 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 					return "error generating datum"
 				}
 				datum := d.(tree.Datum)
-				desc := ColumnDescriptor{
+				desc := descpb.ColumnDescriptor{
 					Type: typ,
 				}
 				value, err := MarshalColumnValue(&desc, datum)
@@ -328,7 +329,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 	} {
 		t.Run(d.String(), func(t *testing.T) {
 			var b []byte
-			colID := ColumnID(1)
+			colID := descpb.ColumnID(1)
 			encoded, err := EncodeTableValue(b, colID, d, []byte{})
 			require.NoError(t, err)
 			a := &DatumAlloc{}

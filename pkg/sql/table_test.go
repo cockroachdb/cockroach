@@ -17,6 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -175,7 +178,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
-		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, descpb.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -197,107 +200,107 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 	testData := []struct {
 		sql     string
-		primary sqlbase.IndexDescriptor
-		indexes []sqlbase.IndexDescriptor
+		primary descpb.IndexDescriptor
+		indexes []descpb.IndexDescriptor
 	}{
 		{
 			"a INT PRIMARY KEY",
-			sqlbase.IndexDescriptor{
+			descpb.IndexDescriptor{
 				Name:             sqlbase.PrimaryKeyIndexName,
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a"},
-				ColumnIDs:        []sqlbase.ColumnID{1},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+				ColumnIDs:        []descpb.ColumnID{1},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
-			[]sqlbase.IndexDescriptor{},
+			[]descpb.IndexDescriptor{},
 		},
 		{
 			"a INT UNIQUE, b INT PRIMARY KEY",
-			sqlbase.IndexDescriptor{
+			descpb.IndexDescriptor{
 				Name:             "primary",
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"b"},
-				ColumnIDs:        []sqlbase.ColumnID{2},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+				ColumnIDs:        []descpb.ColumnID{2},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
-			[]sqlbase.IndexDescriptor{
+			[]descpb.IndexDescriptor{
 				{
 					Name:             "test_a_key",
 					ID:               2,
 					Unique:           true,
 					ColumnNames:      []string{"a"},
-					ColumnIDs:        []sqlbase.ColumnID{1},
-					ExtraColumnIDs:   []sqlbase.ColumnID{2},
-					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-					Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+					ColumnIDs:        []descpb.ColumnID{1},
+					ExtraColumnIDs:   []descpb.ColumnID{2},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:          descpb.SecondaryIndexFamilyFormatVersion,
 				},
 			},
 		},
 		{
 			"a INT, b INT, CONSTRAINT c PRIMARY KEY (a, b)",
-			sqlbase.IndexDescriptor{
+			descpb.IndexDescriptor{
 				Name:             "c",
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnIDs:        []sqlbase.ColumnID{1, 2},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
-				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+				ColumnIDs:        []descpb.ColumnID{1, 2},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
-			[]sqlbase.IndexDescriptor{},
+			[]descpb.IndexDescriptor{},
 		},
 		{
 			"a INT, b INT, CONSTRAINT c UNIQUE (b), PRIMARY KEY (a, b)",
-			sqlbase.IndexDescriptor{
+			descpb.IndexDescriptor{
 				Name:             "primary",
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnIDs:        []sqlbase.ColumnID{1, 2},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
-				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+				ColumnIDs:        []descpb.ColumnID{1, 2},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
-			[]sqlbase.IndexDescriptor{
+			[]descpb.IndexDescriptor{
 				{
 					Name:             "c",
 					ID:               2,
 					Unique:           true,
 					ColumnNames:      []string{"b"},
-					ColumnIDs:        []sqlbase.ColumnID{2},
-					ExtraColumnIDs:   []sqlbase.ColumnID{1},
-					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-					Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+					ColumnIDs:        []descpb.ColumnID{2},
+					ExtraColumnIDs:   []descpb.ColumnID{1},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:          descpb.SecondaryIndexFamilyFormatVersion,
 				},
 			},
 		},
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
-			sqlbase.IndexDescriptor{
+			descpb.IndexDescriptor{
 				Name:             sqlbase.PrimaryKeyIndexName,
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnIDs:        []sqlbase.ColumnID{1, 2},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
-				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
+				ColumnIDs:        []descpb.ColumnID{1, 2},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
 			},
-			[]sqlbase.IndexDescriptor{},
+			[]descpb.IndexDescriptor{},
 		},
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
-		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, descpb.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
 			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIndex)
 		}
-		if !reflect.DeepEqual(d.indexes, append([]sqlbase.IndexDescriptor{}, schema.Indexes...)) {
+		if !reflect.DeepEqual(d.indexes, append([]descpb.IndexDescriptor{}, schema.Indexes...)) {
 			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.Indexes)
 		}
 
@@ -308,11 +311,11 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
-	desc, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
+	desc, err := CreateTestTableDescriptor(context.Background(), 1, 100, s, descpb.NewDefaultPrivilegeDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc.PrimaryIndex = sqlbase.IndexDescriptor{}
+	desc.PrimaryIndex = descpb.IndexDescriptor{}
 
 	err = desc.ValidateTable()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
@@ -336,19 +339,27 @@ CREATE TABLE test.tt (x test.t);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
-	typLookup := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		typDesc, err := sqlbase.GetTypeDescFromID(ctx, kvDB, keys.SystemSQLCodec, id)
-		if err != nil {
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
+	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+		var typeDesc sqlbase.TypeDescriptor
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, id,
+				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
+			if err != nil {
+				return err
+			}
+			typeDesc = desc.(sqlbase.TypeDescriptor)
+			return nil
+		}); err != nil {
 			return tree.TypeName{}, nil, err
 		}
-		return tree.TypeName{}, typDesc, nil
+		return tree.TypeName{}, typeDesc, nil
 	}
-	if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc, sqlbase.TypeLookupFunc(typLookup)); err != nil {
+	if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), sqlbase.TypeLookupFunc(typLookup)); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that we can clone this table.
-	_ = protoutil.Clone(desc).(*TableDescriptor)
+	_ = protoutil.Clone(desc.TableDesc()).(*TableDescriptor)
 }
 
 // TestSerializedUDTsInTableDescriptor tests that expressions containing
@@ -438,8 +449,8 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-		found := tc.getExpr(desc)
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		found := tc.getExpr(desc.TableDesc())
 		if tc.expectedExpr != found {
 			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
 		}

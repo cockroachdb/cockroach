@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -36,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
+func parseTableDesc(createTableStmt string) (sqlbase.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
 	if err != nil {
@@ -47,18 +48,18 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
-	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
+	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
+	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
 	semaCtx := tree.MakeSemaContext()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable()
+	return mutDesc, mutDesc.ValidateTable()
 }
 
-func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+func parseValues(tableDesc *descpb.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := &tree.EvalContext{}
@@ -105,7 +106,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	// This avroDataRecord doesn't have any of the derived fields we need for
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
-	tableDesc := &sqlbase.TableDescriptor{
+	tableDesc := descpb.TableDescriptor{
 		Name: AvroNameToSQLName(s.Name),
 	}
 	for _, f := range s.Fields {
@@ -119,10 +120,10 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		}
 		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
 	}
-	return tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
+	return tableToAvroSchema(sqlbase.NewImmutableTableDescriptor(tableDesc), avroSchemaNoSuffix)
 }
 
-func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, error) {
+func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
 	parsed, err := parser.ParseOne(`ALTER TABLE FOO ADD COLUMN ` + metadata)
 	if err != nil {
 		return nil, err
@@ -249,7 +250,7 @@ func TestAvroSchema(t *testing.T) {
 			// roundtrippedSchema can be used to recreate the original `CREATE
 			// TABLE`.
 
-			rows, err := parseValues(tableDesc, `VALUES `+test.values)
+			rows, err := parseValues(tableDesc.TableDesc(), `VALUES `+test.values)
 			require.NoError(t, err)
 
 			for _, row := range rows {
@@ -281,7 +282,7 @@ func TestAvroSchema(t *testing.T) {
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := indexToAvroSchema(tableDesc, &tableDesc.PrimaryIndex)
+		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.GetPrimaryIndex())
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -323,7 +324,7 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnDescToAvroSchema(&tableDesc.Columns[1])
+			field, err := columnDescToAvroSchema(tableDesc.GetColumnAtIdx(1))
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)
@@ -440,7 +441,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
 			require.NoError(t, err)
-			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			rows, err := parseValues(tableDesc.TableDesc(), `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
 			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
@@ -554,9 +555,9 @@ func TestAvroMigration(t *testing.T) {
 			readerSchema, err := tableToAvroSchema(readerDesc, avroSchemaNoSuffix)
 			require.NoError(t, err)
 
-			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
+			writerRows, err := parseValues(writerDesc.TableDesc(), `VALUES `+test.writerValues)
 			require.NoError(t, err)
-			expectedRows, err := parseValues(readerDesc, `VALUES `+test.expectedValues)
+			expectedRows, err := parseValues(readerDesc.TableDesc(), `VALUES `+test.expectedValues)
 			require.NoError(t, err)
 
 			for i := range writerRows {

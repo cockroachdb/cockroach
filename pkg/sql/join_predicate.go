@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -27,7 +28,7 @@ type joinPredicate struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// numLeft/RightCols are the number of columns in the left and right
 	// operands.
@@ -70,11 +71,11 @@ type joinPredicate struct {
 
 // getJoinResultColumns returns the result columns of a join.
 func getJoinResultColumns(
-	joinType sqlbase.JoinType, left, right sqlbase.ResultColumns,
+	joinType descpb.JoinType, left, right sqlbase.ResultColumns,
 ) sqlbase.ResultColumns {
 	// For anti and semi joins, the right columns are omitted from the output (but
 	// they must be available internally for the ON condition evaluation).
-	omitRightColumns := joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin
+	omitRightColumns := joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin
 
 	// The structure of the join data source results is like this:
 	// - all the left columns,
@@ -89,7 +90,7 @@ func getJoinResultColumns(
 
 // makePredicate constructs a joinPredicate object for joins. The equality
 // columns / on condition must be initialized separately.
-func makePredicate(joinType sqlbase.JoinType, left, right sqlbase.ResultColumns) *joinPredicate {
+func makePredicate(joinType descpb.JoinType, left, right sqlbase.ResultColumns) *joinPredicate {
 	pred := &joinPredicate{
 		joinType:     joinType,
 		numLeftCols:  len(left),

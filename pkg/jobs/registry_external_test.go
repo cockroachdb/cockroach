@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -49,7 +50,7 @@ func TestRoundtripJob(t *testing.T) {
 	storedJob := registry.NewJob(jobs.Record{
 		Description:   "beep boop",
 		Username:      "robot",
-		DescriptorIDs: sqlbase.IDs{42},
+		DescriptorIDs: descpb.IDs{42},
 		Details:       jobspb.RestoreDetails{},
 		Progress:      jobspb.RestoreProgress{},
 	})

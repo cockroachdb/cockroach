@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,10 +59,10 @@ INSERT INTO t."tEst" VALUES (10, 20);
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -126,10 +128,10 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -220,10 +222,10 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
@@ -340,9 +342,9 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -439,13 +441,13 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		INSERT INTO t.child VALUES (10, 314);
 	`)
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
 
 	// Construct datums for the child row values (child_id, parent_id).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -578,12 +580,12 @@ INSERT INTO t.test VALUES (217, 314);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -660,12 +662,12 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v, b).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
@@ -759,19 +761,19 @@ CREATE TABLE t.test (
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	oldTableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	oldTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Drop the first column family.
 	if _, err := db.Exec(`ALTER TABLE t.test DROP COLUMN v1`); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v1).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -870,12 +872,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v1, v2).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2

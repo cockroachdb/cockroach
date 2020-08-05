@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 		return nil, err
 	}
 	// The implicit array types are not modifiable.
-	if desc.Kind == sqlbase.TypeDescriptor_ALIAS {
+	if desc.Kind == descpb.TypeDescriptor_ALIAS {
 		return nil, pgerror.Newf(
 			pgcode.WrongObjectType,
 			"%q is an implicit array type and cannot be modified",
@@ -92,7 +93,7 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetDescriptorByID(params.ctx, p.txn, p.ExecCfg().Codec, id)
+		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 		if err != nil {
 			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
@@ -142,7 +143,7 @@ func (p *planner) performRenameTypeDesc(
 	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, newName string, jobDesc string,
 ) error {
 	// Record the rename details in the descriptor for draining.
-	desc.DrainingNames = append(desc.DrainingNames, sqlbase.NameInfo{
+	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
 		ParentID:       desc.ParentID,
 		ParentSchemaID: desc.ParentSchemaID,
 		Name:           desc.Name,

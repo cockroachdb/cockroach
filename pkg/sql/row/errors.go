@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -77,7 +78,7 @@ func NewUniquenessConstraintViolationError(
 	if err != nil {
 		return err
 	}
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc.TableDesc(), key)
+	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
 		return err
 	}
@@ -90,8 +91,8 @@ func NewUniquenessConstraintViolationError(
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(index.ColumnIDs))
-	cols := make([]sqlbase.ColumnDescriptor, len(index.ColumnIDs))
+	colIdxMap := make(map[descpb.ColumnID]int, len(index.ColumnIDs))
+	cols := make([]descpb.ColumnDescriptor, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		colIdxMap[colID] = i
 		col, err := tableDesc.FindColumnByID(colID)
@@ -112,7 +113,7 @@ func NewUniquenessConstraintViolationError(
 	if err := rf.Init(
 		codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		tableArgs,

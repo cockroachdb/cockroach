@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -136,7 +137,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 					objName.Object(),
 				)
 			}
-			if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
+			if tbDesc.State == descpb.TableDescriptor_OFFLINE {
 				dbName := dbDesc.GetName()
 				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"cannot drop a database with OFFLINE tables, ensure %s is"+
@@ -326,7 +327,7 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 // filterImplicitlyDeletedObjects takes a list of table descriptors and removes
 // any descriptor that will be implicitly deleted.
 func filterImplicitlyDeletedObjects(
-	tables []toDelete, implicitDeleteObjects map[sqlbase.ID]*MutableTableDescriptor,
+	tables []toDelete, implicitDeleteObjects map[descpb.ID]*MutableTableDescriptor,
 ) []toDelete {
 	filteredDeleteList := make([]toDelete, 0, len(tables))
 	for _, toDel := range tables {
@@ -344,8 +345,8 @@ func filterImplicitlyDeletedObjects(
 // filter on it later.
 func (p *planner) accumulateAllObjectsToDelete(
 	ctx context.Context, objects []toDelete,
-) ([]*MutableTableDescriptor, map[sqlbase.ID]*MutableTableDescriptor, error) {
-	implicitDeleteObjects := make(map[sqlbase.ID]*MutableTableDescriptor)
+) ([]*MutableTableDescriptor, map[descpb.ID]*MutableTableDescriptor, error) {
+	implicitDeleteObjects := make(map[descpb.ID]*MutableTableDescriptor)
 	for _, toDel := range objects {
 		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, toDel.desc)
 		if err != nil {
@@ -377,7 +378,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 // dependentObjects map.
 func (p *planner) accumulateOwnedSequences(
 	ctx context.Context,
-	dependentObjects map[sqlbase.ID]*MutableTableDescriptor,
+	dependentObjects map[descpb.ID]*MutableTableDescriptor,
 	desc *sqlbase.MutableTableDescriptor,
 ) error {
 	for colID := range desc.GetColumns() {
@@ -406,7 +407,7 @@ func (p *planner) accumulateOwnedSequences(
 // the namespace table.
 func (p *planner) accumulateCascadingViews(
 	ctx context.Context,
-	dependentObjects map[sqlbase.ID]*MutableTableDescriptor,
+	dependentObjects map[descpb.ID]*MutableTableDescriptor,
 	desc *sqlbase.MutableTableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
@@ -425,7 +426,7 @@ func (p *planner) accumulateCascadingViews(
 	return nil
 }
 
-func (p *planner) removeDbComment(ctx context.Context, dbID sqlbase.ID) error {
+func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-db-comment",

@@ -35,7 +35,7 @@ func newCSVInputReader(
 	opts roachpb.CSVOptions,
 	walltime int64,
 	parallelism int,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {

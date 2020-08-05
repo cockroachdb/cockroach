@@ -250,7 +250,7 @@ func TestEncoders(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
 
-			resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.Name, ts)
+			resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
 			require.NoError(t, err)
 			require.Equal(t, expected.resolved, resolvedStringFn(resolved))
 		})

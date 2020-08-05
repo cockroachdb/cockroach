@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package catconstants
 
 import (
 	"math"
@@ -18,15 +18,6 @@ import (
 
 // DefaultSearchPath is the search path used by virgin sessions.
 var DefaultSearchPath = sessiondata.MakeSearchPath([]string{"public"})
-
-// AdminRole is the default (and non-droppable) role with superuser privileges.
-var AdminRole = "admin"
-
-// PublicRole is the special "public" pseudo-role.
-// All users are implicit members of "public". The role cannot be created,
-// dropped, assigned to another role, and is generally not listed.
-// It can be granted privileges, implicitly granting them to all users (current and future).
-var PublicRole = "public"
 
 // ReportableAppNamePrefix indicates that the application name can be
 // reported in telemetry without scrubbing. (Note this only applies to

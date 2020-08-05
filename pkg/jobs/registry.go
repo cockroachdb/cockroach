@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -596,7 +597,7 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 	for _, id := range payload.DescriptorIDs {
 		pendingMutations := false
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			td, err := sqlbase.GetTableDescFromID(ctx, txn, keys.TODOSQLCodec, id)
+			td, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.TODOSQLCodec, id)
 			if err != nil {
 				return err
 			}

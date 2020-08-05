@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -131,8 +132,13 @@ func NewColBatchScan(
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
-	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
+	// indicates that we're probably doing this wrong. Instead we should be
+	// just seting the ID and Version in the spec or something like that and
+	// retrieving the hydrated ImmutableTableDescriptor from cache.
+	table := sqlbase.NewImmutableTableDescriptor(spec.Table)
+	typs := table.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 	// Add all requested system columns to the output.
 	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&spec.Table, spec.SystemColumns)
 	if err != nil {
@@ -201,15 +207,15 @@ func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
-	desc *sqlbase.TableDescriptor,
+	desc *descpb.TableDescriptor,
 	indexIdx int,
-	colIdxMap map[sqlbase.ColumnID]int,
+	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,
-	lockStr sqlbase.ScanLockingStrength,
-	systemColumnDescs []sqlbase.ColumnDescriptor,
-) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
+	lockStr descpb.ScanLockingStrength,
+	systemColumnDescs []descpb.ColumnDescriptor,
+) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {

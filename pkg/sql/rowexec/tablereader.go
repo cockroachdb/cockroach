@@ -88,9 +88,10 @@ func newTableReader(
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
+	tableDesc := sqlbase.NewImmutableTableDescriptor(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	resultTypes := spec.Table.ColumnTypesWithMutations(returnMutations)
-	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
 	// Add all requested system columns to the output.
 	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&spec.Table, spec.SystemColumns)
 	if err != nil {
@@ -128,7 +129,7 @@ func newTableReader(
 	if _, _, err := initRowFetcher(
 		flowCtx,
 		&fetcher,
-		&spec.Table,
+		tableDesc,
 		int(spec.IndexIdx),
 		columnIdxMap,
 		spec.Reverse,

@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -76,7 +76,7 @@ func TestDistBackfill(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 	// Split the table into multiple ranges.
-	descNumToStr := sqlbase.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "numtostr")
+	descNumToStr := catalogkv.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "numtostr")
 	var sps []SplitPoint
 	//for i := 1; i <= numNodes-1; i++ {
 	for i := numNodes - 1; i > 0; i-- {

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -254,7 +255,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	var desc sqlbase.TableDescriptor
+	var desc descpb.TableDescriptor
 	descBytes, err := protoutil.Marshal(&desc)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +267,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(keys.MinUserDescID))
+		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MinUserDescID))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -1318,8 +1319,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
-			key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(i))
-			if err := txn.Put(ctx, key, (&sqlbase.TableDescriptor{}).DescriptorProto()); err != nil {
+			id := descpb.ID(i)
+			key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+			desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
+			if err := txn.Put(ctx, key, desc.DescriptorProto()); err != nil {
 				return err
 			}
 		}
@@ -1385,8 +1388,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
-		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, (&sqlbase.TableDescriptor{}).DescriptorProto())
+		id := descpb.ID(userTableMax)
+		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+		desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
+		return txn.Put(ctx, k, desc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
 	}

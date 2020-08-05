@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -116,7 +118,10 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				tbNames[i].Catalog(),
 				tbNames[i].Schema(),
 				tbNames[i].Table(),
-				tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: lookupFlags,
+					DesiredObjectKind: tree.TableObject,
+				},
 			)
 			if err != nil {
 				return err
@@ -124,9 +129,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			if objDesc == nil {
 				continue
 			}
-			tbDesc := objDesc.TableDesc()
-			for _, dependedOn := range tbDesc.DependedOnBy {
-				dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
+			tbDesc := objDesc.(sqlbase.TableDescriptor)
+			for _, dependedOn := range tbDesc.GetDependedOnBy() {
+				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
 				if err != nil {
 					return err
 				}
@@ -148,7 +153,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				tbTableName := tree.MakeTableNameWithSchema(
 					tree.Name(dbDesc.GetName()),
 					tree.Name(schema),
-					tree.Name(tbDesc.Name),
+					tree.Name(tbDesc.GetName()),
 				)
 				var dependentDescQualifiedString string
 				if dbDesc.GetID() != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
@@ -214,9 +219,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 // This is a workaround for #45411 until #34416 is resolved.
 func isAllowedDependentDescInRenameDatabase(
 	ctx context.Context,
-	dependedOn sqlbase.TableDescriptor_Reference,
-	tbDesc *sqlbase.TableDescriptor,
-	dependentDesc *sqlbase.TableDescriptor,
+	dependedOn descpb.TableDescriptor_Reference,
+	tbDesc sqlbase.TableDescriptor,
+	dependentDesc *sqlbase.ImmutableTableDescriptor,
 	dbName string,
 ) (bool, string, error) {
 	// If it is a sequence, and it does not contain the database name, then we have

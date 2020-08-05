@@ -16,14 +16,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
 // AddImmediateGCZoneConfig set the GC TTL to 0 for the given table ID. One must
 // make sure to disable strict GC TTL enforcement when using this.
-func AddImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
+func AddImmediateGCZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.GC.TTLSeconds = 0
 	buf, err := protoutil.Marshal(&cfg)
@@ -46,7 +46,7 @@ func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) 
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
-func AddDefaultZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (zonepb.ZoneConfig, error) {
+func AddDefaultZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
 	cfg := zonepb.DefaultZoneConfig()
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {

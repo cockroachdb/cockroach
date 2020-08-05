@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -192,14 +193,14 @@ type vTableLookupJoinNode struct {
 
 	dbName string
 	db     *sqlbase.ImmutableDatabaseDescriptor
-	table  *sqlbase.TableDescriptor
-	index  *sqlbase.IndexDescriptor
+	table  *sqlbase.ImmutableTableDescriptor
+	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
 	virtualTableEntry virtualDefEntry
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// columns is the join's output schema.
 	columns sqlbase.ResultColumns
@@ -297,7 +298,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		if err := genFunc(v); err != nil {
 			return false, err
 		}
-		if v.run.rows.Len() == 0 && v.joinType == sqlbase.LeftOuterJoin {
+		if v.run.rows.Len() == 0 && v.joinType == descpb.LeftOuterJoin {
 			// No matches - construct an outer match.
 			v.run.row = v.run.row[:len(v.inputCols)]
 			for i := len(inputRow); i < len(v.columns); i++ {

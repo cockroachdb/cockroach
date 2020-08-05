@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -165,7 +166,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc *sqlbase.TableDescriptor, pk int,
+	ts *server.TestServer, tableDesc *sqlbase.ImmutableTableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
@@ -319,7 +320,7 @@ func TestMixedDirections(t *testing.T) {
 
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
-) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
+) ([]roachpb.RangeDescriptor, *sqlbase.ImmutableTableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +336,7 @@ func setupRanges(
 		}
 	}
 
-	tableDesc := sqlbase.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))
 	for i, val := range values {
@@ -449,7 +450,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	return nil
 }
 
-func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
+func makeSpan(tableDesc *sqlbase.ImmutableTableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
 		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {

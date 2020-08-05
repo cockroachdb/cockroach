@@ -16,7 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,9 +45,9 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tID := tableDesc.ID
-	var aID, bID, cID sqlbase.ColumnID
+	var aID, bID, cID descpb.ColumnID
 	for i := range tableDesc.Columns {
 		c := &tableDesc.Columns[i]
 		switch c.Name {
@@ -62,9 +63,9 @@ CREATE INDEX bc ON test.t(b, c);
 	secID := tableDesc.Indexes[0].ID
 
 	// Retrieve the numeric descriptors.
-	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
 	tIDHidden := tableDesc.ID
-	var rowIDHidden sqlbase.ColumnID
+	var rowIDHidden descpb.ColumnID
 	for i := range tableDesc.Columns {
 		c := &tableDesc.Columns[i]
 		switch c.Name {

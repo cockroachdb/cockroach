@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -164,11 +165,11 @@ func changefeedPlanHook(
 		}
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
-			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-				targets[tableDesc.ID] = jobspb.ChangefeedTarget{
-					StatementTimeName: tableDesc.Name,
+			if table, isTable := desc.(sqlbase.TableDescriptor); isTable {
+				targets[table.GetID()] = jobspb.ChangefeedTarget{
+					StatementTimeName: table.GetName(),
 				}
-				if err := validateChangefeedTable(targets, tableDesc); err != nil {
+				if err := validateChangefeedTable(targets, table); err != nil {
 					return err
 				}
 			}
@@ -297,7 +298,7 @@ func changefeedPlanHook(
 			jr := jobs.Record{
 				Description: jobDescription,
 				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 					for _, desc := range targetDescs {
 						sqlDescIDs = append(sqlDescIDs, desc.GetID())
 					}
@@ -468,11 +469,11 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 }
 
 func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor,
+	targets jobspb.ChangefeedTargets, tableDesc sqlbase.TableDescriptor,
 ) error {
-	t, ok := targets[tableDesc.ID]
+	t, ok := targets[tableDesc.GetID()]
 	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 
 	// Technically, the only non-user table known not to work is system.jobs
@@ -480,29 +481,29 @@ func validateChangefeedTable(
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
-	if tableDesc.ID < keys.MinUserDescID {
+	if tableDesc.GetID() < keys.MinUserDescID {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
 	}
 	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if len(tableDesc.Families) != 1 {
+	if families := tableDesc.GetFamilies(); len(families) != 1 {
 		return errors.Errorf(
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.Name, len(tableDesc.Families))
+			tableDesc.GetName(), len(families))
 	}
 
-	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+	if tableDesc.GetState() == descpb.TableDescriptor_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
-	if tableDesc.Name != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
+	if tableDesc.GetName() != t.StatementTimeName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
 	}
 
 	// TODO(mrtracy): re-enable this when allow-backfill option is added.

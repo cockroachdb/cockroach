@@ -11,6 +11,7 @@
 package sqlbase
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -27,30 +28,34 @@ type ResultColumn struct {
 	// TableID/PGAttributeNum identify the source of the column, if it is a simple
 	// reference to a column of a base table (or view). If it is not a simple
 	// reference, these fields are zeroes.
-	TableID        ID       // OID of column's source table (pg_attribute.attrelid).
-	PGAttributeNum ColumnID // Column's number in source table (pg_attribute.attnum).
+	TableID        descpb.ID       // OID of column's source table (pg_attribute.attrelid).
+	PGAttributeNum descpb.ColumnID // Column's number in source table (pg_attribute.attnum).
 }
 
 // ResultColumns is the type used throughout the sql module to
 // describe the column types of a table.
 type ResultColumns []ResultColumn
 
-// ResultColumnsFromColDescs converts []ColumnDescriptor to []ResultColumn.
-func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultColumns {
-	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *ColumnDescriptor {
+// ResultColumnsFromColDescs converts []descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescs(
+	tableID descpb.ID, colDescs []descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
 		return &colDescs[i]
 	})
 }
 
-// ResultColumnsFromColDescPtrs converts []*ColumnDescriptor to []ResultColumn.
-func ResultColumnsFromColDescPtrs(tableID ID, colDescs []*ColumnDescriptor) ResultColumns {
-	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *ColumnDescriptor {
+// ResultColumnsFromColDescPtrs converts []*descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescPtrs(
+	tableID descpb.ID, colDescs []*descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
 		return colDescs[i]
 	})
 }
 
 func resultColumnsFromColDescs(
-	tableID ID, numCols int, getColDesc func(int) *ColumnDescriptor,
+	tableID descpb.ID, numCols int, getColDesc func(int) *descpb.ColumnDescriptor,
 ) ResultColumns {
 	cols := make(ResultColumns, numCols)
 	for i := range cols {

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package descpb
 
 import (
 	"testing"
@@ -31,60 +31,60 @@ func TestPrivilege(t *testing.T) {
 	}{
 		{"", nil, nil,
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{security.RootUser, privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{"foo", []string{"DROP", "INSERT"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{"foo", []string{"DROP", "INSERT"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{"foo", []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUser, nil, privilege.List{privilege.ALL},
 			[]UserPrivilegeString{
-				{AdminRole, []string{"ALL"}},
+				{security.AdminRole, []string{"ALL"}},
 			},
 		},
 	}
@@ -301,8 +301,8 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		}
 
 		// Valid: admin's invalid privileges are revoked and replaced with allowable privileges.
-		descriptor.Revoke(AdminRole, privilege.List{privilege.UPDATE})
-		descriptor.Grant(AdminRole, privilege.List{privilege.SELECT, privilege.GRANT})
+		descriptor.Revoke(security.AdminRole, privilege.List{privilege.UPDATE})
+		descriptor.Grant(security.AdminRole, privilege.List{privilege.SELECT, privilege.GRANT})
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
 		}
@@ -348,44 +348,44 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUser: systemPrivs,
-				AdminRole:         systemPrivs,
+				security.RootUser:  systemPrivs,
+				security.AdminRole: systemPrivs,
 			},
 		},
 		{
 			// Valid requirements for system ID.
 			systemID,
 			userPrivileges{
-				security.RootUser: systemPrivs,
-				AdminRole:         systemPrivs,
-				"foo":             privilege.List{privilege.SELECT},
-				"bar":             privilege.List{privilege.GRANT},
-				"baz":             privilege.List{privilege.SELECT, privilege.GRANT},
+				security.RootUser:  systemPrivs,
+				security.AdminRole: systemPrivs,
+				"foo":              privilege.List{privilege.SELECT},
+				"bar":              privilege.List{privilege.GRANT},
+				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
 			},
 			false,
 			userPrivileges{
-				security.RootUser: systemPrivs,
-				AdminRole:         systemPrivs,
-				"foo":             privilege.List{privilege.SELECT},
-				"bar":             privilege.List{privilege.GRANT},
-				"baz":             privilege.List{privilege.SELECT, privilege.GRANT},
+				security.RootUser:  systemPrivs,
+				security.AdminRole: systemPrivs,
+				"foo":              privilege.List{privilege.SELECT},
+				"bar":              privilege.List{privilege.GRANT},
+				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
 			},
 		},
 		{
 			// Too many privileges for system ID.
 			systemID,
 			userPrivileges{
-				security.RootUser: privilege.List{privilege.ALL},
-				AdminRole:         privilege.List{privilege.ALL},
-				"foo":             privilege.List{privilege.ALL},
-				"bar":             privilege.List{privilege.SELECT, privilege.UPDATE},
+				security.RootUser:  privilege.List{privilege.ALL},
+				security.AdminRole: privilege.List{privilege.ALL},
+				"foo":              privilege.List{privilege.ALL},
+				"bar":              privilege.List{privilege.SELECT, privilege.UPDATE},
 			},
 			true,
 			userPrivileges{
-				security.RootUser: systemPrivs,
-				AdminRole:         systemPrivs,
-				"foo":             privilege.List{},
-				"bar":             privilege.List{privilege.SELECT},
+				security.RootUser:  systemPrivs,
+				security.AdminRole: systemPrivs,
+				"foo":              privilege.List{},
+				"bar":              privilege.List{privilege.SELECT},
 			},
 		},
 		{
@@ -394,27 +394,27 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUser: userPrivs,
-				AdminRole:         userPrivs,
+				security.RootUser:  userPrivs,
+				security.AdminRole: userPrivs,
 			},
 		},
 		{
 			// Valid requirements for non-system ID.
 			userID,
 			userPrivileges{
-				security.RootUser: userPrivs,
-				AdminRole:         userPrivs,
-				"foo":             privilege.List{privilege.SELECT},
-				"bar":             privilege.List{privilege.GRANT},
-				"baz":             privilege.List{privilege.SELECT, privilege.GRANT},
+				security.RootUser:  userPrivs,
+				security.AdminRole: userPrivs,
+				"foo":              privilege.List{privilege.SELECT},
+				"bar":              privilege.List{privilege.GRANT},
+				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
 			},
 			false,
 			userPrivileges{
-				security.RootUser: userPrivs,
-				AdminRole:         userPrivs,
-				"foo":             privilege.List{privilege.SELECT},
-				"bar":             privilege.List{privilege.GRANT},
-				"baz":             privilege.List{privilege.SELECT, privilege.GRANT},
+				security.RootUser:  userPrivs,
+				security.AdminRole: userPrivs,
+				"foo":              privilege.List{privilege.SELECT},
+				"bar":              privilege.List{privilege.GRANT},
+				"baz":              privilege.List{privilege.SELECT, privilege.GRANT},
 			},
 		},
 		{
@@ -426,10 +426,10 @@ func TestFixPrivileges(t *testing.T) {
 			},
 			true,
 			userPrivileges{
-				security.RootUser: privilege.List{privilege.ALL},
-				AdminRole:         privilege.List{privilege.ALL},
-				"foo":             privilege.List{privilege.ALL},
-				"bar":             privilege.List{privilege.UPDATE},
+				security.RootUser:  privilege.List{privilege.ALL},
+				security.AdminRole: privilege.List{privilege.ALL},
+				"foo":              privilege.List{privilege.ALL},
+				"bar":              privilege.List{privilege.UPDATE},
 			},
 		},
 	}
@@ -440,7 +440,7 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p)
 		}
 
-		if a, e := desc.MaybeFixPrivileges(testCase.id), testCase.modified; a != e {
+		if a, e := MaybeFixPrivileges(testCase.id, desc), testCase.modified; a != e {
 			t.Errorf("#%d: expected modified=%t, got modified=%t", num, e, a)
 			continue
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -52,7 +53,7 @@ func (p *planner) writeTypeSchemaChange(
 		jobRecord := jobs.Record{
 			Description:   jobDesc,
 			Username:      p.User(),
-			DescriptorIDs: sqlbase.IDs{typeDesc.ID},
+			DescriptorIDs: descpb.IDs{typeDesc.ID},
 			Details: jobspb.TypeSchemaChangeDetails{
 				TypeID: typeDesc.ID,
 			},
@@ -100,7 +101,7 @@ func (p *planner) writeTypeDesc(
 
 // typeSchemaChanger is the struct that actually runs the type schema change.
 type typeSchemaChanger struct {
-	typeID  sqlbase.ID
+	typeID  descpb.ID
 	execCfg *ExecutorConfig
 }
 
@@ -121,11 +122,12 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 ) (*sqlbase.ImmutableTypeDescriptor, error) {
 	var typeDesc *sqlbase.ImmutableTypeDescriptor
 	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		typeDesc, err = sqlbase.GetTypeDescFromID(ctx, txn, t.execCfg.Codec, t.typeID)
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, t.execCfg.Codec, t.typeID,
+			catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
 		if err != nil {
 			return err
 		}
+		typeDesc = desc.(*sqlbase.ImmutableTypeDescriptor)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -163,10 +165,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// If there are any read only enum members, promote them to writeable.
-	if typeDesc.Kind == sqlbase.TypeDescriptor_ENUM {
+	if typeDesc.Kind == descpb.TypeDescriptor_ENUM {
 		hasNonPublic := false
 		for _, member := range typeDesc.EnumMembers {
-			if member.Capability == sqlbase.TypeDescriptor_EnumMember_READ_ONLY {
+			if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
 				hasNonPublic = true
 				break
 			}
@@ -177,13 +179,13 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up.
-			update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+			update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
 				typeDesc := descs[typeDesc.ID].(*sqlbase.MutableTypeDescriptor)
 				didModify := false
 				for i := range typeDesc.EnumMembers {
 					member := &typeDesc.EnumMembers[i]
-					if member.Capability == sqlbase.TypeDescriptor_EnumMember_READ_ONLY {
-						member.Capability = sqlbase.TypeDescriptor_EnumMember_ALL
+					if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+						member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 						didModify = true
 					}
 				}
@@ -194,7 +196,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 			if _, err := leaseMgr.PublishMultiple(
 				ctx,
-				[]sqlbase.ID{typeDesc.ID, typeDesc.ArrayTypeID},
+				[]descpb.ID{typeDesc.ID, typeDesc.ArrayTypeID},
 				update,
 				func(*kv.Txn) error { return nil },
 			); err != nil {
