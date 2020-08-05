@@ -63,7 +63,11 @@ var geosOnce struct {
 func EnsureInit(
 	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string,
 ) (string, error) {
-	_, err := ensureInit(errDisplay, flagLibraryDirectoryValue)
+	crdbBinaryLoc := ""
+	if len(os.Args) > 0 {
+		crdbBinaryLoc = os.Args[0]
+	}
+	_, err := ensureInit(errDisplay, flagLibraryDirectoryValue, crdbBinaryLoc)
 	return geosOnce.loc, err
 }
 
@@ -71,16 +75,18 @@ func EnsureInit(
 // errors privately and not assuming a flag has been set if initialized
 // for the first time.
 func ensureInitInternal() (*C.CR_GEOS, error) {
-	return ensureInit(EnsureInitErrorDisplayPrivate, "")
+	return ensureInit(EnsureInitErrorDisplayPrivate, "", "")
 }
 
 // ensureInits behaves as described in EnsureInit, but also returns the GEOS
 // C object which should be hidden from the public eye.
 func ensureInit(
-	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string,
+	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string, crdbBinaryLoc string,
 ) (*C.CR_GEOS, error) {
 	geosOnce.once.Do(func() {
-		geosOnce.geos, geosOnce.loc, geosOnce.err = initGEOS(findLibraryDirectories(flagLibraryDirectoryValue))
+		geosOnce.geos, geosOnce.loc, geosOnce.err = initGEOS(
+			findLibraryDirectories(flagLibraryDirectoryValue, crdbBinaryLoc),
+		)
 	})
 	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
 		return nil, errors.Newf("geos: this operation is not available")
@@ -106,34 +112,40 @@ const (
 )
 
 // findLibraryDirectories returns the default locations where GEOS is installed.
-func findLibraryDirectories(flagLibraryDirectoryValue string) []string {
-	// For CI, they are always in a parenting directory where libgeos_c is set.
-	// For now, this will need to look at every given location
-	// TODO(otan): fix CI to always use a fixed location OR initialize GEOS
-	// correctly for each test suite that may need GEOS.
-	locs := append(findLibraryDirectoriesInParentingDirectories(), flagLibraryDirectoryValue)
+func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc string) []string {
+	// Try path by trying to find all parenting paths and appending
+	// `lib/libgeos_c.<ext>` to the current working directory, as well
+	// as the directory in which the cockroach binary is initialized.
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	locs := []string{}
+	if flagLibraryDirectoryValue != "" {
+		locs = append(locs, flagLibraryDirectoryValue)
+	}
+	locs = append(
+		append(
+			locs,
+			findLibraryDirectoriesInParentingDirectories(crdbBinaryLoc)...,
+		),
+		findLibraryDirectoriesInParentingDirectories(cwd)...,
+	)
 	return locs
 }
 
 // findLibraryDirectoriesInParentingDirectories attempts to find GEOS by looking at
 // parenting folders and looking inside `lib/libgeos_c.*`.
 // This is basically only useful for CI runs.
-func findLibraryDirectoriesInParentingDirectories() []string {
+func findLibraryDirectoriesInParentingDirectories(dir string) []string {
 	locs := []string{}
 
-	// Add the CI path by trying to find all parenting paths and appending
-	// `lib/libgeos_c.<ext>`.
-	cwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-
 	for {
-		dir := filepath.Join(cwd, "lib")
+		checkDir := filepath.Join(dir, "lib")
 		found := true
 		for _, file := range []string{
-			filepath.Join(dir, getLibraryExt(libgeoscFileName)),
-			filepath.Join(dir, getLibraryExt(libgeosFileName)),
+			filepath.Join(checkDir, getLibraryExt(libgeoscFileName)),
+			filepath.Join(checkDir, getLibraryExt(libgeosFileName)),
 		} {
 			if _, err := os.Stat(file); err != nil {
 				found = false
@@ -141,13 +153,13 @@ func findLibraryDirectoriesInParentingDirectories() []string {
 			}
 		}
 		if found {
-			locs = append(locs, dir)
+			locs = append(locs, checkDir)
 		}
-		nextCWD := filepath.Dir(cwd)
-		if nextCWD == cwd {
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
 			break
 		}
-		cwd = nextCWD
+		dir = parentDir
 	}
 	return locs
 }
