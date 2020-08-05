@@ -109,3 +109,12 @@ generate_series
 1
 2
 3
+
+# Check that distinct is supported.
+query I rowsort
+SELECT DISTINCT v FROM kv
+----
+1
+2
+NULL
+3

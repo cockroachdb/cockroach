@@ -39,12 +39,12 @@ with t=A
   txn_ignore_seqs seqs=(29-30)
   get  k=k
 ----
-scan: "k" -> /BYTES/b @0,0
+scan: "k" -> /BYTES/b @0.000000011,0
 scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
-get: "k" -> /BYTES/b @0,0
-get: "k" -> /BYTES/b @0,0
-get: "k" -> /BYTES/b @0,0
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
@@ -87,9 +87,9 @@ with t=A
   scan k=k end=-k
   get  k=k
 ----
-scan: "k" -> /BYTES/b @0,0
+scan: "k" -> /BYTES/b @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
-get: "k" -> /BYTES/b @0,0
+get: "k" -> /BYTES/b @0.000000011,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=2
 
@@ -103,9 +103,9 @@ with t=A
   scan        k=k end=-k
   get         k=k
 ----
-scan: "k" -> /BYTES/a @0,0
+scan: "k" -> /BYTES/a @0.000000011,0
 scan: "k/10" -> /BYTES/10 @0.000000011,0
-get: "k" -> /BYTES/a @0,0
+get: "k" -> /BYTES/a @0.000000011,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=12} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
@@ -119,9 +119,9 @@ with t=A
   scan        k=k end=-k
   get         k=k
 ----
-scan: "k" -> /BYTES/b @0,0
+scan: "k" -> /BYTES/b @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
-get: "k" -> /BYTES/b @0,0
+get: "k" -> /BYTES/b @0.000000011,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=22} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
@@ -135,10 +135,10 @@ with t=A
   scan        k=k end=-k
   get         k=k
 ----
-scan: "k" -> /BYTES/b @0,0
+scan: "k" -> /BYTES/b @0.000000011,0
 scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/20" -> /BYTES/20 @0.000000011,0
-get: "k" -> /BYTES/b @0,0
+get: "k" -> /BYTES/b @0.000000011,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
@@ -159,8 +159,8 @@ with t=A
   get             k=k
 ----
 meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
-get: "k" -> /BYTES/b @0,0
-get: "k" -> /BYTES/b @0,0
+get: "k" -> /BYTES/b @0.000000011,0
+get: "k" -> /BYTES/b @0.000000011,0
 meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
@@ -184,10 +184,10 @@ with t=A
   scan            k=k end=-k
   get             k=k
 ----
-scan: "k" -> /BYTES/a @0,0
+scan: "k" -> /BYTES/a @0.000000014,0
 scan: "k/10" -> /BYTES/10 @0.000000011,0
 scan: "k/30" -> /BYTES/30 @0.000000011,0
-get: "k" -> /BYTES/a @0,0
+get: "k" -> /BYTES/a @0.000000014,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=40} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
 
@@ -339,7 +339,7 @@ with t=C
   resolve_intent  k=m status=COMMITTED
 ----
 meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} ts=0.000000030,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
-get: "m" -> /BYTES/a @0,0
+get: "m" -> /BYTES/a @0.000000030,0
 >> at end:
 txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000030,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000030,0 wto=false max=0,0 isn=1
 data: "k"/0.000000014,0 -> /BYTES/b

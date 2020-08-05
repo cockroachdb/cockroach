@@ -594,7 +594,18 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 	nullsAreDistinct bool,
 	errorOnDup string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: distinct")
+	physPlan, plan := getPhysPlan(input)
+	spec := createDistinctSpec(
+		distinctCols,
+		orderedCols,
+		nullsAreDistinct,
+		errorOnDup,
+		physPlan.PlanToStreamColMap,
+	)
+	e.dsp.addDistinctProcessors(physPlan, spec, ReqOrdering(reqOrdering))
+	// Since addition of distinct processors doesn't change any properties of
+	// the physical plan, we don't need to update any of those.
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(

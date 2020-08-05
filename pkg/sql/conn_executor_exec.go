@@ -137,6 +137,57 @@ func (ex *connExecutor) recordFailure() {
 	ex.metrics.EngineMetrics.FailureCount.Inc(1)
 }
 
+// execPortal executes a prepared statement. It is a "wrapper" around execStmt
+// method that is performing additional work to track portal's state.
+func (ex *connExecutor) execPortal(
+	ctx context.Context,
+	portal PreparedPortal,
+	portalName string,
+	stmtRes CommandResult,
+	pinfo *tree.PlaceholderInfo,
+) (ev fsm.Event, payload fsm.EventPayload, err error) {
+	curStmt := Statement{
+		Statement:     portal.Stmt.Statement,
+		Prepared:      portal.Stmt,
+		ExpectedTypes: portal.Stmt.Columns,
+		AnonymizedStr: portal.Stmt.AnonymizedStr,
+	}
+	stmtCtx := withStatement(ctx, ex.curStmt)
+	switch ex.machine.CurState().(type) {
+	case stateOpen:
+		// We're about to execute the statement in an open state which
+		// could trigger the dispatch to the execution engine. However, it
+		// is possible that we're trying to execute an already exhausted
+		// portal - in such a scenario we should return no rows, but the
+		// execution engine is not aware of that and would run the
+		// statement as if it was running it for the first time. In order
+		// to prevent such behavior, we check whether the portal has been
+		// exhausted and execute the statement only if it hasn't. If it has
+		// been exhausted, then we do not dispatch the query for execution,
+		// but connExecutor will still perform necessary state transitions
+		// which will emit CommandComplete messages and alike (in a sense,
+		// by not calling execStmt we "execute" the portal in such a way
+		// that it returns 0 rows).
+		// Note that here we deviate from Postgres which returns an error
+		// when attempting to execute an exhausted portal which has a
+		// StatementType() different from "Rows".
+		if !portal.exhausted {
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+			// Portal suspension is supported via a "side" state machine
+			// (see pgwire.limitedCommandResult for details), so when
+			// execStmt returns, we know for sure that the portal has been
+			// executed to completion, thus, it is exhausted.
+			// Note that the portal is considered exhausted regardless of
+			// the fact whether an error occurred or not - if it did, we
+			// still don't want to re-execute the portal from scratch.
+			ex.exhaustPortal(portalName)
+		}
+	default:
+		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+	}
+	return
+}
+
 // execStmtInOpenState executes one statement in the context of the session's
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -476,10 +527,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
 	//
 	// Manually hunting them down and calling ConfigureStepping() each
-	// time would be error prone (and increase the change that a future
+	// time would be error prone (and increase the chance that a future
 	// change would forget to add the call).
 	//
-	// TODO(andrei): really the code should be re-architectued to ensure
+	// TODO(andrei): really the code should be rearchitected to ensure
 	// that all uses of SQL execution initialize the client.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
