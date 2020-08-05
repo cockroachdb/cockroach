@@ -215,3 +215,60 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET enable_experimental_alter_column_type_general = true"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE STRING"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Ensure that after alter column type, the TableAttributeNumber stays consistent.
+
+send
+Parse {"Name": "s2", "Query": "SELECT b, 1 FROM tab3"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
+Describe {"ObjectType": 80, "Name": "p2"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+BindComplete
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello"},{"text":"1"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

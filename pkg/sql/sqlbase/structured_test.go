@@ -1498,17 +1498,17 @@ func TestLogicalColumnID(t *testing.T) {
 		desc     TableDescriptor
 		expected ColumnID
 	}{
-		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 1, LogicalColumnID: 1}}}, 1},
-		// If LogicalColumnID is not explicitly set, it should be lazy loaded as ID.
+		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 1, PGAttributeNum: 1}}}, 1},
+		// If PGAttributeNum is not explicitly set, it should be lazy loaded as ID.
 		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 2}}}, 2},
 	}
 
 	for i := range tests {
-		actual := tests[i].desc.Columns[0].GetLogicalColumnID()
+		actual := tests[i].desc.Columns[0].GetPGAttributeNum()
 		expected := tests[i].expected
 
 		if expected != actual {
-			t.Fatalf("Expected LogicalColumnID to be %d, got %d.", expected, actual)
+			t.Fatalf("Expected PGAttributeNum to be %d, got %d.", expected, actual)
 		}
 	}
 

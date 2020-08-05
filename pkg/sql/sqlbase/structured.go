@@ -3512,10 +3512,10 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColu
 		}
 	}
 
-	// Set newCol's LogicalColumnID to oldCol's ID. This makes
+	// Set newCol's PGAttributeNum to oldCol's ID. This makes
 	// newCol display like oldCol in catalog tables.
-	newCol.LogicalColumnID = oldCol.ID
-	oldCol.LogicalColumnID = 0
+	newCol.PGAttributeNum = oldCol.GetPGAttributeNum()
+	oldCol.PGAttributeNum = 0
 
 	// Mark oldCol as being the result of an AlterColumnType. This allows us
 	// to generate better errors for failing inserts.
@@ -4668,15 +4668,15 @@ func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string
 	return name
 }
 
-// GetLogicalColumnID returns the LogicalColumnID of the ColumnDescriptor
-// if the LogicalColumnID is set (non-zero). Returns the ID of the
-// ColumnDescriptor if the LogicalColumnID is not set.
-func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
-	if desc.LogicalColumnID != 0 {
-		return desc.LogicalColumnID
+// GetPGAttributeNum returns the PGAttributeNum of the ColumnDescriptor
+// if the PGAttributeNum is set (non-zero). Returns the ID of the
+// ColumnDescriptor if the PGAttributeNum is not set.
+func (desc ColumnDescriptor) GetPGAttributeNum() uint32 {
+	if desc.PGAttributeNum != 0 {
+		return desc.PGAttributeNum
 	}
 
-	return desc.ID
+	return uint32(desc.ID)
 }
 
 // HasOwner returns true if the sequence options indicate an owner exists.

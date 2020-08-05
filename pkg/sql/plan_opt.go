@@ -143,7 +143,13 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 			// Convert the metadata opt.ColumnID to its ordinal position in the table.
 			colOrdinal := colMeta.Table.ColumnOrdinal(col.ID)
 			// Use that ordinal position to retrieve the column's stable ID.
-			resultCols[i].PGAttributeNum = sqlbase.ColumnID(tab.Column(colOrdinal).ColID())
+			switch tab.Column(colOrdinal).(type) {
+			case *sqlbase.ColumnDescriptor:
+				col := tab.Column(colOrdinal).(*sqlbase.ColumnDescriptor)
+				resultCols[i].PGAttributeNum = col.GetPGAttributeNum()
+			default:
+				resultCols[i].PGAttributeNum = uint32(tab.Column(colOrdinal).ColID())
+			}
 		}
 	}
 

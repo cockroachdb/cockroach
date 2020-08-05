@@ -137,7 +137,7 @@ func newCopyMachine(
 			Name:           cols[i].Name,
 			Typ:            cols[i].Type,
 			TableID:        tableDesc.GetID(),
-			PGAttributeNum: cols[i].GetLogicalColumnID(),
+			PGAttributeNum: cols[i].GetPGAttributeNum(),
 		}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
