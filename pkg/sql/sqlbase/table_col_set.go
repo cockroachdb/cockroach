@@ -41,6 +41,9 @@ func (s TableColSet) Len() int { return s.set.Len() }
 // ForEach calls a function for each column in the set (in increasing order).
 func (s TableColSet) ForEach(f func(col ColumnID)) { s.set.ForEach(func(i int) { f(ColumnID(i)) }) }
 
+// UnionWith adds all the columns from rhs to this set.
+func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
+
 // Ordered returns a slice with all the ColumnIDs in the set, in increasing
 // order.
 func (s TableColSet) Ordered() []ColumnID {
