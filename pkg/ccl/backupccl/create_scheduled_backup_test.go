@@ -168,7 +168,8 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	}{
 		{
 			name:         "full-cluster",
-			query:        "CREATE SCHEDULE FOR BACKUP TO 'somewhere' RECURRING NEVER",
+			query:        "CREATE SCHEDULE FOR BACKUP TO 'somewhere' RECURRING '@hourly'",
+			nextRun:      cronexpr.MustParse("@hourly").Next(th.env.Now()).Round(time.Microsecond),
 			backupStmt:   "BACKUP TO 'somewhere' WITH detached",
 			scheduleName: "FULL BACKUP OF CLUSTER",
 		},
@@ -203,12 +204,12 @@ WITH EXPERIMENTAL SCHEDULE OPTIONS first_run=$1
 		},
 		{
 			name:   "missing-destination-placeholder",
-			query:  `CREATE SCHEDULE FOR BACKUP TABLE t TO $1 RECURRING NEVER`,
+			query:  `CREATE SCHEDULE FOR BACKUP TABLE t TO $1 RECURRING '@hourly'`,
 			errMsg: "failed to evaluate backup destination paths",
 		},
 		{
 			name:   "missing-encryption-placeholder",
-			query:  `CREATE SCHEDULE FOR BACKUP TABLE t TO 'foo' WITH encryption_passphrase=$1 RECURRING NEVER`,
+			query:  `CREATE SCHEDULE FOR BACKUP TABLE t TO 'foo' WITH encryption_passphrase=$1 RECURRING '@hourly'`,
 			errMsg: "failed to evaluate backup encryption_passphrase",
 		},
 	}
