@@ -36,10 +36,10 @@ type CheckConstraintBuilder struct {
 	inUseNames map[string]struct{}
 }
 
-// NewCheckConstraintBuilder returns a CheckConstraintBuilder struct that can
+// MakeCheckConstraintBuilder returns a CheckConstraintBuilder struct that can
 // be used to build descpb.TableDescriptor_CheckConstraints. See Build for more
 // details.
-func NewCheckConstraintBuilder(
+func MakeCheckConstraintBuilder(
 	ctx context.Context,
 	tableName tree.TableName,
 	desc *sqlbase.MutableTableDescriptor,

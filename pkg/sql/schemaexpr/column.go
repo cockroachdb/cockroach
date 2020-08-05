@@ -253,3 +253,13 @@ func replaceColumnVars(
 
 	return newExpr, colIDs, err
 }
+
+// columnDescriptorsToPtrs returns a list of references to the input
+// ColumnDescriptors.
+func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDescriptor {
+	ptrs := make([]*descpb.ColumnDescriptor, len(cols))
+	for i := range cols {
+		ptrs[i] = &cols[i]
+	}
+	return ptrs
+}

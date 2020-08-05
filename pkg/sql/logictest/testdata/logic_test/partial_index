@@ -2,9 +2,8 @@
 
 # TODO(mgartner): remove this once partial indexes are fully supported.
 statement ok
-SET experimental_partial_indexes=on
-
-#### Validate partial index predicates.
+SET experimental_partial_indexes=on;
+SET experimental_enable_enums = true;
 
 statement ok
 CREATE TABLE t1 (a INT, INDEX (a) WHERE a = 0)
@@ -74,16 +73,15 @@ CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
 statement error no data source matches prefix: unknown.error
 CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
 
-#### Validate CREATE TABLE ... UNIQUE INDEX predicate.
+# Validate CREATE TABLE ... UNIQUE INDEX predicate.
 
 statement ok
 CREATE TABLE t4 (a INT, UNIQUE INDEX (a) WHERE a = 0)
 
-# Don't allow invalid predicates.
 statement error expected index predicate expression to have type bool, but '1' has type int
 CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
 
-#### Validate CREATE INDEX predicate.
+# Validate CREATE INDEX predicate.
 
 statement ok
 CREATE TABLE t5 (a INT)
@@ -99,7 +97,7 @@ CREATE INDEX error ON t5 (a) WHERE 1
 statement error no data source matches prefix: t4
 CREATE INDEX error ON t5 (a) WHERE t4.a = 1
 
-#### Dequalify table references.
+# Dequalify table references.
 
 statement ok
 CREATE TABLE t6 (
@@ -134,7 +132,7 @@ t6  CREATE TABLE public.t6 (
     FAMILY "primary" (a, rowid)
 )
 
-#### Renaming a column updates the index predicates.
+# Renaming a column updates the index predicates.
 
 statement ok
 ALTER TABLE t6 RENAME COLUMN a TO b
@@ -156,7 +154,7 @@ t6  CREATE TABLE public.t6 (
     FAMILY "primary" (b, rowid)
 )
 
-#### Renaming a table keeps the index predicates intact.
+# Renaming a table keeps the index predicates intact.
 
 statement ok
 ALTER TABLE t6 RENAME TO t7
@@ -178,7 +176,7 @@ t7  CREATE TABLE public.t7 (
     FAMILY "primary" (b, rowid)
 )
 
-#### Dropping a column referenced in the predicate drops the index.
+# Dropping a column referenced in the predicate drops the index.
 
 statement ok
 CREATE TABLE t8 (
@@ -203,8 +201,8 @@ t8  CREATE TABLE public.t8 (
     FAMILY fam_0_a_b_c_rowid (a, b, rowid)
 )
 
-#### CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
-#### expressions to the new table.
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
+# expressions to the new table.
 
 statement ok
 CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
@@ -222,7 +220,7 @@ t10  CREATE TABLE public.t10 (
      FAMILY "primary" (a, b, rowid)
 )
 
-#### Update a non-indexed column referenced by the predicate.
+# Update a non-indexed column referenced by the predicate.
 
 statement ok
 CREATE TABLE a (
@@ -236,42 +234,42 @@ CREATE TABLE a (
 )
 
 statement ok
-INSERT INTO a VALUES (1, 1, 1);
+INSERT INTO a VALUES (1, 1, 1)
 
 statement ok
 UPDATE a SET b = b + 1 WHERE a = 1
 
-query III
+query III rowsort
 SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
 ----
 1  2  1
 
-#### Return error if evaluating the predicate errs and do not insert or update
-#### the row.
+# Return error if evaluating the predicate errs and do not insert or update the
+# row.
 
 statement ok
-CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1);
+CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)
 
 statement error division by zero
 INSERT INTO b VALUES (1, 0)
 
-query I
+query I rowsort
 SELECT count(1) FROM b
 ----
 0
 
 statement ok
-INSERT INTO b VALUES (1, 1);
+INSERT INTO b VALUES (1, 1)
 
 statement error division by zero
 UPDATE b SET b = 0 WHERE a = 1
 
-query II
+query II rowsort
 SELECT * FROM b
 ----
 1  1
 
-#### Update two rows where one is in a partial index and one is not.
+# Update two rows where one is in a partial index and one is not.
 
 statement ok
 CREATE TABLE c (
@@ -281,8 +279,7 @@ CREATE TABLE c (
 )
 
 statement ok
-INSERT INTO c VALUES (3, 30);
-INSERT INTO c VALUES (300, 3000)
+INSERT INTO c VALUES (3, 30), (300, 3000)
 
 statement ok
 UPDATE c SET i = i + 1
@@ -292,7 +289,7 @@ SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100
 ----
 3  31
 
-#### Partial index entries are kept consistent throughout multiple mutations.
+# Partial index entries are kept consistent throughout multiple mutations.
 
 statement ok
 CREATE TABLE d (
@@ -308,12 +305,13 @@ CREATE TABLE d (
 # Inserting values populates partial indexes.
 
 statement ok
-INSERT INTO d VALUES (1, 1, 1.0, 'foo', true);
-INSERT INTO d VALUES (2, 2, 2.0, 'foo', false);
-INSERT INTO d VALUES (3, 3, 3.0, 'bar', true);
-INSERT INTO d VALUES (100, 100, 100.0, 'foo', true);
-INSERT INTO d VALUES (200, 200, 200.0, 'foo', false);
-INSERT INTO d VALUES (300, 300, 300.0, 'bar', true);
+INSERT INTO d VALUES
+    (1, 1, 1.0, 'foo', true),
+    (2, 2, 2.0, 'foo', false),
+    (3, 3, 3.0, 'bar', true),
+    (100, 100, 100.0, 'foo', true),
+    (200, 200, 200.0, 'foo', false),
+    (300, 300, 300.0, 'bar', true)
 
 query IIRTB rowsort
 SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
@@ -358,7 +356,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 # Upsert a conflicting row, taking it out of the second partial index.
 
 statement ok
-UPSERT INTO d VALUES (300, 320, 300.0, 'bar', true);
+UPSERT INTO d VALUES (300, 320, 300.0, 'bar', true)
 
 query IIRTB rowsort
 SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
@@ -370,7 +368,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 # Upsert a conflicting row, adding it into the second partial index.
 
 statement ok
-UPSERT INTO d VALUES (300, 330, 300.0, 'foo', true);
+UPSERT INTO d VALUES (300, 330, 300.0, 'foo', true)
 
 query IIRTB rowsort
 SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
@@ -383,7 +381,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 # Upsert a non-conflicting row.
 
 statement ok
-UPSERT INTO d VALUES (400, 400, 400.0, 'foo', true);
+UPSERT INTO d VALUES (400, 400, 400.0, 'foo', true)
 
 query IIRTB rowsort
 SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
@@ -456,6 +454,141 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 300  330  300  foo  true
 400  400  400  foo  true
 
+# Backfill a partial index.
+
+statement ok
+CREATE TABLE e (a INT, b INT)
+
+statement ok
+INSERT INTO e VALUES
+    (1, 10),
+    (2, 20),
+    (3, 30),
+    (4, 40),
+    (5, 50),
+    (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON e (a) WHERE b > 30
+
+# Note: This is guaranteed to be a full scan over the partial index because b
+# is not an indexed column. Therefore, this is a valid way to retrieve all rows
+# that have entries in the partial index.
+query II rowsort
+SELECT * FROM e@a_b_gt_30_idx WHERE b > 30
+----
+4  40
+5  50
+6  60
+
+# Backfill a partial index when a new table is created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE f (a INT, b INT)
+
+statement ok
+INSERT INTO f VALUES (1, 10), (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON f (a) WHERE b > 30
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
+----
+6  60
+
+# Backfill a partial index with a reference to a new column in the predicate.
+
+statement ok
+CREATE TABLE g (a INT)
+
+statement ok
+INSERT INTO g VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE g ADD COLUMN b INT
+
+statement ok
+CREATE INDEX a_b_null_idx ON g (a) WHERE b IS NULL
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM g@a_b_null_idx WHERE b IS NULL
+----
+1  NULL
+
+# Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE h (a INT, b enum)
+
+statement ok
+INSERT INTO h VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+CREATE INDEX a_b_foo_idx ON h (a) WHERE b = 'foo'
+
+query IT rowsort
+SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+# Backfill a partial index with a user defined type when a new table is created
+# in the same transaction.
+# TODO(mgartner): Uncomment this test. This test is fails sporadically with
+# "cannot publish new versions for descriptors ... old versions still in use".
+# This appears unrelated to partial indexes. See issue #52539.
+#
+# statement ok
+# BEGIN
+#
+# statement ok
+# CREATE TABLE i (a INT, b enum)
+#
+# statement ok
+# INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
+#
+# statement ok
+# CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+#
+# statement ok
+# COMMIT
+#
+# query IT rowsort
+# SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+# ----
+# 1  foo
+
+# Add a primary key to a table with a partial index.
+
+statement ok
+CREATE TABLE j (k INT NOT NULL, a INT, INDEX a_gt_5_idx (a) WHERE a > 5)
+
+statement ok
+INSERT INTO j VALUES (1, 1), (6, 6)
+
+statement ok
+ALTER TABLE j ADD PRIMARY KEY (k)
+
+query II rowsort
+SELECT * FROM j@a_gt_5_idx WHERE a > 5
+----
+6  6
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 
@@ -472,7 +605,7 @@ BEGIN; CREATE INDEX i ON t52318 (a) WHERE b > 5
 statement ok
 INSERT INTO t52318 (a, b) VALUES (1, 1), (6, 6)
 
-query II
+query II rowsort
 SELECT * FROM t52318 WHERE b > 5
 ----
 6  6
@@ -480,7 +613,7 @@ SELECT * FROM t52318 WHERE b > 5
 statement ok
 UPDATE t52318 SET b = b + 1
 
-query II
+query II rowsort
 SELECT * FROM t52318 WHERE b > 5
 ----
 6  7

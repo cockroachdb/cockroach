@@ -37,7 +37,7 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	builder := NewCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
+	builder := MakeCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
 	builder.MarkNameInUse("check_a3")
 
 	testData := []struct {
@@ -156,7 +156,7 @@ func TestCheckConstraintBuilder_DefaultName(t *testing.T) {
 		[]testCol{{"c", types.String}, {"d", types.String}, {"e", types.String}},
 	)
 
-	builder := NewCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
+	builder := MakeCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
 
 	testData := []struct {
 		expr     string

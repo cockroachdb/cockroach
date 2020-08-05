@@ -6104,3 +6104,44 @@ CREATE UNIQUE INDEX i ON t.test(v);
 		runTest(params)
 	})
 }
+
+// TestPartialIndexBackfill tests that backfilling a partial index adds the
+// correct number of entries to the index.
+func TestPartialIndexBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET experimental_partial_indexes=on;
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, a INT, b INT);
+INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4);
+CREATE INDEX i ON t.test (a) WHERE b > 2
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	indexDesc, _, err := tableDesc.FindIndexByName("i")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Collect all the keys in the partial index.
+	span := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
+	keys, err := kvDB.Scan(ctx, span.Key, span.EndKey, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	numKeys := len(keys)
+	expectedNumKeys := 2
+	if numKeys != expectedNumKeys {
+		t.Errorf("partial index contains an incorrect number of keys: expected %d, but found %d", expectedNumKeys, numKeys)
+	}
+}
