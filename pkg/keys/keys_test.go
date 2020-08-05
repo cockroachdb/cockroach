@@ -169,6 +169,70 @@ func TestKeyAddressError(t *testing.T) {
 	}
 }
 
+func TestSpanAddress(t *testing.T) {
+	testCases := []struct {
+		span       roachpb.Span
+		expAddress roachpb.RSpan
+	}{
+		// Without EndKey.
+		{
+			roachpb.Span{},
+			roachpb.RSpan{},
+		},
+		{
+			roachpb.Span{Key: roachpb.Key{}},
+			roachpb.RSpan{Key: roachpb.RKeyMin},
+		},
+		{
+			roachpb.Span{Key: roachpb.Key("123")},
+			roachpb.RSpan{Key: roachpb.RKey("123")},
+		},
+		{
+			roachpb.Span{Key: RangeDescriptorKey(roachpb.RKey("foo"))},
+			roachpb.RSpan{Key: roachpb.RKey("foo")},
+		},
+		{
+			roachpb.Span{Key: TransactionKey(roachpb.Key("baz"), uuid.MakeV4())},
+			roachpb.RSpan{Key: roachpb.RKey("baz")},
+		},
+		{
+			roachpb.Span{Key: TransactionKey(roachpb.KeyMax, uuid.MakeV4())},
+			roachpb.RSpan{Key: roachpb.RKeyMax},
+		},
+		{
+			roachpb.Span{Key: RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.MakeV4())))},
+			roachpb.RSpan{Key: roachpb.RKey("doubleBaz")},
+		},
+		// With EndKey.
+		{
+			roachpb.Span{Key: roachpb.Key("123"), EndKey: roachpb.Key("456")},
+			roachpb.RSpan{Key: roachpb.RKey("123"), EndKey: roachpb.RKey("456")},
+		},
+		{
+			roachpb.Span{Key: RangeDescriptorKey(roachpb.RKey("foo")), EndKey: RangeDescriptorKey(roachpb.RKey("fop"))},
+			roachpb.RSpan{Key: roachpb.RKey("foo"), EndKey: roachpb.RKey("fop")},
+		},
+		{
+			roachpb.Span{Key: TransactionKey(roachpb.Key("bar"), uuid.MakeV4()), EndKey: TransactionKey(roachpb.Key("baz"), uuid.MakeV4())},
+			roachpb.RSpan{Key: roachpb.RKey("bar"), EndKey: roachpb.RKey("baz")},
+		},
+		{
+			roachpb.Span{
+				Key:    RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBar"), uuid.MakeV4()))),
+				EndKey: RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.MakeV4()))),
+			},
+			roachpb.RSpan{Key: roachpb.RKey("doubleBar"), EndKey: roachpb.RKey("doubleBaz")},
+		},
+	}
+	for i, test := range testCases {
+		if spanAddr, err := SpanAddr(test.span); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if !spanAddr.Equal(test.expAddress) {
+			t.Errorf("%d: expected address for span %q doesn't match %q", i, test.span, test.expAddress)
+		}
+	}
+}
+
 func TestRangeMetaKey(t *testing.T) {
 	testCases := []struct {
 		key, expKey roachpb.RKey

@@ -136,13 +136,7 @@ func (r *Replica) RangeFeed(
 	}
 	ctx := r.AnnotateCtx(stream.Context())
 
-	var rSpan roachpb.RSpan
-	var err error
-	rSpan.Key, err = keys.Addr(args.Span.Key)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-	rSpan.EndKey, err = keys.Addr(args.Span.EndKey)
+	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
 		return roachpb.NewError(err)
 	}

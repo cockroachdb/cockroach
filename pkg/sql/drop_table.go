@@ -368,22 +368,27 @@ func (p *planner) initiateDropTable(
 	}
 
 	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue.
-	ranges, err := ScanMetaKVs(ctx, p.txn, tableDesc.TableSpan(p.ExecCfg().Codec))
-	if err != nil {
-		return err
-	}
-	for _, r := range ranges {
-		var desc roachpb.RangeDescriptor
-		if err := r.ValueProto(&desc); err != nil {
+	// automatically merged by the merge queue. Gate this on being the
+	// system tenant because secondary tenants aren't allowed to scan
+	// the meta ranges directly.
+	if p.ExecCfg().Codec.ForSystemTenant() {
+		span := tableDesc.TableSpan(p.ExecCfg().Codec)
+		ranges, err := ScanMetaKVs(ctx, p.txn, span)
+		if err != nil {
 			return err
 		}
-		if (desc.GetStickyBit() != hlc.Timestamp{}) {
-			// Swallow "key is not the start of a range" errors because it would mean
-			// that the sticky bit was removed and merged concurrently. DROP TABLE
-			// should not fail because of this.
-			if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
 				return err
+			}
+			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+				// Swallow "key is not the start of a range" errors because it would mean
+				// that the sticky bit was removed and merged concurrently. DROP TABLE
+				// should not fail because of this.
+				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
+					return err
+				}
 			}
 		}
 	}

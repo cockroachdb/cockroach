@@ -807,23 +807,19 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	nodeMap := make(map[roachpb.NodeID]int)
 	it := planCtx.spanIter
 	for _, span := range spans {
-		// rspan is the span we are currently partitioning.
-		var rspan roachpb.RSpan
-		var err error
-		if rspan.Key, err = keys.Addr(span.Key); err != nil {
-			return nil, err
-		}
-		if rspan.EndKey, err = keys.Addr(span.EndKey); err != nil {
+		// rSpan is the span we are currently partitioning.
+		rSpan, err := keys.SpanAddr(span)
+		if err != nil {
 			return nil, err
 		}
 
 		var lastNodeID roachpb.NodeID
 		// lastKey maintains the EndKey of the last piece of `span`.
-		lastKey := rspan.Key
+		lastKey := rSpan.Key
 		if log.V(1) {
 			log.Infof(ctx, "partitioning span %s", span)
 		}
-		// We break up rspan into its individual ranges (which may or
+		// We break up rSpan into its individual ranges (which may or
 		// may not be on separate nodes). We then create "partitioned
 		// spans" using the end keys of these individual ranges.
 		for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
@@ -850,8 +846,8 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 
 			// Limit the end key to the end of the span we are resolving.
 			endKey := desc.EndKey
-			if rspan.EndKey.Less(endKey) {
-				endKey = rspan.EndKey
+			if rSpan.EndKey.Less(endKey) {
+				endKey = rSpan.EndKey
 			}
 
 			nodeID := replDesc.NodeID
@@ -887,7 +883,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				})
 			}
 
-			if !endKey.Less(rspan.EndKey) {
+			if !endKey.Less(rSpan.EndKey) {
 				// Done.
 				break
 			}

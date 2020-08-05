@@ -73,16 +73,11 @@ func MisplannedRanges(
 	log.VEvent(ctx, 2, "checking range cache to see if range info updates should be communicated to the gateway")
 	misplanned := make(map[roachpb.RangeID]struct{})
 	for _, sp := range spans {
-		rstart, err := keys.Addr(sp.Key)
+		rSpan, err := keys.SpanAddr(sp)
 		if err != nil {
 			panic(err)
 		}
-		rend, err := keys.Addr(sp.EndKey)
-		if err != nil {
-			panic(err)
-		}
-		rsp := roachpb.RSpan{Key: rstart, EndKey: rend}
-		overlapping := rdc.GetCachedOverlapping(ctx, rsp)
+		overlapping := rdc.GetCachedOverlapping(ctx, rSpan)
 
 		for _, ri := range overlapping {
 			if _, ok := misplanned[ri.Desc.RangeID]; ok {

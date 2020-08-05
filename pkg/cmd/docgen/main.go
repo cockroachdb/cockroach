@@ -24,7 +24,7 @@ func main() {
 	rootCmd := func() *cobra.Command {
 		cmd := &cobra.Command{
 			Use:   "docgen",
-			Short: "docgen generates documentation for cockroachdb's SQL functions and grammar",
+			Short: "docgen generates documentation for cockroachdb's SQL functions, grammar, and HTTP endpoints",
 		}
 		cmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "suppress output where possible")
 		cmd.AddCommand(cmds...)
