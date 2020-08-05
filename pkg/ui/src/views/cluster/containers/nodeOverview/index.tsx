@@ -26,6 +26,8 @@ import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/compone
 import { Button } from "src/components/button";
 import { BackIcon } from "src/components/icon";
 import "./nodeOverview.styl";
+import { LiveBytesTooltip, KeyBytesTooltip, ValueBytesTooltip, IntentBytesTooltip, SystemBytesTooltip, NodeUsedCapacityTooltip, NodeAvailableCapacityTooltip, NodeMaximumCapacityTooltip } from "./tooltips";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -33,17 +35,20 @@ import "./nodeOverview.styl";
  * across the different stores on the node (along with a total value for the
  * node itself).
  */
-function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
-  return <tr className="table__row table__row--body">
-    <td className="table__cell">{ props.title }</td>
-    <td className="table__cell">{ props.valueFn(props.data.metrics) }</td>
+function TableRow( props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode, CellTooltip?: React.FC<TooltipProps>, nodeName?: string }) {
+  const { data, title, valueFn, CellTooltip } = props;
+  return (<tr className="table__row table__row--body">
+    <td className="table__cell">
+      {CellTooltip !== undefined ? <CellTooltip {...props}>{title}</CellTooltip> : title}
+    </td>
+    <td className="table__cell">{ valueFn(data.metrics) }</td>
     {
-      _.map(props.data.store_statuses, (ss) => {
-        return <td key={ss.desc.store_id} className="table__cell">{ props.valueFn(ss.metrics) }</td>;
+      _.map(data.store_statuses, (ss) => {
+        return <td key={ss.desc.store_id} className="table__cell">{ valueFn(ss.metrics) }</td>;
       })
     }
     <td className="table__cell table__cell--filler" />
-  </tr>;
+  </tr>);
 }
 
 interface NodeOverviewProps extends RouteComponentProps {
@@ -122,19 +127,28 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               <tbody>
                 <TableRow data={node}
                           title="Live Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.liveBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.liveBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={LiveBytesTooltip} />
                 <TableRow data={node}
                           title="Key Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.keyBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.keyBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={KeyBytesTooltip} />
                 <TableRow data={node}
                           title="Value Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.valBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.valBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={ValueBytesTooltip} />
                 <TableRow data={node}
                           title="Intent Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.intentBytes])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.intentBytes])}
+                          CellTooltip={IntentBytesTooltip} />
                 <TableRow data={node}
-                          title="Sys Bytes"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.sysBytes])} />
+                          title="System Bytes"
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.sysBytes])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={SystemBytesTooltip} />
                 <TableRow data={node}
                           title="GC Bytes Age"
                           valueFn={(metrics) => metrics[MetricConstants.gcBytesAge].toString()} />
@@ -155,13 +169,19 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                           valueFn={(metrics) => Percentage(metrics[MetricConstants.underReplicatedRanges], metrics[MetricConstants.ranges])} />
                 <TableRow data={node}
                           title="Used Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.usedCapacity])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.usedCapacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeUsedCapacityTooltip} />
                 <TableRow data={node}
                           title="Available Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])} />
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeAvailableCapacityTooltip} />
                 <TableRow data={node}
-                          title="Total Capacity"
-                          valueFn={(metrics) => Bytes(metrics[MetricConstants.capacity])} />
+                          title="Maximum Capacity"
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.capacity])}
+                          nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                          CellTooltip={NodeMaximumCapacityTooltip} />
               </tbody>
             </table>
           </div>

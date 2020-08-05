@@ -98,7 +98,7 @@ export default function(props: ClusterSummaryProps) {
               </>
             )}
           >
-            Capacity Used
+            Capacity Usage
           </Tooltip>
         } value={capacityPercent} format={formatPercentage}>
           <SummaryStatMessage
