@@ -52,13 +52,25 @@ func registerDecommission(r *testRegistry) {
 	{
 		numNodes := 6
 		r.Add(testSpec{
-			Name:       "decommission-recommission",
+			Name:       "decommission/randomized",
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Timeout:    10 * time.Minute,
 			Cluster:    makeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runDecommissionRecommission(ctx, t, c)
+				runDecommissionRandomized(ctx, t, c)
+			},
+		})
+	}
+	{
+		numNodes := 4
+		r.Add(testSpec{
+			Name:       "decommission/mixed-versions",
+			Owner:      OwnerKV,
+			MinVersion: "v20.2.0",
+			Cluster:    makeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
 			},
 		})
 	}
@@ -277,13 +289,13 @@ func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, durati
 	}
 }
 
-// runDecommissionRecommission tests a bunch of node
+// runDecommissionRandomized tests a bunch of node
 // decommissioning/recommissioning procedures, all the while checking for
 // replica movement and appropriate membership status detection behavior. We go
 // through partial decommissioning of random nodes, ensuring we're able to undo
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
-func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
+func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
@@ -311,6 +323,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 			return cur
 		}
 	}
+	firstNodeID := nodeIDs[0]
 
 	h := &decommTestHelper{c: c, t: t}
 	retryOpts := retry.Options{
@@ -318,6 +331,12 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     2,
 	}
+
+	// Sleep for a tiny bit, just to wait for nodes to fully spin up their
+	// servers before attempting to decommission anything. We've seen this fail
+	// if the test runner sends out RPCs too early where the server process
+	// disallows them during bootstrapping (`rpcsAllowedWhileBootstrapping`).
+	time.Sleep(10 * time.Second)
 
 	// Partially decommission then recommission a random node, from another
 	// random node. Run a couple of status checks while doing so.
@@ -640,7 +659,11 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 			}()
 		}
 
-		targetNode := getRandNodeOtherThan(decommissionedNodeA, decommissionedNodeB)
+		// We also have to exclude the first node seeing as how we're going to
+		// wiping it below. Roachprod attempts to initialize a cluster when
+		// starting a "fresh" first node (without an existing bootstrap marker
+		// on disk, which we happen to also be wiping away).
+		targetNode := getRandNodeOtherThan(decommissionedNodeA, decommissionedNodeB, firstNodeID)
 		t.l.Printf("intentionally killing n%d to later decommission it when down\n", targetNode)
 		c.Stop(ctx, c.Node(targetNode))
 
