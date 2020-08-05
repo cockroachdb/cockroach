@@ -333,9 +333,11 @@ func registerTPCC(r *testRegistry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses:   100,
-				Duration:     duration,
-				ExtraRunArgs: "--wait=false --tolerate-errors",
+				Warehouses: 100,
+				Duration:   duration,
+				// For chaos tests, we don't want to use the default method because it
+				// involves preparing statements on all connections (see #51785).
+				ExtraRunArgs: "--method=simple --wait=false --tolerate-errors",
 				Chaos: func() Chaos {
 					return Chaos{
 						Timer: Periodic{
@@ -695,9 +697,15 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
+	method := ""
+	if b.Chaos {
+		// For chaos tests, we don't want to use the default method because it
+		// involves preparing statements on all connections (see #51785).
+		method = "--method=simple"
+	}
 	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
-		"--wait=false --duration=%s --scatter --tolerate-errors {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, roachNodes)
+		"--wait=false --duration=%s --scatter --tolerate-errors %s {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, method, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
@@ -852,7 +860,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				default:
 					panic("unexpected")
 				}
-
+				if b.Chaos {
+					// For chaos tests, we don't want to use the default method because it
+					// involves preparing statements on all connections (see #51785).
+					extraFlags += " --method=simple"
+				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
 				cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+

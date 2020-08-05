@@ -15,6 +15,9 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+// MaxPoints is the maximum number of points segmentize is allowed to generate.
+const MaxPoints = 16336
+
 // SegmentizeGeom returns a modified geom.T having no segment longer
 // than the given maximum segment length.
 // segmentMaxAngleOrLength represents two different things depending
@@ -28,7 +31,7 @@ import (
 func SegmentizeGeom(
 	geometry geom.T,
 	segmentMaxAngleOrLength float64,
-	segmentizeCoords func(geom.Coord, geom.Coord, float64) []float64,
+	segmentizeCoords func(geom.Coord, geom.Coord, float64) ([]float64, error),
 ) (geom.T, error) {
 	if geometry.Empty() {
 		return geometry, nil
@@ -39,9 +42,13 @@ func SegmentizeGeom(
 	case *geom.LineString:
 		var allFlatCoordinates []float64
 		for pointIdx := 1; pointIdx < geometry.NumCoords(); pointIdx++ {
+			coords, err := segmentizeCoords(geometry.Coord(pointIdx-1), geometry.Coord(pointIdx), segmentMaxAngleOrLength)
+			if err != nil {
+				return nil, err
+			}
 			allFlatCoordinates = append(
 				allFlatCoordinates,
-				segmentizeCoords(geometry.Coord(pointIdx-1), geometry.Coord(pointIdx), segmentMaxAngleOrLength)...,
+				coords...,
 			)
 		}
 		// Appending end point as it wasn't included in the iteration of coordinates.
@@ -63,9 +70,13 @@ func SegmentizeGeom(
 	case *geom.LinearRing:
 		var allFlatCoordinates []float64
 		for pointIdx := 1; pointIdx < geometry.NumCoords(); pointIdx++ {
+			coords, err := segmentizeCoords(geometry.Coord(pointIdx-1), geometry.Coord(pointIdx), segmentMaxAngleOrLength)
+			if err != nil {
+				return nil, err
+			}
 			allFlatCoordinates = append(
 				allFlatCoordinates,
-				segmentizeCoords(geometry.Coord(pointIdx-1), geometry.Coord(pointIdx), segmentMaxAngleOrLength)...,
+				coords...,
 			)
 		}
 		// Appending end point as it wasn't included in the iteration of coordinates.
