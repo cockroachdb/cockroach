@@ -686,6 +686,11 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
 }
 
+// Ann is a shortcut for the Annotations from the eval context.
+func (p *planner) Ann() *tree.Annotations {
+	return p.ExtendedEvalContext().EvalContext.Annotations
+}
+
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
 type txnModesSetter interface {

@@ -13,14 +13,12 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -82,7 +80,7 @@ func (p *planner) addEnumValue(
 	return p.writeTypeSchemaChange(
 		ctx,
 		n.desc,
-		tree.AsStringWithFQNames(n.n, p.ExtendedEvalContext().EvalContext.Annotations),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	)
 }
 
@@ -112,7 +110,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 		ctx,
 		n.desc,
 		newName,
-		tree.AsStringWithFQNames(n.n, p.ExtendedEvalContext().EvalContext.Annotations),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
 	}
@@ -137,7 +135,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 		ctx,
 		arrayDesc,
 		newArrayName,
-		tree.AsStringWithFQNames(n.n, p.ExtendedEvalContext().EvalContext.Annotations),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
 	}
@@ -161,16 +159,15 @@ func (p *planner) performRenameTypeDesc(
 		return err
 	}
 	// Construct the new namespace key.
-	b := p.txn.NewBatch()
 	key := catalogkv.MakeObjectNameKey(
 		ctx,
 		p.ExecCfg().Settings,
 		desc.ParentID,
 		desc.ParentSchemaID,
 		newName,
-	).Key(p.ExecCfg().Codec)
-	b.CPut(key, desc.ID, nil /* expected */)
-	return p.txn.Run(ctx, b)
+	)
+
+	return p.writeNameKey(ctx, key, desc.ID)
 }
 
 func (p *planner) renameTypeValue(
@@ -201,7 +198,7 @@ func (p *planner) renameTypeValue(
 	return p.writeTypeSchemaChange(
 		ctx,
 		n.desc,
-		tree.AsStringWithFQNames(n.n, p.ExtendedEvalContext().EvalContext.Annotations),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	)
 }
 
@@ -232,20 +229,15 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	typeDesc.SetParentSchemaID(desiredSchemaID)
 
 	if err := p.writeTypeSchemaChange(
-		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.ExtendedEvalContext().EvalContext.Annotations),
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
 	}
 
 	newKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, typeDesc.Name).Key(p.ExecCfg().Codec)
+		databaseID, desiredSchemaID, typeDesc.Name)
 
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, typeDesc.ID)
-	}
-	b.CPut(newKey, typeDesc.ID, nil)
-	return p.txn.Run(ctx, b)
+	return p.writeNameKey(ctx, newKey, typeDesc.ID)
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
