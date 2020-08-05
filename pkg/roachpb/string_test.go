@@ -16,6 +16,7 @@ import (
 
 	// Hook up the pretty printer.
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,6 +65,7 @@ func TestBatchRequestString(t *testing.T) {
 		0,               // maxOffsetNs
 	)
 	br.Txn = &txn
+	br.WaitPolicy = lock.WaitPolicy_Error
 	for i := 0; i < 100; i++ {
 		var ru roachpb.RequestUnion
 		ru.MustSetInner(&roachpb.GetRequest{})
@@ -73,7 +75,7 @@ func TestBatchRequestString(t *testing.T) {
 	ru.MustSetInner(&roachpb.EndTxnRequest{})
 	br.Requests = append(br.Requests, ru)
 
-	e := fmt.Sprintf(`[txn: %s], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(commit:false tsflex:false) [/Min] `,
+	e := fmt.Sprintf(`[txn: %s], [wait-policy: Error], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(commit:false tsflex:false) [/Min] `,
 		br.Txn.Short())
 	if e != br.String() {
 		t.Fatalf("e = %s\nv = %s", e, br.String())

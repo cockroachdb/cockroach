@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -158,6 +159,25 @@ func (w *lockTableWaiterImpl) WaitOn(
 			state := guard.CurState()
 			switch state.kind {
 			case waitFor, waitForDistinguished:
+				if req.WaitPolicy == lock.WaitPolicy_Error {
+					// If the waiter has an Error wait policy, resolve the conflict
+					// immediately without waiting. If the conflict is a lock then
+					// push the lock holder's transaction using a PUSH_TOUCH to
+					// determine whether the lock is abandoned or whether its holder
+					// is still active. If the conflict is a reservation holder,
+					// raise an error immediately, we know the reservation holder is
+					// active.
+					if state.held {
+						err = w.pushLockTxn(ctx, req, state)
+					} else {
+						err = newWriteIntentErr(state)
+					}
+					if err != nil {
+						return err
+					}
+					continue
+				}
+
 				// waitFor indicates that the request is waiting on another
 				// transaction. This transaction may be the lock holder of a
 				// conflicting lock or the head of a lock-wait queue that the
@@ -411,29 +431,50 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return roachpb.NewError(&roachpb.WriteIntentError{
-			Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
-		})
+		return newWriteIntentErr(ws)
 	}
 
-	// Determine which form of push to use. For read-write conflicts, try to
-	// push the lock holder's timestamp forward so the read request can read
-	// under the lock. For write-write conflicts, try to abort the lock holder
-	// entirely so the write request can revoke and replace the lock with its
-	// own lock.
+	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
 	var pushType roachpb.PushTxnType
-	switch ws.guardAccess {
-	case spanset.SpanReadOnly:
-		pushType = roachpb.PUSH_TIMESTAMP
-		log.VEventf(ctx, 3, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
-	case spanset.SpanReadWrite:
-		pushType = roachpb.PUSH_ABORT
-		log.VEventf(ctx, 3, "pushing txn %s to abort", ws.txn.ID.Short())
+	switch req.WaitPolicy {
+	case lock.WaitPolicy_Block:
+		// This wait policy signifies that the request wants to wait until the
+		// conflicting lock is released. For read-write conflicts, try to push
+		// the lock holder's timestamp forward so the read request can read
+		// under the lock. For write-write conflicts, try to abort the lock
+		// holder entirely so the write request can revoke and replace the lock
+		// with its own lock.
+		switch ws.guardAccess {
+		case spanset.SpanReadOnly:
+			pushType = roachpb.PUSH_TIMESTAMP
+			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
+
+		case spanset.SpanReadWrite:
+			pushType = roachpb.PUSH_ABORT
+			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.ID.Short())
+		}
+
+	case lock.WaitPolicy_Error:
+		// This wait policy signifies that the request wants to raise an error
+		// upon encountering a conflicting lock. We still need to push the lock
+		// holder to ensure that it is active and that this isn't an abandoned
+		// lock, but we push using a PUSH_TOUCH to immediately return an error
+		// if the lock hold is still active.
+		pushType = roachpb.PUSH_TOUCH
+		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.ID.Short())
+
+	default:
+		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
 	}
 
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
+		// If pushing with an Error WaitPolicy and the push fails, then the lock
+		// holder is still active. Transform the error into a WriteIntentError.
+		if _, ok := err.GetDetail().(*roachpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
+			err = newWriteIntentErr(ws)
+		}
 		return err
 	}
 
@@ -663,6 +704,12 @@ func (c *txnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
 func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	copy(c.txns[1:], c.txns[:])
 	c.txns[0] = txn
+}
+
+func newWriteIntentErr(ws waitingState) *Error {
+	return roachpb.NewError(&roachpb.WriteIntentError{
+		Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
+	})
 }
 
 func hasMinPriority(txn *enginepb.TxnMeta) bool {

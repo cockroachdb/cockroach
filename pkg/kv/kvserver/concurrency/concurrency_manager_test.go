@@ -53,7 +53,7 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [maxts=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [consistency]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name>
 // finish       req=<req-name>
@@ -149,6 +149,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					readConsistency = roachpb.INCONSISTENT
 				}
 
+				waitPolicy := scanWaitPolicy(t, d, false /* required */)
+
 				// Each roachpb.Request is provided on an indented line.
 				var reqs []roachpb.Request
 				singleReqLines := strings.Split(d.Input, "\n")
@@ -167,6 +169,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					Timestamp: ts,
 					// TODO(nvanbenschoten): test Priority
 					ReadConsistency: readConsistency,
+					WaitPolicy:      waitPolicy,
 					Requests:        reqUnions,
 					LatchSpans:      latchSpans,
 					LockSpans:       lockSpans,
@@ -563,13 +566,19 @@ func (c *cluster) PushTransaction(
 		switch pushType {
 		case roachpb.PUSH_TIMESTAMP:
 			pushed = h.Timestamp.Less(pusheeTxn.WriteTimestamp) || pusheeTxn.Status.IsFinalized()
-		case roachpb.PUSH_ABORT:
+		case roachpb.PUSH_ABORT, roachpb.PUSH_TOUCH:
 			pushed = pusheeTxn.Status.IsFinalized()
 		default:
 			return nil, roachpb.NewErrorf("unexpected push type: %s", pushType)
 		}
 		if pushed {
 			return pusheeTxn, nil
+		}
+		// If PUSH_TOUCH, return error instead of waiting.
+		if pushType == roachpb.PUSH_TOUCH {
+			log.Eventf(ctx, "pushee not abandoned")
+			err := roachpb.NewTransactionPushError(*pusheeTxn)
+			return nil, roachpb.NewError(err)
 		}
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}

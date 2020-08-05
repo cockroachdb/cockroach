@@ -35649,6 +35649,7 @@ const int Header::kRangeIdFieldNumber;
 const int Header::kUserPriorityFieldNumber;
 const int Header::kTxnFieldNumber;
 const int Header::kReadConsistencyFieldNumber;
+const int Header::kWaitPolicyFieldNumber;
 const int Header::kMaxSpanRequestKeysFieldNumber;
 const int Header::kTargetBytesFieldNumber;
 const int Header::kDistinctSpansFieldNumber;
@@ -35691,15 +35692,15 @@ Header::Header(const Header& from)
     client_range_info_ = NULL;
   }
   ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&can_forward_read_timestamp_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(can_forward_read_timestamp_));
+    static_cast<size_t>(reinterpret_cast<char*>(&target_bytes_) -
+    reinterpret_cast<char*>(&range_id_)) + sizeof(target_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Header)
 }
 
 void Header::SharedCtor() {
   ::memset(&timestamp_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&can_forward_read_timestamp_) -
-      reinterpret_cast<char*>(&timestamp_)) + sizeof(can_forward_read_timestamp_));
+      reinterpret_cast<char*>(&target_bytes_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(target_bytes_));
 }
 
 Header::~Header() {
@@ -35746,8 +35747,8 @@ void Header::Clear() {
   }
   client_range_info_ = NULL;
   ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&can_forward_read_timestamp_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(can_forward_read_timestamp_));
+      reinterpret_cast<char*>(&target_bytes_) -
+      reinterpret_cast<char*>(&range_id_)) + sizeof(target_bytes_));
   _internal_metadata_.Clear();
 }
 
@@ -35951,6 +35952,21 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+      case 18: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(144u /* 144 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_wait_policy(static_cast< ::cockroach::kv::kvserver::concurrency::lock::WaitPolicy >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -36047,6 +36063,12 @@ void Header::SerializeWithCachedSizes(
       17, this->_internal_client_range_info(), output);
   }
 
+  // .cockroach.kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  if (this->wait_policy() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      18, this->wait_policy(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Header)
@@ -36113,13 +36135,6 @@ size_t Header::ByteSizeLong() const {
         this->gateway_node_id());
   }
 
-  // int64 target_bytes = 15;
-  if (this->target_bytes() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->target_bytes());
-  }
-
   // bool distinct_spans = 9;
   if (this->distinct_spans() != 0) {
     total_size += 1 + 1;
@@ -36138,6 +36153,19 @@ size_t Header::ByteSizeLong() const {
   // bool can_forward_read_timestamp = 16;
   if (this->can_forward_read_timestamp() != 0) {
     total_size += 2 + 1;
+  }
+
+  // .cockroach.kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  if (this->wait_policy() != 0) {
+    total_size += 2 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->wait_policy());
+  }
+
+  // int64 target_bytes = 15;
+  if (this->target_bytes() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->target_bytes());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -36184,9 +36212,6 @@ void Header::MergeFrom(const Header& from) {
   if (from.gateway_node_id() != 0) {
     set_gateway_node_id(from.gateway_node_id());
   }
-  if (from.target_bytes() != 0) {
-    set_target_bytes(from.target_bytes());
-  }
   if (from.distinct_spans() != 0) {
     set_distinct_spans(from.distinct_spans());
   }
@@ -36198,6 +36223,12 @@ void Header::MergeFrom(const Header& from) {
   }
   if (from.can_forward_read_timestamp() != 0) {
     set_can_forward_read_timestamp(from.can_forward_read_timestamp());
+  }
+  if (from.wait_policy() != 0) {
+    set_wait_policy(from.wait_policy());
+  }
+  if (from.target_bytes() != 0) {
+    set_target_bytes(from.target_bytes());
   }
 }
 
@@ -36227,11 +36258,12 @@ void Header::InternalSwap(Header* other) {
   swap(max_span_request_keys_, other->max_span_request_keys_);
   swap(read_consistency_, other->read_consistency_);
   swap(gateway_node_id_, other->gateway_node_id_);
-  swap(target_bytes_, other->target_bytes_);
   swap(distinct_spans_, other->distinct_spans_);
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
   swap(can_forward_read_timestamp_, other->can_forward_read_timestamp_);
+  swap(wait_policy_, other->wait_policy_);
+  swap(target_bytes_, other->target_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

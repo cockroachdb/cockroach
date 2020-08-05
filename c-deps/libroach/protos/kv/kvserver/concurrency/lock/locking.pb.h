@@ -83,6 +83,17 @@ const Durability Durability_MIN = Replicated;
 const Durability Durability_MAX = Unreplicated;
 const int Durability_ARRAYSIZE = Durability_MAX + 1;
 
+enum WaitPolicy {
+  Block = 0,
+  Error = 1,
+  WaitPolicy_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  WaitPolicy_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool WaitPolicy_IsValid(int value);
+const WaitPolicy WaitPolicy_MIN = Block;
+const WaitPolicy WaitPolicy_MAX = Error;
+const int WaitPolicy_ARRAYSIZE = WaitPolicy_MAX + 1;
+
 // ===================================================================
 
 
@@ -112,6 +123,7 @@ namespace protobuf {
 
 template <> struct is_proto_enum< ::cockroach::kv::kvserver::concurrency::lock::Strength> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::kv::kvserver::concurrency::lock::Durability> : ::std::true_type {};
+template <> struct is_proto_enum< ::cockroach::kv::kvserver::concurrency::lock::WaitPolicy> : ::std::true_type {};
 
 }  // namespace protobuf
 }  // namespace google
