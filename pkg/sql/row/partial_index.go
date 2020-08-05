@@ -47,7 +47,7 @@ func (pm *PartialIndexUpdateHelper) Init(
 ) error {
 	colIdx := 0
 	partialIndexOrds := tabDesc.PartialIndexOrds()
-	indexes := tabDesc.Indexes
+	indexes := tabDesc.DeletableIndexes()
 
 	for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
 		index := &indexes[i]
