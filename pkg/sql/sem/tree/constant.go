@@ -63,11 +63,20 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
+// isDefiniteType returns true if t is not Any or an Array of Any (or Array of
+// Array of Any, etc).
+func isDefiniteType(t *types.T) bool {
+	if t.Family() == types.ArrayFamily {
+		return isDefiniteType(t.ArrayContents())
+	}
+	return t.Family() != types.AnyFamily
+}
+
 func typeCheckConstant(
 	ctx context.Context, semaCtx *SemaContext, c Constant, desired *types.T,
 ) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired.Family() != types.AnyFamily {
+	if isDefiniteType(desired) {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, semaCtx, desired)
