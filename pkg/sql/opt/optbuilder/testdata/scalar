@@ -759,6 +759,20 @@ eq [type=bool]
       ├── const: 'bar' [type=string]
       └── const: 'baz' [type=string]
 
+build-scalar
+'{"x": "bar"}' -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
+
+build-scalar
+('{"x": "bar"}') -> 'x'
+----
+fetch-val [type=jsonb]
+ ├── const: '{"x": "bar"}' [type=jsonb]
+ └── const: 'x' [type=string]
+
 build-scalar vars=(json)
 @1->>'a' = 'b'
 ----
