@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,7 +72,7 @@ func GenerateSubzoneSpans(
 	st *cluster.Settings,
 	clusterID uuid.UUID,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc sqlbase.TableDescriptor,
 	subzones []zonepb.Subzone,
 	hasNewSubzones bool,
 ) ([]zonepb.SubzoneSpan, error) {
@@ -86,19 +87,19 @@ func GenerateSubzoneSpans(
 
 	a := &sqlbase.DatumAlloc{}
 
-	subzoneIndexByIndexID := make(map[sqlbase.IndexID]int32)
+	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
 	subzoneIndexByPartition := make(map[string]int32)
 	for i, subzone := range subzones {
 		if len(subzone.PartitionName) > 0 {
 			subzoneIndexByPartition[subzone.PartitionName] = int32(i)
 		} else {
-			subzoneIndexByIndexID[sqlbase.IndexID(subzone.IndexID)] = int32(i)
+			subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)] = int32(i)
 		}
 	}
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *sqlbase.IndexDescriptor) error {
+	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
 		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
 		if indexSubzoneExists {
 			idxSpan := tableDesc.IndexSpan(codec, idxDesc.ID)
@@ -135,7 +136,7 @@ func GenerateSubzoneSpans(
 
 	// NB: This assumes that none of the indexes are interleaved, which is
 	// checked in PartitionDescriptor validation.
-	sharedPrefix := codec.TablePrefix(uint32(tableDesc.ID))
+	sharedPrefix := codec.TablePrefix(uint32(tableDesc.GetID()))
 
 	var subzoneSpans []zonepb.SubzoneSpan
 	for _, r := range ranges {
@@ -151,7 +152,7 @@ func GenerateSubzoneSpans(
 		if subzone := payloads[0].(zonepb.Subzone); len(subzone.PartitionName) > 0 {
 			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[subzone.PartitionName]
 		} else {
-			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[sqlbase.IndexID(subzone.IndexID)]
+			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)]
 		}
 		if !ok {
 			continue
@@ -171,9 +172,9 @@ func GenerateSubzoneSpans(
 func indexCoveringsForPartitioning(
 	a *sqlbase.DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.TableDescriptor,
-	idxDesc *sqlbase.IndexDescriptor,
-	partDesc *sqlbase.PartitioningDescriptor,
+	tableDesc sqlbase.TableDescriptor,
+	idxDesc *descpb.IndexDescriptor,
+	partDesc *descpb.PartitioningDescriptor,
 	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
 ) ([]covering.Covering, error) {

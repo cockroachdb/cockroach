@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -552,7 +552,7 @@ func (c *transientCluster) getNetworkURLForServer(
 ) (string, error) {
 	options := url.Values{}
 	if includeAppName {
-		options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
+		options.Add("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo")
 	}
 	sqlURL := url.URL{
 		Scheme: "postgres",

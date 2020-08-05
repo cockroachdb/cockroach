@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -887,7 +888,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						for _, tableName := range errorOriginSpec.tableNames {
 							filters[nodeIdx].tableIDsToFilter = append(
 								filters[nodeIdx].tableIDsToFilter,
-								int(sqlbase.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).ID),
+								int(catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).ID),
 							)
 						}
 						filters[nodeIdx].Unlock()

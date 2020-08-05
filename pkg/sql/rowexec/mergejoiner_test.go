@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,7 +59,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -94,7 +95,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
@@ -135,7 +136,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:   sqlbase.InnerJoin,
+				Type:   descpb.InnerJoin,
 				OnExpr: execinfrapb.Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
@@ -186,7 +187,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:   sqlbase.FullOuterJoin,
+				Type:   descpb.FullOuterJoin,
 				OnExpr: execinfrapb.Expression{Expr: "@2 >= @4"},
 				// Implicit AND @1 = @3 constraint.
 			},
@@ -251,7 +252,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftOuterJoin,
+				Type: descpb.LeftOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -290,7 +291,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.RightOuterJoin,
+				Type: descpb.RightOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{3, 1, 2},
@@ -329,7 +330,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.FullOuterJoin,
+				Type: descpb.FullOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -370,7 +371,7 @@ func TestMergeJoiner(t *testing.T) {
 						{ColIdx: 0, Direction: encoding.Ascending},
 						{ColIdx: 1, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.FullOuterJoin,
+				Type: descpb.FullOuterJoin,
 			},
 			outCols:   []uint32{0, 1, 2, 3},
 			leftTypes: sqlbase.TwoIntCols,
@@ -408,7 +409,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.InnerJoin,
+				Type: descpb.InnerJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.OneIntCol,
@@ -436,7 +437,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftSemiJoin,
+				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -467,7 +468,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftSemiJoin,
+				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -501,7 +502,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftSemiJoin,
+				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -531,7 +532,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:   sqlbase.LeftSemiJoin,
+				Type:   descpb.LeftSemiJoin,
 				OnExpr: execinfrapb.Expression{Expr: "@1 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
@@ -578,7 +579,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftAntiJoin,
+				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -611,7 +612,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type: sqlbase.LeftAntiJoin,
+				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
 			leftTypes: sqlbase.TwoIntCols,
@@ -641,7 +642,7 @@ func TestMergeJoiner(t *testing.T) {
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
-				Type:   sqlbase.LeftAntiJoin,
+				Type:   descpb.LeftAntiJoin,
 				OnExpr: execinfrapb.Expression{Expr: "@1 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
@@ -754,7 +755,7 @@ func TestConsumerClosed(t *testing.T) {
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
@@ -762,12 +763,12 @@ func TestConsumerClosed(t *testing.T) {
 	rightTypes := sqlbase.OneIntCol
 
 	testCases := []struct {
-		typ       sqlbase.JoinType
+		typ       descpb.JoinType
 		leftRows  sqlbase.EncDatumRows
 		rightRows sqlbase.EncDatumRows
 	}{
 		{
-			typ: sqlbase.InnerJoin,
+			typ: descpb.InnerJoin,
 			// Implicit @1 = @2 constraint.
 			leftRows: sqlbase.EncDatumRows{
 				{v[0]},
@@ -777,7 +778,7 @@ func TestConsumerClosed(t *testing.T) {
 			},
 		},
 		{
-			typ: sqlbase.LeftOuterJoin,
+			typ: descpb.LeftOuterJoin,
 			// Implicit @1 = @2 constraint.
 			leftRows: sqlbase.EncDatumRows{
 				{v[0]},
@@ -785,7 +786,7 @@ func TestConsumerClosed(t *testing.T) {
 			rightRows: sqlbase.EncDatumRows{},
 		},
 		{
-			typ: sqlbase.RightOuterJoin,
+			typ: descpb.RightOuterJoin,
 			// Implicit @1 = @2 constraint.
 			leftRows: sqlbase.EncDatumRows{},
 			rightRows: sqlbase.EncDatumRows{
@@ -845,7 +846,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	post := &execinfrapb.PostProcessSpec{}

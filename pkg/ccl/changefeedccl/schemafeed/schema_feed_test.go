@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,7 +25,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
-	validateFn := func(_ context.Context, desc *sqlbase.TableDescriptor) error {
+	validateFn := func(_ context.Context, desc *sqlbase.ImmutableTableDescriptor) error {
 		if desc.Name != `` {
 			return errors.Newf("descriptor: %s", desc.Name)
 		}
@@ -66,8 +67,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.Equal(t, ts(3), m.highWater())
 
 	// validates
-	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*sqlbase.TableDescriptor{
-		{ID: 0},
+	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*sqlbase.ImmutableTableDescriptor{
+		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0}),
 	}, validateFn))
 	require.Equal(t, ts(4), m.highWater())
 
@@ -106,8 +107,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*sqlbase.TableDescriptor{
-		{ID: 0, Name: `whoops!`},
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*sqlbase.ImmutableTableDescriptor{
+		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0, Name: `whoops!`}),
 	}, validateFn), `descriptor: whoops!`)
 	require.Equal(t, ts(7), m.highWater())
 
@@ -123,8 +124,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*sqlbase.TableDescriptor{
-		{ID: 0, Name: `oh no!`},
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*sqlbase.ImmutableTableDescriptor{
+		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0, Name: `oh no!`}),
 	}, validateFn), `descriptor: oh no!`)
 	require.Equal(t, ts(7), m.highWater())
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)

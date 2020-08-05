@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +53,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (ID->name) of tables to truncate.
-	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
+	toTruncate := make(map[descpb.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
@@ -81,7 +82,7 @@ func (t *truncateNode) startExec(params runParams) error {
 		tableDesc := toTraverse[idx]
 		toTraverse = toTraverse[:idx]
 
-		maybeEnqueue := func(tableID sqlbase.ID, msg string) error {
+		maybeEnqueue := func(tableID descpb.ID, msg string) error {
 			// Check if we're already truncating the referencing table.
 			if _, ok := toTruncate[tableID]; ok {
 				return nil
@@ -97,7 +98,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 				return err
 			}
-			otherName, err := p.getQualifiedTableName(ctx, other.TableDesc())
+			otherName, err := p.getQualifiedTableName(ctx, other)
 			if err != nil {
 				return err
 			}
@@ -160,7 +161,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(
-	ctx context.Context, id sqlbase.ID, jobDesc string, traceKV bool,
+	ctx context.Context, id descpb.ID, jobDesc string, traceKV bool,
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -217,12 +218,12 @@ func (p *planner) truncateTable(
 	if changed, err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
 		return err
 	} else if changed {
-		newTableDesc.State = sqlbase.TableDescriptor_ADD
+		newTableDesc.State = descpb.TableDescriptor_ADD
 	}
 
 	for _, table := range tables {
 		if err := p.writeSchemaChange(
-			ctx, table, sqlbase.InvalidMutationID, "updating reference for truncated table",
+			ctx, table, descpb.InvalidMutationID, "updating reference for truncated table",
 		); err != nil {
 			return err
 		}
@@ -234,7 +235,7 @@ func (p *planner) truncateTable(
 	); err != nil {
 		return err
 	} else if changed {
-		newTableDesc.State = sqlbase.TableDescriptor_ADD
+		newTableDesc.State = descpb.TableDescriptor_ADD
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -248,7 +249,7 @@ func (p *planner) truncateTable(
 	newTableDesc.GCMutations = nil
 	// NB: Set the modification time to a zero value so that it is interpreted
 	// as the commit timestamp for the new descriptor. See the comment on
-	// sqlbase.Descriptor.Table().
+	// descpb.Descriptor.Table().
 	newTableDesc.ModificationTime = hlc.Timestamp{}
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings,
@@ -325,11 +326,11 @@ func (p *planner) findAllReferences(
 
 // reassign all the references from oldID to newID.
 func reassignReferencedTables(
-	tables []*sqlbase.MutableTableDescriptor, oldID, newID sqlbase.ID,
+	tables []*sqlbase.MutableTableDescriptor, oldID, newID descpb.ID,
 ) (bool, error) {
 	changed := false
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
 			for j, a := range index.Interleave.Ancestors {
 				if a.TableID == oldID {
 					index.Interleave.Ancestors[j].TableID = newID
@@ -409,7 +410,7 @@ func ClearTableDataInChunks(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
@@ -425,7 +426,7 @@ func ClearTableDataInChunks(
 				ctx,
 				txn,
 				codec,
-				sqlbase.NewImmutableTableDescriptor(*tableDesc),
+				tableDesc,
 				nil,
 				alloc,
 			)
@@ -450,6 +451,6 @@ func ClearTableDataInChunks(
 // key from a single span.
 // This determines whether an index is dropped during a schema change, or if
 // it is only deleted upon GC.
-func canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
+func canClearRangeForDrop(index *descpb.IndexDescriptor) bool {
 	return !index.IsInterleaved()
 }

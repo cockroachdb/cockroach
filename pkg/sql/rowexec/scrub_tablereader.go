@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -45,7 +46,7 @@ var ScrubTypes = []*types.T{
 
 type scrubTableReader struct {
 	tableReader
-	tableDesc sqlbase.TableDescriptor
+	tableDesc sqlbase.ImmutableTableDescriptor
 	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -76,7 +77,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = spec.Table
+	tr.tableDesc = sqlbase.MakeImmutableTableDescriptor(spec.Table)
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(
@@ -110,8 +111,8 @@ func newScrubTableReader(
 			tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
 		}
 	} else {
-		colIdxMap := spec.Table.ColumnIdxMap()
-		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id sqlbase.ColumnID) error {
+		colIdxMap := tr.tableDesc.ColumnIdxMap()
+		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
 			neededColumns.Add(colIdxMap[id])
 			return nil
 		})
@@ -145,7 +146,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	row sqlbase.EncDatumRow, scrubErr *scrub.Error,
 ) (sqlbase.EncDatumRow, error) {
 	details := make(map[string]interface{})
-	var index *sqlbase.IndexDescriptor
+	var index *descpb.IndexDescriptor
 	if tr.indexIdx == 0 {
 		index = &tr.tableDesc.PrimaryIndex
 	} else {
@@ -167,7 +168,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 		return nil, err
 	}
 
-	primaryKeyValues := tr.prettyPrimaryKeyValues(row, &tr.tableDesc)
+	primaryKeyValues := tr.prettyPrimaryKeyValues(row, tr.tableDesc.TableDesc())
 	return sqlbase.EncDatumRow{
 		sqlbase.DatumToEncDatum(
 			ScrubTypes[0],
@@ -185,14 +186,14 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 }
 
 func (tr *scrubTableReader) prettyPrimaryKeyValues(
-	row sqlbase.EncDatumRow, table *sqlbase.TableDescriptor,
+	row sqlbase.EncDatumRow, table *descpb.TableDescriptor,
 ) string {
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	colIdxMap := make(map[descpb.ColumnID]int, len(table.Columns))
 	for i := range table.Columns {
 		id := table.Columns[i].ID
 		colIdxMap[id] = i
 	}
-	colIDToRowIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	colIDToRowIdxMap := make(map[descpb.ColumnID]int, len(table.Columns))
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
 		colIDToRowIdxMap[tr.tableDesc.Columns[colIdx].ID] = rowIdx
 	}

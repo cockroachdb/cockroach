@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -76,7 +77,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 	}
 
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
+		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // renameColumn will rename the column in tableDesc from oldName to newName.
@@ -124,11 +125,11 @@ func (p *planner) renameColumn(
 	_, columnNotFoundErr := tableDesc.FindActiveColumnByName(string(*newName))
 	if m := tableDesc.FindColumnMutationByName(*newName); m != nil {
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case descpb.DescriptorMutation_ADD:
 			return false, pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public",
 				col.Name)
-		case sqlbase.DescriptorMutation_DROP:
+		case descpb.DescriptorMutation_DROP:
 			return false, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q being dropped, try again later", col.Name)
 		default:
@@ -178,7 +179,7 @@ func (p *planner) renameColumn(
 	// Rename the column in hash-sharded index descriptors. Potentially rename the
 	// shard column too if we haven't already done it.
 	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
-	maybeUpdateShardedDesc := func(shardedDesc *sqlbase.ShardedDescriptor) {
+	maybeUpdateShardedDesc := func(shardedDesc *descpb.ShardedDescriptor) {
 		if !shardedDesc.IsSharded {
 			return
 		}

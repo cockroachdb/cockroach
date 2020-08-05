@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -40,28 +40,28 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 	}{
 		{ // Just a simple Message
 			pbname: "cockroach.sql.sqlbase.Descriptor",
-			message: &sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{
-					Table: &sqlbase.TableDescriptor{Name: "the table"},
+			message: &descpb.Descriptor{
+				Union: &descpb.Descriptor_Table{
+					Table: &descpb.TableDescriptor{Name: "the table"},
 				},
 			},
 		},
 		{ // Message with an array
 			pbname: "cockroach.sql.sqlbase.ColumnDescriptor",
-			message: &sqlbase.ColumnDescriptor{
+			message: &descpb.ColumnDescriptor{
 				Name:            "column",
 				ID:              123,
-				OwnsSequenceIds: []sqlbase.ID{3, 2, 1},
+				OwnsSequenceIds: []descpb.ID{3, 2, 1},
 			},
 		},
 		{ // Message with an array and other embedded descriptors
 			pbname: "cockroach.sql.sqlbase.IndexDescriptor",
-			message: &sqlbase.IndexDescriptor{
+			message: &descpb.IndexDescriptor{
 				Name:             "myidx",
 				ID:               42,
 				Unique:           true,
 				ColumnNames:      []string{"foo", "bar", "buz"},
-				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				GeoConfig: geoindex.Config{
 					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
 						MinLevel: 123,
@@ -80,12 +80,12 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 			message: &tracing.RecordedSpan{
 				TraceID: 123,
 				Tags:    map[string]string{"one": "1", "two": "2", "three": "3"},
-				Stats:   makeAny(t, &sqlbase.ColumnDescriptor{Name: "bogus stats"}),
+				Stats:   makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"}),
 			},
 		},
 		{ // Message deeply nested inside other message
 			pbname:  "cockroach.sql.sqlbase.TableDescriptor.SequenceOpts.SequenceOwner",
-			message: &sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{OwnerColumnID: 123},
+			message: &descpb.TableDescriptor_SequenceOpts_SequenceOwner{OwnerColumnID: 123},
 		},
 	} {
 		t.Run(tc.pbname, func(t *testing.T) {

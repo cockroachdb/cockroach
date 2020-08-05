@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -149,7 +150,7 @@ func (dv *datumVec) Cap() int {
 func (dv *datumVec) MarshalAt(i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
 	return sqlbase.EncodeTableValue(
-		nil /* appendTo */, sqlbase.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
+		nil /* appendTo */, descpb.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
 	)
 }
 

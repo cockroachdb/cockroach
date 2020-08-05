@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -131,17 +132,13 @@ func (src *DataSourceInfo) String() string {
 		buf.WriteString(c.Name)
 	}
 	buf.WriteString("\toutput column names\n")
-	if src.SourceAlias == AnonymousTable {
+	if src.SourceAlias == descpb.AnonymousTable {
 		buf.WriteString("\t<anonymous table>\n")
 	} else {
 		fmt.Fprintf(&buf, "\t'%s'\n", src.SourceAlias.String())
 	}
 	return buf.String()
 }
-
-// AnonymousTable is the empty table name, used when a data source
-// has no own name, e.g. VALUES, subqueries or the empty source.
-var AnonymousTable = tree.TableName{}
 
 // NewSourceInfoForSingleTable creates a simple DataSourceInfo
 // which maps the same tableAlias to all columns.

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -101,7 +102,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
+		desc := table.Column(c).(*descpb.ColumnDescriptor)
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg
@@ -251,7 +252,7 @@ func constructVirtualScan(
 	}
 	indexDesc := index.(*optVirtualIndex).desc
 	columns, constructor := virtual.getPlanInfo(
-		table.(*optVirtualTable).desc.TableDesc(),
+		table.(*optVirtualTable).desc,
 		indexDesc, params.IndexConstraint)
 
 	n, err := delayedNodeCallback(&delayedNode{
@@ -306,10 +307,10 @@ func constructVirtualScan(
 
 func collectSystemColumnsFromCfg(
 	colCfg *scanColumnsConfig,
-) (systemColumns []sqlbase.SystemColumnKind, systemColumnOrdinals []int) {
+) (systemColumns []descpb.SystemColumnKind, systemColumnOrdinals []int) {
 	for i, id := range colCfg.wantedColumns {
-		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(sqlbase.ColumnID(id))
-		if sysColKind != sqlbase.SystemColumnKind_NONE {
+		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(descpb.ColumnID(id))
+		if sysColKind != descpb.SystemColumnKind_NONE {
 			// The scan is requested to produce a system column.
 			systemColumns = append(systemColumns, sysColKind)
 			systemColumnOrdinals = append(systemColumnOrdinals, i)

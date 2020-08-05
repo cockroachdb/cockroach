@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -19,7 +20,7 @@ import (
 )
 
 type setOpTestCase struct {
-	setOpType   sqlbase.JoinType
+	setOpType   descpb.JoinType
 	columnTypes []*types.T
 	ordering    sqlbase.ColumnOrdering
 	leftInput   sqlbase.EncDatumRows
@@ -87,7 +88,7 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL only returns rows that are in both the left
 			// and right side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -132,7 +133,7 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -170,7 +171,7 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -220,7 +221,7 @@ func exceptAllTestCases() []setOpTestCase {
 		{
 			// Check that EXCEPT ALL only returns rows that are on the left side
 			// but not the right side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -260,7 +261,7 @@ func exceptAllTestCases() []setOpTestCase {
 		{
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -296,7 +297,7 @@ func exceptAllTestCases() []setOpTestCase {
 		{
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, null},
@@ -328,7 +329,7 @@ func exceptAllTestCases() []setOpTestCase {
 		},
 		{
 			// Check that EXCEPT ALL handles mixed ordering correctly.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			ordering: sqlbase.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Descending},

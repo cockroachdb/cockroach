@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -122,7 +123,7 @@ func GenerateValuesSpec(
 	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
 	for i := range spec.Columns {
 		spec.Columns[i].Type = colTypes[i]
-		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		spec.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 	}
 
 	var a sqlbase.DatumAlloc

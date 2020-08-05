@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -56,9 +57,9 @@ type tableInfo struct {
 	// want to scan.
 	spans            roachpb.Spans
 	desc             *sqlbase.ImmutableTableDescriptor
-	index            *sqlbase.IndexDescriptor
+	index            *descpb.IndexDescriptor
 	isSecondaryIndex bool
-	indexColumnDirs  []sqlbase.IndexDescriptor_Direction
+	indexColumnDirs  []descpb.IndexDescriptor_Direction
 	// equivSignature is an equivalence class for each unique table-index
 	// pair. It allows us to check if an index key belongs to a given
 	// table-index.
@@ -66,7 +67,7 @@ type tableInfo struct {
 
 	// The table columns to use for fetching, possibly including ones currently in
 	// schema changes.
-	cols []sqlbase.ColumnDescriptor
+	cols []descpb.ColumnDescriptor
 
 	// The set of ColumnIDs that are required.
 	neededCols util.FastIntSet
@@ -81,7 +82,7 @@ type tableInfo struct {
 	neededValueCols int
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap map[descpb.ColumnID]int
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -139,10 +140,10 @@ type FetcherTableArgs struct {
 	// table.
 	Spans            roachpb.Spans
 	Desc             *sqlbase.ImmutableTableDescriptor
-	Index            *sqlbase.IndexDescriptor
-	ColIdxMap        map[sqlbase.ColumnID]int
+	Index            *descpb.IndexDescriptor
+	ColIdxMap        map[descpb.ColumnID]int
 	IsSecondaryIndex bool
-	Cols             []sqlbase.ColumnDescriptor
+	Cols             []descpb.ColumnDescriptor
 	// The indexes (0 to # of columns - 1) of the columns to return.
 	ValNeededForCol util.FastIntSet
 }
@@ -198,7 +199,7 @@ type Fetcher struct {
 	mustDecodeIndexKey bool
 
 	// lockStr represents the row-level locking mode to use when fetching rows.
-	lockStr sqlbase.ScanLockingStrength
+	lockStr descpb.ScanLockingStrength
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
@@ -251,7 +252,7 @@ func (rf *Fetcher) Reset() {
 func (rf *Fetcher) Init(
 	codec keys.SQLCodec,
 	reverse bool,
-	lockStr sqlbase.ScanLockingStrength,
+	lockStr descpb.ScanLockingStrength,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	tables ...FetcherTableArgs,
@@ -340,7 +341,7 @@ func (rf *Fetcher) Init(
 				table.neededCols.Add(int(col))
 				// If this column is the timestamp column, set up the output index.
 				sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
-				if sysColKind == sqlbase.SystemColumnKind_MVCCTIMESTAMP {
+				if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
 					table.timestampOutputIdx = idx
 					rf.mvccDecodeStrategy = MVCCDecodingRequired
 				}
@@ -348,10 +349,10 @@ func (rf *Fetcher) Init(
 		}
 
 		table.knownPrefixLength = len(
-			sqlbase.MakeIndexKeyPrefix(codec, table.desc.TableDesc(), table.index.ID),
+			sqlbase.MakeIndexKeyPrefix(codec, table.desc, table.index.ID),
 		)
 
-		var indexColumnIDs []sqlbase.ColumnID
+		var indexColumnIDs []descpb.ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
 		table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
@@ -415,7 +416,7 @@ func (rf *Fetcher) Init(
 		}
 
 		// Prepare our index key vals slice.
-		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
+		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc, indexColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -431,7 +432,7 @@ func (rf *Fetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
+			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
 			nExtraColumns := len(table.index.ExtraColumnIDs)
 			if cap(table.extraVals) >= nExtraColumns {
 				table.extraVals = table.extraVals[:nExtraColumns]
@@ -762,7 +763,7 @@ func (rf *Fetcher) ReadIndexKey(
 	// to go through the equivalence signature checks.
 	if len(rf.tables) == 1 {
 		return sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-			rf.currentTable.desc.TableDesc(),
+			rf.currentTable.desc,
 			rf.currentTable.index,
 			rf.currentTable.keyValTypes,
 			rf.currentTable.keyVals,
@@ -898,7 +899,7 @@ func (rf *Fetcher) processKV(
 	}
 
 	// For covering secondary indexes, allow for decoding as a primary key.
-	if table.index.GetEncodingType(table.desc.PrimaryIndex.ID) == sqlbase.PrimaryIndexEncoding &&
+	if table.index.GetEncodingType(table.desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding &&
 		len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
@@ -923,8 +924,8 @@ func (rf *Fetcher) processKV(
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
 
-			var family *sqlbase.ColumnFamilyDescriptor
-			family, err = table.desc.FindFamilyByID(sqlbase.FamilyID(familyID))
+			var family *descpb.ColumnFamilyDescriptor
+			family, err = table.desc.FindFamilyByID(descpb.FamilyID(familyID))
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
@@ -1006,7 +1007,7 @@ func (rf *Fetcher) processKV(
 func (rf *Fetcher) processValueSingle(
 	ctx context.Context,
 	table *tableInfo,
-	family *sqlbase.ColumnFamilyDescriptor,
+	family *descpb.ColumnFamilyDescriptor,
 	kv roachpb.KeyValue,
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
@@ -1076,7 +1077,7 @@ func (rf *Fetcher) processValueBytes(
 	}
 
 	var colIDDiff uint32
-	var lastColID sqlbase.ColumnID
+	var lastColID descpb.ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
 	for len(valueBytes) > 0 && rf.valueColsFound < table.neededValueCols {
@@ -1084,7 +1085,7 @@ func (rf *Fetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + sqlbase.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDiff)
 		lastColID = colID
 		if !table.neededCols.Contains(int(colID)) {
 			// This column wasn't requested, so read its length and skip it.
@@ -1153,8 +1154,8 @@ func (rf *Fetcher) NextRow(
 	ctx context.Context,
 ) (
 	row sqlbase.EncDatumRow,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	table sqlbase.TableDescriptor,
+	index *descpb.IndexDescriptor,
 	err error,
 ) {
 	if rf.kvEnd {
@@ -1185,7 +1186,7 @@ func (rf *Fetcher) NextRow(
 		}
 		if rowDone {
 			err := rf.finalizeRow()
-			return rf.rowReadyTable.row, rf.rowReadyTable.desc.TableDesc(), rf.rowReadyTable.index, err
+			return rf.rowReadyTable.row, rf.rowReadyTable.desc, rf.rowReadyTable.index, err
 		}
 	}
 }
@@ -1197,12 +1198,7 @@ func (rf *Fetcher) NextRow(
 // (relevant when more than one table is specified during initialization).
 func (rf *Fetcher) NextRowDecoded(
 	ctx context.Context,
-) (
-	datums tree.Datums,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	err error,
-) {
+) (datums tree.Datums, table sqlbase.TableDescriptor, index *descpb.IndexDescriptor, err error) {
 	row, table, index, err := rf.NextRow(ctx)
 	if err != nil {
 		err = scrub.UnwrapScrubError(err)
@@ -1277,7 +1273,7 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, 
 		rf.rowReadyTable.decodedRow[i] = row[i].Datum
 	}
 
-	if index.ID == table.PrimaryIndex.ID {
+	if index.ID == table.GetPrimaryIndex().ID {
 		err = rf.checkPrimaryIndexDatumEncodings(ctx)
 	} else {
 		err = rf.checkSecondaryIndexDatumEncodings(ctx)
@@ -1297,7 +1293,7 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, 
 func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
-	colIDToColumn := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor)
+	colIDToColumn := make(map[descpb.ColumnID]*descpb.ColumnDescriptor)
 	for i := range table.desc.Columns {
 		col := &table.desc.Columns[i]
 		colIDToColumn[col.ID] = col
@@ -1306,7 +1302,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.Indexes}
 
 	for i := range table.desc.Families {
-		var lastColID sqlbase.ColumnID
+		var lastColID descpb.ColumnID
 		familyID := table.desc.Families[i].ID
 		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
 		if !ok {
@@ -1356,7 +1352,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 // secondary index datums.
 func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
-	colToEncDatum := make(map[sqlbase.ColumnID]sqlbase.EncDatum, len(table.row))
+	colToEncDatum := make(map[descpb.ColumnID]sqlbase.EncDatum, len(table.row))
 	values := make(tree.Datums, len(table.row))
 	for i, col := range table.cols {
 		colToEncDatum[col.ID] = table.row[i]
@@ -1365,7 +1361,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 
 	// The below code makes incorrect checks (#45256).
 	indexEntries, err := sqlbase.EncodeSecondaryIndex(
-		rf.codec, table.desc.TableDesc(), table.index, table.colIdxMap, values, false /* includeEmpty */)
+		rf.codec, table.desc, table.index, table.colIdxMap, values, false /* includeEmpty */)
 	if err != nil {
 		return err
 	}
@@ -1407,15 +1403,15 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 		idx := rf.rowReadyTable.colIdxMap[id]
 		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
 		expectedDirection := rf.rowReadyTable.index.ColumnDirections[i]
-		if rf.reverse && expectedDirection == sqlbase.IndexDescriptor_ASC {
-			expectedDirection = sqlbase.IndexDescriptor_DESC
-		} else if rf.reverse && expectedDirection == sqlbase.IndexDescriptor_DESC {
-			expectedDirection = sqlbase.IndexDescriptor_ASC
+		if rf.reverse && expectedDirection == descpb.IndexDescriptor_ASC {
+			expectedDirection = descpb.IndexDescriptor_DESC
+		} else if rf.reverse && expectedDirection == descpb.IndexDescriptor_DESC {
+			expectedDirection = descpb.IndexDescriptor_ASC
 		}
 
 		if result != 0 {
-			if expectedDirection == sqlbase.IndexDescriptor_ASC && result < 0 ||
-				expectedDirection == sqlbase.IndexDescriptor_DESC && result > 0 {
+			if expectedDirection == descpb.IndexDescriptor_ASC && result < 0 ||
+				expectedDirection == descpb.IndexDescriptor_DESC && result > 0 {
 				return scrub.WrapError(scrub.IndexKeyDecodingError,
 					errors.Errorf("key ordering did not match datum ordering. IndexDescriptor=%s",
 						expectedDirection))
@@ -1527,7 +1523,7 @@ func hasExtraCols(table *tableInfo) bool {
 // would include the trailing table ID index ID pair, since that's a more
 // precise key: /Table/60/1/6/7/#/61/1.
 func consumeIndexKeyWithoutTableIDIndexIDPrefix(
-	index *sqlbase.IndexDescriptor, nCols int, key []byte,
+	index *descpb.IndexDescriptor, nCols int, key []byte,
 ) (int, error) {
 	origKeyLen := len(key)
 	consumedCols := 0

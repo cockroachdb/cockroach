@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3364,15 +3366,16 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				// Get the referenced table and index.
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
+				// TODO(ajwerner): This is awful, we should be able to resolve this
+				// thing using the usual tools rather than going through the DB.
+				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
-				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				indexDesc, err := tableDesc.FindIndexByID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
 				}
-
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
 				indexColIDs := indexDesc.ColumnIDs
@@ -3446,7 +3449,7 @@ may increase either contention or retry errors, or both.`,
 
 				// Create a column id to row index map. In this case, each column ID
 				// just maps to the i'th ordinal.
-				colMap := make(map[sqlbase.ColumnID]int)
+				colMap := make(map[descpb.ColumnID]int)
 				for i, id := range indexColIDs {
 					colMap[id] = i
 				}
@@ -3798,11 +3801,12 @@ may increase either contention or retry errors, or both.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
+				// TODO(ajwerner): This should be able to use the normal lookup mechanisms.
+				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
-				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				indexDesc, err := tableDesc.FindIndexByID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
 				}
@@ -3832,11 +3836,11 @@ may increase either contention or retry errors, or both.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, ctx.Codec, sqlbase.ID(tableID))
+				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
-				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				indexDesc, err := tableDesc.FindIndexByID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
 				}

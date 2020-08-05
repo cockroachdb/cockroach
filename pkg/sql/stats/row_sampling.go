@@ -14,6 +14,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -161,7 +162,7 @@ func (sr *SampleReservoir) copyRow(
 			dst[i].Datum = truncateDatum(evalCtx, dst[i].Datum, maxBytesPerSample)
 			afterSize = dst[i].Size()
 		} else {
-			if enc, ok := src[i].Encoding(); ok && enc != sqlbase.DatumEncoding_VALUE {
+			if enc, ok := src[i].Encoding(); ok && enc != descpb.DatumEncoding_VALUE {
 				// Only datums that were key-encoded might reference the kv batch.
 				dst[i].Datum = deepCopyDatum(evalCtx, dst[i].Datum)
 			}

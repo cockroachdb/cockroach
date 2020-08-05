@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -40,7 +40,7 @@ func NewKVFetcher(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
-	lockStr sqlbase.ScanLockingStrength,
+	lockStr descpb.ScanLockingStrength,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
 		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,

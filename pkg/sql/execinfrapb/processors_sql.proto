@@ -19,9 +19,9 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
-import "sql/sqlbase/structured.proto";
-import "sql/sqlbase/join_type.proto";
-import "sql/sqlbase/locking.proto";
+import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/descpb/join_type.proto";
+import "sql/catalog/descpb/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";

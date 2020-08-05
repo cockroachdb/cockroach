@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -79,7 +80,7 @@ func (p *planner) addColumnImpl(
 		}
 		for _, changedSeqDesc := range changedSeqDescs {
 			if err := params.p.writeSchemaChange(
-				params.ctx, changedSeqDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 			); err != nil {
 				return err
 			}
@@ -101,11 +102,11 @@ func (p *planner) addColumnImpl(
 	_, err = n.tableDesc.FindActiveColumnByName(string(d.Name))
 	if m := n.tableDesc.FindColumnMutationByName(d.Name); m != nil {
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case descpb.DescriptorMutation_ADD:
 			return pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public",
 				col.Name)
-		case sqlbase.DescriptorMutation_DROP:
+		case descpb.DescriptorMutation_DROP:
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q being dropped, try again later", col.Name)
 		default:
@@ -123,9 +124,9 @@ func (p *planner) addColumnImpl(
 		return sqlbase.NewColumnAlreadyExistsError(string(d.Name), n.tableDesc.Name)
 	}
 
-	n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_ADD)
+	n.tableDesc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
 	if idx != nil {
-		if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+		if err := n.tableDesc.AddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
 			return err
 		}
 	}

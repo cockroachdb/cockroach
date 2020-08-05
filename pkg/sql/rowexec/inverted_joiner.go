@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -61,18 +62,18 @@ type invertedJoiner struct {
 
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
-	desc         sqlbase.TableDescriptor
+	desc         sqlbase.ImmutableTableDescriptor
 	// The map from ColumnIDs in the table to the column position.
-	colIdxMap map[sqlbase.ColumnID]int
-	index     *sqlbase.IndexDescriptor
+	colIdxMap map[descpb.ColumnID]int
+	index     *descpb.IndexDescriptor
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
-	invertedColID sqlbase.ColumnID
+	invertedColID descpb.ColumnID
 
 	onExprHelper execinfra.ExprHelper
 	combinedRow  sqlbase.EncDatumRow
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
@@ -161,8 +162,7 @@ func newInvertedJoiner(
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	ij := &invertedJoiner{
-		desc:                spec.Table,
-		colIdxMap:           spec.Table.ColumnIdxMap(),
+		desc:                sqlbase.MakeImmutableTableDescriptor(spec.Table),
 		input:               input,
 		inputTypes:          input.OutputTypes(),
 		lookupColumnIdx:     spec.LookupColumn,
@@ -170,6 +170,7 @@ func newInvertedJoiner(
 		joinType:            spec.Type,
 		batchSize:           invertedJoinerBatchSize,
 	}
+	ij.colIdxMap = ij.desc.ColumnIdxMap()
 
 	var err error
 	ij.index, _, err = ij.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
@@ -198,7 +199,7 @@ func newInvertedJoiner(
 	// Inverted joins are not used for mutations.
 	rightColTypes := ij.desc.ColumnTypesWithMutations(false /* mutations */)
 	var includeRightCols bool
-	if ij.joinType == sqlbase.InnerJoin || ij.joinType == sqlbase.LeftOuterJoin {
+	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)
 		includeRightCols = true
 	}
@@ -257,7 +258,7 @@ func newInvertedJoiner(
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
 		allIndexCols, false /* isCheck */, &ij.alloc, execinfra.ScanVisibilityPublic,
-		sqlbase.ScanLockingStrength_FOR_NONE, nil, /* systemColumns */
+		descpb.ScanLockingStrength_FOR_NONE, nil, /* systemColumns */
 	)
 	if err != nil {
 		return nil, err
@@ -305,7 +306,7 @@ func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
 	// true, since JSON inverted columns use a custom encoding. But since we
 	// are providing an already encoded Datum, the following will eventually
 	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := sqlbase.EncDatumFromEncoded(sqlbase.DatumEncoding_ASCENDING_KEY, enc)
+	encDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
 	ij.invertedColRow = append(ij.invertedColRow[:0], encDatum)
 	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, 1 /* prefixLen */)
 	return span, err
@@ -383,7 +384,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 			break
 		}
 		if row[ij.lookupColumnIdx].IsNull() &&
-			(ij.joinType != sqlbase.LeftOuterJoin && ij.joinType != sqlbase.LeftAntiJoin) {
+			(ij.joinType != descpb.LeftOuterJoin && ij.joinType != descpb.LeftAntiJoin) {
 			// There is no expression to evaluate, so the evaluation will be the
 			// empty set. And the join type will emit no row, so don't bother
 			// copying the input row.
@@ -507,9 +508,9 @@ func (ij *invertedJoiner) emitRow() (
 
 		if !seenMatch {
 			switch ij.joinType {
-			case sqlbase.LeftOuterJoin:
+			case descpb.LeftOuterJoin:
 				return ijEmittingRows, ij.renderUnmatchedRow(ij.inputRows[inputRowIdx]), nil
-			case sqlbase.LeftAntiJoin:
+			case descpb.LeftAntiJoin:
 				return ijEmittingRows, ij.inputRows[inputRowIdx], nil
 			}
 		}
@@ -542,16 +543,16 @@ func (ij *invertedJoiner) emitRow() (
 	if renderedRow != nil {
 		ij.emitCursor.seenMatch = true
 		switch ij.joinType {
-		case sqlbase.InnerJoin, sqlbase.LeftOuterJoin:
+		case descpb.InnerJoin, descpb.LeftOuterJoin:
 			return ijEmittingRows, renderedRow, nil
-		case sqlbase.LeftSemiJoin:
+		case descpb.LeftSemiJoin:
 			// Skip the rest of the joined rows.
 			if err := skipRemaining(); err != nil {
 				ij.MoveToDraining(err)
 				return ijStateUnknown, nil, ij.DrainHelper()
 			}
 			return ijEmittingRows, inputRow, nil
-		case sqlbase.LeftAntiJoin:
+		case descpb.LeftAntiJoin:
 			// Skip the rest of the joined rows.
 			if err := skipRemaining(); err != nil {
 				ij.MoveToDraining(err)

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -89,8 +90,8 @@ var useTBI = settings.RegisterBoolSetting(
 )
 
 type tableAndIndex struct {
-	tableID sqlbase.ID
-	indexID sqlbase.IndexID
+	tableID descpb.ID
+	indexID descpb.IndexID
 }
 
 type backupKMSEnv struct {
@@ -162,17 +163,14 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	codec keys.SQLCodec,
-	tables []sqlbase.TableDescriptorInterface,
-	revs []BackupManifest_DescriptorRevision,
+	codec keys.SQLCodec, tables []sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		tableDesc := table.TableDesc()
-		for _, index := range tableDesc.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(tableDesc.IndexSpan(codec, index.ID)), false); err != nil {
+		for _, index := range table.AllNonDropIndexes() {
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
 			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
@@ -188,7 +186,9 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil && tbl.State != sqlbase.TableDescriptor_DROP {
+		rawTbl := sqlbase.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
+			tbl := sqlbase.NewImmutableTableDescriptor(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
@@ -519,27 +519,23 @@ func backupPlanHook(
 			return err
 		}
 
-		var tables []sqlbase.TableDescriptorInterface
-		statsFiles := make(map[sqlbase.ID]string)
+		var tables []sqlbase.TableDescriptor
+		statsFiles := make(map[descpb.ID]string)
 		for _, desc := range targetDescs {
-			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				db := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
-				if err := p.CheckPrivilege(ctx, db, privilege.SELECT); err != nil {
+			switch desc := desc.(type) {
+			case sqlbase.DatabaseDescriptor:
+				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 					return err
 				}
-			}
-			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-				// TODO(ajwerner): This construction of a wrapper is unfortunate and should
-				// go away in this PR.
-				table := sqlbase.NewImmutableTableDescriptor(*tableDesc)
-				if err := p.CheckPrivilege(ctx, table, privilege.SELECT); err != nil {
+			case sqlbase.TableDescriptor:
+				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 					return err
 				}
-				tables = append(tables, table)
+				tables = append(tables, desc)
 
 				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
-				statsFiles[tableDesc.GetID()] = BackupStatisticsFileName
+				statsFiles[desc.GetID()] = BackupStatisticsFileName
 			}
 		}
 
@@ -742,11 +738,11 @@ func backupPlanHook(
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
-		var priorIDs map[sqlbase.ID]sqlbase.ID
+		var priorIDs map[descpb.ID]descpb.ID
 
 		var revs []BackupManifest_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
-			priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+			priorIDs = make(map[descpb.ID]descpb.ID)
 			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs)
 			if err != nil {
 				return err
@@ -787,10 +783,11 @@ func backupPlanHook(
 		}
 
 		if len(prevBackups) > 0 {
-			tablesInPrev := make(map[sqlbase.ID]struct{})
-			dbsInPrev := make(map[sqlbase.ID]struct{})
-			for _, d := range prevBackups[len(prevBackups)-1].Descriptors {
-				if t := d.Table(hlc.Timestamp{}); t != nil {
+			tablesInPrev := make(map[descpb.ID]struct{})
+			dbsInPrev := make(map[descpb.ID]struct{})
+			rawDescs := prevBackups[len(prevBackups)-1].Descriptors
+			for i := range rawDescs {
+				if t := sqlbase.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}
@@ -838,12 +835,16 @@ func backupPlanHook(
 		// mis-handled, but is disallowed above. IntroducedSpans may also be lost by
 		// a 1.x node, meaning that if 1.1 nodes may resume a backup, the limitation
 		// of requiring full backups after schema changes remains.
+		descriptorProtos := make([]descpb.Descriptor, 0, len(targetDescs))
+		for _, desc := range targetDescs {
+			descriptorProtos = append(descriptorProtos, *desc.DescriptorProto())
+		}
 
 		backupManifest := BackupManifest{
 			StartTime:           startTime,
 			EndTime:             endTime,
 			MVCCFilter:          mvccFilter,
-			Descriptors:         targetDescs,
+			Descriptors:         descriptorProtos,
 			Tenants:             tenants,
 			DescriptorChanges:   revs,
 			CompleteDbs:         completeDBs,
@@ -999,9 +1000,10 @@ func backupPlanHook(
 		jr := jobs.Record{
 			Description: description,
 			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
-				for _, sqlDesc := range backupManifest.Descriptors {
-					sqlDescIDs = append(sqlDescIDs, sqlDesc.GetID())
+			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
+				for i := range backupManifest.Descriptors {
+					sqlDescIDs = append(sqlDescIDs,
+						sqlbase.GetDescriptorID(&backupManifest.Descriptors[i]))
 				}
 				return sqlDescIDs
 			}(),
@@ -1131,46 +1133,48 @@ func checkForNewTables(
 	ctx context.Context,
 	db *kv.DB,
 	targetDescs []sqlbase.Descriptor,
-	tablesInPrev map[sqlbase.ID]struct{},
-	dbsInPrev map[sqlbase.ID]struct{},
-	priorIDs map[sqlbase.ID]sqlbase.ID,
+	tablesInPrev map[descpb.ID]struct{},
+	dbsInPrev map[descpb.ID]struct{},
+	priorIDs map[descpb.ID]descpb.ID,
 	startTime hlc.Timestamp,
 	endTime hlc.Timestamp,
 ) error {
 	for _, d := range targetDescs {
-		if t := d.Table(hlc.Timestamp{}); t != nil {
-			// If we're trying to use a previous backup for this table, ideally it
-			// actually contains this table.
-			if _, ok := tablesInPrev[t.ID]; ok {
-				continue
-			}
-			// This table isn't in the previous backup... maybe was added to a
-			// DB that the previous backup captured?
-			if _, ok := dbsInPrev[t.ParentID]; ok {
-				continue
-			}
-			// Maybe this table is missing from the previous backup because it was
-			// truncated?
-			if t.ReplacementOf.ID != sqlbase.InvalidID {
-				// Check if we need to lazy-load the priorIDs (i.e. if this is the first
-				// truncate we've encountered in non-MVCC backup).
-				if priorIDs == nil {
-					priorIDs = make(map[sqlbase.ID]sqlbase.ID)
-					_, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
-					if err != nil {
-						return err
-					}
-				}
-				found := false
-				for was := t.ReplacementOf.ID; was != sqlbase.InvalidID && !found; was = priorIDs[was] {
-					_, found = tablesInPrev[was]
-				}
-				if found {
-					continue
-				}
-			}
-			return errors.Errorf("previous backup does not contain table %q", t.Name)
+		t, ok := d.(sqlbase.TableDescriptor)
+		if !ok {
+			continue
 		}
+		// If we're trying to use a previous backup for this table, ideally it
+		// actually contains this table.
+		if _, ok := tablesInPrev[t.GetID()]; ok {
+			continue
+		}
+		// This table isn't in the previous backup... maybe was added to a
+		// DB that the previous backup captured?
+		if _, ok := dbsInPrev[t.GetParentID()]; ok {
+			continue
+		}
+		// Maybe this table is missing from the previous backup because it was
+		// truncated?
+		if replacement := t.GetReplacementOf(); replacement.ID != descpb.InvalidID {
+			// Check if we need to lazy-load the priorIDs (i.e. if this is the first
+			// truncate we've encountered in non-MVCC backup).
+			if priorIDs == nil {
+				priorIDs = make(map[descpb.ID]descpb.ID)
+				_, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
+				if err != nil {
+					return err
+				}
+			}
+			found := false
+			for was := replacement.ID; was != descpb.InvalidID && !found; was = priorIDs[was] {
+				_, found = tablesInPrev[was]
+			}
+			if found {
+				continue
+			}
+		}
+		return errors.Errorf("previous backup does not contain table %q", t.GetName())
 	}
 	return nil
 }

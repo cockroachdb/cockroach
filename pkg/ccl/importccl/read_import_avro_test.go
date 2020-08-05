@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -141,7 +142,7 @@ func (g *intArrGen) Gen() interface{} {
 // A testHelper to generate avro data.
 type testHelper struct {
 	schemaJSON  string
-	schemaTable *sqlbase.TableDescriptor
+	schemaTable *sqlbase.ImmutableTableDescriptor
 	codec       *goavro.Codec
 	gens        []avroGen
 	settings    *cluster.Settings
@@ -575,7 +576,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), keys.PublicSchemaID, sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	require.NoError(b, err)
 
 	kvCh := make(chan row.KVBatch)
@@ -588,7 +589,9 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
-	avro, err := newAvroInputReader(kvCh, tableDesc.TableDesc(), avroOpts, 0, 0, &evalCtx)
+	avro, err := newAvroInputReader(kvCh,
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 
 	limitStream := &limitAvroStream{

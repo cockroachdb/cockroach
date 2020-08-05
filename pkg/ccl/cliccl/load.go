@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -101,12 +102,15 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	// Note that these descriptors could be from any past version of the cluster,
 	// in case more fields need to be added to the output.
 	fmt.Printf("Descriptors:\n")
-	for _, d := range desc.Descriptors {
-		if desc := d.Table(hlc.Timestamp{}); desc != nil {
-			fmt.Printf("	%d: %s (table)\n", d.GetID(), d.GetName())
+	for i := range desc.Descriptors {
+		d := &desc.Descriptors[i]
+		if desc := sqlbase.TableFromDescriptor(d, hlc.Timestamp{}); desc != nil {
+			fmt.Printf("	%d: %s (table)\n",
+				sqlbase.GetDescriptorID(d), sqlbase.GetDescriptorName(d))
 		}
 		if desc := d.GetDatabase(); desc != nil {
-			fmt.Printf("	%d: %s (database)\n", d.GetID(), d.GetName())
+			fmt.Printf("	%d: %s (database)\n",
+				sqlbase.GetDescriptorID(d), sqlbase.GetDescriptorName(d))
 		}
 	}
 	return nil

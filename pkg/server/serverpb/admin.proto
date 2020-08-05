@@ -549,7 +549,7 @@ message JobsResponse {
     string username = 4;
     repeated uint32 descriptor_ids = 5 [
       (gogoproto.customname) = "DescriptorIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
     string status = 6;
     google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];

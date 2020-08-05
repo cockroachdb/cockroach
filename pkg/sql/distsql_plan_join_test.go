@@ -22,7 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -47,7 +48,7 @@ func encodeTestKey(kvDB *kv.DB, keyStr string) (roachpb.Key, error) {
 	for _, tok := range tokens {
 		// Encode the table ID if the token is a table name.
 		if tableNames[tok] {
-			desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
+			desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
 			key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
 			continue
 		}
@@ -90,7 +91,7 @@ func decodeTestKey(kvDB *kv.DB, key roachpb.Key) (string, error) {
 			}
 
 			if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-				desc, err := sqlbase.GetTableDescFromID(context.Background(), txn, keys.SystemSQLCodec, sqlbase.ID(descID))
+				desc, err := catalogkv.MustGetTableDescByID(context.Background(), txn, keys.SystemSQLCodec, descpb.ID(descID))
 				if err != nil {
 					return err
 				}

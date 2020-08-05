@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,12 +35,12 @@ import (
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
-func MakeIndexKeyPrefix(codec keys.SQLCodec, desc *TableDescriptor, indexID IndexID) []byte {
+func MakeIndexKeyPrefix(codec keys.SQLCodec, desc TableDescriptor, indexID descpb.IndexID) []byte {
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
 		ancestor := &i.Interleave.Ancestors[0]
 		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
-	return codec.IndexPrefix(uint32(desc.ID), uint32(indexID))
+	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
 }
 
 // EncodeIndexKey creates a key by concatenating keyPrefix with the
@@ -55,9 +56,9 @@ func MakeIndexKeyPrefix(codec keys.SQLCodec, desc *TableDescriptor, indexID Inde
 // Note that ExtraColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
+	tableDesc *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
@@ -75,10 +76,10 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
+	tableDesc *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[ColumnID]int,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
@@ -104,14 +105,14 @@ func EncodePartialIndexSpan(
 //  - index.ColumnIDs for unique indexes, and
 //  - append(index.ColumnIDs, index.ExtraColumnIDs) for non-unique indexes.
 func EncodePartialIndexKey(
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
+	tableDesc TableDescriptor,
+	index *descpb.IndexDescriptor,
 	numCols int,
-	colMap map[ColumnID]int,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	var colIDs, extraColIDs []ColumnID
+	var colIDs, extraColIDs []descpb.ColumnID
 	if numCols <= len(index.ColumnIDs) {
 		colIDs = index.ColumnIDs[:numCols]
 	} else {
@@ -163,7 +164,7 @@ func EncodePartialIndexKey(
 			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
-		key = EncodePartialTableIDIndexID(key, tableDesc.ID, index.ID)
+		key = EncodePartialTableIDIndexID(key, tableDesc.GetID(), index.ID)
 	}
 
 	var n bool
@@ -181,7 +182,7 @@ func EncodePartialIndexKey(
 	return key, containsNull, nil
 }
 
-type directions []IndexDescriptor_Direction
+type directions []descpb.IndexDescriptor_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
@@ -205,13 +206,13 @@ func (d directions) get(i int) (encoding.Direction, error) {
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
-	dirs []IndexDescriptor_Direction,
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
+	dirs []descpb.IndexDescriptor_Direction,
+	tableDesc TableDescriptor,
+	index *descpb.IndexDescriptor,
 	alloc *DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
+	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc.TableDesc(), index, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -237,13 +238,13 @@ func MakeSpanFromEncDatums(
 }
 
 // NeededColumnFamilyIDs returns the minimal set of column families required to
-// retrieve neededCols for the specified table and index. The returned FamilyIDs
+// retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededColOrdinals util.FastIntSet, table *TableDescriptor, index *IndexDescriptor,
-) []FamilyID {
+	neededColOrdinals util.FastIntSet, table *ImmutableTableDescriptor, index *descpb.IndexDescriptor,
+) []descpb.FamilyID {
 	if len(table.Families) == 1 {
-		return []FamilyID{table.Families[0].ID}
+		return []descpb.FamilyID{table.Families[0].ID}
 	}
 
 	// Build some necessary data structures for column metadata.
@@ -271,8 +272,8 @@ func NeededColumnFamilyIDs(
 	// between null values and the absence of a row. Also, secondary indexes store
 	// values here for composite and "extra" columns. ("Extra" means primary key
 	// columns which are not indexed.)
-	var family0 *ColumnFamilyDescriptor
-	hasSecondaryEncoding := index.GetEncodingType(table.PrimaryIndex.ID) == SecondaryIndexEncoding
+	var family0 *descpb.ColumnFamilyDescriptor
+	hasSecondaryEncoding := index.GetEncodingType(table.PrimaryIndex.ID) == descpb.SecondaryIndexEncoding
 
 	// First iterate over the needed columns and look for a few special cases:
 	// * columns which can be decoded from the key and columns whose value is stored
@@ -303,7 +304,7 @@ func NeededColumnFamilyIDs(
 
 	// If the MVCC timestamp column was requested, then bail out.
 	if mvccColumnRequested {
-		var families []FamilyID
+		var families []descpb.FamilyID
 		for i := range table.Families {
 			families = append(families, table.Families[i].ID)
 		}
@@ -314,7 +315,7 @@ func NeededColumnFamilyIDs(
 	// We also keep track of whether all of the needed families' columns are
 	// nullable, since this means we need column family 0 as a sentinel, even if
 	// none of its columns are needed.
-	var neededFamilyIDs []FamilyID
+	var neededFamilyIDs []descpb.FamilyID
 	allFamiliesNullable := true
 	for i := range table.Families {
 		family := &table.Families[i]
@@ -376,7 +377,7 @@ func NeededColumnFamilyIDs(
 //
 // The function accepts a slice of spans to append to.
 func SplitSpanIntoSeparateFamilies(
-	appendTo roachpb.Spans, span roachpb.Span, neededFamilies []FamilyID,
+	appendTo roachpb.Spans, span roachpb.Span, neededFamilies []descpb.FamilyID,
 ) roachpb.Spans {
 	span.Key = span.Key[:len(span.Key):len(span.Key)] // avoid mutation and aliasing
 	for i, familyID := range neededFamilies {
@@ -407,9 +408,9 @@ func SplitSpanIntoSeparateFamilies(
 func makeKeyFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
-	dirs []IndexDescriptor_Direction,
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
+	dirs []descpb.IndexDescriptor_Direction,
+	tableDesc *descpb.TableDescriptor,
+	index *descpb.IndexDescriptor,
 	alloc *DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
@@ -475,7 +476,9 @@ func makeKeyFromEncDatums(
 
 // findColumnValue returns the value corresponding to the column. If
 // the column isn't present return a NULL value.
-func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Datum) tree.Datum {
+func findColumnValue(
+	column descpb.ColumnID, colMap map[descpb.ColumnID]int, values []tree.Datum,
+) tree.Datum {
 	if i, ok := colMap[column]; ok {
 		// TODO(pmattis): Need to convert the values[i] value to the type
 		// expected by the column.
@@ -490,13 +493,13 @@ func appendEncDatumsToKey(
 	key roachpb.Key,
 	types []*types.T,
 	values EncDatumRow,
-	dirs []IndexDescriptor_Direction,
+	dirs []descpb.IndexDescriptor_Direction,
 	alloc *DatumAlloc,
 ) (_ roachpb.Key, containsNull bool, _ error) {
 	for i, val := range values {
-		encoding := DatumEncoding_ASCENDING_KEY
-		if dirs[i] == IndexDescriptor_DESC {
-			encoding = DatumEncoding_DESCENDING_KEY
+		encoding := descpb.DatumEncoding_ASCENDING_KEY
+		if dirs[i] == descpb.IndexDescriptor_DESC {
+			encoding = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
 			containsNull = true
@@ -512,15 +515,15 @@ func appendEncDatumsToKey(
 
 // EncodePartialTableIDIndexID encodes a table id followed by an index id to an
 // existing key. The key must already contain a tenant id.
-func EncodePartialTableIDIndexID(key []byte, tableID ID, indexID IndexID) []byte {
+func EncodePartialTableIDIndexID(key []byte, tableID descpb.ID, indexID descpb.IndexID) []byte {
 	return keys.MakeTableIDIndexID(key, uint32(tableID), uint32(indexID))
 }
 
 // DecodePartialTableIDIndexID decodes a table id followed by an index id. The
 // input key must already have its tenant id removed.
-func DecodePartialTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
+func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID, error) {
 	key, tableID, indexID, err := keys.DecodeTableIDIndexID(key)
-	return key, ID(tableID), IndexID(indexID), err
+	return key, descpb.ID(tableID), descpb.IndexID(indexID), err
 }
 
 // DecodeIndexKeyPrefix decodes the prefix of an index key and returns the
@@ -528,8 +531,8 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	codec keys.SQLCodec, desc *TableDescriptor, key []byte,
-) (indexID IndexID, remaining []byte, err error) {
+	codec keys.SQLCodec, desc *ImmutableTableDescriptor, key []byte,
+) (indexID descpb.IndexID, remaining []byte, err error) {
 	key, err = codec.StripTenantPrefix(key)
 	if err != nil {
 		return 0, nil, err
@@ -538,10 +541,10 @@ func DecodeIndexKeyPrefix(
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
-	interleaves := append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...)
+	interleaves := append([]descpb.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...)
 
 	for component := 0; ; component++ {
-		var tableID ID
+		var tableID descpb.ID
 		key, tableID, indexID, err = DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return 0, nil, err
@@ -599,11 +602,11 @@ func DecodeIndexKeyPrefix(
 // no error.
 func DecodeIndexKey(
 	codec keys.SQLCodec,
-	desc *TableDescriptor,
-	index *IndexDescriptor,
+	desc *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []IndexDescriptor_Direction,
+	colDirs []descpb.IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
@@ -621,15 +624,15 @@ func DecodeIndexKey(
 // except it expects its index key is missing in its tenant id and first table
 // id / index id key prefix.
 func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-	desc *TableDescriptor,
-	index *IndexDescriptor,
+	desc *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []IndexDescriptor_Direction,
+	colDirs []descpb.IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, foundNull bool, _ error) {
-	var decodedTableID ID
-	var decodedIndexID IndexID
+	var decodedTableID descpb.ID
+	var decodedIndexID descpb.IndexID
 	var err error
 
 	if len(index.Interleave.Ancestors) > 0 {
@@ -694,7 +697,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []descpb.IndexDescriptor_Direction, key []byte,
 ) ([]byte, bool, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -702,9 +705,9 @@ func DecodeKeyVals(
 	}
 	foundNull := false
 	for j := range vals {
-		enc := DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == IndexDescriptor_DESC) {
-			enc = DatumEncoding_DESCENDING_KEY
+		enc := descpb.DatumEncoding_ASCENDING_KEY
+		if directions != nil && (directions[j] == descpb.IndexDescriptor_DESC) {
+			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
@@ -723,7 +726,7 @@ func DecodeKeyVals(
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc, codec keys.SQLCodec, tableDesc *TableDescriptor, entry kv.KeyValue,
+	a *DatumAlloc, codec keys.SQLCodec, tableDesc *ImmutableTableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
 	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
 	if err != nil {
@@ -770,10 +773,10 @@ func ExtractIndexKey(
 		return nil, err
 	}
 	extraValues := make([]EncDatum, len(index.ExtraColumnIDs))
-	dirs = make([]IndexDescriptor_Direction, len(index.ExtraColumnIDs))
+	dirs = make([]descpb.IndexDescriptor_Direction, len(index.ExtraColumnIDs))
 	for i := range index.ExtraColumnIDs {
 		// Implicit columns are always encoded Ascending.
-		dirs[i] = IndexDescriptor_ASC
+		dirs[i] = descpb.IndexDescriptor_ASC
 	}
 	extraKey := key
 	if index.Unique {
@@ -788,7 +791,7 @@ func ExtractIndexKey(
 	}
 
 	// Encode the index key from its components.
-	colMap := make(map[ColumnID]int)
+	colMap := make(map[descpb.ColumnID]int)
 	for i, columnID := range index.ColumnIDs {
 		colMap[columnID] = i
 	}
@@ -822,13 +825,13 @@ type IndexEntry struct {
 	Key   roachpb.Key
 	Value roachpb.Value
 	// Only used for forward indexes.
-	Family FamilyID
+	Family descpb.FamilyID
 }
 
 // valueEncodedColumn represents a composite or stored column of a secondary
 // index.
 type valueEncodedColumn struct {
-	id          ColumnID
+	id          descpb.ColumnID
 	isComposite bool
 }
 
@@ -844,7 +847,10 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 // concatenating keyPrefix with the encodings of the column in the
 // index.
 func EncodeInvertedIndexKeys(
-	index *IndexDescriptor, colMap map[ColumnID]int, values []tree.Datum, keyPrefix []byte,
+	index *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
 ) (key [][]byte, err error) {
 	if len(index.ColumnIDs) > 1 {
 		return nil, errors.AssertionFailedf("trying to apply inverted index to more than one column")
@@ -912,7 +918,7 @@ func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
-	val tree.Datum, inKey []byte, index *IndexDescriptor,
+	val tree.Datum, inKey []byte, index *descpb.IndexDescriptor,
 ) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -962,9 +968,9 @@ func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err err
 // It returns indexEntries in family sorted order.
 func EncodePrimaryIndex(
 	codec keys.SQLCodec,
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
+	tableDesc *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
@@ -974,7 +980,7 @@ func EncodePrimaryIndex(
 		return nil, err
 	}
 	// This information should be precomputed on the table descriptor.
-	indexedColumns := map[ColumnID]struct{}{}
+	indexedColumns := map[descpb.ColumnID]struct{}{}
 	for _, colID := range index.ColumnIDs {
 		indexedColumns[colID] = struct{}{}
 	}
@@ -1039,30 +1045,30 @@ func EncodePrimaryIndex(
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary
-// index. colMap maps ColumnIDs to indices in `values`. This returns a
+// index. colMap maps descpb.ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. includeEmpty controls whether or not
 // EncodeSecondaryIndex should return k/v's that contain
 // empty values. For forward indexes the returned list of
 // index entries is in family sorted order.
 func EncodeSecondaryIndex(
 	codec keys.SQLCodec,
-	tableDesc *TableDescriptor,
-	secondaryIndex *IndexDescriptor,
-	colMap map[ColumnID]int,
+	tableDesc *ImmutableTableDescriptor,
+	secondaryIndex *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, secondaryIndex.ID)
 
 	// Use the primary key encoding for covering indexes.
-	if secondaryIndex.GetEncodingType(tableDesc.PrimaryIndex.ID) == PrimaryIndexEncoding {
+	if secondaryIndex.GetEncodingType(tableDesc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding {
 		return EncodePrimaryIndex(codec, tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 
 	var containsNull = false
 	var secondaryKeys [][]byte
 	var err error
-	if secondaryIndex.Type == IndexDescriptor_INVERTED {
+	if secondaryIndex.Type == descpb.IndexDescriptor_INVERTED {
 		secondaryKeys, err = EncodeInvertedIndexKeys(secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
 	} else {
 		var secondaryIndexKey []byte
@@ -1094,8 +1100,8 @@ func EncodeSecondaryIndex(
 		}
 
 		if len(tableDesc.Families) == 1 ||
-			secondaryIndex.Type == IndexDescriptor_INVERTED ||
-			secondaryIndex.Version == BaseIndexFormatVersion {
+			secondaryIndex.Type == descpb.IndexDescriptor_INVERTED ||
+			secondaryIndex.Version == descpb.BaseIndexFormatVersion {
 			// We do all computation that affects indexes with families in a separate code path to avoid performance
 			// regression for tables without column families.
 			entry, err := encodeSecondaryIndexNoFamilies(secondaryIndex, colMap, key, values, extraKey)
@@ -1109,8 +1115,8 @@ func EncodeSecondaryIndex(
 			// TODO (rohany): we want to share this information across calls to EncodeSecondaryIndex --
 			//  its not easy to do this right now. It would be nice if the index descriptor or table descriptor
 			//  had this information computed/cached for us.
-			familyToColumns := make(map[FamilyID][]valueEncodedColumn)
-			addToFamilyColMap := func(id FamilyID, column valueEncodedColumn) {
+			familyToColumns := make(map[descpb.FamilyID][]valueEncodedColumn)
+			addToFamilyColMap := func(id descpb.FamilyID, column valueEncodedColumn) {
 				if _, ok := familyToColumns[id]; !ok {
 					familyToColumns[id] = []valueEncodedColumn{}
 				}
@@ -1147,9 +1153,9 @@ func EncodeSecondaryIndex(
 // controls whether or not k/v's with empty values will be returned.
 // The returned indexEntries are in family sorted order.
 func encodeSecondaryIndexWithFamilies(
-	familyMap map[FamilyID][]valueEncodedColumn,
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
+	familyMap map[descpb.FamilyID][]valueEncodedColumn,
+	index *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1170,7 +1176,7 @@ func encodeSecondaryIndexWithFamilies(
 	}
 	sort.Ints(familyIDs)
 	for _, familyID := range familyIDs {
-		storedColsInFam := familyMap[FamilyID(familyID)]
+		storedColsInFam := familyMap[descpb.FamilyID(familyID)]
 		// Ensure that future appends to key will cause a copy and not overwrite
 		// existing key values.
 		key = key[:origKeyLen:origKeyLen]
@@ -1202,7 +1208,7 @@ func encodeSecondaryIndexWithFamilies(
 		if err != nil {
 			return []IndexEntry{}, err
 		}
-		entry := IndexEntry{Key: key, Family: FamilyID(familyID)}
+		entry := IndexEntry{Key: key, Family: descpb.FamilyID(familyID)}
 		// If we aren't looking at family 0 and don't have a value,
 		// don't include an entry for this k/v.
 		if familyID != 0 && len(value) == 0 && !includeEmpty {
@@ -1228,8 +1234,8 @@ func encodeSecondaryIndexWithFamilies(
 // performs the index encoding version before column
 // families were introduced onto secondary indexes.
 func encodeSecondaryIndexNoFamilies(
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
+	index *descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	key []byte,
 	row []tree.Datum,
 	extraKeyCols []byte,
@@ -1260,7 +1266,7 @@ func encodeSecondaryIndexNoFamilies(
 	for _, id := range index.CompositeColumnIDs {
 		// Inverted indexes on a composite type (i.e. an array of composite types)
 		// should not add the indexed column to the value.
-		if index.Type == IndexDescriptor_INVERTED && id == index.ColumnIDs[0] {
+		if index.Type == descpb.IndexDescriptor_INVERTED && id == index.ColumnIDs[0] {
 			continue
 		}
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
@@ -1278,9 +1284,9 @@ func encodeSecondaryIndexNoFamilies(
 // writeColumnValues writes the value encoded versions of the desired columns from the input
 // row of datums into the value byte slice.
 func writeColumnValues(
-	value []byte, colMap map[ColumnID]int, row []tree.Datum, columns []valueEncodedColumn,
+	value []byte, colMap map[descpb.ColumnID]int, row []tree.Datum, columns []valueEncodedColumn,
 ) ([]byte, error) {
-	var lastColID ColumnID
+	var lastColID descpb.ColumnID
 	for _, col := range columns {
 		val := findColumnValue(col.id, colMap, row)
 		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
@@ -1301,14 +1307,14 @@ func writeColumnValues(
 }
 
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
-// maps ColumnIDs to indices in `values`. secondaryIndexEntries is the return
+// maps descpb.ColumnIDs to indices in `values`. secondaryIndexEntries is the return
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
 	codec keys.SQLCodec,
-	tableDesc *TableDescriptor,
-	indexes []IndexDescriptor,
-	colMap map[ColumnID]int,
+	tableDesc *ImmutableTableDescriptor,
+	indexes []descpb.IndexDescriptor,
+	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
@@ -1389,7 +1395,7 @@ func IndexKeyEquivSignature(
 	restResult = restBuf[:0]
 	for {
 		// Well-formed key is guaranteed to to have 2 varints for every
-		// ancestor: the TableID and IndexID.
+		// ancestor: the TableID and descpb.IndexID.
 		// We extract these out and add them to our buffer.
 		for i := 0; i < 2; i++ {
 			idLen, err := encoding.PeekLength(key)
@@ -1413,7 +1419,7 @@ func IndexKeyEquivSignature(
 		for {
 			key, isSentinel = encoding.DecodeIfInterleavedSentinel(key)
 			// We stop once the key is empty or if we encounter a
-			// sentinel for the next TableID-IndexID pair.
+			// sentinel for the next TableID-descpb.IndexID pair.
 			if len(key) == 0 || isSentinel {
 				break
 			}
@@ -1445,7 +1451,7 @@ func IndexKeyEquivSignature(
 // TableEquivSignatures returns the equivalence signatures for each interleave
 // ancestor and itself. See IndexKeyEquivSignature for more info.
 func TableEquivSignatures(
-	desc *TableDescriptor, index *IndexDescriptor,
+	desc *descpb.TableDescriptor, index *descpb.IndexDescriptor,
 ) (signatures [][]byte, err error) {
 	// signatures contains the slice reference to the signature of every
 	// ancestor of the current table-index.
@@ -1459,7 +1465,7 @@ func TableEquivSignatures(
 	// table's and index's ID.
 	fullSignature := make([]byte, 0, len(index.Interleave.Ancestors)*9+8)
 
-	// Encode the table's ancestors' TableIDs and IndexIDs.
+	// Encode the table's ancestors' TableIDs and descpb.IndexIDs.
 	for i, ancestor := range index.Interleave.Ancestors {
 		fullSignature = EncodePartialTableIDIndexID(fullSignature, ancestor.TableID, ancestor.IndexID)
 		// Create a reference up to this point for the ancestor's
@@ -1499,7 +1505,7 @@ func TableEquivSignatures(
 //    /table/index/<parent-pk1>/.../<parent-pkX>
 //
 // This returns the maximum number of <tokens> in this prefix.
-func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
+func maxKeyTokens(index *descpb.IndexDescriptor, containsNull bool) int {
 	nTables := len(index.Interleave.Ancestors) + 1
 	nKeyCols := len(index.ColumnIDs)
 
@@ -1544,7 +1550,7 @@ func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 // was /1, we cannot push this forwards since that is the first key we want
 // to read.
 func AdjustStartKeyForInterleave(
-	codec keys.SQLCodec, index *IndexDescriptor, start roachpb.Key,
+	codec keys.SQLCodec, index *descpb.IndexDescriptor, start roachpb.Key,
 ) (roachpb.Key, error) {
 	// Remove the tenant prefix before decomposing.
 	strippedStart, err := codec.StripTenantPrefix(start)
@@ -1589,12 +1595,12 @@ func AdjustStartKeyForInterleave(
 // AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
 func AdjustEndKeyForInterleave(
 	codec keys.SQLCodec,
-	table *TableDescriptor,
-	index *IndexDescriptor,
+	table *ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor,
 	end roachpb.Key,
 	inclusive bool,
 ) (roachpb.Key, error) {
-	if index.Type == IndexDescriptor_INVERTED {
+	if index.Type == descpb.IndexDescriptor_INVERTED {
 		return end.PrefixEnd(), nil
 	}
 

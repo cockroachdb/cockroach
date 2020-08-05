@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -61,7 +62,7 @@ type Record struct {
 	Description   string
 	Statement     string
 	Username      string
-	DescriptorIDs sqlbase.IDs
+	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
 	RunningStatus RunningStatus

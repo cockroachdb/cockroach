@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -37,7 +38,7 @@ type (
 	TableName = tree.TableName
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	DatabaseDescriptor = sqlbase.DatabaseDescriptor
+	DatabaseDescriptor = descpb.DatabaseDescriptor
 	// UncachedDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	UncachedDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
@@ -49,16 +50,16 @@ type (
 	ImmutableTableDescriptor = sqlbase.ImmutableTableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	TableDescriptor = sqlbase.TableDescriptor
+	TableDescriptor = descpb.TableDescriptor
 	// TypeDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	TypeDescriptor = sqlbase.TypeDescriptor
+	TypeDescriptor = descpb.TypeDescriptor
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ViewDescriptor = sqlbase.TableDescriptor
+	ViewDescriptor = descpb.TableDescriptor
 	// SequenceDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	SequenceDescriptor = sqlbase.TableDescriptor
+	SequenceDescriptor = descpb.TableDescriptor
 	// TableNames is provided for convenience and to make the interface
 	// definitions below more intuitive.
 	TableNames = tree.TableNames

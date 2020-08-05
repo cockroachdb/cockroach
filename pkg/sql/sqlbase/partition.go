@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -104,9 +105,9 @@ func (t *PartitionTuple) String() string {
 func DecodePartitionTuple(
 	a *DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc *TableDescriptor,
-	idxDesc *IndexDescriptor,
-	partDesc *PartitioningDescriptor,
+	tableDesc TableDescriptor,
+	idxDesc *descpb.IndexDescriptor,
+	partDesc *descpb.PartitioningDescriptor,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
 ) (*PartitionTuple, []byte, error) {
@@ -158,7 +159,7 @@ func DecodePartitionTuple(
 	}
 
 	allDatums := append(prefixDatums, t.Datums...)
-	colMap := make(map[ColumnID]int, len(allDatums))
+	colMap := make(map[descpb.ColumnID]int, len(allDatums))
 	for i := range allDatums {
 		colMap[idxDesc.ColumnIDs[i]] = i
 	}

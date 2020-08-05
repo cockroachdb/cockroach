@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -30,7 +31,7 @@ import (
 // perform the physical planning of hash and merge joins.
 type joinPlanningInfo struct {
 	leftPlan, rightPlan *PhysicalPlan
-	joinType            sqlbase.JoinType
+	joinType            descpb.JoinType
 	joinResultTypes     []*types.T
 	onExpr              execinfrapb.Expression
 	post                execinfrapb.PostProcessSpec
@@ -121,7 +122,7 @@ func (dsp *DistSQLPlanner) createPlanForInterleavedJoin(
 			ord.Columns[j].ColIdx = uint32(scan.colIdxMap[scan.index.ColumnIDs[j]])
 			ord.Columns[j].Direction = execinfrapb.Ordering_Column_ASC
 			// Note: != is equivalent to a logical XOR.
-			if (scan.index.ColumnDirections[j] == sqlbase.IndexDescriptor_DESC) != scan.reverse {
+			if (scan.index.ColumnDirections[j] == descpb.IndexDescriptor_DESC) != scan.reverse {
 				ord.Columns[j].Direction = execinfrapb.Ordering_Column_DESC
 			}
 		}
@@ -296,7 +297,7 @@ type joinPlanningHelper struct {
 }
 
 func (h *joinPlanningHelper) joinOutColumns(
-	joinType sqlbase.JoinType, columns sqlbase.ResultColumns,
+	joinType descpb.JoinType, columns sqlbase.ResultColumns,
 ) (post execinfrapb.PostProcessSpec, joinToStreamColMap []int) {
 	joinToStreamColMap = makePlanToStreamColMap(len(columns))
 	post.Projection = true
@@ -778,12 +779,12 @@ func joinSpans(parent, child *scanNode, parentSpans []SpanPartition) ([]SpanPart
 	return joinSpans, nil
 }
 
-func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
+func distsqlSetOpJoinType(setOpType tree.UnionType) descpb.JoinType {
 	switch setOpType {
 	case tree.ExceptOp:
-		return sqlbase.ExceptAllJoin
+		return descpb.ExceptAllJoin
 	case tree.IntersectOp:
-		return sqlbase.IntersectAllJoin
+		return descpb.IntersectAllJoin
 	default:
 		panic(errors.AssertionFailedf("set op type %v unsupported by joins", setOpType))
 	}

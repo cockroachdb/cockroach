@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -130,14 +131,14 @@ func (n *dropIndexNode) startExec(params runParams) error {
 func (n *dropIndexNode) dropShardColumnAndConstraint(
 	params runParams,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	shardColDesc *sqlbase.ColumnDescriptor,
+	shardColDesc *descpb.ColumnDescriptor,
 ) error {
 	validChecks := tableDesc.Checks[:0]
 	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
-		if used, err := check.UsesColumn(tableDesc.TableDesc(), shardColDesc.ID); err != nil {
+		if used, err := tableDesc.CheckConstraintUsesColumn(check, shardColDesc.ID); err != nil {
 			return err
 		} else if used {
-			if check.Validity == sqlbase.ConstraintValidity_Validating {
+			if check.Validity == descpb.ConstraintValidity_Validating {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"referencing constraint %q in the middle of being added, try again later", check.Name)
 			}
@@ -150,7 +151,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 		tableDesc.Checks = validChecks
 	}
 
-	tableDesc.AddColumnMutation(shardColDesc, sqlbase.DescriptorMutation_DROP)
+	tableDesc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_DROP)
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].ID == shardColDesc.ID {
 			tmp := tableDesc.Columns[:0]
@@ -273,7 +274,7 @@ func (p *planner) dropIndexByName(
 					p.ExecCfg().Settings,
 					p.ExecCfg().ClusterID(),
 					p.ExecCfg().Codec,
-					tableDesc.TableDesc(),
+					tableDesc,
 					zone.Subzones,
 					false, /* newSubzones */
 				)
@@ -305,7 +306,7 @@ func (p *planner) dropIndexByName(
 	// Construct a list of all the remaining indexes, so that we can see if there
 	// is another index that could replace the one we are deleting for a given
 	// foreign key constraint.
-	remainingIndexes := make([]*sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+1)
+	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.Indexes)+1)
 	remainingIndexes = append(remainingIndexes, &tableDesc.PrimaryIndex)
 	for i := range tableDesc.Indexes {
 		index := &tableDesc.Indexes[i]
@@ -316,7 +317,7 @@ func (p *planner) dropIndexByName(
 
 	// indexHasReplacementCandidate runs isValidIndex on each index in remainingIndexes and returns
 	// true if at least one index satisfies isValidIndex.
-	indexHasReplacementCandidate := func(isValidIndex func(*sqlbase.IndexDescriptor) bool) bool {
+	indexHasReplacementCandidate := func(isValidIndex func(*descpb.IndexDescriptor) bool) bool {
 		foundReplacement := false
 		for _, index := range remainingIndexes {
 			if isValidIndex(index) {
@@ -330,7 +331,7 @@ func (p *planner) dropIndexByName(
 	// from the foreign key descriptors, fall back to the existing drop index logic.
 	// That means we pretend that we can never find replacements for any indexes.
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNoExplicitForeignKeyIndexIDs) {
-		indexHasReplacementCandidate = func(func(*sqlbase.IndexDescriptor) bool) bool {
+		indexHasReplacementCandidate = func(func(*descpb.IndexDescriptor) bool) bool {
 			return false
 		}
 	}
@@ -338,12 +339,12 @@ func (p *planner) dropIndexByName(
 	// Check for foreign key mutations referencing this index.
 	for _, m := range tableDesc.Mutations {
 		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			// If the index being deleted could be used as a index for this outbound
 			// foreign key mutation, then make sure that we have another index that
 			// could be used for this mutation.
 			idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs) &&
-			!indexHasReplacementCandidate(func(idx *sqlbase.IndexDescriptor) bool {
+			!indexHasReplacementCandidate(func(idx *descpb.IndexDescriptor) bool {
 				return idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs)
 			}) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -364,7 +365,7 @@ func (p *planner) dropIndexByName(
 			tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
 			sliceIdx++
 			fk := &tableDesc.OutboundFKs[i]
-			canReplace := func(idx *sqlbase.IndexDescriptor) bool {
+			canReplace := func(idx *descpb.IndexDescriptor) bool {
 				return idx.IsValidOriginIndex(fk.OriginColumnIDs)
 			}
 			// The index being deleted could be used as the origin index for this foreign key.
@@ -387,7 +388,7 @@ func (p *planner) dropIndexByName(
 		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
 		sliceIdx++
 		fk := &tableDesc.InboundFKs[i]
-		canReplace := func(idx *sqlbase.IndexDescriptor) bool {
+		canReplace := func(idx *descpb.IndexDescriptor) bool {
 			return idx.IsValidReferencedIndex(fk.ReferencedColumnIDs)
 		}
 		// The index being deleted could potentially be the referenced index for this fk.
@@ -484,7 +485,7 @@ func (p *planner) dropIndexByName(
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
 			// copy idxEntry for drop instead.
-			if err := tableDesc.AddIndexMutation(&idxEntry, sqlbase.DescriptorMutation_DROP); err != nil {
+			if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)

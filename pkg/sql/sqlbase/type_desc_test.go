@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -28,42 +29,42 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		a TypeDescriptor
-		b TypeDescriptor
+		a descpb.TypeDescriptor
+		b descpb.TypeDescriptor
 		// If err == "", then no error is expected. Otherwise, an error that
 		// matches is expected.
 		err string
 	}{
 		// Different type kinds shouldn't be equal.
 		{
-			a: TypeDescriptor{
+			a: descpb.TypeDescriptor{
 				Name: "a",
-				Kind: TypeDescriptor_ENUM,
+				Kind: descpb.TypeDescriptor_ENUM,
 			},
-			b: TypeDescriptor{
+			b: descpb.TypeDescriptor{
 				Name: "b",
-				Kind: TypeDescriptor_ALIAS,
+				Kind: descpb.TypeDescriptor_ALIAS,
 			},
 			err: `"b" is not an enum`,
 		},
 		// We aren't considering compatibility between different alias kinds.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ALIAS,
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ALIAS,
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ALIAS,
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ALIAS,
 			},
 			err: `compatibility comparison unsupported`,
 		},
 		// The empty enum should be compatible with any other enums.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -74,9 +75,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 		},
 		// The same enum should be compatible with itself.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -87,9 +88,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 					},
 				},
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -104,18 +105,18 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 		},
 		// An enum with only some members of another enum should be compatible.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hi",
 						PhysicalRepresentation: []byte{200},
 					},
 				},
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -130,9 +131,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 		},
 		// An enum with missing members shouldn't be compatible.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "howdy",
 						PhysicalRepresentation: []byte{128},
@@ -143,9 +144,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 					},
 				},
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -160,9 +161,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 		},
 		// An enum with a different physical representation shouldn't be compatible.
 		{
-			a: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			a: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -173,9 +174,9 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 					},
 				},
 			},
-			b: TypeDescriptor{
-				Kind: TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+			b: descpb.TypeDescriptor{
+				Kind: descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "hello",
 						PhysicalRepresentation: []byte{128},
@@ -191,7 +192,8 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		err := test.a.IsCompatibleWith(&test.b)
+		a, b := NewImmutableTypeDescriptor(test.a), NewImmutableTypeDescriptor(test.b)
+		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
 		} else {
@@ -210,7 +212,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Write some existing descriptors into the kvDB.
-	writeDesc := func(d *Descriptor, id ID) {
+	writeDesc := func(d *descpb.Descriptor, id descpb.ID) {
 		var v roachpb.Value
 		if err := v.SetProto(d); err != nil {
 			t.Fatal(err)
@@ -219,34 +221,34 @@ func TestValidateTypeDesc(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeDesc(&Descriptor{Union: &Descriptor_Database{}}, 100)
-	writeDesc(&Descriptor{Union: &Descriptor_Schema{}}, 101)
-	writeDesc(&Descriptor{Union: &Descriptor_Type{}}, 102)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Database{}}, 100)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{}}, 101)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Type{}}, 102)
 
 	testData := []struct {
 		err  string
-		desc TypeDescriptor
+		desc descpb.TypeDescriptor
 	}{
 		{
 			`empty type name`,
-			TypeDescriptor{},
+			descpb.TypeDescriptor{},
 		},
 		{
 			`invalid ID 0`,
-			TypeDescriptor{Name: "t"},
+			descpb.TypeDescriptor{Name: "t"},
 		},
 		{
 			`invalid parentID 0`,
-			TypeDescriptor{Name: "t", ID: 1},
+			descpb.TypeDescriptor{Name: "t", ID: 1},
 		},
 		{
 			`enum members are not sorted [{[2] a ALL} {[1] b ALL}]`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       1,
 				ParentID: 1,
-				Kind:     TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "a",
 						PhysicalRepresentation: []byte{2},
@@ -260,12 +262,12 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 		{
 			`duplicate enum physical rep [1]`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       1,
 				ParentID: 1,
-				Kind:     TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "a",
 						PhysicalRepresentation: []byte{1},
@@ -279,12 +281,12 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 		{
 			`duplicate enum member "a"`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       1,
 				ParentID: 1,
-				Kind:     TypeDescriptor_ENUM,
-				EnumMembers: []TypeDescriptor_EnumMember{
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "a",
 						PhysicalRepresentation: []byte{1},
@@ -298,62 +300,63 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 		{
 			`ALIAS type desc has nil alias type`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       1,
 				ParentID: 1,
-				Kind:     TypeDescriptor_ALIAS,
+				Kind:     descpb.TypeDescriptor_ALIAS,
 			},
 		},
 		{
 			`parentID 500 does not exist`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       1,
 				ParentID: 500,
-				Kind:     TypeDescriptor_ALIAS,
+				Kind:     descpb.TypeDescriptor_ALIAS,
 				Alias:    types.Int,
 			},
 		},
 		{
 			`parentSchemaID 500 does not exist`,
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             1,
 				ParentID:       100,
 				ParentSchemaID: 500,
-				Kind:           TypeDescriptor_ALIAS,
+				Kind:           descpb.TypeDescriptor_ALIAS,
 				Alias:          types.Int,
 			},
 		},
 		{
 			"arrayTypeID 500 does not exist",
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             1,
 				ParentID:       100,
 				ParentSchemaID: 101,
-				Kind:           TypeDescriptor_ENUM,
+				Kind:           descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:    500,
 			},
 		},
 		{
 			"referencing descriptor 500 does not exist",
-			TypeDescriptor{
+			descpb.TypeDescriptor{
 				Name:                     "t",
 				ID:                       1,
 				ParentID:                 100,
 				ParentSchemaID:           101,
-				Kind:                     TypeDescriptor_ENUM,
+				Kind:                     descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:              102,
-				ReferencingDescriptorIDs: []ID{500},
+				ReferencingDescriptorIDs: []descpb.ID{500},
 			},
 		},
 	}
 
 	for _, test := range testData {
+		desc := NewImmutableTypeDescriptor(test.desc)
 		txn := kvDB.NewTxn(ctx, "test")
-		if err := test.desc.Validate(ctx, txn, keys.SystemSQLCodec); err == nil {
+		if err := desc.Validate(ctx, txn, keys.SystemSQLCodec); err == nil {
 			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("expected err: %s but found: %s", test.err, err)

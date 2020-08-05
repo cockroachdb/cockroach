@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -128,7 +129,7 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 		log.Errorf(context.Background(), "tableStatAddedGossipUpdate(%s) error: %v", key, err)
 		return
 	}
-	sc.RefreshTableStats(context.Background(), sqlbase.ID(tableID))
+	sc.RefreshTableStats(context.Background(), descpb.ID(tableID))
 }
 
 // GetTableStats looks up statistics for the requested table ID in the cache,
@@ -137,14 +138,14 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) GetTableStats(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descpb.ID,
 ) ([]*TableStatistic, error) {
-	if sqlbase.IsReservedID(tableID) {
+	if descpb.IsReservedID(tableID) {
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
 		return nil, nil
 	}
-	if sqlbase.IsVirtualTable(tableID) {
+	if descpb.IsVirtualTable(tableID) {
 		// Don't try to get statistics for virtual tables.
 		return nil, nil
 	}
@@ -167,7 +168,7 @@ func (sc *TableStatisticsCache) GetTableStats(
 // Assumes that the caller holds sc.mu. Note that the mutex can be unlocked and
 // locked again if we need to wait (this can only happen when found=true).
 func (sc *TableStatisticsCache) lookupStatsLocked(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descpb.ID,
 ) (found bool, e *cacheEntry) {
 	eUntyped, ok := sc.mu.cache.Get(tableID)
 	if !ok {
@@ -199,7 +200,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 //  - mutex is locked again and the entry is updated.
 //
 func (sc *TableStatisticsCache) addCacheEntryLocked(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descpb.ID,
 ) (stats []*TableStatistic, err error) {
 	if log.V(1) {
 		log.Infof(ctx, "reading statistics for table %d", tableID)
@@ -244,7 +245,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 //  - stats are retrieved from database:
 //  - mutex is locked again and the entry is updated.
 //
-func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID sqlbase.ID) {
+func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID descpb.ID) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
@@ -296,7 +297,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID s
 
 // RefreshTableStats refreshes the cached statistics for the given table ID
 // by fetching the new stats from the database.
-func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID sqlbase.ID) {
+func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID descpb.ID) {
 	if log.V(1) {
 		log.Infof(ctx, "refreshing statistics for table %d", tableID)
 	}
@@ -309,7 +310,7 @@ func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID s
 // Note that RefreshTableStats should normally be used instead of this function.
 // This function is used only when we want to guarantee that the next query
 // uses updated stats.
-func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
+func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID descpb.ID) {
 	if log.V(1) {
 		log.Infof(ctx, "evicting statistics for table %d", tableID)
 	}
@@ -373,7 +374,7 @@ func parseStats(
 	// Extract datum values.
 	res := &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
-			TableID:       sqlbase.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
+			TableID:       descpb.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
 			StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
 			CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
 			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
@@ -382,9 +383,9 @@ func parseStats(
 		},
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
-	res.ColumnIDs = make([]sqlbase.ColumnID, len(columnIDs.Array))
+	res.ColumnIDs = make([]descpb.ColumnID, len(columnIDs.Array))
 	for i, d := range columnIDs.Array {
-		res.ColumnIDs[i] = sqlbase.ColumnID((int32)(*d.(*tree.DInt)))
+		res.ColumnIDs[i] = descpb.ColumnID((int32)(*d.(*tree.DInt)))
 	}
 	if datums[nameIndex] != tree.DNull {
 		res.Name = string(*datums[nameIndex].(*tree.DString))
@@ -414,10 +415,10 @@ func parseStats(
 			// collecting the stats. Changes to types are backwards compatible across
 			// versions, so using a newer version of the type metadata here is safe.
 			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				typeLookup := func(ctx context.Context, id sqlbase.ID) (tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+				typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
 					return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
 				}
-				name, typeDesc, err := typeLookup(ctx, sqlbase.ID(typ.StableTypeID()))
+				name, typeDesc, err := typeLookup(ctx, descpb.ID(typ.StableTypeID()))
 				if err != nil {
 					return err
 				}
@@ -449,7 +450,7 @@ func parseStats(
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
 func (sc *TableStatisticsCache) getTableStatsFromDB(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descpb.ID,
 ) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
 SELECT

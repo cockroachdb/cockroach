@@ -40,7 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1593,7 +1594,7 @@ func TestStatusAPIStatements(t *testing.T) {
 			// be automatically retried, confusing the test success check.
 			continue
 		}
-		if strings.HasPrefix(respStatement.Key.KeyData.App, sqlbase.InternalAppNamePrefix) {
+		if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 			// We ignore internal queries, these are not relevant for the
 			// validity of this test.
 			continue
@@ -1792,12 +1793,12 @@ func TestJobStatusResponse(t *testing.T) {
 			Details: jobspb.ImportDetails{
 				Tables: []jobspb.ImportDetails_Table{
 					{
-						Desc: &sqlbase.TableDescriptor{
+						Desc: &descpb.TableDescriptor{
 							ID: 1,
 						},
 					},
 					{
-						Desc: &sqlbase.TableDescriptor{
+						Desc: &descpb.TableDescriptor{
 							ID: 2,
 						},
 					},
@@ -1805,7 +1806,7 @@ func TestJobStatusResponse(t *testing.T) {
 				URIs: []string{"a", "b"},
 			},
 			Progress:      jobspb.ImportProgress{},
-			DescriptorIDs: []sqlbase.ID{1, 2, 3},
+			DescriptorIDs: []descpb.ID{1, 2, 3},
 		},
 		nil)
 	if err != nil {

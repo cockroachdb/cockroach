@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -103,7 +103,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		)
 		mergeJoiner, err := NewMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
-			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
+			colexecbase.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},

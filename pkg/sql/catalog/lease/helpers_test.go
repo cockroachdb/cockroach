@@ -14,15 +14,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // A unique id for a particular descriptor version.
 type descVersionID struct {
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	id      descpb.ID
+	version descpb.DescriptorVersion
 }
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
@@ -83,7 +83,7 @@ func (t RemovalTracker) WaitForRemoval() error {
 // store. This should be hooked up as a callback to
 // StorageTestingKnobs.LeaseReleasedEvent.
 func (w *LeaseRemovalTracker) LeaseRemovedNotification(
-	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
+	id descpb.ID, version descpb.DescriptorVersion, err error,
 ) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

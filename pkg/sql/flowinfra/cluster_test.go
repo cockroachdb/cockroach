@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +68,7 @@ func TestClusterFlow(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sumDigitsFn, sqlutils.RowEnglishFn))
 
 	kvDB := tc.Server(0).DB()
-	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.Indexes[0].ID))
@@ -100,19 +102,19 @@ func TestClusterFlow(t *testing.T) {
 	leafInputState := txn.GetLeafTxnInputState(ctx)
 
 	tr1 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
 	}
 
 	tr2 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
 	}
 
 	tr3 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
 	}
@@ -196,7 +198,7 @@ func TestClusterFlow(t *testing.T) {
 						},
 						ColumnTypes: sqlbase.TwoIntCols,
 					}},
-					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc}},
+					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc()}},
 					Post: execinfrapb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{2},
@@ -407,7 +409,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		RightOrdering: execinfrapb.Ordering{
 			Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		},
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 	}
 
 	now := tc.Server(0).Clock().Now()

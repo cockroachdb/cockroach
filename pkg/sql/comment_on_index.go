@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -22,8 +23,8 @@ import (
 
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
-	tableDesc *sqlbase.TableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	tableDesc *descpb.TableDescriptor
+	indexDesc *descpb.IndexDescriptor
 }
 
 // CommentOnIndex adds a comment on an index.
@@ -76,7 +77,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 }
 
 func (p *planner) upsertIndexComment(
-	ctx context.Context, tableID sqlbase.ID, indexID sqlbase.IndexID, comment string,
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, comment string,
 ) error {
 	_, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 		ctx,
@@ -93,7 +94,7 @@ func (p *planner) upsertIndexComment(
 }
 
 func (p *planner) removeIndexComment(
-	ctx context.Context, tableID sqlbase.ID, indexID sqlbase.IndexID,
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,

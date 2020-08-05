@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -488,7 +488,7 @@ func TestToHex(t *testing.T) {
 			{idx: -1, msg: &jobspb.Progress{}},
 		},
 		"debug/system.descriptor.txt": {
-			{idx: 2, msg: &sqlbase.Descriptor{}},
+			{idx: 2, msg: &descpb.Descriptor{}},
 		},
 	}
 

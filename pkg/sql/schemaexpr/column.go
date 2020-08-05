@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,7 +67,7 @@ func FormatColumnForDisplay(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	tbl *sqlbase.ImmutableTableDescriptor,
-	desc *sqlbase.ColumnDescriptor,
+	desc *descpb.ColumnDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.FormatNameP(&desc.Name)
@@ -135,7 +136,7 @@ func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
 // If the expression references a column that does not exist in the table
 // descriptor, iterColDescriptors errs with pgcode.UndefinedColumn.
 func iterColDescriptors(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*sqlbase.ColumnDescriptor) error,
+	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*descpb.ColumnDescriptor) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
@@ -218,7 +219,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // If the expression references a column that does not exist in the table
 // descriptor, replaceColumnVars errs with pgcode.UndefinedColumn.
 func replaceColumnVars(
-	desc sqlbase.TableDescriptorInterface, rootExpr tree.Expr,
+	desc sqlbase.TableDescriptor, rootExpr tree.Expr,
 ) (tree.Expr, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 

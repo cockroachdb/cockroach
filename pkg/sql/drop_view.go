@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -118,7 +119,7 @@ func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropViewNode) Close(context.Context)        {}
 
-func descInSlice(descID sqlbase.ID, td []toDelete) bool {
+func descInSlice(descID descpb.ID, td []toDelete) bool {
 	for _, toDel := range td {
 		if descID == toDel.desc.ID {
 			return true
@@ -130,7 +131,7 @@ func descInSlice(descID sqlbase.ID, td []toDelete) bool {
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,
 	from *sqlbase.MutableTableDescriptor,
-	ref sqlbase.TableDescriptor_Reference,
+	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
@@ -140,8 +141,8 @@ func (p *planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID sqlbase.ID,
-	ref sqlbase.TableDescriptor_Reference,
+	parentID descpb.ID,
+	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
@@ -199,7 +200,7 @@ func (p *planner) dropViewImpl(
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
 		if err := p.writeSchemaChange(
-			ctx, dependencyDesc, sqlbase.InvalidMutationID,
+			ctx, dependencyDesc, descpb.InvalidMutationID,
 			fmt.Sprintf("removing references for view %s from table %s(%d)",
 				viewDesc.Name, dependencyDesc.Name, dependencyDesc.ID),
 		); err != nil {
@@ -241,7 +242,7 @@ func (p *planner) getViewDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, viewID sqlbase.ID,
+	parentID, viewID descpb.ID,
 	behavior tree.DropBehavior,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	viewDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, viewID, p.txn)
@@ -253,7 +254,7 @@ func (p *planner) getViewDescForCascade(
 		viewName := viewDesc.Name
 		if viewDesc.ParentID != parentID {
 			var err error
-			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc.TableDesc())
+			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				return nil, sqlbase.NewDependentObjectErrorf(

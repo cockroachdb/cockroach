@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -243,7 +243,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE INT;
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(desc.Mutations) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}

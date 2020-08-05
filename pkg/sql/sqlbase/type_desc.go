@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -27,57 +28,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetTypeDescFromID retrieves the type descriptor for the type ID passed
-// in using an existing proto getter. It returns an error if the descriptor
-// doesn't exist or if it exists and is not a type descriptor.
-//
-// TODO(ajwerner): Move this to catalogkv or something like it.
-func GetTypeDescFromID(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
-) (*ImmutableTypeDescriptor, error) {
-	descKey := MakeDescMetadataKey(codec, id)
-	desc := &Descriptor{}
-	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
-	if err != nil {
-		return nil, err
-	}
-	typ := desc.GetType()
-	if typ == nil {
-		return nil, ErrDescriptorNotFound
-	}
-	// TODO(ajwerner): Fill in ModificationTime.
-	return NewImmutableTypeDescriptor(*typ), nil
-}
-
-// TypeDescriptorInterface will eventually be called typedesc.Descriptor.
+// TypeDescriptor will eventually be called typedesc.Descriptor.
 // It is implemented by (Imm|M)utableTypeDescriptor.
-type TypeDescriptorInterface interface {
-	BaseDescriptorInterface
-	TypeDesc() *TypeDescriptor
+type TypeDescriptor interface {
+	Descriptor
+	TypeDesc() *descpb.TypeDescriptor
 	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
+	GetIDClosure() map[descpb.ID]struct{}
 }
 
-var _ TypeDescriptorInterface = (*ImmutableTypeDescriptor)(nil)
-var _ TypeDescriptorInterface = (*MutableTypeDescriptor)(nil)
+var _ TypeDescriptor = (*ImmutableTypeDescriptor)(nil)
+var _ TypeDescriptor = (*MutableTypeDescriptor)(nil)
 
 // MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
 // for the input type. It is intended to be used as an intermediate for name
 // resolution, and should not be serialized and stored on disk.
 func MakeSimpleAliasTypeDescriptor(typ *types.T) *ImmutableTypeDescriptor {
-	return NewImmutableTypeDescriptor(TypeDescriptor{
-		ParentID:       InvalidID,
-		ParentSchemaID: InvalidID,
+	return NewImmutableTypeDescriptor(descpb.TypeDescriptor{
+		ParentID:       descpb.InvalidID,
+		ParentSchemaID: descpb.InvalidID,
 		Name:           typ.Name(),
-		ID:             InvalidID,
-		Kind:           TypeDescriptor_ALIAS,
+		ID:             descpb.InvalidID,
+		Kind:           descpb.TypeDescriptor_ALIAS,
 		Alias:          typ,
 	})
 }
 
 // NameResolutionResult implements the NameResolutionResult interface.
-func (desc *TypeDescriptor) NameResolutionResult() {}
+func (desc *ImmutableTypeDescriptor) NameResolutionResult() {}
 
 // MutableTypeDescriptor is a custom type for TypeDescriptors undergoing
 // any types of modifications.
@@ -98,7 +78,7 @@ type MutableTypeDescriptor struct {
 // ImmutableTypeDescriptor is a custom type for wrapping TypeDescriptors
 // when used in a read only way.
 type ImmutableTypeDescriptor struct {
-	TypeDescriptor
+	descpb.TypeDescriptor
 
 	// The fields below are used to fill user defined type metadata for ENUMs.
 	logicalReps     []string
@@ -109,7 +89,7 @@ type ImmutableTypeDescriptor struct {
 // NewMutableCreatedTypeDescriptor returns a MutableTypeDescriptor from the
 // given type descriptor with the cluster version being the zero type. This
 // is for a type that is created in the same transaction.
-func NewMutableCreatedTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
+func NewMutableCreatedTypeDescriptor(desc descpb.TypeDescriptor) *MutableTypeDescriptor {
 	return &MutableTypeDescriptor{
 		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(desc),
 	}
@@ -118,26 +98,26 @@ func NewMutableCreatedTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor
 // NewMutableExistingTypeDescriptor returns a MutableTypeDescriptor from the
 // given type descriptor with the cluster version also set to the descriptor.
 // This is for types that already exist.
-func NewMutableExistingTypeDescriptor(desc TypeDescriptor) *MutableTypeDescriptor {
+func NewMutableExistingTypeDescriptor(desc descpb.TypeDescriptor) *MutableTypeDescriptor {
 	return &MutableTypeDescriptor{
-		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(*protoutil.Clone(&desc).(*TypeDescriptor)),
+		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(*protoutil.Clone(&desc).(*descpb.TypeDescriptor)),
 		ClusterVersion:          NewImmutableTypeDescriptor(desc),
 	}
 }
 
 // NewImmutableTypeDescriptor returns an ImmutableTypeDescriptor from the
 // given TypeDescriptor.
-func NewImmutableTypeDescriptor(desc TypeDescriptor) *ImmutableTypeDescriptor {
+func NewImmutableTypeDescriptor(desc descpb.TypeDescriptor) *ImmutableTypeDescriptor {
 	m := makeImmutableTypeDescriptor(desc)
 	return &m
 }
 
-func makeImmutableTypeDescriptor(desc TypeDescriptor) ImmutableTypeDescriptor {
+func makeImmutableTypeDescriptor(desc descpb.TypeDescriptor) ImmutableTypeDescriptor {
 	immutDesc := ImmutableTypeDescriptor{TypeDescriptor: desc}
 
 	// Initialize metadata specific to the TypeDescriptor kind.
 	switch immutDesc.Kind {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		immutDesc.logicalReps = make([]string, len(desc.EnumMembers))
 		immutDesc.physicalReps = make([][]byte, len(desc.EnumMembers))
 		immutDesc.readOnlyMembers = make([]bool, len(desc.EnumMembers))
@@ -145,81 +125,85 @@ func makeImmutableTypeDescriptor(desc TypeDescriptor) ImmutableTypeDescriptor {
 			member := &desc.EnumMembers[i]
 			immutDesc.logicalReps[i] = member.LogicalRepresentation
 			immutDesc.physicalReps[i] = member.PhysicalRepresentation
-			immutDesc.readOnlyMembers[i] = member.Capability == TypeDescriptor_EnumMember_READ_ONLY
+			immutDesc.readOnlyMembers[i] =
+				member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY
 		}
 	}
 
 	return immutDesc
 }
 
-// DatabaseDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableTypeDescriptor) DatabaseDesc() *DatabaseDescriptor {
-	return nil
+// getTypeDescFromID retrieves the type descriptor for the type ID passed
+// in using an existing proto getter. It returns an error if the descriptor
+// doesn't exist or if it exists and is not a type descriptor.
+//
+// TODO(ajwerner): Remove this when we have a higher-level interface for
+// retrieving descriptors by ID during validation.
+func getTypeDescFromID(
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id descpb.ID,
+) (*ImmutableTypeDescriptor, error) {
+	descKey := MakeDescMetadataKey(codec, id)
+	desc := &descpb.Descriptor{}
+	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
+		return nil, err
+	}
+	typ := desc.GetType()
+	if typ == nil {
+		return nil, ErrDescriptorNotFound
+	}
+	// TODO(ajwerner): Fill in ModificationTime.
+	return NewImmutableTypeDescriptor(*typ), nil
 }
 
-// SchemaDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableTypeDescriptor) SchemaDesc() *SchemaDescriptor {
-	return nil
-}
-
-// TableDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableTypeDescriptor) TableDesc() *TableDescriptor {
-	return nil
-}
-
-// TypeDesc implements the ObjectDescriptor interface.
-func (desc *ImmutableTypeDescriptor) TypeDesc() *TypeDescriptor {
+// TypeDesc implements the Descriptor interface.
+func (desc *ImmutableTypeDescriptor) TypeDesc() *descpb.TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
-// Adding implements the BaseDescriptorInterface interface.
-func (desc *TypeDescriptor) Adding() bool {
+// Adding implements the Descriptor interface.
+func (desc *ImmutableTypeDescriptor) Adding() bool {
 	return false
 }
 
-// Dropped implements the BaseDescriptorInterface interface.
-func (desc *TypeDescriptor) Dropped() bool {
-	return desc.State == TypeDescriptor_DROP
-}
-
-// Offline implements the BaseDescriptorInterface interface.
-func (desc *TypeDescriptor) Offline() bool {
+// Offline implements the Descriptor interface.
+func (desc *ImmutableTypeDescriptor) Offline() bool {
 	return false
 }
 
-// GetOfflineReason implements the BaseDescriptorInterface interface.
-func (desc *TypeDescriptor) GetOfflineReason() string {
+// GetOfflineReason implements the Descriptor interface.
+func (desc *ImmutableTypeDescriptor) GetOfflineReason() string {
 	return ""
 }
 
 // DescriptorProto returns a Descriptor for serialization.
-func (desc *TypeDescriptor) DescriptorProto() *Descriptor {
-	return &Descriptor{
-		Union: &Descriptor_Type{
-			Type: desc,
+func (desc *ImmutableTypeDescriptor) DescriptorProto() *descpb.Descriptor {
+	return &descpb.Descriptor{
+		Union: &descpb.Descriptor_Type{
+			Type: &desc.TypeDescriptor,
 		},
 	}
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) SetDrainingNames(names []NameInfo) {
+func (desc *MutableTypeDescriptor) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
-	return TableDescriptor_DISABLED
+func (desc *ImmutableTypeDescriptor) GetAuditMode() descpb.TableDescriptor_AuditMode {
+	return descpb.TableDescriptor_DISABLED
 }
 
 // GetPrivileges implements the DescriptorProto interface.
 //
 // Types do not carry privileges.
-func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
+func (desc *ImmutableTypeDescriptor) GetPrivileges() *descpb.PrivilegeDescriptor {
 	return nil
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *TypeDescriptor) TypeName() string {
+func (desc *ImmutableTypeDescriptor) TypeName() string {
 	return "type"
 }
 
@@ -242,15 +226,15 @@ func (desc *MutableTypeDescriptor) OriginalName() string {
 }
 
 // OriginalID implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) OriginalID() ID {
+func (desc *MutableTypeDescriptor) OriginalID() descpb.ID {
 	if desc.ClusterVersion == nil {
-		return InvalidID
+		return descpb.InvalidID
 	}
 	return desc.ClusterVersion.ID
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) OriginalVersion() DescriptorVersion {
+func (desc *MutableTypeDescriptor) OriginalVersion() descpb.DescriptorVersion {
 	if desc.ClusterVersion == nil {
 		return 0
 	}
@@ -258,10 +242,10 @@ func (desc *MutableTypeDescriptor) OriginalVersion() DescriptorVersion {
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
+func (desc *MutableTypeDescriptor) Immutable() Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*TypeDescriptor))
+	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -271,7 +255,7 @@ func (desc *MutableTypeDescriptor) IsNew() bool {
 
 // AddEnumValue adds an enum member to the type.
 func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) error {
-	if desc.Kind != TypeDescriptor_ENUM {
+	if desc.Kind != descpb.TypeDescriptor_ENUM {
 		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 	// See if the value already exists in the enum or not.
@@ -326,22 +310,22 @@ func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) er
 	// capability to ensure that they aren't written before all other nodes know
 	// how to decode the physical representation.
 	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
-	newMember := TypeDescriptor_EnumMember{
+	newMember := descpb.TypeDescriptor_EnumMember{
 		LogicalRepresentation:  node.NewVal,
 		PhysicalRepresentation: newPhysicalRep,
-		Capability:             TypeDescriptor_EnumMember_READ_ONLY,
+		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
 	}
 
 	// Now, insert the new member.
 	if len(desc.EnumMembers) == 0 {
-		desc.EnumMembers = []TypeDescriptor_EnumMember{newMember}
+		desc.EnumMembers = []descpb.TypeDescriptor_EnumMember{newMember}
 	} else {
 		if pos < 0 {
 			// Insert the element in the front of the slice.
-			desc.EnumMembers = append([]TypeDescriptor_EnumMember{newMember}, desc.EnumMembers...)
+			desc.EnumMembers = append([]descpb.TypeDescriptor_EnumMember{newMember}, desc.EnumMembers...)
 		} else {
 			// Insert the element in front of pos.
-			desc.EnumMembers = append(desc.EnumMembers, TypeDescriptor_EnumMember{})
+			desc.EnumMembers = append(desc.EnumMembers, descpb.TypeDescriptor_EnumMember{})
 			copy(desc.EnumMembers[pos+2:], desc.EnumMembers[pos+1:])
 			desc.EnumMembers[pos+1] = newMember
 		}
@@ -351,7 +335,7 @@ func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) er
 
 // AddReferencingDescriptorID adds a new referencing descriptor ID to the
 // TypeDescriptor. It ensures that duplicates are not added.
-func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new ID) {
+func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new descpb.ID) {
 	for _, id := range desc.ReferencingDescriptorIDs {
 		if new == id {
 			return
@@ -362,7 +346,7 @@ func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new ID) {
 
 // RemoveReferencingDescriptorID removes the desired referencing descriptor ID
 // from the TypeDescriptor. It has no effect if the requested ID is not present.
-func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove ID) {
+func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove descpb.ID) {
 	for i, id := range desc.ReferencingDescriptorIDs {
 		if id == remove {
 			desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs[:i], desc.ReferencingDescriptorIDs[i+1:]...)
@@ -373,7 +357,7 @@ func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove ID) {
 
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
 // physical representation.
-type EnumMembers []TypeDescriptor_EnumMember
+type EnumMembers []descpb.TypeDescriptor_EnumMember
 
 func (e EnumMembers) Len() int { return len(e) }
 func (e EnumMembers) Less(i, j int) bool {
@@ -382,21 +366,23 @@ func (e EnumMembers) Less(i, j int) bool {
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
 // Validate performs validation on the TypeDescriptor.
-func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
+func (desc *ImmutableTypeDescriptor) Validate(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) error {
 	// Validate local properties of the descriptor.
 	if err := validateName(desc.Name, "type"); err != nil {
 		return err
 	}
 
-	if desc.ID == InvalidID {
+	if desc.ID == descpb.InvalidID {
 		return errors.AssertionFailedf("invalid ID %d", errors.Safe(desc.ID))
 	}
-	if desc.ParentID == InvalidID {
+	if desc.ParentID == descpb.InvalidID {
 		return errors.AssertionFailedf("invalid parentID %d", errors.Safe(desc.ParentID))
 	}
 
 	switch desc.Kind {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		// All of the enum members should be in sorted order.
 		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
 			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)
@@ -416,7 +402,7 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 			}
 			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
 		}
-	case TypeDescriptor_ALIAS:
+	case descpb.TypeDescriptor_ALIAS:
 		if desc.Alias == nil {
 			return errors.AssertionFailedf("ALIAS type desc has nil alias type")
 		}
@@ -451,7 +437,7 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 	}
 
 	switch desc.Kind {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		// Ensure that the referenced array type exists.
 		b.Get(MakeDescMetadataKey(codec, desc.ArrayTypeID))
 		opChecks = append(opChecks, func(k kv.KeyValue) error {
@@ -460,8 +446,8 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 			}
 			return nil
 		})
-	case TypeDescriptor_ALIAS:
-		if desc.ArrayTypeID != InvalidID {
+	case descpb.TypeDescriptor_ALIAS:
+		if desc.ArrayTypeID != descpb.InvalidID {
 			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
 		}
 	}
@@ -500,21 +486,21 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 
 // TypeDescriptorResolver is an interface used during hydration of type
 // metadata in types.T's. It is similar to tree.TypeReferenceResolver, except
-// that it has the power to return TypeDescriptorInterface, rather than only a
+// that it has the power to return TypeDescriptor, rather than only a
 // types.T. Implementers of tree.TypeReferenceResolver should implement this
 // interface as well.
 type TypeDescriptorResolver interface {
 	// GetTypeDescriptor returns the type descriptor for the input ID.
-	GetTypeDescriptor(ctx context.Context, id ID) (tree.TypeName, TypeDescriptorInterface, error)
+	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
 }
 
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.
-type TypeLookupFunc func(ctx context.Context, id ID) (tree.TypeName, TypeDescriptorInterface, error)
+type TypeLookupFunc func(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
 
 // GetTypeDescriptor implements the TypeDescriptorResolver interface.
 func (t TypeLookupFunc) GetTypeDescriptor(
-	ctx context.Context, id ID,
-) (tree.TypeName, TypeDescriptorInterface, error) {
+	ctx context.Context, id descpb.ID,
+) (tree.TypeName, TypeDescriptor, error) {
 	return t(ctx, id)
 }
 
@@ -523,13 +509,13 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 	ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		typ := types.MakeEnum(uint32(desc.GetID()), uint32(desc.ArrayTypeID))
 		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
 			return nil, err
 		}
 		return typ, nil
-	case TypeDescriptor_ALIAS:
+	case descpb.TypeDescriptor_ALIAS:
 		// Hydrate the alias and return it.
 		if err := desc.HydrateTypeInfoWithName(ctx, desc.Alias, name, res); err != nil {
 			return nil, err
@@ -544,12 +530,12 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 // types present in a table descriptor. typeLookup retrieves the fully
 // qualified name and descriptor for a particular ID.
 func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *TableDescriptor, res TypeDescriptorResolver,
+	ctx context.Context, desc *descpb.TableDescriptor, res TypeDescriptorResolver,
 ) error {
-	hydrateCol := func(col *ColumnDescriptor) error {
+	hydrateCol := func(col *descpb.ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
-			name, typDesc, err := res.GetTypeDescriptor(ctx, ID(col.Type.StableTypeID()))
+			name, typDesc, err := res.GetTypeDescriptor(ctx, descpb.ID(col.Type.StableTypeID()))
 			if err != nil {
 				return err
 			}
@@ -592,7 +578,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	}
 	typ.TypeMeta.Version = uint32(desc.Version)
 	switch desc.Kind {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
 			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
 		}
@@ -602,13 +588,13 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 			IsMemberReadOnly:        desc.readOnlyMembers,
 		}
 		return nil
-	case TypeDescriptor_ALIAS:
+	case descpb.TypeDescriptor_ALIAS:
 		if typ.UserDefined() {
 			switch typ.Family() {
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, ID(elemType.StableTypeID()))
+				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, descpb.ID(elemType.StableTypeID()))
 				if err != nil {
 					return err
 				}
@@ -629,10 +615,10 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 // IsCompatibleWith returns whether the type "desc" is compatible with "other".
 // As of now "compatibility" entails that disk encoded data of "desc" can be
 // interpreted and used by "other".
-func (desc *TypeDescriptor) IsCompatibleWith(other *TypeDescriptor) error {
+func (desc *ImmutableTypeDescriptor) IsCompatibleWith(other *ImmutableTypeDescriptor) error {
 	switch desc.Kind {
-	case TypeDescriptor_ENUM:
-		if other.Kind != TypeDescriptor_ENUM {
+	case descpb.TypeDescriptor_ENUM:
+		if other.Kind != descpb.TypeDescriptor_ENUM {
 			return errors.Newf("%q is not an enum", other.Name)
 		}
 		// Every enum value in desc must be present in other, and all of the
@@ -666,13 +652,13 @@ func (desc *TypeDescriptor) IsCompatibleWith(other *TypeDescriptor) error {
 
 // HasPendingSchemaChanges returns whether or not this descriptor has schema
 // changes that need to be completed.
-func (desc *TypeDescriptor) HasPendingSchemaChanges() bool {
+func (desc *ImmutableTypeDescriptor) HasPendingSchemaChanges() bool {
 	switch desc.Kind {
-	case TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM:
 		// If there are any non-public enum members, then a type schema change is
 		// needed to promote the members.
 		for i := range desc.EnumMembers {
-			if desc.EnumMembers[i].Capability != TypeDescriptor_EnumMember_ALL {
+			if desc.EnumMembers[i].Capability != descpb.TypeDescriptor_EnumMember_ALL {
 				return true
 			}
 		}
@@ -684,11 +670,11 @@ func (desc *TypeDescriptor) HasPendingSchemaChanges() bool {
 
 // GetIDClosure returns all type descriptor IDs that are referenced by this
 // type descriptor.
-func (desc *TypeDescriptor) GetIDClosure() map[ID]struct{} {
-	ret := make(map[ID]struct{})
+func (desc *ImmutableTypeDescriptor) GetIDClosure() map[descpb.ID]struct{} {
+	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
 	ret[desc.ID] = struct{}{}
-	if desc.Kind == TypeDescriptor_ALIAS {
+	if desc.Kind == descpb.TypeDescriptor_ALIAS {
 		// If this descriptor is an alias for another type, then get collect the
 		// closure for alias.
 		children := GetTypeDescriptorClosure(desc.Alias)
@@ -704,12 +690,14 @@ func (desc *TypeDescriptor) GetIDClosure() map[ID]struct{} {
 
 // GetTypeDescriptorClosure returns all type descriptor IDs that are
 // referenced by this input types.T.
-func GetTypeDescriptorClosure(typ *types.T) map[ID]struct{} {
+func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
 	if !typ.UserDefined() {
-		return map[ID]struct{}{}
+		return map[descpb.ID]struct{}{}
 	}
 	// Collect the type's descriptor ID.
-	ret := map[ID]struct{}{ID(typ.StableTypeID()): {}}
+	ret := map[descpb.ID]struct{}{
+		descpb.ID(typ.StableTypeID()): {},
+	}
 	if typ.Family() == types.ArrayFamily {
 		// If we have an array type, then collect all types in the contents.
 		children := GetTypeDescriptorClosure(typ.ArrayContents())
@@ -718,7 +706,7 @@ func GetTypeDescriptorClosure(typ *types.T) map[ID]struct{} {
 		}
 	} else {
 		// Otherwise, take the array type ID.
-		ret[ID(typ.StableArrayTypeID())] = struct{}{}
+		ret[descpb.ID(typ.StableArrayTypeID())] = struct{}{}
 	}
 	return ret
 }

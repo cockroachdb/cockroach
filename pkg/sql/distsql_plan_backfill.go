@@ -14,16 +14,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 func initBackfillerSpec(
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc descpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
@@ -51,7 +51,7 @@ func initBackfillerSpec(
 func (dsp *DistSQLPlanner) createBackfiller(
 	planCtx *PlanningCtx,
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc descpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,

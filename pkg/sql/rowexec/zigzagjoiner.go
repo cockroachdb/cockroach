@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -275,8 +276,13 @@ func newZigzagJoiner(
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
 
-	leftColumnTypes := spec.Tables[0].ColumnTypes()
-	rightColumnTypes := spec.Tables[1].ColumnTypes()
+	// TODO(ajwerner): Utilize a cached copy of these tables.
+	tables := make([]sqlbase.ImmutableTableDescriptor, len(spec.Tables))
+	for i := range spec.Tables {
+		tables[i] = sqlbase.MakeImmutableTableDescriptor(spec.Tables[i])
+	}
+	leftColumnTypes := tables[0].ColumnTypes()
+	rightColumnTypes := tables[1].ColumnTypes()
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
@@ -319,7 +325,7 @@ func newZigzagJoiner(
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(flowCtx, spec, i, colOffset); err != nil {
+		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables); err != nil {
 			return nil, err
 		}
 		colOffset += len(z.infos[i].table.Columns)
@@ -359,10 +365,10 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
 	alloc      *sqlbase.DatumAlloc
-	table      *sqlbase.TableDescriptor
-	index      *sqlbase.IndexDescriptor
+	table      *sqlbase.ImmutableTableDescriptor
+	index      *descpb.IndexDescriptor
 	indexTypes []*types.T
-	indexDirs  []sqlbase.IndexDescriptor_Direction
+	indexDirs  []descpb.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
@@ -392,13 +398,17 @@ type zigzagJoinerInfo struct {
 // to process. It is the number of columns in the tables of all previous sides
 // of the join.
 func (z *zigzagJoiner) setupInfo(
-	flowCtx *execinfra.FlowCtx, spec *execinfrapb.ZigzagJoinerSpec, side int, colOffset int,
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.ZigzagJoinerSpec,
+	side int,
+	colOffset int,
+	tables []sqlbase.ImmutableTableDescriptor,
 ) error {
 	z.side = side
 	info := z.infos[side]
 
 	info.alloc = &sqlbase.DatumAlloc{}
-	info.table = &spec.Tables[side]
+	info.table = &tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
 	if indexOrdinal == 0 {
@@ -407,7 +417,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.index = &info.table.Indexes[indexOrdinal-1]
 	}
 
-	var columnIDs []sqlbase.ColumnID
+	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
 	info.indexTypes = make([]*types.T, len(columnIDs))
 	columnTypes := info.table.ColumnTypes()
@@ -453,7 +463,7 @@ func (z *zigzagJoiner) setupInfo(
 		execinfra.ScanVisibilityPublic,
 		// NB: zigzag joins are disabled when a row-level locking clause is
 		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingStrength_FOR_NONE,
 		nil, /* systemColumns */
 	)
 	if err != nil {
@@ -499,7 +509,7 @@ func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
 	return meta
 }
 
-func findColumnID(s []sqlbase.ColumnID, t sqlbase.ColumnID) int {
+func findColumnID(s []descpb.ColumnID, t descpb.ColumnID) int {
 	for i := range s {
 		if s[i] == t {
 			return i
@@ -560,7 +570,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
 	// index key containing the remaining neededDatums can be generated
 	// and appended using EncodeColumns.
-	colMap := make(map[sqlbase.ColumnID]int)
+	colMap := make(map[descpb.ColumnID]int)
 	decodedDatums := make([]tree.Datum, len(datums))
 
 	// Ensure all EncDatums have been decoded.
@@ -617,7 +627,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	if info.index.Type == sqlbase.IndexDescriptor_INVERTED {
+	if info.index.Type == descpb.IndexDescriptor_INVERTED {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -136,7 +137,7 @@ func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
 // NextRow is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) NextRow(
 	ctx context.Context,
-) (sqlbase.EncDatumRow, *sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
+) (sqlbase.EncDatumRow, sqlbase.TableDescriptor, *descpb.IndexDescriptor, error) {
 	start := timeutil.Now()
 	row, t, i, err := c.Fetcher.NextRow(ctx)
 	if row != nil {

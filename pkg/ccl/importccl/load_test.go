@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -78,7 +79,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	for _, tc := range []struct {
 		dbName string
 
-		expected    *sqlbase.DatabaseDescriptor
+		expected    *descpb.DatabaseDescriptor
 		expectedErr error
 	}{
 		{"bob", bobDesc.DatabaseDesc(), nil},

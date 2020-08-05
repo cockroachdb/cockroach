@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -160,13 +161,13 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
 	col := tableDesc.GetColumns()[colIdx]
-	var seqDescs []*SequenceDescriptor
+	var seqDescs []*ImmutableTableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
-			sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
+			catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
 		)
 	}
 
@@ -356,8 +357,8 @@ CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 func addOwnedSequence(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, colIdx int, seqName string,
 ) {
-	seqDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
@@ -377,8 +378,8 @@ func addOwnedSequence(
 func breakOwnershipMapping(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
 ) {
-	seqDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	for colIdx := range tableDesc.GetColumns() {

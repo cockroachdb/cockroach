@@ -14,7 +14,7 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 // execgen:template<useSel>
@@ -170,14 +170,14 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				nResults = collectAnti(hj, batchSize, nResults, batch, sel, true)
 			default:
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, true)
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				nResults = collectAnti(hj, batchSize, nResults, batch, sel, false)
 			default:
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, false)
@@ -205,7 +205,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 	} else {
 		if sel != nil {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.
@@ -215,7 +215,7 @@ func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []
 			}
 		} else {
 			switch hj.spec.joinType {
-			case sqlbase.LeftAntiJoin, sqlbase.ExceptAllJoin:
+			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// For LEFT ANTI and EXCEPT ALL joins we don't care whether the build
 				// (right) side was distinct, so we only have single variation of COLLECT
 				// method.

@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +33,7 @@ func generateInvertedSpanKey(
 	// true, since JSON inverted columns use a custom encoding. But since we
 	// are providing an already encoded Datum, the following will eventually
 	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := sqlbase.EncDatumFromEncoded(sqlbase.DatumEncoding_ASCENDING_KEY, enc)
+	encDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
 	scratchRow = append(scratchRow[:0], encDatum)
 	span, _, err := sb.SpanFromEncDatums(scratchRow, 1 /* prefixLen */)
 	return span.Key, err

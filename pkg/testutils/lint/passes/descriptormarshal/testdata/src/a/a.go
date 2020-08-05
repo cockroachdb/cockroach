@@ -10,9 +10,9 @@
 
 package a
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 func F() {
-	var d sqlbase.Descriptor
+	var d descpb.Descriptor
 	d.GetTable() // want `Illegal call to Descriptor.GetTable\(\) in F, see Descriptor.Table\(\)`
 }

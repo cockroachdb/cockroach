@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -63,7 +64,7 @@ func (p *planner) LookupNamespaceID(
 		return 0, false, nil
 	}
 	id := tree.MustBeDInt(r[0])
-	if err := p.checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
+	if err := p.checkDescriptorPermissions(ctx, descpb.ID(id)); err != nil {
 		return 0, false, err
 	}
 	return id, true, nil
@@ -73,7 +74,7 @@ func (p *planner) LookupNamespaceID(
 func (p *planner) LookupZoneConfigByNamespaceID(
 	ctx context.Context, id int64,
 ) (tree.DBytes, bool, error) {
-	if err := p.checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
+	if err := p.checkDescriptorPermissions(ctx, descpb.ID(id)); err != nil {
 		return "", false, err
 	}
 
@@ -98,8 +99,8 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 // checkDescriptorPermissions returns nil if the executing user has permissions
 // to check the permissions of a descriptor given its ID, or the id given
 // is not a descriptor of a table or database.
-func (p *planner) checkDescriptorPermissions(ctx context.Context, id sqlbase.ID) error {
-	desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+func (p *planner) checkDescriptorPermissions(ctx context.Context, id descpb.ID) error {
+	desc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 	if err != nil {
 		return err
 	}

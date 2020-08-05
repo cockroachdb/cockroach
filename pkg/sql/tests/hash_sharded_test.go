@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -26,8 +28,8 @@ import (
 // getShardColumnID fetches the id of the shard column associated with the given sharded
 // index.
 func getShardColumnID(
-	t *testing.T, tableDesc *sqlbase.TableDescriptor, shardedIndexName string,
-) sqlbase.ColumnID {
+	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
+) descpb.ColumnID {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +47,7 @@ func getShardColumnID(
 // 2. A hidden check constraint was created on the aforementioned shard column.
 // 3. The first column in the index set is the aforementioned shard column.
 func verifyTableDescriptorState(
-	t *testing.T, tableDesc *sqlbase.TableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
 ) {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {
@@ -59,7 +61,7 @@ func verifyTableDescriptorState(
 	shardColID := getShardColumnID(t, tableDesc, shardedIndexName)
 	foundCheckConstraint := false
 	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
-		usesShard, err := check.UsesColumn(tableDesc, shardColID)
+		usesShard, err := tableDesc.CheckConstraintUsesColumn(check, shardColID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +107,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX foo ON kv_primary (v)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
 		verifyTableDescriptorState(t, tableDesc, "primary" /* shardedIndexName */)
 		shardColID := getShardColumnID(t, tableDesc, "primary" /* shardedIndexName */)
 
@@ -138,7 +140,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary" /* shardedIndexName */)
 	})
 
@@ -155,7 +157,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH BUCKET_COUNT = 12`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary2" /* shardedIndexName */)
 	})
 }

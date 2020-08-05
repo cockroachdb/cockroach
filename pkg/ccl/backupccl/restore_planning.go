@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -39,7 +40,7 @@ import (
 )
 
 // DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
-type DescRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_DescriptorRewrite
+type DescRewriteMap map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite
 
 const (
 	restoreOptIntoDB                    = "into_db"
@@ -66,7 +67,7 @@ var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 // non-empty db qualifiers with `newDB`.
 //
 // TODO: this AST traversal misses tables named in strings (#24556).
-func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
+func rewriteViewQueryDBNames(table *sqlbase.MutableTableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.Syntax,
@@ -98,7 +99,7 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 	ctx := tree.NewFmtCtx(tree.FmtSerializable)
 	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.IDTypeReference) {
 		newRef := ref
-		if rw, ok := rewrites[sqlbase.ID(ref.ID)]; ok {
+		if rw, ok := rewrites[descpb.ID(ref.ID)]; ok {
 			newRef = &tree.IDTypeReference{ID: uint32(rw.ID)}
 		}
 		ctx.WriteString(newRef.SQLString())
@@ -113,12 +114,12 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 // restoreOptSkipMissingViews option is not set, an error is returned if any
 // unrestorable views are found.
 func maybeFilterMissingViews(
-	tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor, opts map[string]string,
-) (map[sqlbase.ID]*sqlbase.TableDescriptor, error) {
+	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor, opts map[string]string,
+) (map[descpb.ID]*sqlbase.MutableTableDescriptor, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
-	var hasValidViewDependencies func(*sqlbase.TableDescriptor) bool
-	hasValidViewDependencies = func(desc *sqlbase.TableDescriptor) bool {
+	var hasValidViewDependencies func(desc *sqlbase.MutableTableDescriptor) bool
+	hasValidViewDependencies = func(desc *sqlbase.MutableTableDescriptor) bool {
 		if !desc.IsView() {
 			return true
 		}
@@ -130,7 +131,7 @@ func maybeFilterMissingViews(
 		return true
 	}
 
-	filteredTablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	filteredTablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 	for id, table := range tablesByID {
 		if hasValidViewDependencies(table) {
 			filteredTablesByID[id] = table
@@ -154,17 +155,17 @@ func maybeFilterMissingViews(
 func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	databasesByID map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor,
-	tablesByID map[sqlbase.ID]*sql.TableDescriptor,
-	typesByID map[sqlbase.ID]*sqlbase.TypeDescriptor,
-	restoreDBs []*sqlbase.ImmutableDatabaseDescriptor,
+	databasesByID map[descpb.ID]*sqlbase.MutableDatabaseDescriptor,
+	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	typesByID map[descpb.ID]*sqlbase.MutableTypeDescriptor,
+	restoreDBs []sqlbase.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts map[string]string,
 ) (DescRewriteMap, error) {
 	descriptorRewrites := make(DescRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
-	restoreDBNames := make(map[string]*sqlbase.ImmutableDatabaseDescriptor, len(restoreDBs))
+	restoreDBNames := make(map[string]sqlbase.DatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
 		restoreDBNames[db.GetName()] = db
 	}
@@ -202,7 +203,7 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				if _, ok := typesByID[sqlbase.ID(col.Type.StableTypeID())]; !ok {
+				if _, ok := typesByID[descpb.ID(col.Type.StableTypeID())]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",
 						table.Name,
@@ -260,11 +261,11 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	needsNewParentIDs := make(map[string][]sqlbase.ID)
+	needsNewParentIDs := make(map[string][]descpb.ID)
 
 	// Increment the DescIDSequenceKey so that it is higher than the max desc ID
 	// in the backup. This generator keeps produced the next descriptor ID.
-	var tempSysDBID sqlbase.ID
+	var tempSysDBID descpb.ID
 	if descriptorCoverage == tree.AllDescriptors {
 		var err error
 		// Restore the key which generates descriptor IDs.
@@ -347,7 +348,7 @@ func allocateDescriptorRewrites(
 					descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: table.ParentID}
 				}
 			} else {
-				var parentID sqlbase.ID
+				var parentID descpb.ID
 				{
 					found, newParentID, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, targetDB)
 					if err != nil {
@@ -369,7 +370,7 @@ func allocateDescriptorRewrites(
 
 				// Check privileges.
 				{
-					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, p.ExecCfg().Codec, parentID)
+					parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
 					if err != nil {
 						return errors.Wrapf(err,
 							"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -409,7 +410,7 @@ func allocateDescriptorRewrites(
 			} else {
 				// The remapping logic for a type will perform the remapping for a type's
 				// array type, so don't perform this logic for the array type itself.
-				if typ.Kind == sqlbase.TypeDescriptor_ALIAS {
+				if typ.Kind == descpb.TypeDescriptor_ALIAS {
 					continue
 				}
 
@@ -423,7 +424,7 @@ func allocateDescriptorRewrites(
 						targetDB, typ.Name)
 				}
 				// Check privileges on the parent DB.
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, p.ExecCfg().Codec, parentID)
+				parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -458,13 +459,13 @@ func allocateDescriptorRewrites(
 					// this type to the type existing in the cluster.
 
 					// See what kind of object we collided with.
-					desc, err := catalogkv.GetDescriptorByID(ctx, txn, p.ExecCfg().Codec, id)
+					desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 					if err != nil {
 						return err
 					}
 					// If the collided object isn't a type, then error out.
-					existingType := desc.TypeDesc()
-					if existingType == nil {
+					existingType, isType := desc.(*sqlbase.ImmutableTypeDescriptor)
+					if !isType {
 						return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
 
@@ -513,7 +514,7 @@ func allocateDescriptorRewrites(
 	// it would be a big performance hit.
 
 	for _, db := range restoreDBs {
-		var newID sqlbase.ID
+		var newID descpb.ID
 		var err error
 		if descriptorCoverage == tree.AllDescriptors {
 			newID = db.GetID()
@@ -524,7 +525,7 @@ func allocateDescriptorRewrites(
 			}
 		}
 
-		descriptorRewrites[db.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ID: newID}
+		descriptorRewrites[db.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ID: newID}
 		for _, tableID := range needsNewParentIDs[db.GetName()] {
 			descriptorRewrites[tableID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: newID}
 		}
@@ -534,7 +535,7 @@ func allocateDescriptorRewrites(
 	// full cluster restore this should only include the system tables that need
 	// to be remapped to the temporary table. All other tables in a full cluster
 	// backup should have the same ID as they do in the backup.
-	descriptorsToRemap := make([]sqlbase.BaseDescriptorInterface, 0, len(tablesByID))
+	descriptorsToRemap := make([]sqlbase.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
 			if table.ParentID == sqlbase.SystemDB.GetID() {
@@ -563,7 +564,7 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	sort.Sort(sqlbase.BaseDescriptorInterfaces(descriptorsToRemap))
+	sort.Sort(sqlbase.DescriptorInterfaces(descriptorsToRemap))
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, desc := range descriptorsToRemap {
@@ -597,9 +598,9 @@ func maybeUpgradeTableDescsInBackupManifests(
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
-			if table := desc.Table(hlc.Timestamp{}); table != nil {
+			if table := sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
 				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(codec, table.ID))] =
-					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*sqlbase.TableDescriptor)).DescriptorProto()
+					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor)).DescriptorProto()
 			}
 		}
 	}
@@ -607,14 +608,18 @@ func maybeUpgradeTableDescsInBackupManifests(
 	for i := range backupManifests {
 		backupManifest := &backupManifests[i]
 		for j := range backupManifest.Descriptors {
-			if table := backupManifest.Descriptors[j].Table(hlc.Timestamp{}); table != nil {
-				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, codec, skipFKsWithNoMatchingTable); err != nil {
-					return err
-				}
-				// TODO(lucy): Is this necessary?
-				backupManifest.Descriptors[j] = *sqlbase.NewMutableExistingTableDescriptor(
-					*table).DescriptorProto()
+			table := sqlbase.TableFromDescriptor(&backupManifest.Descriptors[j], hlc.Timestamp{})
+			if table == nil {
+				continue
 			}
+			if !sqlbase.TableHasDeprecatedForeignKeyRepresentation(table) {
+				continue
+			}
+			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, protoGetter, codec, skipFKsWithNoMatchingTable, table)
+			if err != nil {
+				return err
+			}
+			backupManifest.Descriptors[j] = *desc.DescriptorProto()
 		}
 	}
 	return nil
@@ -628,7 +633,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 	}
 	// TODO (rohany): Probably should expose some functions on the types.T to
 	//  set this information, rather than reaching into the internal type.
-	if rw, ok := descriptorRewrites[sqlbase.ID(typ.StableTypeID())]; ok {
+	if rw, ok := descriptorRewrites[descpb.ID(typ.StableTypeID())]; ok {
 		typ.InternalType.UDTMetadata.StableTypeID = uint32(rw.ID)
 		typ.InternalType.Oid = types.StableTypeIDToOID(uint32(rw.ID))
 	}
@@ -638,7 +643,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 	} else {
 		// If the type is not an array, then we just need to updated the array
 		// type ID in the type metadata.
-		if rw, ok := descriptorRewrites[sqlbase.ID(typ.StableArrayTypeID())]; ok {
+		if rw, ok := descriptorRewrites[descpb.ID(typ.StableArrayTypeID())]; ok {
 			typ.InternalType.UDTMetadata.StableArrayTypeID = uint32(rw.ID)
 		}
 	}
@@ -646,7 +651,9 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 
 // rewriteTypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
-func rewriteTypeDescs(types []*sqlbase.TypeDescriptor, descriptorRewrites DescRewriteMap) error {
+func rewriteTypeDescs(
+	types []*sqlbase.MutableTypeDescriptor, descriptorRewrites DescRewriteMap,
+) error {
 	for _, typ := range types {
 		rewrite, ok := descriptorRewrites[typ.ID]
 		if !ok {
@@ -661,11 +668,11 @@ func rewriteTypeDescs(types []*sqlbase.TypeDescriptor, descriptorRewrites DescRe
 			}
 		}
 		switch t := typ.Kind; t {
-		case sqlbase.TypeDescriptor_ENUM:
+		case descpb.TypeDescriptor_ENUM:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
 				typ.ArrayTypeID = rw.ID
 			}
-		case sqlbase.TypeDescriptor_ALIAS:
+		case descpb.TypeDescriptor_ALIAS:
 			// We need to rewrite any ID's present in the aliased types.T.
 			rewriteIDsInTypesT(typ.Alias, descriptorRewrites)
 		default:
@@ -679,7 +686,7 @@ func rewriteTypeDescs(types []*sqlbase.TypeDescriptor, descriptorRewrites DescRe
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
 func RewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
+	tables []*sqlbase.MutableTableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := descriptorRewrites[table.ID]
@@ -714,7 +721,7 @@ func RewriteTableDescs(
 			return err
 		}
 
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
 			// Verify that for any interleaved index being restored, the interleave
 			// parent is also being restored. Otherwise, the interleave entries in the
 			// restored IndexDescriptors won't have anything to point to.
@@ -804,15 +811,15 @@ func RewriteTableDescs(
 				// remove the ownership dependency. To get here, the user must have
 				// specified 'skip_missing_sequence_owners', otherwise we would have
 				// errored out in allocateDescriptorRewrites.
-				table.SequenceOpts.SequenceOwner = sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}
+				table.SequenceOpts.SequenceOwner = descpb.TableDescriptor_SequenceOpts_SequenceOwner{}
 			}
 		}
 
 		// rewriteCol is a closure that performs the ID rewrite logic on a column.
-		rewriteCol := func(col *sqlbase.ColumnDescriptor) error {
+		rewriteCol := func(col *descpb.ColumnDescriptor) error {
 			// Rewrite the types.T's IDs present in the column.
 			rewriteIDsInTypesT(col.Type, descriptorRewrites)
-			var newUsedSeqRefs []sqlbase.ID
+			var newUsedSeqRefs []descpb.ID
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := descriptorRewrites[seqID]; ok {
 					newUsedSeqRefs = append(newUsedSeqRefs, rewrite.ID)
@@ -821,14 +828,14 @@ func RewriteTableDescs(
 					// Strip the DEFAULT expression and sequence references.
 					// To get here, the user must have specified 'skip_missing_sequences' --
 					// otherwise, would have errored out in allocateDescriptorRewrites.
-					newUsedSeqRefs = []sqlbase.ID{}
+					newUsedSeqRefs = []descpb.ID{}
 					col.DefaultExpr = nil
 					break
 				}
 			}
 			col.UsesSequenceIds = newUsedSeqRefs
 
-			var newOwnedSeqRefs []sqlbase.ID
+			var newOwnedSeqRefs []descpb.ID
 			for _, seqID := range col.OwnsSequenceIds {
 				// We only add the sequence ownership dependency if the owned sequence
 				// is being restored.
@@ -1056,20 +1063,17 @@ func doRestorePlan(
 		}
 	}
 
-	databasesByID := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
-	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	typesByID := make(map[sqlbase.ID]*sqlbase.TypeDescriptor)
+	databasesByID := make(map[descpb.ID]*sqlbase.MutableDatabaseDescriptor)
+	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+	typesByID := make(map[descpb.ID]*sqlbase.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
-		// TODO(ajwerner): make sqlDescs into a []sqlbase.DescriptorInterface so
-		// we don't need to do this duplicate construction of the unwrapped
-		// descriptor.
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
-			databasesByID[dbDesc.GetID()] = dbDesc
-		} else if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-			tablesByID[tableDesc.ID] = tableDesc
-		} else if typDesc := desc.GetType(); typDesc != nil {
-			typesByID[typDesc.ID] = typDesc
+		switch desc := desc.(type) {
+		case *sqlbase.MutableDatabaseDescriptor:
+			databasesByID[desc.GetID()] = desc
+		case *sqlbase.MutableTableDescriptor:
+			tablesByID[desc.ID] = desc
+		case *sqlbase.MutableTypeDescriptor:
+			typesByID[desc.ID] = desc
 		}
 	}
 	filteredTablesByID, err := maybeFilterMissingViews(tablesByID, opts)
@@ -1094,11 +1098,11 @@ func doRestorePlan(
 		return err
 	}
 
-	var tables []*sqlbase.TableDescriptor
+	var tables []*sqlbase.MutableTableDescriptor
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
 	}
-	var types []*sqlbase.TypeDescriptor
+	var types []*sqlbase.MutableTypeDescriptor
 	for _, desc := range typesByID {
 		types = append(types, desc)
 	}
@@ -1120,10 +1124,14 @@ func doRestorePlan(
 		}
 	}
 
+	encodedTables := make([]*descpb.TableDescriptor, len(tables))
+	for i, table := range tables {
+		encodedTables[i] = table.TableDesc()
+	}
 	jr := jobs.Record{
 		Description: description,
 		Username:    p.User(),
-		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 			for _, tableRewrite := range descriptorRewrites {
 				sqlDescIDs = append(sqlDescIDs, tableRewrite.ID)
 			}
@@ -1134,7 +1142,7 @@ func doRestorePlan(
 			DescriptorRewrites: descriptorRewrites,
 			URIs:               defaultURIs,
 			BackupLocalityInfo: localityInfo,
-			TableDescs:         tables,
+			TableDescs:         encodedTables,
 			OverrideDB:         opts[restoreOptIntoDB],
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,

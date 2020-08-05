@@ -16,7 +16,7 @@ import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catalog/descpb/structured.proto";
 import "util/hlc/timestamp.proto";
 
 message Lease {
@@ -93,11 +93,11 @@ message RestoreDetails {
   message DescriptorRewrite {
     uint32 id = 1 [
       (gogoproto.customname) = "ID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
     uint32 parent_id = 2 [
       (gogoproto.customname) = "ParentID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
     // ToExisting represents whether this descriptor is being remapped to a
     // descriptor that already exists in the cluster.
@@ -109,7 +109,7 @@ message RestoreDetails {
   reserved 1;
   util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
   map<uint32, DescriptorRewrite> descriptor_rewrites = 2 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
   // URIs contains one URI for each backup (full or incremental) corresponding
   // to the location of the main BACKUP manifest. For partitioned backups, each
@@ -156,7 +156,7 @@ message ImportDetails {
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
   string backup_path = 7;
 
@@ -203,7 +203,7 @@ message ImportProgress {
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
 message TypeSchemaChangeDetails {
-  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 // TypeSchemaChangeProgress is the persisted progress for a type schema change job.
@@ -224,7 +224,7 @@ enum Status {
 
 message DroppedTableDetails {
   string name = 1;
-  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   Status status = 3;
 }
 
@@ -245,13 +245,13 @@ message DroppedTableDetails {
 message SchemaChangeGCDetails {
   message DroppedIndex {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
     int64 drop_time = 2;
   }
 
   message DroppedID {
     int64 id = 1 [(gogoproto.customname) = "ID",
-                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
     int64 drop_time = 2;
   }
 
@@ -264,7 +264,7 @@ message SchemaChangeGCDetails {
   // If dropping indexes, the table ID which has those indexes. If dropping a
   // database, the database ID.
   int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
-                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 message SchemaChangeDetails {
@@ -280,14 +280,14 @@ message SchemaChangeDetails {
   // dropped_types holds the set of types to drop as part of a DROP DATABASE
   // statement. We collect the types here rather than creating individual DROP
   // TYPE jobs for each dropped type.
-  repeated uint32 dropped_types = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  repeated uint32 dropped_types = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   // The descriptor ID of the dropped database which created this job.
   uint32 dropped_database_id = 4 [
     (gogoproto.customname) = "DroppedDatabaseID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
-  uint32 table_id = 5 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
-  uint32 mutation_id = 6 [(gogoproto.customname) = "MutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.MutationID"];
+  uint32 table_id = 5 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 mutation_id = 6 [(gogoproto.customname) = "MutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.MutationID"];
   // The format version of the schema change job details. This is used to
   // distinguish between jobs as they existed in 19.2 and earlier versions
   // (controlled and updated by a SchemaChanger) and jobs as they exist in 20.1
@@ -312,13 +312,13 @@ message SchemaChangeGCProgress {
 
   message IndexProgress {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
     Status status = 2;
   }
 
   message TableProgress {
     int64 id = 1 [(gogoproto.customname) = "ID",
-                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
     Status status = 2;
   }
 
@@ -354,7 +354,7 @@ message ChangefeedDetails {
   // if the descriptor id no longer exists when the jobs is unpaused (which can
   // happen if it was dropped or truncated).
   map<uint32, ChangefeedTarget> targets = 6 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID",
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.casttype) = "ChangefeedTargets",
     (gogoproto.nullable) = false
   ];
@@ -399,7 +399,7 @@ message CreateStatsDetails {
   message ColStat {
     repeated uint32 column_ids = 1 [
       (gogoproto.customname) = "ColumnIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"
     ];
 
     // Indicates whether this column stat should include a histogram.
@@ -436,7 +436,7 @@ message Payload {
   reserved 5;
   repeated uint32 descriptor_ids = 6 [
     (gogoproto.customname) = "DescriptorIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
   reserved 7;
   // TODO (lucy): Deprecate the string error field and move to using the encoded

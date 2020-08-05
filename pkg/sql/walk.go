@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -50,7 +51,7 @@ type planObserver struct {
 
 	// spans is invoked for spans embedded in each node. hardLimitSet indicates
 	// whether the node will "touch" a limited number of rows.
-	spans func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool)
+	spans func(nodeName, fieldName string, index *descpb.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)
@@ -186,10 +187,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			if n.hardLimit > 0 {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 			}
-			if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 				v.observer.attr(name, "locking strength", n.lockingStrength.PrettyString())
 			}
-			if n.lockingWaitPolicy != sqlbase.ScanLockingWaitPolicy_BLOCK {
+			if n.lockingWaitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
 				v.observer.attr(name, "locking wait policy", n.lockingWaitPolicy.PrettyString())
 			}
 		}
@@ -284,7 +285,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *zigzagJoinNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "type", joinTypeStr(sqlbase.InnerJoin))
+			v.observer.attr(name, "type", joinTypeStr(descpb.InnerJoin))
 			if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
 				v.expr(name, "pred", -1, n.onCond)
 			}
@@ -313,7 +314,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *joinNode:
 		if v.observer.attr != nil {
 			jType := joinTypeStr(n.joinType)
-			if n.joinType == sqlbase.InnerJoin && len(n.pred.leftColNames) == 0 && n.pred.onCond == nil {
+			if n.joinType == descpb.InnerJoin && len(n.pred.leftColNames) == 0 && n.pred.onCond == nil {
 				jType = "cross"
 			}
 			v.observer.attr(name, "type", jType)
@@ -378,10 +379,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 			v.observer.attr(name, "ancestor", ancestor)
 
-			if lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			if lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 				v.observer.attr(name, "locking strength", lockingStrength.PrettyString())
 			}
-			if lockingWaitPolicy != sqlbase.ScanLockingWaitPolicy_BLOCK {
+			if lockingWaitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
 				v.observer.attr(name, "locking wait policy", lockingWaitPolicy.PrettyString())
 			}
 		}
@@ -842,7 +843,7 @@ func (v *planVisitor) metadataTuples(nodeName string, tuples [][]tree.TypedExpr)
 
 // formatTable returns a string of the form "<table_name>@<index_name>", or
 // "<table_name>@<index_name> (partial index)" if the index is partial.
-func formatTable(desc *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor) string {
+func formatTable(desc *sqlbase.ImmutableTableDescriptor, index *descpb.IndexDescriptor) string {
 	partial := ""
 	if index.IsPartial() {
 		partial = " (partial index)"
@@ -893,19 +894,19 @@ func nodeName(plan planNode) string {
 	return name
 }
 
-func joinTypeStr(t sqlbase.JoinType) string {
+func joinTypeStr(t descpb.JoinType) string {
 	switch t {
-	case sqlbase.InnerJoin:
+	case descpb.InnerJoin:
 		return "inner"
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		return "left outer"
-	case sqlbase.RightOuterJoin:
+	case descpb.RightOuterJoin:
 		return "right outer"
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		return "full outer"
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		return "semi"
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		return "anti"
 	}
 	panic(errors.AssertionFailedf("unknown join type %s", t))

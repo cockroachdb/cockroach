@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -116,7 +117,7 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func indexDetail(desc *sqlbase.TableDescriptor, indexIdx uint32) string {
+func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
 	index := "primary"
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name
@@ -129,8 +130,9 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
 
 	if len(tr.Spans) > 0 {
+		tbl := sqlbase.NewImmutableTableDescriptor(tr.Table)
 		// only show the first span
-		idx, _, _ := tr.Table.FindIndexByIndexIdx(int(tr.IndexIdx))
+		idx, _, _ := tbl.FindIndexByIndexIdx(int(tr.IndexIdx))
 		valDirs := sqlbase.IndexKeyValDirs(idx)
 
 		var spanStr strings.Builder
@@ -154,7 +156,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 // summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
 	details := make([]string, 0, 4)
-	if jr.Type != sqlbase.InnerJoin {
+	if jr.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
 	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
@@ -167,9 +169,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
-func joinTypeDetail(joinType sqlbase.JoinType) string {
+func joinTypeDetail(joinType descpb.JoinType) string {
 	typeStr := strings.Replace(joinType.String(), "_", " ", -1)
-	if joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin {
+	if joinType == descpb.IntersectAllJoin || joinType == descpb.ExceptAllJoin {
 		return fmt.Sprintf("Type: %s", typeStr)
 	}
 	return fmt.Sprintf("Type: %s JOIN", typeStr)
@@ -184,7 +186,7 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 
 	details := make([]string, 0, 4)
 
-	if hj.Type != sqlbase.InnerJoin {
+	if hj.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(hj.Type))
 	}
 	if len(hj.LeftEqColumns) > 0 {
@@ -221,11 +223,11 @@ func (ifs *InvertedFiltererSpec) summary() (string, []string) {
 }
 
 func orderedJoinDetails(
-	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
+	joinType descpb.JoinType, left, right Ordering, onExpr Expression,
 ) []string {
 	details := make([]string, 0, 3)
 
-	if joinType != sqlbase.InnerJoin {
+	if joinType != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(joinType))
 	}
 	details = append(details, fmt.Sprintf(
@@ -294,7 +296,7 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 // summary implements the diagramCellType interface.
 func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	details := make([]string, 0, 4)
-	if ij.Type != sqlbase.InnerJoin {
+	if ij.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
 	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))

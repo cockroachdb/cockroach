@@ -37,6 +37,7 @@ type bulkRowWriter struct {
 	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
+	tableDesc      sqlbase.ImmutableTableDescriptor
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
 	output         execinfra.RowReceiver
@@ -57,6 +58,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
+		tableDesc:      sqlbase.MakeImmutableTableDescriptor(spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,
@@ -100,7 +102,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	var g ctxgroup.Group
 
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.spec.Table, nil /* targetColNames */, sp.EvalCtx, kvCh)
+		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh)
 	if err != nil {
 		return err
 	}

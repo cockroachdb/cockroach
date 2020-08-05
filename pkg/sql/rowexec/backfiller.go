@@ -21,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,7 +46,7 @@ type chunkBackfiller interface {
 	// once the backfill is complete.
 	runChunk(
 		ctx context.Context,
-		mutations []sqlbase.DescriptorMutation,
+		mutations []descpb.DescriptorMutation,
 		span roachpb.Span,
 		chunkSize int64,
 		readAsOf hlc.Timestamp,
@@ -83,8 +84,8 @@ func (*backfiller) OutputTypes() []*types.T {
 
 func (b backfiller) getMutationsToProcess(
 	ctx context.Context,
-) ([]sqlbase.DescriptorMutation, error) {
-	var mutations []sqlbase.DescriptorMutation
+) ([]descpb.DescriptorMutation, error) {
+	var mutations []descpb.DescriptorMutation
 	desc := b.spec.Table
 	if len(desc.Mutations) == 0 {
 		return nil, errors.Errorf("no schema changes for table ID=%d", desc.ID)
@@ -163,7 +164,7 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 // mainLoop invokes runChunk on chunks of rows.
 // It does not close the output.
 func (b *backfiller) mainLoop(
-	ctx context.Context, mutations []sqlbase.DescriptorMutation,
+	ctx context.Context, mutations []descpb.DescriptorMutation,
 ) (roachpb.Spans, error) {
 	if err := b.chunks.prepare(ctx); err != nil {
 		return nil, err
@@ -243,11 +244,11 @@ func GetResumeSpans(
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	tableID sqlbase.ID,
-	mutationID sqlbase.MutationID,
+	tableID descpb.ID,
+	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
+	tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -324,8 +325,8 @@ func WriteResumeSpan(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	id sqlbase.ID,
-	mutationID sqlbase.MutationID,
+	id descpb.ID,
+	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 	finished roachpb.Spans,
 	jobsRegistry *jobs.Registry,

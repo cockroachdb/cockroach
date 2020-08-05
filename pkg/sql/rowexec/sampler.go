@@ -19,6 +19,7 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -253,7 +254,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	// have multiple indexes with different configurations over the same
 	// column. For now, since we don't even allow users to change the
 	// defaults, we can just not worry about it.
-	invIndexDesc := &sqlbase.IndexDescriptor{
+	invIndexDesc := &descpb.IndexDescriptor{
 		GeoConfig: geoindex.Config{
 			S2Geography: geoindex.DefaultGeographyIndexConfig().S2Geography,
 			S2Geometry:  geoindex.DefaultGeometryIndexConfig().S2Geometry,

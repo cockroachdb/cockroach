@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -216,9 +217,9 @@ func (p *planner) maybeLogStatementInternal(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(desc sqlbase.DescriptorInterface, priv privilege.Kind) {
+func (p *planner) maybeAudit(desc sqlbase.Descriptor, priv privilege.Kind) {
 	wantedMode := desc.GetAuditMode()
-	if wantedMode == sqlbase.TableDescriptor_DISABLED {
+	if wantedMode == descpb.TableDescriptor_DISABLED {
 		return
 	}
 
@@ -233,7 +234,7 @@ func (p *planner) maybeAudit(desc sqlbase.DescriptorInterface, priv privilege.Ki
 // auditEvent represents an audit event for a single table.
 type auditEvent struct {
 	// The descriptor being audited.
-	desc sqlbase.DescriptorInterface
+	desc sqlbase.Descriptor
 	// Whether the event was for INSERT/DELETE/UPDATE.
 	writing bool
 }

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -142,7 +143,7 @@ func ShowCreateTable(
 		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
+			f.WriteString(idx.SQLString(&descpb.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
 
@@ -208,7 +209,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
-	allDescs []sqlbase.Descriptor,
+	allDescs []descpb.Descriptor,
 	desc *sqlbase.ImmutableTableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {

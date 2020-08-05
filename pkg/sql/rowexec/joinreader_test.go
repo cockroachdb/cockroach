@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,14 +79,14 @@ func TestJoinReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tdSecondary := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdSecondary := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	sqlutils.CreateTable(t, sqlDB, "t2",
 		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s)",
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	tdFamily := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	tdFamily := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
 
 	sqlutils.CreateTable(t, sqlDB, "t3parent",
 		"a INT PRIMARY KEY",
@@ -96,7 +98,7 @@ func TestJoinReader(t *testing.T) {
 		"t3parent(a)",
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
-	tdInterleaved := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
+	tdInterleaved := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
 
 	testCases := []struct {
 		description string
@@ -105,7 +107,7 @@ func TestJoinReader(t *testing.T) {
 		onExpr      string
 		input       [][]tree.Datum
 		lookupCols  []uint32
-		joinType    sqlbase.JoinType
+		joinType    descpb.JoinType
 		inputTypes  []*types.T
 		outputTypes []*types.T
 		expected    string
@@ -209,7 +211,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2)},
 			},
 			lookupCols:  []uint32{0, 1},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[10 0 NULL] [0 2 2]]",
@@ -240,7 +242,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:  []uint32{0, 1},
-			joinType:    sqlbase.LeftOuterJoin,
+			joinType:    descpb.LeftOuterJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[0 NULL]]",
@@ -276,7 +278,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			inputTypes:  []*types.T{types.Int, types.String},
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[1 'two'] [1 'two'] [6 'two'] [7 'two'] [1 'two']]",
@@ -292,7 +294,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:  []uint32{0, 1},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[]",
@@ -313,7 +315,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(1)), bFn(2)},
 			},
 			lookupCols:  []uint32{0},
-			joinType:    sqlbase.LeftSemiJoin,
+			joinType:    descpb.LeftSemiJoin,
 			onExpr:      "@2 > 2",
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.TwoIntCols,
@@ -330,7 +332,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(1234)), tree.NewDInt(tree.DInt(1234))},
 			},
 			lookupCols:  []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[1234 1234]]",
@@ -350,7 +352,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(1)), bFn(2)},
 			},
 			lookupCols:  []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			onExpr:      "@2 > 2",
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.TwoIntCols,
@@ -367,7 +369,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(10), tree.NewDInt(tree.DInt(1234))},
 			},
 			lookupCols:  []uint32{0},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[]",
@@ -383,7 +385,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:  []uint32{0, 1},
-			joinType:    sqlbase.LeftAntiJoin,
+			joinType:    descpb.LeftAntiJoin,
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[0 NULL]]",
@@ -406,7 +408,7 @@ func TestJoinReader(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
+	for i, td := range []*sqlbase.ImmutableTableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
 			for _, reqOrdering := range []bool{true, false} {
 				t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s", i, reqOrdering, c.description), func(t *testing.T) {
@@ -436,7 +438,7 @@ func TestJoinReader(t *testing.T) {
 						&flowCtx,
 						0, /* processorID */
 						&execinfrapb.JoinReaderSpec{
-							Table:            *td,
+							Table:            *td.TableDesc(),
 							IndexIdx:         c.indexIdx,
 							LookupColumns:    c.lookupCols,
 							OnExpr:           execinfrapb.Expression{Expr: c.onExpr},
@@ -524,7 +526,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		key, stringColVal, numRows); err != nil {
 		t.Fatal(err)
 	}
-	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -571,10 +573,10 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		&flowCtx,
 		0, /* processorID */
 		&execinfrapb.JoinReaderSpec{
-			Table:         *td,
+			Table:         *td.TableDesc(),
 			IndexIdx:      1,
 			LookupColumns: []uint32{0},
-			Type:          sqlbase.InnerJoin,
+			Type:          descpb.InnerJoin,
 			// Disk storage is only used when the input ordering must be maintained.
 			MaintainOrdering: true,
 		},
@@ -622,7 +624,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
-	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(context.Background(), storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -675,7 +677,9 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
+				Table: *td.TableDesc(),
+			}, in, &execinfrapb.PostProcessSpec{},
 			out, lookupJoinReaderType)
 		if err != nil {
 			t.Fatal(err)
@@ -696,7 +700,9 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
+				Table: *td.TableDesc(),
+			}, in, &execinfrapb.PostProcessSpec{},
 			out, lookupJoinReaderType)
 		if err != nil {
 			t.Fatal(err)
@@ -768,8 +774,8 @@ func TestIndexJoiner(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	tdf := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdf := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
@@ -778,7 +784,7 @@ func TestIndexJoiner(t *testing.T) {
 
 	testCases := []struct {
 		description string
-		desc        *sqlbase.TableDescriptor
+		desc        *descpb.TableDescriptor
 		post        execinfrapb.PostProcessSpec
 		input       sqlbase.EncDatumRows
 		outputTypes []*types.T
@@ -786,7 +792,7 @@ func TestIndexJoiner(t *testing.T) {
 	}{
 		{
 			description: "Test selecting rows using the primary index",
-			desc:        td,
+			desc:        td.TableDesc(),
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
@@ -807,7 +813,7 @@ func TestIndexJoiner(t *testing.T) {
 		},
 		{
 			description: "Test a filter in the post process spec and using a secondary index",
-			desc:        td,
+			desc:        td.TableDesc(),
 			post: execinfrapb.PostProcessSpec{
 				Filter:        execinfrapb.Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
@@ -834,7 +840,7 @@ func TestIndexJoiner(t *testing.T) {
 		},
 		{
 			description: "Test selecting rows using the primary index with multiple family spans",
-			desc:        tdf,
+			desc:        tdf.TableDesc(),
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
@@ -1019,7 +1025,7 @@ func BenchmarkJoinReader(b *testing.B) {
 
 							// Get the table descriptor and find the index that will provide us with
 							// the expected match ratio.
-							tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 							indexIdx := uint32(0)
 							for i := range tableDesc.Indexes {
 								require.Equal(b, 1, len(tableDesc.Indexes[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
@@ -1039,7 +1045,7 @@ func BenchmarkJoinReader(b *testing.B) {
 							output := rowDisposer{}
 
 							spec := execinfrapb.JoinReaderSpec{
-								Table:               *tableDesc,
+								Table:               *tableDesc.TableDesc(),
 								LookupColumns:       []uint32{0},
 								LookupColumnsAreKey: parallel,
 								IndexIdx:            indexIdx,

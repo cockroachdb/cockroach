@@ -11,12 +11,15 @@ package changefeedbase
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
-func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor) error {
+func ValidateTable(
+	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.ImmutableTableDescriptor,
+) error {
 	t, ok := targets[tableDesc.ID]
 	if !ok {
 		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
@@ -45,7 +48,7 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDes
 			tableDesc.Name, len(tableDesc.Families))
 	}
 
-	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+	if tableDesc.State == descpb.TableDescriptor_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
 	if tableDesc.Name != t.StatementTimeName {

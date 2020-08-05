@@ -28,14 +28,14 @@ import (
 const Doc = `check for correct unmarshaling of sqlbase descriptors`
 
 // TODO(ajwerner): write an Analyzer which determines whether a function passes
-// a pointer to a struct which contains a sqlbase.Descriptor to a function
+// a pointer to a struct which contains a descpb.Descriptor to a function
 // which will pass that pointer to protoutil.Unmarshal and verify that said
 // function also calls Descriptor.Table().
 
-const sqlbasePkg = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+const descpbPkg = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 // Analyzer is a linter that ensures there are no calls to
-// sqlbase.Descriptor.GetTable() except where appropriate.
+// descpb.Descriptor.GetTable() except where appropriate.
 var Analyzer = &analysis.Analyzer{
 	Name:     "descriptormarshal",
 	Doc:      Doc,
@@ -58,7 +58,7 @@ var Analyzer = &analysis.Analyzer{
 			if !ok {
 				return
 			}
-			if f.Pkg() == nil || f.Pkg().Path() != sqlbasePkg || f.Name() != "GetTable" {
+			if f.Pkg() == nil || f.Pkg().Path() != descpbPkg || f.Name() != "GetTable" {
 				return
 			}
 			if !isMethodForNamedType(f, "Descriptor") {
@@ -79,7 +79,7 @@ var Analyzer = &analysis.Analyzer{
 }
 
 var allowedFunctions = []string{
-	"(*github.com/cockroachdb/cockroach/pkg/sql/sqlbase.Descriptor).Table",
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TableFromDescriptor",
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestDefaultExprNil",
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestKeysPerRow",
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl.readBackupManifest",

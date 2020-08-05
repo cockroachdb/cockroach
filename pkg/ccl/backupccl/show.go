@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -207,15 +208,17 @@ func backupShowerDefault(
 		fn: func(manifests []BackupManifest) ([]tree.Datums, error) {
 			var rows []tree.Datums
 			for _, manifest := range manifests {
-				descs := make(map[sqlbase.ID]string)
-				for _, descriptor := range manifest.Descriptors {
+				descs := make(map[descpb.ID]string)
+				for i := range manifest.Descriptors {
+					descriptor := &manifest.Descriptors[i]
 					if descriptor.GetDatabase() != nil {
-						if _, ok := descs[descriptor.GetID()]; !ok {
-							descs[descriptor.GetID()] = descriptor.GetName()
+						id := sqlbase.GetDescriptorID(descriptor)
+						if _, ok := descs[id]; !ok {
+							descs[id] = sqlbase.GetDescriptorName(descriptor)
 						}
 					}
 				}
-				descSizes := make(map[sqlbase.ID]RowCount)
+				descSizes := make(map[descpb.ID]RowCount)
 				for _, file := range manifest.Files {
 					// TODO(dan): This assumes each file in the backup only contains
 					// data from a single table, which is usually but not always
@@ -226,9 +229,9 @@ func backupShowerDefault(
 					if err != nil {
 						continue
 					}
-					s := descSizes[sqlbase.ID(tableID)]
+					s := descSizes[descpb.ID(tableID)]
 					s.add(file.EntryCounts)
-					descSizes[sqlbase.ID(tableID)] = s
+					descSizes[descpb.ID(tableID)] = s
 				}
 				start := tree.DNull
 				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
@@ -242,8 +245,9 @@ func backupShowerDefault(
 					}
 				}
 				var row tree.Datums
-				for _, descriptor := range manifest.Descriptors {
-					if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+				for i := range manifest.Descriptors {
+					descriptor := &manifest.Descriptors[i]
+					if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 						dbName := descs[table.ParentID]
 						row = tree.Datums{
 							tree.NewDString(dbName),
@@ -289,12 +293,12 @@ func backupShowerDefault(
 	}
 }
 
-func showPrivileges(descriptor sqlbase.Descriptor) string {
+func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privStringBuilder strings.Builder
-	var privDesc *sqlbase.PrivilegeDescriptor
+	var privDesc *descpb.PrivilegeDescriptor
 	if db := descriptor.GetDatabase(); db != nil {
 		privDesc = db.GetPrivileges()
-	} else if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+	} else if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
 	}
 	if privDesc == nil {
@@ -315,7 +319,7 @@ func showPrivileges(descriptor sqlbase.Descriptor) string {
 			privStringBuilder.WriteString(priv)
 		}
 		privStringBuilder.WriteString(" ON ")
-		privStringBuilder.WriteString(descriptor.GetName())
+		privStringBuilder.WriteString(sqlbase.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
 		privStringBuilder.WriteString(user)
 		privStringBuilder.WriteString("; ")

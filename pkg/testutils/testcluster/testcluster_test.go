@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -58,7 +58,7 @@ func TestManualReplication(t *testing.T) {
 
 	// Split the table to a new range.
 	kvDB := tc.Servers[0].DB()
-	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey)

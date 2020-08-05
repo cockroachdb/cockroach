@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -160,13 +161,13 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
-					if m.joinType == sqlbase.LeftAntiJoin || m.joinType == sqlbase.ExceptAllJoin {
+					if m.joinType == descpb.LeftAntiJoin || m.joinType == descpb.ExceptAllJoin {
 						break
 					}
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
-					if m.joinType == sqlbase.LeftSemiJoin || m.joinType == sqlbase.IntersectAllJoin {
+					if m.joinType == descpb.LeftSemiJoin || m.joinType == descpb.IntersectAllJoin {
 						// Semi-joins and INTERSECT ALL only need to know if there is at
 						// least one match, so can skip the rest of the right rows.
 						m.rightIdx = len(m.rightRows)
