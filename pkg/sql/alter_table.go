@@ -214,7 +214,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						err = infoErr
 						return
 					}
-					ckBuilder := schemaexpr.NewCheckConstraintBuilder(params.ctx, *tn, n.tableDesc, &params.p.semaCtx)
+					ckBuilder := schemaexpr.MakeCheckConstraintBuilder(params.ctx, *tn, n.tableDesc, &params.p.semaCtx)
 					for k := range info {
 						ckBuilder.MarkNameInUse(k)
 					}
@@ -374,7 +374,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			computedColValidator := schemaexpr.NewComputedColumnValidator(
+			computedColValidator := schemaexpr.MakeComputedColumnValidator(
 				params.ctx,
 				n.tableDesc,
 				&params.p.semaCtx,

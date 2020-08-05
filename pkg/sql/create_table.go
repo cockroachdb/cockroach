@@ -1423,7 +1423,7 @@ func MakeTableDesc(
 		}
 		return nil
 	}
-	idxValidator := schemaexpr.NewIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
+	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1687,7 +1687,7 @@ func MakeTableDesc(
 		newTableName:   &n.Table,
 	}
 
-	ckBuilder := schemaexpr.NewCheckConstraintBuilder(ctx, n.Table, &desc, semaCtx)
+	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, n.Table, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
@@ -1717,7 +1717,7 @@ func MakeTableDesc(
 
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
-	computedColValidator := schemaexpr.NewComputedColumnValidator(
+	computedColValidator := schemaexpr.MakeComputedColumnValidator(
 		ctx,
 		&desc,
 		semaCtx,
