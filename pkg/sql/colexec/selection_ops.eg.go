@@ -57700,13 +57700,11 @@ func GetSelectionConstOperator(
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
-	binFn *tree.BinOp,
 ) (colexecbase.Operator, error) {
 	c := GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		colIdx:         colIdx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
 	}
 	switch cmpOp {
 	case tree.EQ:
@@ -58952,13 +58950,11 @@ func GetSelectionOperator(
 	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
-	binFn *tree.BinOp,
 ) (colexecbase.Operator, error) {
 	selOpBase := selOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		col1Idx:        col1Idx,
-		col2Idx:        col2Idx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
 	}
 	switch cmpOp {
 	case tree.EQ:

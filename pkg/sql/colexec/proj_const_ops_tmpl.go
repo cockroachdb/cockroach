@@ -208,20 +208,79 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // {{end}}
 // {{end}}
 
+type defaultComparison_CONST_SIDEConstOp struct {
+	projConstOpBase
+
+	adapter             comparisonExprAdapter
+	constArg            tree.Datum
+	toDatumConverter    *vecToDatumConverter
+	datumToVecConverter func(tree.Datum) interface{}
+}
+
+var _ colexecbase.Operator = &defaultComparison_CONST_SIDEConstOp{}
+
+func (d *defaultComparison_CONST_SIDEConstOp) Init() {
+	d.input.Init()
+}
+
+func (d *defaultComparison_CONST_SIDEConstOp) Next(ctx context.Context) coldata.Batch {
+	batch := d.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	output := batch.ColVec(d.outputIdx)
+	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
+		d.toDatumConverter.convertBatchDensely(batch)
+		nonConstColumn := d.toDatumConverter.getDatumColumn(d.colIdx)
+		for i := 0; i < n; i++ {
+			// Note that we performed a "dense" conversion, so there is no need
+			// to check whether sel is non-nil.
+			// {{if _IS_CONST_LEFT}}
+			res, err := d.adapter.eval(d.constArg, nonConstColumn[i])
+			// {{else}}
+			res, err := d.adapter.eval(nonConstColumn[i], d.constArg)
+			// {{end}}
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			// Convert the datum into a physical type and write it out.
+			// TODO(yuzefovich): this code block is repeated in several places.
+			// Refactor it.
+			if res == tree.DNull {
+				output.Nulls().SetNull(rowIdx)
+			} else {
+				converted := d.datumToVecConverter(res)
+				coldata.SetValueAt(output, converted, rowIdx)
+			}
+		}
+	})
+	// Although we didn't change the length of the batch, it is necessary to set
+	// the length anyway (this helps maintaining the invariant of flat bytes).
+	batch.SetLength(n)
+	return batch
+}
+
 // GetProjection_CONST_SIDEConstOperator returns the appropriate constant
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -231,11 +290,11 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
+	c := GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
-	c = GetDatumToPhysicalFn(leftType)(constArg)
+	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
-	c = GetDatumToPhysicalFn(rightType)(constArg)
+	leftType, rightType := inputTypes[colIdx], constType
 	// {{end}}
 	switch op.(type) {
 	case tree.BinaryOperator:
@@ -321,7 +380,15 @@ func GetProjection_CONST_SIDEConstOperator(
 				}
 				// {{end}}
 			}
-			// {{end}}
+		// {{end}}
+		default:
+			return &defaultComparison_CONST_SIDEConstOp{
+				projConstOpBase:     projConstOpBase,
+				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+				constArg:            constArg,
+				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+				datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			}, nil
 		}
 		// {{end}}
 	}

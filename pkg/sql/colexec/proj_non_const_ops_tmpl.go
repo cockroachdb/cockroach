@@ -216,20 +216,74 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // {{end}}
 // {{end}}
 
+type defaultComparisonOp struct {
+	projOpBase
+
+	adapter             comparisonExprAdapter
+	toDatumConverter    *vecToDatumConverter
+	datumToVecConverter func(tree.Datum) interface{}
+}
+
+var _ colexecbase.Operator = &defaultComparisonOp{}
+
+func (d *defaultComparisonOp) Init() {
+	d.input.Init()
+}
+
+func (d *defaultComparisonOp) Next(ctx context.Context) coldata.Batch {
+	batch := d.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	output := batch.ColVec(d.outputIdx)
+	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
+		d.toDatumConverter.convertBatchDensely(batch)
+		leftColumn := d.toDatumConverter.getDatumColumn(d.col1Idx)
+		rightColumn := d.toDatumConverter.getDatumColumn(d.col2Idx)
+		for i := 0; i < n; i++ {
+			// Note that we performed a "dense" conversion, so there is no need
+			// to check whether sel is non-nil.
+			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			// Convert the datum into a physical type and write it out.
+			// TODO(yuzefovich): this code block is repeated in several places.
+			// Refactor it.
+			if res == tree.DNull {
+				output.Nulls().SetNull(rowIdx)
+			} else {
+				converted := d.datumToVecConverter(res)
+				coldata.SetValueAt(output, converted, rowIdx)
+			}
+		}
+	})
+	// Although we didn't change the length of the batch, it is necessary to set
+	// the length anyway (this helps maintaining the invariant of flat bytes).
+	batch.SetLength(n)
+	return batch
+}
+
 // GetProjectionOperator returns the appropriate projection operator for the
 // given left and right column types and operation.
 func GetProjectionOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -241,6 +295,7 @@ func GetProjectionOperator(
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
 
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
@@ -294,7 +349,14 @@ func GetProjectionOperator(
 				}
 				// {{end}}
 			}
-			// {{end}}
+		// {{end}}
+		default:
+			return &defaultComparisonOp{
+				projOpBase:          projOpBase,
+				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+				datumToVecConverter: GetDatumToPhysicalFn(outputType),
+			}, nil
 		}
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

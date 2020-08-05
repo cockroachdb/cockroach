@@ -858,6 +858,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
+  pkg/sql/colexec/default_cmp_expr.eg.go \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable_distinct.eg.go \
