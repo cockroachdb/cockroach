@@ -116,6 +116,7 @@ class LocalityView extends React.Component<LocalityViewProps & RouteComponentPro
         <CapacityArc
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
+          localityLabel={getLocalityLabel(tiers)}
         />
         <Sparklines nodes={nodeIds} />
       </g>

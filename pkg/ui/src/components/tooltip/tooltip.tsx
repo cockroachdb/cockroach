@@ -16,11 +16,11 @@ import "antd/es/tooltip/style/css";
 import "./tooltip.styl";
 
 export interface TooltipProps {
-  children: React.ReactNode;
+  children: React.ReactNode | string;
   theme?: "default" | "blue";
 }
 
-export function Tooltip(props: TooltipProps & AntTooltipProps) {
+export function Tooltip(props: TooltipProps & AntTooltipProps ) {
   const { children, theme, overlayClassName } = props;
   const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`, overlayClassName);
   return (

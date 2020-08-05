@@ -9,10 +9,12 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Tooltip, Anchor } from "src/components";
+import { Anchor, Tooltip, Text } from "src/components";
 import { nodeLivenessIssues, howItWork, capacityMetrics } from "src/util/docs";
 import { LivenessStatus } from "src/redux/nodes";
+import { NodeStatusRow } from "src/views/cluster/containers/nodesOverview/index";
 import { AggregatedNodeStatus } from ".";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 
 export const getStatusDescription = (status: LivenessStatus) => {
   switch (status) {
@@ -109,10 +111,11 @@ export const getNodeStatusDescription = (status: AggregatedNodeStatus) => {
   }
 };
 
-export const NodeCountTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+type PlainTooltip = React.FC<TooltipProps>;
+
+export const NodeCountTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -120,14 +123,13 @@ export const NodeCountTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const UptimeTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const UptimeTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -135,14 +137,13 @@ export const UptimeTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const ReplicasTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const ReplicasTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -150,14 +151,13 @@ export const ReplicasTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const CapacityUseTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const NodelistCapacityUsageTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -173,14 +173,13 @@ export const CapacityUseTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const MemoryUseTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const MemoryUseTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -191,14 +190,13 @@ export const MemoryUseTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const CPUsTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const CPUsTooltip: PlainTooltip = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -206,40 +204,72 @@ export const CPUsTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const VersionTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const VersionTooltip: PlainTooltip = (props) => (
   <Tooltip
-  placement="bottom"
-  title={
-    <div className="tooltip__table--title">
-      <p>
-        Build tag of the CockroachDB version installed on the node.
-      </p>
-    </div>
-  }
->
-    {children}
-  </Tooltip>
-);
-
-export const StatusTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
-  <Tooltip
-  placement="bottom"
-  title={
-    <div className="tooltip__table--title">
-      <p>
-        Node status can be live, suspect, dead, decommissioning, or decommissioned. Hover over the status for each node to learn more.
-      </p>
-    </div>
-  }
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>Build tag of the CockroachDB version installed on the node.</p>
+      </div>
+    }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
+
+export const StatusTooltip: PlainTooltip = (props) => (
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>
+          Node status can be live, suspect, dead, decommissioning, or
+          decommissioned. Hover over the status for each node to learn more.
+        </p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
+);
+
+export const plainNodeTooltips: PlainTooltip[] = [
+  NodeCountTooltip,
+  UptimeTooltip,
+  ReplicasTooltip,
+  NodelistCapacityUsageTooltip,
+  MemoryUseTooltip,
+  CPUsTooltip,
+  VersionTooltip,
+  StatusTooltip,
+];
+
+// tslint:disable-next-line:variable-name
+export const NodeLocalityColumn: React.FC<{
+  record: NodeStatusRow;
+  visible?: boolean;
+}> = ({ record: { tiers, region }, ...props }) => {
+  return (
+    <Text>
+      <Tooltip
+        {...props}
+        placement={"bottom"}
+        title={
+          <div>
+            {tiers.map((tier, idx) => (
+              <div key={idx}>{`${tier.key} = ${tier.value}`}</div>
+            ))}
+          </div>
+        }
+      >
+        {region}
+      </Tooltip>
+    </Text>
+  );
+};
