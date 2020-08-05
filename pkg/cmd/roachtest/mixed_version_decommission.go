@@ -265,16 +265,3 @@ func startVersion(nodes nodeListOption, version string) versionStep {
 		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
 }
-
-func registerDecommissionMixedVersion(r *testRegistry) {
-	r.Add(testSpec{
-		Name:       "decommission/mixed-versions",
-		Owner:      OwnerKV,
-		MinVersion: "v20.2.0",
-		Cluster:    makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
-		},
-	})
-
-}
