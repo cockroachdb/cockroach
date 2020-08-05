@@ -120,15 +120,14 @@ func TestIsNullProjOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return createTestProjectingOperator(
-					ctx, flowCtx, input[0], []*types.T{types.Int},
-					fmt.Sprintf("@1 %s", c.projExpr), false, /* canFallbackToRowexec */
-				)
-			}
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
-		})
+		log.Infof(ctx, "%s", c.desc)
+		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			return createTestProjectingOperator(
+				ctx, flowCtx, input[0], []*types.T{types.Int},
+				fmt.Sprintf("@1 %s", c.projExpr), false, /* canFallbackToRowexec */
+			)
+		}
+		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
 	}
 }
 
@@ -227,30 +226,29 @@ func TestIsNullSelOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				spec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
-					Core: execinfrapb.ProcessorCoreUnion{
-						Noop: &execinfrapb.NoopCoreSpec{},
-					},
-					Post: execinfrapb.PostProcessSpec{
-						Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", c.selExpr)},
-					},
-				}
-				args := &NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              input,
-					StreamingMemAccount: testMemAcc,
-				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := TestNewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					return nil, err
-				}
-				return result.Op, nil
+		log.Infof(ctx, "%s", c.desc)
+		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			spec := &execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
+				Core: execinfrapb.ProcessorCoreUnion{
+					Noop: &execinfrapb.NoopCoreSpec{},
+				},
+				Post: execinfrapb.PostProcessSpec{
+					Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", c.selExpr)},
+				},
 			}
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
-		})
+			args := &NewColOperatorArgs{
+				Spec:                spec,
+				Inputs:              input,
+				StreamingMemAccount: testMemAcc,
+			}
+			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+			result, err := TestNewColOperator(ctx, flowCtx, args)
+			if err != nil {
+				return nil, err
+			}
+			return result.Op, nil
+		}
+		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
 	}
 }

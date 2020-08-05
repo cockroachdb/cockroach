@@ -72,15 +72,14 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return createTestProjectingOperator(
-						ctx, flowCtx, input[0], tc.inputTypes,
-						tc.expr, false, /* canFallbackToRowexec */
-					)
-				})
-		})
+		log.Infof(ctx, "%s", tc.desc)
+		runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return createTestProjectingOperator(
+					ctx, flowCtx, input[0], tc.inputTypes,
+					tc.expr, false, /* canFallbackToRowexec */
+				)
+			})
 	}
 }
 

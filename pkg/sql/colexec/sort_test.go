@@ -163,17 +163,16 @@ func TestSortRandomized(t *testing.T) {
 			for _, k := range []int{0, rng.Intn(nTups) + 1} {
 				topK := k != 0
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
-				t.Run(name, func(t *testing.T) {
-					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				log.Infof(context.Background(), "%s", name)
+				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				if topK {
+					expected = expected[:k]
+				}
+				runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					if topK {
-						expected = expected[:k]
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
 					}
-					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						if topK {
-							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
-						}
-						return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
-					})
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
 				})
 			}
 		}
