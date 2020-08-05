@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type alterTableSetSchemaNode struct {
@@ -126,16 +124,9 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	}
 
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, tableDesc.Name).Key(p.ExecCfg().Codec)
+		databaseID, desiredSchemaID, tableDesc.Name)
 
-	b := &kv.Batch{}
-	if params.p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, tableDesc.ID)
-	}
-
-	b.CPut(newTbKey, tableDesc.ID, nil)
-
-	return p.txn.Run(ctx, b)
+	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

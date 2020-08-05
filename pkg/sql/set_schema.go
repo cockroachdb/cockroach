@@ -28,12 +28,14 @@ func (p *planner) prepareSetSchema(
 	ctx context.Context, desc catalog.MutableDescriptor, schema string,
 ) (descpb.ID, error) {
 
-	if desc.DescriptorProto().GetType() != nil && desc.DescriptorProto().GetTable() != nil {
-		return 0, pgerror.New(
+	switch t := desc.(type) {
+	case *MutableTableDescriptor, *MutableTypeDescriptor:
+	default:
+		return 0, pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			"no table or type was found for SET SCHEMA command",
-		)
+			"no table or type was found for SET SCHEMA command, found %T", t)
 	}
+
 	databaseID := desc.GetParentID()
 	schemaID := desc.GetParentSchemaID()
 
@@ -81,7 +83,7 @@ func (p *planner) prepareSetSchema(
 		return desiredSchemaID, nil
 	}
 
-	exists, id, err := sqlbase.LookupObjectID(
+	exists, id, err := catalogkv.LookupObjectID(
 		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, desc.GetName(),
 	)
 	if err == nil && exists {
