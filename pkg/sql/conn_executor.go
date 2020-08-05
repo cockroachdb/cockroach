@@ -1838,6 +1838,14 @@ func (ex *connExecutor) execCopyIn(
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload, nil
 	}
+	// If we let the copy-machine handle its own txn state then we need clean up
+	// anything it might have accumulated. In general this is just going to be
+	// releasing any leases which were acquired.
+	if isNoTxn {
+		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache, noEvent); err != nil {
+			return nil, nil, err
+		}
+	}
 	return nil, nil, nil
 }
 
