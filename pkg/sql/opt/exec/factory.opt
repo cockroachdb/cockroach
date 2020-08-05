@@ -35,8 +35,22 @@ define InvertedFilter {
 define SimpleProject {
     Input exec.Node
     Cols []exec.NodeColumnOrdinal
-    ColNames []string
     ReqOrdering exec.OutputOrdering
+}
+
+# SerializingProject is similar to SimpleProject, but it allows renaming of
+# columns and forces distributed execution to serialize (merge) any parallel
+# result streams into a single stream before the projection. This allows any
+# required output ordering of the input node to be "materialized", which is
+# important for cases where the projection no longer contains the ordering
+# columns (e.g. SELECT a FROM t ORDER BY b).
+#
+# Typically used as the "root" (top-level) operator to ensure the correct
+# ordering and naming of columns.
+define SerializingProject {
+    Input exec.Node
+    Cols []exec.NodeColumnOrdinal
+    ColNames []string
 }
 
 # Render applies a projection on the results of the given input node. The
@@ -321,12 +335,6 @@ define ProjectSet {
 define Window {
     Input exec.Node
     Window exec.WindowInfo
-}
-
-# RenameColumns modifies the column names of a node.
-define RenameColumns {
-    Input exec.Node
-    ColNames []string
 }
 
 # Explain implements EXPLAIN (OPT), showing information about the given plan.

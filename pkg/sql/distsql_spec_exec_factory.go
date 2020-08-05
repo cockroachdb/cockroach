@@ -347,24 +347,34 @@ func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
 	for i := range cols {
-		projection[i] = uint32(cols[i])
+		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
+	}
+	physPlan.AddProjection(projection)
+	physPlan.ResultColumns = getResultColumnsForSimpleProject(
+		cols, nil /* colNames */, physPlan.ResultTypes, physPlan.ResultColumns,
+	)
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	return plan, nil
+}
+
+func (e *distSQLSpecExecFactory) ConstructSerializingProject(
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
+) (exec.Node, error) {
+	physPlan, plan := getPhysPlan(n)
+	physPlan.EnsureSingleStreamOnGateway()
+	projection := make([]uint32, len(cols))
+	for i := range cols {
+		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
 	physPlan.AddProjection(projection)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.ResultTypes, physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
-	if reqOrdering == nil {
-		// When reqOrdering is nil, we're adding a top-level (i.e. "final")
-		// projection. In such scenario we need to be careful to not simply
-		// reset the merge ordering that is currently set on the plan - we do
-		// so by merging the streams on the gateway node.
-		physPlan.EnsureSingleStreamOnGateway()
-	}
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
 	return plan, nil
 }
 

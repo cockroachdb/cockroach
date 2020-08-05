@@ -277,12 +277,10 @@ func constructVirtualScan(
 	if needed := params.NeededCols; needed.Len() != len(columns) {
 		// We are selecting a subset of columns; we need a projection.
 		cols := make([]exec.NodeColumnOrdinal, 0, needed.Len())
-		colNames := make([]string, len(cols))
 		for ord, ok := needed.Next(0); ok; ord, ok = needed.Next(ord + 1) {
 			cols = append(cols, exec.NodeColumnOrdinal(ord-1))
-			colNames = append(colNames, columns[ord-1].Name)
 		}
-		n, err = ef.ConstructSimpleProject(n, cols, colNames, nil /* reqOrdering */)
+		n, err = ef.ConstructSimpleProject(n, cols, nil /* reqOrdering */)
 		if err != nil {
 			return nil, err
 		}
