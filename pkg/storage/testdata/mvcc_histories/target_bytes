@@ -272,14 +272,14 @@ with t=A ts=11,0 targetbytes=32
   scan      k=k end=o
   scan      k=k end=o reverse=true
 ----
-scan: "k" -> /BYTES/b @0,0
-scan: "l" -> /BYTES/b @0,0
+scan: "k" -> /BYTES/b @0.000000011,0
+scan: "l" -> /BYTES/b @0.000000011,0
 scan: resume span ["m","o")
-scan: 32 bytes (target 32)
-scan: "n" -> /BYTES/b @0,0
-scan: "m" -> /BYTES/b @0,0
+scan: 50 bytes (target 32)
+scan: "n" -> /BYTES/b @0.000000011,0
+scan: "m" -> /BYTES/b @0.000000011,0
 scan: resume span ["k","l\x00")
-scan: 32 bytes (target 32)
+scan: 50 bytes (target 32)
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 data: "a"/0.000000123,45 -> /BYTES/abcdef

@@ -1112,10 +1112,64 @@ func (p *PhysicalPlan) AddJoinStage(
 	}
 }
 
+// AddStageOnNodes adds a stage of processors that take in a single input
+// logical stream on the specified nodes and connects them to the previous
+// stage via a hash router.
+func (p *PhysicalPlan) AddStageOnNodes(
+	nodes []roachpb.NodeID,
+	core execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
+	hashCols []uint32,
+	types []*types.T,
+	mergeOrd execinfrapb.Ordering,
+	routers []ProcessorIdx,
+) {
+	pIdxStart := len(p.Processors)
+	newStageID := p.NewStageOnNodes(nodes)
+
+	for _, n := range nodes {
+		proc := Processor{
+			Node: n,
+			Spec: execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{
+					{ColumnTypes: types},
+				},
+				Core:    core,
+				Post:    post,
+				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID: newStageID,
+			},
+		}
+		p.AddProcessor(proc)
+	}
+
+	if len(nodes) > 1 {
+		// Set up the routers.
+		for _, resultProc := range routers {
+			p.Processors[resultProc].Spec.Output[0] = execinfrapb.OutputRouterSpec{
+				Type:        execinfrapb.OutputRouterSpec_BY_HASH,
+				HashColumns: hashCols,
+			}
+		}
+	}
+
+	// Connect the result streams to the processors.
+	for bucket := 0; bucket < len(nodes); bucket++ {
+		pIdx := ProcessorIdx(pIdxStart + bucket)
+		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0)
+	}
+
+	// Set the new result routers.
+	p.ResultRouters = p.ResultRouters[:0]
+	for i := 0; i < len(nodes); i++ {
+		p.ResultRouters = append(p.ResultRouters, ProcessorIdx(pIdxStart+i))
+	}
+}
+
 // AddDistinctSetOpStage creates a distinct stage and a join stage to implement
 // INTERSECT and EXCEPT plans.
 //
-// TODO(abhimadan): If there's a strong key on the left or right side, we
+// TODO(yuzefovich): If there's a strong key on the left or right side, we
 // can elide the distinct stage on that side.
 func (p *PhysicalPlan) AddDistinctSetOpStage(
 	nodes []roachpb.NodeID,
@@ -1127,65 +1181,28 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
-	const numSides = 2
-	inputResultTypes := [numSides][]*types.T{leftTypes, rightTypes}
-	inputMergeOrderings := [numSides]execinfrapb.Ordering{leftMergeOrd, rightMergeOrd}
-	inputResultRouters := [numSides][]ProcessorIdx{leftRouters, rightRouters}
-
 	// Create distinct stages for the left and right sides, where left and right
 	// sources are sent by hash to the node which will contain the join processor.
 	// The distinct stage must be before the join stage for EXCEPT queries to
 	// produce correct results (e.g., (VALUES (1),(1),(2)) EXCEPT (VALUES (1))
 	// would return (1),(2) instead of (2) if there was no distinct processor
 	// before the EXCEPT ALL join).
-	distinctIdxStart := len(p.Processors)
 	distinctProcs := make(map[roachpb.NodeID][]ProcessorIdx)
-
-	for side, types := range inputResultTypes {
-		distinctStageID := p.NewStageOnNodes(nodes)
-		for _, n := range nodes {
-			proc := Processor{
-				Node: n,
-				Spec: execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{
-						{ColumnTypes: types},
-					},
-					Core:    distinctCores[side],
-					Post:    execinfrapb.PostProcessSpec{},
-					Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-					StageID: distinctStageID,
-				},
-			}
-			pIdx := p.AddProcessor(proc)
-			distinctProcs[n] = append(distinctProcs[n], pIdx)
-		}
+	p.AddStageOnNodes(
+		nodes, distinctCores[0], execinfrapb.PostProcessSpec{}, eqCols,
+		leftTypes, leftMergeOrd, leftRouters,
+	)
+	for _, leftDistinctProcIdx := range p.ResultRouters {
+		node := p.Processors[leftDistinctProcIdx].Node
+		distinctProcs[node] = append(distinctProcs[node], leftDistinctProcIdx)
 	}
-
-	if len(nodes) > 1 {
-		// Set up the left routers.
-		for _, resultProc := range leftRouters {
-			p.Processors[resultProc].Spec.Output[0] = execinfrapb.OutputRouterSpec{
-				Type:        execinfrapb.OutputRouterSpec_BY_HASH,
-				HashColumns: eqCols,
-			}
-		}
-		// Set up the right routers.
-		for _, resultProc := range rightRouters {
-			p.Processors[resultProc].Spec.Output[0] = execinfrapb.OutputRouterSpec{
-				Type:        execinfrapb.OutputRouterSpec_BY_HASH,
-				HashColumns: eqCols,
-			}
-		}
-	}
-
-	// Connect the left and right streams to the distinct processors.
-	for side, routers := range inputResultRouters {
-		// Get the processor index offset for the current side.
-		sideOffset := side * len(nodes)
-		for bucket := 0; bucket < len(nodes); bucket++ {
-			pIdx := ProcessorIdx(distinctIdxStart + sideOffset + bucket)
-			p.MergeResultStreams(routers, bucket, inputMergeOrderings[side], pIdx, 0)
-		}
+	p.AddStageOnNodes(
+		nodes, distinctCores[1], execinfrapb.PostProcessSpec{}, eqCols,
+		rightTypes, rightMergeOrd, rightRouters,
+	)
+	for _, rightDistinctProcIdx := range p.ResultRouters {
+		node := p.Processors[rightDistinctProcIdx].Node
+		distinctProcs[node] = append(distinctProcs[node], rightDistinctProcIdx)
 	}
 
 	// Create a join stage, where the distinct processors on the same node are

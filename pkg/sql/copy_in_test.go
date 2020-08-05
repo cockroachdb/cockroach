@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCopyNullInfNaN(t *testing.T) {
@@ -497,4 +499,47 @@ func TestCopyFKCheck(t *testing.T) {
 	if !testutils.IsError(err, "foreign key violation|violates foreign key constraint") {
 		t.Fatalf("expected FK error, got: %v", err)
 	}
+}
+
+// TestCopyInReleasesLeases is a regression test to ensure that the execution
+// of CopyIn does not retain table descriptor leases after completing by
+// attempting to run a schema change after performing a copy.
+func TestCopyInReleasesLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	tdb := sqlutils.MakeSQLRunner(db)
+	defer s.Stopper().Stop(context.Background())
+	tdb.Exec(t, `CREATE TABLE t (k INT8 PRIMARY KEY)`)
+	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
+	tdb.Exec(t, `GRANT admin TO foo`)
+
+	userURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
+		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"),
+		false /* withClientCerts */)
+	defer cleanupFn()
+	conn, err := pgxConn(t, userURL)
+	require.NoError(t, err)
+
+	tag, err := conn.CopyFromReader(strings.NewReader("1\n2\n"),
+		"copy t(k) from stdin")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), tag.RowsAffected())
+
+	// Prior to the bug fix which prompted this test, the below schema change
+	// would hang until the leases expire. Let's make sure it finishes "soon".
+	alterErr := make(chan error, 1)
+	go func() {
+		_, err := db.Exec(`ALTER TABLE t ADD COLUMN v INT NOT NULL DEFAULT 0`)
+		alterErr <- err
+	}()
+	select {
+	case err := <-alterErr:
+		require.NoError(t, err)
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("alter did not complete")
+	}
+	require.NoError(t, conn.Close())
 }
