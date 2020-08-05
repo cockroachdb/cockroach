@@ -1571,6 +1571,18 @@ func planProjectionOperators(
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
 ) (op colexecbase.Operator, resultIdx int, typs []*types.T, internalMemUsed int, err error) {
+	projectDatum := func(datum tree.Datum) (colexecbase.Operator, error) {
+		resultIdx = len(columnTypes)
+		datumType := datum.ResolvedType()
+		typs = appendOneType(columnTypes, datumType)
+		if datumType.Family() == types.UnknownFamily {
+			// We handle Unknown type by planning a special constant null
+			// operator.
+			return colexec.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx), nil
+		}
+		constVal := colexec.GetDatumToPhysicalFn(datumType)(datum)
+		return colexec.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
+	}
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
@@ -1589,7 +1601,6 @@ func planProjectionOperators(
 			columnTypes, input, acc, factory, t.Fn.Fn, nil, /* cmpExpr */
 		)
 	case *tree.IsNullExpr:
-		t.TypedInnerExpr()
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory)
 	case *tree.IsNotNullExpr:
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory)
@@ -1632,21 +1643,15 @@ func planProjectionOperators(
 		typs = appendOneType(typs, t.ResolvedType())
 		return op, resultIdx, typs, internalMemUsed, err
 	case tree.Datum:
-		datumType := t.ResolvedType()
-		resultIdx = len(columnTypes)
-		typs = appendOneType(columnTypes, datumType)
-		if datumType.Family() == types.UnknownFamily {
-			// We handle Unknown type by planning a special constant null
-			// operator.
-			op = colexec.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx)
-			return op, resultIdx, typs, internalMemUsed, nil
-		}
-		constVal := colexec.GetDatumToPhysicalFn(datumType)(t)
-		op, err := colexec.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
+		op, err = projectDatum(t)
+		return op, resultIdx, typs, internalMemUsed, err
+	case *tree.Tuple:
+		tuple, err := t.Eval(evalCtx)
 		if err != nil {
 			return nil, resultIdx, typs, internalMemUsed, err
 		}
-		return op, resultIdx, typs, internalMemUsed, nil
+		op, err = projectDatum(tuple)
+		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.CaseExpr:
 		if t.Expr != nil {
 			return nil, resultIdx, typs, internalMemUsed, errors.New("CASE <expr> WHEN expressions unsupported")
@@ -1837,6 +1842,16 @@ func planProjectionExpr(
 			return nil, resultIdx, typs, internalMemUsed, err
 		}
 		internalMemUsed += internalMemUsedLeft
+		// Note that this check exists only for testing purposes. On the
+		// regular workloads, we expect that tree.Tuples have already been
+		// pre-evaluated.
+		if tuple, ok := right.(*tree.Tuple); ok {
+			tupleDatum, err := tuple.Eval(evalCtx)
+			if err != nil {
+				return nil, resultIdx, typs, internalMemUsed, err
+			}
+			right = tupleDatum
+		}
 		if rConstArg, rConst := right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is appended
@@ -1857,6 +1872,21 @@ func planProjectionExpr(
 					// expressions, so we fallback to the default comparison
 					// operator.
 					break
+				} else {
+					containsTuples := false
+					for _, typ := range datumTuple.ResolvedType().TupleContents() {
+						if typ.Family() == types.TupleFamily {
+							containsTuples = true
+							break
+						}
+					}
+					if containsTuples {
+						// Optimized IN operator is not supported when we have
+						// tuples in the IN clause because they require a
+						// special null-handling logic, so we fallback to the
+						// default comparison operator.
+						break
+					}
 				}
 				op, err = colexec.GetInProjectionOperator(
 					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], input, leftIdx,

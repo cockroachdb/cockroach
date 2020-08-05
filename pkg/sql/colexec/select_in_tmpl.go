@@ -148,17 +148,14 @@ var _ colexecbase.Operator = &projectInOp_TYPE{}
 func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []_GOTYPE
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(_GOTYPE)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpIn_TYPE(

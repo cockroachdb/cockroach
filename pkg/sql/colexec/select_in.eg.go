@@ -334,17 +334,14 @@ var _ colexecbase.Operator = &projectInOpBool{}
 func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []bool
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(bool)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInBool(
@@ -572,17 +569,14 @@ var _ colexecbase.Operator = &projectInOpBytes{}
 func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result [][]byte
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.([]byte)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInBytes(
@@ -806,17 +800,14 @@ var _ colexecbase.Operator = &projectInOpDecimal{}
 func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []apd.Decimal
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(apd.Decimal)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInDecimal(
@@ -1036,17 +1027,14 @@ var _ colexecbase.Operator = &projectInOpInt16{}
 func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int16
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(int16)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInInt16(
@@ -1277,17 +1265,14 @@ var _ colexecbase.Operator = &projectInOpInt32{}
 func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int32
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(int32)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInInt32(
@@ -1518,17 +1503,14 @@ var _ colexecbase.Operator = &projectInOpInt64{}
 func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int64
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(int64)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInInt64(
@@ -1759,17 +1741,14 @@ var _ colexecbase.Operator = &projectInOpFloat64{}
 func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []float64
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(float64)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInFloat64(
@@ -2008,17 +1987,14 @@ var _ colexecbase.Operator = &projectInOpTimestamp{}
 func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []time.Time
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(time.Time)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInTimestamp(
@@ -2245,17 +2221,14 @@ var _ colexecbase.Operator = &projectInOpInterval{}
 func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Duration, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []duration.Duration
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(duration.Duration)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInInterval(
@@ -2475,17 +2448,14 @@ var _ colexecbase.Operator = &projectInOpDatum{}
 func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []interface{}
-	hasNulls := false
 	for _, d := range datumTuple.D {
-		if d == tree.DNull {
-			hasNulls = true
-		} else {
+		if d != tree.DNull {
 			convRaw := conv(d)
 			converted := convRaw.(interface{})
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls
+	return result, datumTuple.ContainsNull()
 }
 
 func cmpInDatum(

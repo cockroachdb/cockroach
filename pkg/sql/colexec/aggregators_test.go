@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
 var (
@@ -514,24 +516,24 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				execinfrapb.AggregatorSpec_SUM_INT,
 			},
 			input: tuples{
-				{`{"id": null}`, -1},
-				{`{"id": 0, "data": "s1"}`, 1},
-				{`{"id": 0, "data": "s1"}`, 2},
-				{`{"id": 1, "data": "s2"}`, 10},
-				{`{"id": 1, "data": "s2"}`, 11},
-				{`{"id": 2, "data": "s3"}`, 100},
-				{`{"id": 2, "data": "s3"}`, 101},
-				{`{"id": 2, "data": "s4"}`, 102},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 0), -1},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 1},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 2},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 2), 10},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 2), 11},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 3), 100},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 3), 101},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 4), 102},
 			},
 			expected: tuples{
-				{`{"id": null}`, -1},
-				{`{"id": 0, "data": "s1"}`, 3},
-				{`{"id": 1, "data": "s2"}`, 21},
-				{`{"id": 2, "data": "s3"}`, 201},
-				{`{"id": 2, "data": "s4"}`, 102},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 0), -1},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 1), 3},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 2), 21},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 3), 201},
+				{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 4), 102},
 			},
-			typs:      []*types.T{types.Jsonb, types.Int},
-			name:      "GroupOnJsonColumns",
+			typs:      []*types.T{types.TimeTZ, types.Int},
+			name:      "GroupOnTimeTZColumns",
 			groupCols: []uint32{0},
 			aggCols: [][]uint32{
 				{0}, {1},

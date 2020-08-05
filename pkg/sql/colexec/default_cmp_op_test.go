@@ -89,26 +89,24 @@ func TestDefaultComparisonOp(t *testing.T) {
 				{"abc", "ab", true},
 			},
 		},
-		// TODO(yuzefovich): uncomment this once tree.Tuple is supported in
-		// colbuilder.planProjectionOperators.
-		//{
-		//	cmpExpr:    "(1, 2) IS DISTINCT FROM @1",
-		//	inputTypes: []*types.T{types.MakeTuple([]*types.T{types.Int, types.Int})},
-		//	inputTuples: tuples{
-		//		{"(1, NULL)"},
-		//		{nil},
-		//		{"(1, 2)"},
-		//	},
-		//	outputTuples: tuples{
-		//		{"(1, NULL)", true},
-		//		{nil, true},
-		//		{"(1, 2)", false},
-		//	},
-		//},
+		{
+			cmpExpr:    "(1, 2) IS DISTINCT FROM @1",
+			inputTypes: []*types.T{types.MakeTuple([]*types.T{types.Int, types.Int})},
+			inputTuples: tuples{
+				{"(1, NULL)"},
+				{nil},
+				{"(1, 2)"},
+			},
+			outputTuples: tuples{
+				{"(1, NULL)", true},
+				{nil, true},
+				{"(1, 2)", false},
+			},
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.cmpExpr, func(t *testing.T) {
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
+			runTestsWithTyps(t, []tuples{c.inputTuples}, [][]*types.T{c.inputTypes}, c.outputTuples, orderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return createTestProjectingOperator(
 						ctx, flowCtx, input[0], c.inputTypes,
