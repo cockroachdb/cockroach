@@ -2802,6 +2802,26 @@ func TestConcurrentBackupRestores(t *testing.T) {
 	}
 }
 
+func TestBackupTenantsWithRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	defer cleanupFn()
+
+	_, err := tc.Servers[0].StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	require.NoError(t, err)
+
+	const msg = "can not backup tenants with revision history"
+
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO 'nodelocal://0/' WITH revision_history`)
+	require.Contains(t, fmt.Sprint(err), msg)
+
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://0/' WITH revision_history`)
+	require.Contains(t, fmt.Sprint(err), msg)
+}
+
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5151,9 +5171,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	// BACKUP tenant 10 at ts1, before they created bar2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
+	// Also create a full cluster backup. It should contain the tenant.
+	systemDB.Exec(t, `BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME `+ts1)
 
-	// Incrementtally backup tenant 10 again, capturing up to ts2.
+	// Incrementally backup tenant 10 again, capturing up to ts2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts2)
+	// Run full cluster backup incrementally to ts2 as well.
+	systemDB.Exec(t, `BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME `+ts2)
 
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
@@ -5162,7 +5186,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	// once tenant destruction actually clears their key-space. See #48775.
 
 	t.Run("non-existent", func(t *testing.T) {
-		systemDB.ExpectErr(t, "tenant 1 does not exist", `BACKUP TENANT 1 TO 'nodelocal://1/t1'`)
+		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/t1'`)
 		systemDB.ExpectErr(t, "tenant 21 does not exist", `BACKUP TENANT 21 TO 'nodelocal://1/t20'`)
 		systemDB.ExpectErr(t, "tenant 21 not in backup", `RESTORE TENANT 21 FROM 'nodelocal://1/t20'`)
 		systemDB.ExpectErr(t, "file does not exist", `RESTORE TENANT 21 FROM 'nodelocal://1/t21'`)
@@ -5170,7 +5194,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("invalid", func(t *testing.T) {
 		systemDB.ExpectErr(t, "invalid tenant ID", `BACKUP TENANT 0 TO 'nodelocal://1/z'`)
-		systemDB.ExpectErr(t, "tenant 1 does not exist", `BACKUP TENANT 1 TO 'nodelocal://1/z'`)
+		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 TO 'nodelocal://1/z'`)
 		systemDB.ExpectErr(t, "syntax error", `BACKUP TENANT system TO 'nodelocal://1/z'`)
 	})
 
@@ -5193,6 +5217,63 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+	})
+
+	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {
+		restoreTC := testcluster.StartTestCluster(
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+		)
+		defer restoreTC.Stopper().Stop(ctx)
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
+		restoreDB.CheckQueryResults(t, `select * from system.tenants order by id asc`, [][]string{
+			{"10", "true", "ten"},
+		})
+
+		restoreConn10 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+		)
+		defer restoreConn10.Close()
+		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+	})
+
+	t.Run("restore-all-from-cluster-backup", func(t *testing.T) {
+		restoreTC := testcluster.StartTestCluster(
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+		)
+
+		defer restoreTC.Stopper().Stop(ctx)
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
+		restoreDB.CheckQueryResults(t, `select * from system.tenants order by id asc`, [][]string{
+			{"10", "true", "ten"},
+			{"11", "true", "NULL"},
+			{"20", "true", "NULL"},
+		})
+
+		restoreConn10 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+		)
+		defer restoreConn10.Close()
+		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
+
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
+		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		restoreConn11 := serverutils.StartTenant(
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11), Existing: true},
+		)
+		defer restoreConn11.Close()
+		restoreTenant11 := sqlutils.MakeSQLRunner(restoreConn11)
+
+		restoreTenant11.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
 	})
 
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {
