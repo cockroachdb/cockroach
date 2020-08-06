@@ -77,6 +77,11 @@ func (j *ScheduledJob) ScheduleID() int64 {
 	return j.rec.ScheduleID
 }
 
+// ScheduleName returns schedule name.
+func (j *ScheduledJob) ScheduleName() string {
+	return j.rec.ScheduleName
+}
+
 // SetScheduleName updates schedule name.
 func (j *ScheduledJob) SetScheduleName(name string) {
 	j.rec.ScheduleName = name
@@ -122,6 +127,21 @@ func (j *ScheduledJob) SetSchedule(scheduleExpr string) error {
 // HasRecurringSchedule returns true if this schedule job runs periodically.
 func (j *ScheduledJob) HasRecurringSchedule() bool {
 	return len(j.rec.ScheduleExpr) > 0
+}
+
+// Frequency returns how often this schedule executes.
+func (j *ScheduledJob) Frequency() (time.Duration, error) {
+	if !j.HasRecurringSchedule() {
+		return 0, errors.Newf(
+			"schedule %d is not periodic", j.rec.ScheduleID)
+	}
+	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
+	if err != nil {
+		return 0, errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)
+	}
+	next := expr.Next(j.env.Now())
+	nextNext := expr.Next(next)
+	return nextNext.Sub(next), nil
 }
 
 // ScheduleNextRun updates next run based on job schedule.
