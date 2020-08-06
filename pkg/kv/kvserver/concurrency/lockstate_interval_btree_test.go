@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 
+	// Load pkg/keys so that roachpb.Span.String() could be executed correctly.
+	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
