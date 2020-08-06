@@ -164,8 +164,10 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	blockFnErrChan := make(chan error, 1)
 	revMigrationDoneCh, signalRevMigrationDone := makeSignal()
 	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldSignalMigration)
+	g := ctxgroup.WithContext(context.Background())
 	runner, sqlDB, tc := setupServerAndStartSchemaChange(
 		t,
+		g,
 		blockFnErrChan,
 		testCase,
 		signalRevMigrationDone,
@@ -199,6 +201,11 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	log.Info(ctx, "waiting for migration to complete")
 	<-migrationDoneCh
 
+	// The original schema change, which has had its job modified, should return a
+	// result at this point now that all relevant jobs are in a terminal state (or
+	// no longer exist?). But the result doesn't matter.
+	_ = g.Wait()
+
 	// TODO(pbardea): SHOW JOBS WHEN COMPLETE SELECT does not work on some schema
 	// changes when canceling jobs, but querying until there are no jobs works.
 	//runner.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE (job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC')")
@@ -227,6 +234,7 @@ func makeSignal() (chan struct{}, func()) {
 
 func setupServerAndStartSchemaChange(
 	t *testing.T,
+	g ctxgroup.Group,
 	errCh chan error,
 	testCase migrationTestCase,
 	revMigrationDone, signalMigrationDone func(),
@@ -271,8 +279,6 @@ func setupServerAndStartSchemaChange(
 	runner = sqlutils.MakeSQLRunner(sqlDB)
 	registry = tc.Server(0).JobRegistry().(*jobs.Registry)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	if _, err := sqlDB.Exec(setup); err != nil {
 		t.Fatal(err)
 	}
@@ -280,10 +286,8 @@ func setupServerAndStartSchemaChange(
 	runner.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'canceled')", [][]string{{"0"}})
 	blockSchemaChanges = true
 
-	bg := ctxgroup.WithContext(ctx)
-	bg.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		if _, err := sqlDB.ExecContext(ctx, testCase.schemaChange.query); err != nil {
-			cancel()
 			return err
 		}
 		return nil
@@ -939,18 +943,16 @@ func TestMissingMutation(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer s.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(context.Background())
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k INT PRIMARY KEY, v INT);`)
 	require.NoError(t, err)
 
-	bg := ctxgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(context.Background())
 	// Start a schema change on the table in a separate goroutine.
-	bg.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		if _, err := sqlDB.ExecContext(ctx, `CREATE INDEX ON t.test (v);`); err != nil {
-			cancel()
 			return err
 		}
 		return nil
@@ -961,6 +963,7 @@ func TestMissingMutation(t *testing.T) {
 	// Rewrite the job to be a 19.2-style job.
 	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, CreateIndex))
 
+	ctx := context.Background()
 	// To get the table descriptor into the (invalid) state we're trying to test,
 	// clear the mutations on the table descriptor.
 	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -982,6 +985,6 @@ func TestMissingMutation(t *testing.T) {
 
 	close(descriptorUpdated)
 
-	err = bg.Wait()
+	err = g.Wait()
 	require.Regexp(t, fmt.Sprintf("mutation %d not found for MutationJob %d", 1, schemaChangeJobID), err)
 }
