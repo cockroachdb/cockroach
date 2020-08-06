@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -50,12 +49,7 @@ import (
 type Sink interface {
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
-	EmitRow(
-		ctx context.Context,
-		table *descpb.TableDescriptor,
-		key, value []byte,
-		updated hlc.Timestamp,
-	) error
+	EmitRow(ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
 	// asynchronous delivery on every topic that has been seen by EmitRow. An
 	// error may be returned if a previously enqueued message has failed.
@@ -236,7 +230,7 @@ type errorWrapperSink struct {
 }
 
 func (s errorWrapperSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, table, key, value, updated); err != nil {
 		return MarkRetryableError(err)
@@ -456,9 +450,9 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
+	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.GetName())
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
@@ -690,9 +684,9 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	topic := table.Name
+	topic := table.GetName()
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
@@ -804,12 +798,12 @@ type bufferSink struct {
 
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
-	_ context.Context, table *descpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
-	topic := table.Name
+	topic := table.GetName()
 	s.buf.Push(sqlbase.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic

@@ -213,7 +213,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		}
 		return err
 	}
-	if tableDesc.TableDesc().ParentID == keys.SystemDatabaseID {
+	if tableDesc.GetParentID() == keys.SystemDatabaseID {
 		return p.RequireAdminRole(ctx, "alter system tables")
 	}
 
