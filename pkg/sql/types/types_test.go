@@ -501,10 +501,9 @@ func TestTypes(t *testing.T) {
 		{MakeEnum(15210, 15213), &T{InternalType: InternalType{
 			Family: EnumFamily,
 			Locale: &emptyLocale,
-			Oid:    StableTypeIDToOID(15210),
+			Oid:    15210,
 			UDTMetadata: &PersistentUserDefinedTypeMetadata{
-				StableTypeID:      15210,
-				StableArrayTypeID: 15213,
+				ArrayTypeOID: 15213,
 			},
 		}}},
 	}

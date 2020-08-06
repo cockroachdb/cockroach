@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // UncommittedDatabase is a database that has been created/dropped
@@ -1235,9 +1236,11 @@ func (dt *DistSQLTypeResolver) ResolveType(
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
-// ResolveTypeByID implements the tree.TypeReferenceResolver interface.
-func (dt *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := dt.GetTypeDescriptor(ctx, descpb.ID(id))
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+func (dt *DistSQLTypeResolver) ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid,
+) (*types.T, error) {
+	name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +1269,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, desc, err := dt.GetTypeDescriptor(ctx, descpb.ID(t.StableTypeID()))
+			name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.GetTypeDescID(t))
 			if err != nil {
 				return err
 			}

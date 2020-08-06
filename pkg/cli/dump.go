@@ -22,11 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
 	"github.com/spf13/cobra"
 )
 
@@ -341,9 +344,9 @@ func (d *dumpTypeContext) ResolveType(
 	return typ, nil
 }
 
-// ResolveTypeByID implements the tree.TypeReferenceResolver interface.
-func (d *dumpTypeContext) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
-	return nil, errors.AssertionFailedf("cannot resolve types in dump by ID")
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+func (d *dumpTypeContext) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
+	return nil, errors.AssertionFailedf("cannot resolve types in dump by OID")
 }
 
 func collectUserDefinedSchemas(conn *sqlConn, dbName string, ts string) ([]string, error) {
@@ -470,7 +473,7 @@ WHERE
 		// type kind in the typing context.
 		switch {
 		case len(enumMembers) != 0:
-			typ := types.MakeEnum(uint32(id), 0 /* arrayTypeID */)
+			typ := types.MakeEnum(sqlbase.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeOID */)
 			typ.TypeMeta = types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
 					Name:   name,

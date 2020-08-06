@@ -857,7 +857,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					{
 						Name: "a",
 						ID:   1,
-						Type: types.MakeEnum(500, 500),
+						Type: types.MakeEnum(TypeIDToOID(500), TypeIDToOID(100500)),
 					},
 				},
 			},
@@ -879,7 +879,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 						Name:        "a",
 						ID:          1,
 						Type:        types.Int,
-						DefaultExpr: pointer("a::@500"),
+						DefaultExpr: pointer("a::@100500"),
 					},
 				},
 			},
@@ -900,7 +900,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 						Name:        "a",
 						ID:          1,
 						Type:        types.Int,
-						ComputeExpr: pointer("a:::@500"),
+						ComputeExpr: pointer("a:::@100500"),
 					},
 				},
 			},
@@ -912,7 +912,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name: "foo",
 				Checks: []*descpb.TableDescriptor_CheckConstraint{
 					{
-						Expr: "a::@500",
+						Expr: "a::@100500",
 					},
 				},
 			},

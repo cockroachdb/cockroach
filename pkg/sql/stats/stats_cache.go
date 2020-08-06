@@ -418,7 +418,7 @@ func parseStats(
 				typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
 					return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
 				}
-				name, typeDesc, err := typeLookup(ctx, descpb.ID(typ.StableTypeID()))
+				name, typeDesc, err := typeLookup(ctx, sqlbase.GetTypeDescID(typ))
 				if err != nil {
 					return err
 				}

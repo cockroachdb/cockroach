@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // TypeName corresponds to the name of a type in a CREATE TYPE statement,
@@ -101,7 +102,7 @@ func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 // underlying representation of a user defined type.
 type TypeReferenceResolver interface {
 	ResolveType(ctx context.Context, name *UnresolvedObjectName) (*types.T, error)
-	ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error)
+	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 }
 
 // ResolvableTypeReference represents a type that is possibly unknown
@@ -115,7 +116,7 @@ type ResolvableTypeReference interface {
 var _ ResolvableTypeReference = &UnresolvedObjectName{}
 var _ ResolvableTypeReference = &ArrayTypeReference{}
 var _ ResolvableTypeReference = &types.T{}
-var _ ResolvableTypeReference = &IDTypeReference{}
+var _ ResolvableTypeReference = &OIDTypeReference{}
 
 // ResolveType converts a ResolvableTypeReference into a *types.T.
 func ResolveType(
@@ -137,11 +138,11 @@ func ResolveType(
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", t)
 		}
 		return resolver.ResolveType(ctx, t)
-	case *IDTypeReference:
+	case *OIDTypeReference:
 		if resolver == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type id %d does not exist", t.ID)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type OID %d does not exist", t.OID)
 		}
-		return resolver.ResolveTypeByID(ctx, t.ID)
+		return resolver.ResolveTypeByOID(ctx, t.OID)
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable type reference type %s", t)
 	}
@@ -153,13 +154,13 @@ func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 		switch t := ref.(type) {
 		case *types.T:
 			if t.UserDefined() {
-				idRef := IDTypeReference{ID: t.StableTypeID()}
+				idRef := OIDTypeReference{OID: t.Oid()}
 				ctx.WriteString(idRef.SQLString())
 				return
 			}
 		}
 	}
-	if idRef, ok := ref.(*IDTypeReference); ok && ctx.indexedTypeFormatter != nil {
+	if idRef, ok := ref.(*OIDTypeReference); ok && ctx.indexedTypeFormatter != nil {
 		ctx.indexedTypeFormatter(ctx, idRef)
 		return
 	}
@@ -185,14 +186,14 @@ func MustBeStaticallyKnownType(ref ResolvableTypeReference) *types.T {
 	panic(errors.AssertionFailedf("type reference was not a statically known type"))
 }
 
-// IDTypeReference is a reference to a type directly by its stable ID.
-type IDTypeReference struct {
-	ID uint32
+// OIDTypeReference is a reference to a type directly by its stable ID.
+type OIDTypeReference struct {
+	OID oid.Oid
 }
 
 // SQLString implements the ResolvableTypeReference interface.
-func (node *IDTypeReference) SQLString() string {
-	return fmt.Sprintf("@%d", node.ID)
+func (node *OIDTypeReference) SQLString() string {
+	return fmt.Sprintf("@%d", node.OID)
 }
 
 // ArrayTypeReference represents an array of possibly unknown type references.
@@ -227,9 +228,9 @@ func IsReferenceSerialType(ref ResolvableTypeReference) bool {
 }
 
 // TypeCollectorVisitor is an expression visitor that collects all explicit
-// ID type references in an expression.
+// OID type references in an expression.
 type TypeCollectorVisitor struct {
-	IDs map[uint32]struct{}
+	OIDs map[oid.Oid]struct{}
 }
 
 // VisitPre implements the Visitor interface.
@@ -237,21 +238,21 @@ func (v *TypeCollectorVisitor) VisitPre(expr Expr) (bool, Expr) {
 	switch t := expr.(type) {
 	case Datum:
 		if t.ResolvedType().UserDefined() {
-			v.IDs[t.ResolvedType().StableTypeID()] = struct{}{}
+			v.OIDs[t.ResolvedType().Oid()] = struct{}{}
 		}
 	case *IsOfTypeExpr:
 		for _, ref := range t.Types {
-			if idref, ok := ref.(*IDTypeReference); ok {
-				v.IDs[idref.ID] = struct{}{}
+			if idref, ok := ref.(*OIDTypeReference); ok {
+				v.OIDs[idref.OID] = struct{}{}
 			}
 		}
 	case *CastExpr:
-		if idref, ok := t.Type.(*IDTypeReference); ok {
-			v.IDs[idref.ID] = struct{}{}
+		if idref, ok := t.Type.(*OIDTypeReference); ok {
+			v.OIDs[idref.OID] = struct{}{}
 		}
 	case *AnnotateTypeExpr:
-		if idref, ok := t.Type.(*IDTypeReference); ok {
-			v.IDs[idref.ID] = struct{}{}
+		if idref, ok := t.Type.(*OIDTypeReference); ok {
+			v.OIDs[idref.OID] = struct{}{}
 		}
 	}
 	return true, expr
@@ -278,8 +279,8 @@ func (dtr *TestingMapTypeResolver) ResolveType(
 	return typ, nil
 }
 
-// ResolveTypeByID implements the TypeReferenceResolver interface.
-func (dtr *TestingMapTypeResolver) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
+// ResolveTypeByOID implements the TypeReferenceResolver interface.
+func (dtr *TestingMapTypeResolver) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
 	return nil, errors.AssertionFailedf("unimplemented")
 }
 

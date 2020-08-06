@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 var _ resolver.SchemaResolver = &planner{}
@@ -197,9 +198,9 @@ func (p *planner) ResolveType(
 	return tdesc.MakeTypesT(ctx, &tn, p)
 }
 
-// ResolveTypeByID implements the tree.TypeResolver interface.
-func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := p.GetTypeDescriptor(ctx, descpb.ID(id))
+// ResolveTypeByOID implements the tree.TypeResolver interface.
+func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	name, desc, err := p.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
 	}
