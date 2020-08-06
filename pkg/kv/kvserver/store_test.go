@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -394,9 +395,13 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	var seen []seenT
 	var tombstone roachpb.RangeTombstone
 
-	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
-		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-		return true, nil
+	handleTombstone := func(c iterutil.Cur) error {
+		rangeID, ok := c.Elem.(*roachpb.RangeID)
+		if !ok {
+			return errors.Newf("unexpected type %T for iterator element; expected %T", c.Elem, rangeID)
+		}
+		seen = append(seen, seenT{rangeID: *rangeID, tombstone: tombstone})
+		return nil
 	}
 
 	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
