@@ -11,6 +11,9 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -505,6 +508,36 @@ func (b *backupResumer) Resume(
 		}
 	}
 
+	// If this is a full backup that was automatically nested in a collection of
+	// backups, record the path under which we wrote it to the LATEST file in the
+	// root of the collection. Note: this file *not* encrypted, as it only
+	// contains the name of another file that is in the same folder -- if you can
+	// get to this file to read it, you could already find its contents from the
+	// listing of the directory it is in -- it exists only to save us a
+	// potentially expensive listing of a giant backup collection to find the most
+	// recent completed entry.
+	if backupManifest.StartTime.IsEmpty() && details.CollectionURI != "" {
+		backupURI, err := url.Parse(details.URI)
+		if err != nil {
+			return err
+		}
+		collectionURI, err := url.Parse(details.CollectionURI)
+		if err != nil {
+			return err
+		}
+
+		suffix := strings.TrimPrefix(path.Clean(backupURI.Path), path.Clean(collectionURI.Path))
+
+		c, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, details.CollectionURI, p.User())
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		if err := c.WriteFile(ctx, latestFileName, strings.NewReader(suffix)); err != nil {
+			return err
+		}
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*b.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
@@ -580,11 +613,7 @@ func (b *backupResumer) deleteCheckpoint(
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
 		// details.URI.
-		conf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, user)
-		if err != nil {
-			return err
-		}
-		exportStore, err := cfg.DistSQLSrv.ExternalStorage(ctx, conf)
+		exportStore, err := cfg.DistSQLSrv.ExternalStorageFromURI(ctx, details.URI, user)
 		if err != nil {
 			return err
 		}

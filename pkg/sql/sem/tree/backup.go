@@ -46,16 +46,14 @@ var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets            TargetList
+	Targets            *TargetList
 	DescriptorCoverage DescriptorCoverage
-	// StringOrPlaceholderOptList is a list of destination URIs for a single
-	// BACKUP. A single URI corresponds to the special case of a regular backup,
-	// and multiple URIs correspond to a partitioned backup whose locality
-	// configuration is specified by LOCALITY url params.
-	To              StringOrPlaceholderOptList
-	IncrementalFrom Exprs
-	AsOf            AsOfClause
-	Options         BackupOptions
+	To                 StringOrPlaceholderOptList
+	IncrementalFrom    Exprs
+	AsOf               AsOfClause
+	Options            BackupOptions
+	Nested             bool
+	AppendToLatest     bool
 }
 
 var _ Statement = &Backup{}
@@ -63,11 +61,18 @@ var _ Statement = &Backup{}
 // Format implements the NodeFormatter interface.
 func (node *Backup) Format(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
-	if node.DescriptorCoverage == RequestedDescriptors {
-		ctx.FormatNode(&node.Targets)
+	if node.Targets != nil {
+		ctx.FormatNode(node.Targets)
 		ctx.WriteString(" ")
 	}
-	ctx.WriteString("TO ")
+	if node.Nested {
+		ctx.WriteString("INTO ")
+		if node.AppendToLatest {
+			ctx.WriteString("LATEST IN ")
+		}
+	} else {
+		ctx.WriteString("TO ")
+	}
 	ctx.FormatNode(&node.To)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
@@ -84,6 +89,14 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 }
 
+// Coverage return the coverage (all vs requested).
+func (node Backup) Coverage() DescriptorCoverage {
+	if node.Targets == nil {
+		return AllDescriptors
+	}
+	return RequestedDescriptors
+}
+
 // Restore represents a RESTORE statement.
 type Restore struct {
 	Targets            TargetList
@@ -91,6 +104,7 @@ type Restore struct {
 	From               []StringOrPlaceholderOptList
 	AsOf               AsOfClause
 	Options            KVOptions
+	Subdir             Expr
 }
 
 var _ Statement = &Restore{}
@@ -103,6 +117,10 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 	}
 	ctx.WriteString("FROM ")
+	if node.Subdir != nil {
+		ctx.FormatNode(node.Subdir)
+		ctx.WriteString(" IN ")
+	}
 	for i := range node.From {
 		if i > 0 {
 			ctx.WriteString(", ")

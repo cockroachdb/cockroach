@@ -604,7 +604,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %token <str> KEY KEYS KMS KV
 
-%token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
+%token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
@@ -2057,24 +2057,36 @@ alter_attribute_action:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+  BACKUP opt_backup_targets INTO string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
   {
-    backup := &tree.Backup{
-      To:              $4.stringOrPlaceholderOptList(),
+    $$.val = &tree.Backup{
+      Targets: $2.targetListPtr(),
+      To: $4.stringOrPlaceholderOptList(),
+      Nested: true,
+      AsOf: $5.asOfClause(),
+      Options: *$6.backupOptions(),
+    }
+  }
+| BACKUP opt_backup_targets INTO LATEST IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+  {
+    $$.val = &tree.Backup{
+      Targets: $2.targetListPtr(),
+      To: $6.stringOrPlaceholderOptList(),
+      Nested: true,
+      AppendToLatest: true,
+      AsOf: $7.asOfClause(),
+      Options: *$8.backupOptions(),
+    }
+  }
+| BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+  {
+    $$.val = &tree.Backup{
+      Targets: $2.targetListPtr(),
+      To: $4.stringOrPlaceholderOptList(),
       IncrementalFrom: $6.exprs(),
-      AsOf:            $5.asOfClause(),
-      Options:         *$7.backupOptions(),
+      AsOf: $5.asOfClause(),
+      Options: *$7.backupOptions(),
     }
-
-    tl := $2.targetListPtr()
-    if tl == nil {
-      backup.DescriptorCoverage = tree.AllDescriptors
-    } else {
-      backup.DescriptorCoverage = tree.RequestedDescriptors
-      backup.Targets = *tl
-    }
-
-    $$.val = backup
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -2312,11 +2324,24 @@ opt_with_schedule_options:
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{DescriptorCoverage: tree.AllDescriptors, From: $3.listOfStringOrPlaceholderOptList(), AsOf: $4.asOfClause(), Options: $5.kvOptions()}
+    $$.val = &tree.Restore{
+      DescriptorCoverage: tree.AllDescriptors, From: $3.listOfStringOrPlaceholderOptList(),
+      AsOf: $4.asOfClause(), Options: $5.kvOptions(),
+    }
   }
 | RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.listOfStringOrPlaceholderOptList(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{
+      Targets: $2.targetList(), From: $4.listOfStringOrPlaceholderOptList(),
+      AsOf: $5.asOfClause(), Options: $6.kvOptions(),
+      }
+  }
+| RESTORE targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+  {
+    $$.val = &tree.Restore{
+      Targets: $2.targetList(), Subdir: $4.expr(), From: $6.listOfStringOrPlaceholderOptList(),
+      AsOf: $7.asOfClause(), Options: $8.kvOptions(),
+    }
   }
 | RESTORE error // SHOW HELP: RESTORE
 
@@ -10916,6 +10941,7 @@ unreserved_keyword:
 | KV
 | LANGUAGE
 | LAST
+| LATEST
 | LC_COLLATE
 | LC_CTYPE
 | LEASE

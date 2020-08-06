@@ -107,7 +107,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	s.lock.Unlock()
 
 	return &tree.Backup{
-		Targets: targets,
+		Targets: &targets,
 		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),
 		Options: tree.BackupOptions{CaptureRevisionHistory: s.coin()},
