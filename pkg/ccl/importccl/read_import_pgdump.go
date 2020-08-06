@@ -381,6 +381,15 @@ func readPostgresStmt(
 					return errors.Errorf("unsupported statement: %s", stmt)
 				}
 				create.Defs = append(create.Defs, cmd.ColumnDef)
+			case *tree.AlterTableSetNotNull:
+				for i, def := range create.Defs {
+					def, ok := def.(*tree.ColumnTableDef)
+					if !ok || def.Name != cmd.Column {
+						continue
+					}
+					def.Nullable.Nullability = tree.NotNull
+					create.Defs[i] = def
+				}
 			case *tree.AlterTableValidateConstraint:
 				// ignore
 			default:
