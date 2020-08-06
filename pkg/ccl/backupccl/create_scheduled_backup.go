@@ -205,13 +205,7 @@ func doCreateBackupSchedule(
 		backupNode.To = append(backupNode.To, tree.NewDString(dest))
 	}
 
-	// Set backup targets and descriptor coverage.
-	if eval.Targets == nil {
-		backupNode.DescriptorCoverage = tree.AllDescriptors
-	} else {
-		backupNode.DescriptorCoverage = tree.RequestedDescriptors
-		backupNode.Targets = *eval.Targets
-	}
+	backupNode.Targets = eval.Targets
 
 	// TODO(yevgeniy): Validate backup schedule:
 	//  * Verify targets exist.  Provide a way for user to override this via option.
