@@ -4258,3 +4258,76 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 		})
 	}
 }
+
+func TestDistSenderRPCMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{{NodeID: 1, Address: util.UnresolvedAddr{}}}}
+
+	var desc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+
+	// We'll send a request that first gets a NLHE, and then a ConditionFailedError.
+	call := 0
+	var transportFn = func(_ context.Context, _ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		br := &roachpb.BatchResponse{}
+		if call == 0 {
+			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
+				Lease: &roachpb.Lease{Replica: desc.Replicas().All()[1]},
+			})
+		} else {
+			br.Error = roachpb.NewError(&roachpb.ConditionFailedError{})
+		}
+		call++
+		return br, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		NodeDescs:  ns,
+		RPCContext: rpcContext,
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+			[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+		) {
+			return nil, nil, errors.New("range desc db unexpectedly used")
+		}),
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ds := NewDistSender(cfg)
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc: desc,
+		Lease: roachpb.Lease{
+			Replica: desc.Replicas().All()[0],
+		},
+	})
+	var ba roachpb.BatchRequest
+	get := &roachpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
+
+	_, err := ds.Send(ctx, ba)
+	require.Regexp(t, "unexpected value", err)
+
+	require.Equal(t, ds.metrics.MethodCounts[roachpb.Get].Count(), int64(1))
+	// Expect that the metrics for both of the returned errors were incremented.
+	require.Equal(t, ds.metrics.ErrCounts[roachpb.NotLeaseHolderErrType].Count(), int64(1))
+	require.Equal(t, ds.metrics.ErrCounts[roachpb.ConditionFailedErrType].Count(), int64(1))
+}
