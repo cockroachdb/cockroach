@@ -582,15 +582,24 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,v:6,s:7,t:8,u:9])
  ├── G22: (variable b)
  └── G23: (const 2)
 
-# No-op case because a single join can only be commuted (this is handled by
-# CommuteJoin).
-opt expect-not=ReorderJoins format=hide-all
+# Only commutation is possible for a single join.
+exploretrace rule=ReorderJoins format=hide-all
 SELECT * FROM abc, stu WHERE a = s
 ----
-inner-join (merge)
- ├── scan abc@ab
- ├── scan stu
- └── filters (true)
+----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── scan abc
+   ├── scan stu
+   └── filters
+        └── a = s
+
+No new expressions.
+----
+----
 
 # No-op case because the joins have join flags.
 opt expect-not=ReorderJoins format=hide-all
@@ -628,8 +637,7 @@ inner-join-apply
  └── filters
       └── a = column1
 
-# No-op case because LeftJoin is (currently) not matched.
-opt expect-not=ReorderJoins format=hide-all
+opt expect=ReorderJoins format=hide-all
 SELECT *
 FROM abc
 LEFT JOIN stu
@@ -651,6 +659,22 @@ INNER JOIN xyz
 ON b = y
 ----
 ----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan stu
+   │    ├── scan abc
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
+
+No new expressions.
+
 ================================================================================
 ReorderJoins
 ================================================================================
@@ -841,6 +865,23 @@ Source expression:
              └── small.m = large.m
 
 No new expressions.
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  project
+   └── left-join (hash)
+        ├── scan small
+        ├── inner-join (hash)
+        │    ├── scan large
+        │    ├── scan medium
+        │    └── filters
+        │         └── large.n = medium.n
+        └── filters
+             └── small.m = large.m
+
+No new expressions.
 ----
 ----
 
@@ -857,6 +898,27 @@ ON result.a = small.n AND (small.m = result.b OR result.b IS NULL)
 INNER JOIN xyz ON True
 ----
 ----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  project
+   └── inner-join (cross)
+        ├── inner-join (hash)
+        │    ├── left-join (hash)
+        │    │    ├── scan medium
+        │    │    ├── scan large
+        │    │    └── filters
+        │    │         └── large.m = medium.m
+        │    ├── scan small
+        │    └── filters
+        │         ├── medium.n = small.n
+        │         └── (small.m = large.n) OR (large.n IS NULL)
+        ├── scan xyz
+        └── filters (true)
+
+No new expressions.
+
 ================================================================================
 ReorderJoins
 ================================================================================
@@ -931,6 +993,22 @@ ReorderJoins
 ================================================================================
 Source expression:
   full-join (hash)
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
+
+No new expressions.
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  full-join (hash)
    ├── full-join (merge)
    │    ├── scan abc@ab
    │    ├── scan stu
@@ -977,6 +1055,22 @@ Source expression:
    └── filters
         └── a = x
 
+No new expressions.
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  full-join (hash)
+   ├── scan abc
+   ├── full-join (hash)
+   │    ├── scan stu
+   │    ├── scan xyz
+   │    └── filters
+   │         └── t = y
+   └── filters
+        └── a = x
+
 New expression 1 of 1:
   full-join (hash)
    ├── scan stu
@@ -997,6 +1091,22 @@ LEFT JOIN stu ON s = a
 LEFT JOIN xyz ON b = y
 ----
 ----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  left-join (hash)
+   ├── left-join (hash)
+   │    ├── scan abc
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
+
+No new expressions.
+
 ================================================================================
 ReorderJoins
 ================================================================================
@@ -1035,6 +1145,22 @@ ReorderJoins
 ================================================================================
 Source expression:
   left-join (hash)
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
+
+No new expressions.
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  left-join (hash)
    ├── full-join (merge)
    │    ├── scan abc@ab
    │    ├── scan stu
@@ -1062,7 +1188,7 @@ New expression 1 of 1:
 
 # Verify that the reversed join expressions get added to the memo, and there
 # are no duplicates.
-memo
+memo expect=CommuteJoin
 SELECT * FROM abc JOIN xyz ON a=z
 ----
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
@@ -1090,7 +1216,7 @@ memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G7: (variable a)
  └── G8: (variable z)
 
-memo
+memo expect=CommuteJoin
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
 ----
 memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
@@ -1119,7 +1245,7 @@ memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  └── G8: (variable z)
 
 # Verify that we swap to get the smaller side on the right.
-opt
+opt expect=CommuteJoin
 SELECT * FROM abc INNER JOIN xyz ON a=c WHERE b=1
 ----
 inner-join (cross)
@@ -1139,7 +1265,7 @@ inner-join (cross)
  └── filters (true)
 
 # Verify that the hash join hint prevents swapping the sides.
-opt
+opt expect=CommuteJoin
 SELECT * FROM abc INNER HASH JOIN xyz ON a=c WHERE b=1
 ----
 inner-join (cross)
@@ -1159,7 +1285,7 @@ inner-join (cross)
  │    └── columns: x:6 y:7 z:8
  └── filters (true)
 
-opt
+opt expect=CommuteJoin
 SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
@@ -1176,7 +1302,7 @@ full-join (hash)
 # Verify that commuting works correctly when there is a lookup join hint
 # (specifically that it returns the original expression and flags when applied
 # twice; if it didn't, we'd see more inner-join expressions).
-memo
+memo expect=CommuteJoin
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
@@ -2973,7 +3099,7 @@ inner-join (zigzag pqr@q pqr@r)
 memo
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~14KB, required=[presentation: q:2,r:3])
+memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@q pqr@r) (select G4 G5) (select G6 G7) (select G8 G7)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
@@ -3054,7 +3180,7 @@ inner-join (lookup pqr)
 memo
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~16KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4)) (select G6 G7) (select G8 G9) (select G10 G9)
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4))
@@ -3173,7 +3299,7 @@ inner-join (zigzag pqr@rs pqr@ts)
 memo
 SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: r:3,t:5])
+memo (optimized, ~13KB, required=[presentation: r:3,t:5])
  ├── G1: (select G2 G3) (zigzag-join G3 pqr@rs pqr@ts) (select G4 G5) (select G6 G5) (select G7 G8)
  │    └── [presentation: r:3,t:5]
  │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
@@ -3607,7 +3733,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~19KB, required=[presentation: ?column?:7])
+memo (optimized, ~18KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
