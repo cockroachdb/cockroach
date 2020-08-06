@@ -1804,6 +1804,35 @@ CockroachDB supports the following flags:
 		},
 	),
 
+	"pg_get_serial_sequence": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySequences,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table_name", types.String}, {"column_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tableName := tree.MustBeDString(args[0])
+				columnName := tree.MustBeDString(args[1])
+				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
+				if err != nil {
+					return nil, err
+				}
+				res, err := evalCtx.Sequence.GetSerialSequenceNameFromColumn(evalCtx.Ctx(), qualifiedName, tree.Name(columnName))
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					return tree.DNull, nil
+				}
+				res.ExplicitCatalog = false
+				return tree.NewDString(fmt.Sprintf(`%s.%s`, res.Schema(), res.Object())), nil
+			},
+			Info:       "Returns the name of the sequence used by the given column_name in the table table_name.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"lastval": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySequences,

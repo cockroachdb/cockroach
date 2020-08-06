@@ -184,6 +184,15 @@ func (p *planner) getSchemaIDForCreate(
 func getTableCreateParams(
 	params runParams, dbID descpb.ID, isTemporary bool, tableName *tree.TableName,
 ) (tKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+	// Check we are not creating a table which conflicts with an alias available
+	// as a built-in type in CockroachDB but an extension type on the public
+	// schema for PostgreSQL.
+	if tableName.Schema() == tree.PublicSchema {
+		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
+			return nil, 0, sqlbase.NewTypeAlreadyExistsError(tableName.String())
+		}
+	}
+
 	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
 			return nil, 0, errors.WithTelemetry(

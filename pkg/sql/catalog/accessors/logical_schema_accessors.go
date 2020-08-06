@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -112,6 +114,18 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		}
 		return desc.Desc(), nil
 	}
+
+	// Resolve type aliases which are usually available in the PostgreSQL as an extension
+	// on the public schema.
+	if schema == tree.PublicSchema && flags.DesiredObjectKind == tree.TypeObject {
+		if alias, ok := types.PublicSchemaAliases[object]; ok {
+			if flags.RequireMutable {
+				return nil, errors.Newf("cannot use mutable descriptor of aliased type %s.%s", schema, object)
+			}
+			return sqlbase.MakeSimpleAliasTypeDescriptor(alias), nil
+		}
+	}
+
 	// Fallthrough.
 	return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 }

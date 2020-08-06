@@ -227,6 +227,25 @@ SHOW CREATE SEQUENCE serial_a_seq1
 ----
 serial_a_seq1  CREATE SEQUENCE public.serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
+query TT
+SELECT pg_get_serial_sequence('serial', 'a'), pg_get_serial_sequence('serial', 'b')
+----
+public.serial_a_seq1  NULL
+
+statement error relation "non_existent_tbl" does not exist
+SELECT pg_get_serial_sequence('non_existent_tbl', 'a')
+
+statement error column "non_existent_col" does not exist
+SELECT pg_get_serial_sequence('serial', 'non_existent_col')
+
+statement ok
+create table serial_2 ("capITALS" SERIAL)
+
+query T
+SELECT pg_get_serial_sequence('serial_2', 'capITALS')
+----
+public.serial_2_capITALS_seq
+
 statement ok
 INSERT INTO serial (a, b) VALUES (0, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
 

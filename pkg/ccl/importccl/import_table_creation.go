@@ -202,6 +202,13 @@ var (
 type importSequenceOperators struct {
 }
 
+// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
+	ctx context.Context, tn *tree.TableName, columnName tree.Name,
+) (*tree.TableName, error) {
+	return nil, errors.WithStack(errSequenceOperators)
+}
+
 // Implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)

@@ -37,6 +37,35 @@ CREATE TABLE geom_table_negative_values(
   a geometry(geometry, -1)
 )
 
+statement ok
+CREATE TABLE geom_table_public_schema (
+  geom public.geometry,
+  geog public.geography
+)
+
+statement ok
+INSERT INTO geom_table_public_schema VALUES ('POINT(1 0)', 'POINT(3 2)')
+
+query TT
+SELECT ST_AsText(geom), ST_AsText(geog) FROM geom_table_public_schema
+----
+POINT (1 0)  POINT (3 2)
+
+statement ok
+SET experimental_enable_enums = true
+
+statement error type .*geometry.* already exists
+CREATE TYPE geometry AS enum('no')
+
+statement error type .*geography.* already exists
+CREATE TYPE geography AS enum('no')
+
+statement error type .*geometry.* already exists
+CREATE TABLE geometry (a geometry)
+
+statement error type .*geography.* already exists
+CREATE TABLE geography (a geography)
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
