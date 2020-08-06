@@ -2233,7 +2233,7 @@ backup_options:
 //
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
-  CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets TO
+  CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets INTO
   /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
