@@ -84,8 +84,8 @@ func getCreateTypeParams(
 	if err != nil {
 		return nil, 0, err
 	}
-	typeKey = sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
-	exists, collided, err := sqlbase.LookupObjectID(
+	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
+	exists, collided, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
@@ -111,7 +111,7 @@ func findFreeArrayTypeName(
 	arrayName := "_" + name
 	for {
 		// See if there is a collision with the current name.
-		exists, _, err := sqlbase.LookupObjectID(
+		exists, _, err := catalogkv.LookupObjectID(
 			ctx,
 			txn,
 			codec,
@@ -157,7 +157,7 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.ID, schemaID, arrayTypeName)
+	arrayTypeKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.ID, schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)

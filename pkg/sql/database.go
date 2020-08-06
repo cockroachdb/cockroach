@@ -42,14 +42,14 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
+	if exists, _, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {
 		return err
 	}
 
-	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
+	newKey := catalogkv.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
 
 	descID := newDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
@@ -62,7 +62,7 @@ func (p *planner) renameDatabase(
 	}
 	b.CPut(newKey, descID, nil)
 	b.Put(descKey, descDesc)
-	err := sqlbase.RemoveDatabaseNamespaceEntry(
+	err := catalogkv.RemoveDatabaseNamespaceEntry(
 		ctx, p.txn, p.ExecCfg().Codec, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {

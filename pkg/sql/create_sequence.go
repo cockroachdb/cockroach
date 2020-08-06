@@ -120,7 +120,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateTable() needed here.
 
-	key := sqlbase.MakeObjectNameKey(
+	key := catalogkv.MakeObjectNameKey(
 		params.ctx,
 		params.ExecCfg().Settings,
 		dbDesc.GetID(),

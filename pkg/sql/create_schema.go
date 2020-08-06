@@ -47,7 +47,7 @@ func (p *planner) schemaExists(
 		}
 	}
 	// Now lookup in the namespace for other schemas.
-	exists, _, err := sqlbase.LookupObjectID(ctx, p.txn, p.ExecCfg().Codec, parentID, keys.RootNamespaceID, schema)
+	exists, _, err := catalogkv.LookupObjectID(ctx, p.txn, p.ExecCfg().Codec, parentID, keys.RootNamespaceID, schema)
 	if err != nil {
 		return false, err
 	}

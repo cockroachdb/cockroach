@@ -887,7 +887,7 @@ func TestGCJobCreated(t *testing.T) {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
-		if err := sqlbase.RemoveObjectNamespaceEntry(
+		if err := catalogkv.RemoveObjectNamespaceEntry(
 			ctx, txn, keys.SystemSQLCodec, tableDesc.ID, tableDesc.ParentID, tableDesc.Name, false, /* kvTrace */
 		); err != nil {
 			return err

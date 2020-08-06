@@ -83,7 +83,7 @@ func (p *planner) addEnumValue(
 
 func (p *planner) renameType(params runParams, n *alterTypeNode, newName string) error {
 	// See if there is a name collision with the new name.
-	exists, id, err := sqlbase.LookupObjectID(
+	exists, id, err := catalogkv.LookupObjectID(
 		params.ctx,
 		p.txn,
 		p.ExecCfg().Codec,
@@ -155,7 +155,7 @@ func (p *planner) performRenameTypeDesc(
 	}
 	// Construct the new namespace key.
 	b := p.txn.NewBatch()
-	key := sqlbase.MakeObjectNameKey(
+	key := catalogkv.MakeObjectNameKey(
 		ctx,
 		p.ExecCfg().Settings,
 		desc.ParentID,

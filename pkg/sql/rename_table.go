@@ -148,7 +148,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
-	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
+	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
 		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
@@ -182,7 +182,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	exists, id, err := sqlbase.LookupPublicTableID(
+	exists, id, err := catalogkv.LookupPublicTableID(
 		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
 	)
 	if err == nil && exists {

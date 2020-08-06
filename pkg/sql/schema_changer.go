@@ -372,7 +372,7 @@ func drainNamesForDescriptor(
 		func(txn *kv.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				err := sqlbase.RemoveObjectNamespaceEntry(
+				err := catalogkv.RemoveObjectNamespaceEntry(
 					ctx, txn, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
 				)
 				if err != nil {

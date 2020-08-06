@@ -1662,7 +1662,7 @@ func (m *Manager) resolveName(
 		txn.SetFixedTimestamp(ctx, timestamp)
 		var found bool
 		var err error
-		found, id, err = sqlbase.LookupObjectID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
+		found, id, err = catalogkv.LookupObjectID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
 		if err != nil {
 			return err
 		}
