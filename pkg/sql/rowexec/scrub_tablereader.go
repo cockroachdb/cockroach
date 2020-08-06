@@ -124,7 +124,7 @@ func newScrubTableReader(
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
 		flowCtx, &fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(),
-		spec.Reverse, neededColumns, true /* isCheck */, &tr.alloc,
+		spec.Reverse, neededColumns, true /* isCheck */, flowCtx.EvalCtx.Mon, &tr.alloc,
 		execinfra.ScanVisibilityPublic, spec.LockingStrength, nil, /* systemColumns */
 	); err != nil {
 		return nil, err

@@ -111,11 +111,13 @@ func NewUniquenessConstraintViolationError(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return pgerror.Newf(pgcode.UniqueViolation,

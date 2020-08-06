@@ -107,6 +107,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 	if err := d.fetcher.Init(
+		params.ctx,
 		params.ExecCfg().Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
@@ -115,6 +116,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		params.p.alloc,
+		nil, /* memMonitor */
 		allTables...,
 	); err != nil {
 		return err
