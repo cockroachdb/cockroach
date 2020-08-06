@@ -45,7 +45,9 @@ docker_login_with_google
 gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
 
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
-curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar xfz - --strip-components 1
+# NB: tar usually stops reading as soon as it sees an empty block but that makes
+# curl unhappy, so passing `i` will cause it to read to the end.
+curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach build/deploy/cockroach
 
 docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
