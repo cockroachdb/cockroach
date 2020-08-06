@@ -90,6 +90,8 @@ proc send_eof {} {
 # in `server_pid`.
 proc start_server {argv} {
     report "BEGIN START SERVER"
+    # Note: when changing this command line, update the telemetry tests
+    # in test_flags.tcl.
     system "$argv start-single-node --insecure --max-sql-memory=128MB --pid-file=server_pid --listening-url-file=server_url --background -s=path=logs/db >>logs/expect-cmd.log 2>&1;
             $argv sql --insecure -e 'select 1'"
     report "START SERVER DONE"
