@@ -95,9 +95,11 @@ type TableDescriptor interface {
 
 	Validate(ctx context.Context, pg protoGetter, codec keys.SQLCodec) error
 
+	GetDependedOnBy() []descpb.TableDescriptor_Reference
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
+	GetOutboundFKs() []descpb.ForeignKeyConstraint
 	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
