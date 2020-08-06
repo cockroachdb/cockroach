@@ -91,6 +91,10 @@ type joinReader struct {
 	batchSizeBytes    int64
 	curBatchSizeBytes int64
 
+	// rowsRead is the total number of rows that this fetcher read from
+	// disk.
+	rowsRead int64
+
 	// State variables for each batch of input rows.
 	scratchInputRows sqlbase.EncDatumRows
 }
@@ -481,6 +485,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			// Done with this input batch.
 			break
 		}
+		jr.rowsRead++
 
 		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, key); err != nil {
 			jr.MoveToDraining(err)
@@ -582,10 +587,17 @@ func (jr *joinReader) outputStatsToTrace() {
 }
 
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
+	meta := &trailingMeta[0]
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.RowsRead = jr.rowsRead
+	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
-		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
+		trailingMeta = append(trailingMeta,
+			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},
+		)
 	}
-	return nil
+	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
