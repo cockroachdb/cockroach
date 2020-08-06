@@ -202,7 +202,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		require.NoError(t, gen.ValidateTable())
 
 		if !proto.Equal(test.pkg.TableDesc(), gen.TableDesc()) {
-			diff := strings.Join(pretty.Diff(&test.pkg, &gen), "\n")
+			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
 				"hardcoded table descriptor:\n%s", test.pkg.Name, diff)
 		}
