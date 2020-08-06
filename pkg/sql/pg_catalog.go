@@ -426,9 +426,9 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				defSrc = tree.NewDString(ctx.String())
 			}
 			return addRow(
-				h.ColumnOid(table.ID, column.ID),                     // oid
-				tableOid(table.ID),                                   // adrelid
-				tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // adnum
+				h.ColumnOid(table.ID, column.ID),                    // oid
+				tableOid(table.ID),                                  // adrelid
+				tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // adnum
 				defSrc, // adbin
 				defSrc, // adsrc
 			)
@@ -471,7 +471,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
-		addColumn := func(column *descpb.ColumnDescriptor, attRelID tree.Datum, colID descpb.ColumnID) error {
+		addColumn := func(column *descpb.ColumnDescriptor, attRelID tree.Datum, attNum uint32) error {
 			colTyp := column.Type
 			// Sets the attgenerated column to 's' if the column is generated/
 			// computed, zero byte otherwise.
@@ -482,14 +482,14 @@ CREATE TABLE pg_catalog.pg_attribute (
 				isColumnComputed = ""
 			}
 			return addRow(
-				attRelID,                       // attrelid
-				tree.NewDName(column.Name),     // attname
-				typOid(colTyp),                 // atttypid
-				zeroVal,                        // attstattarget
-				typLen(colTyp),                 // attlen
-				tree.NewDInt(tree.DInt(colID)), // attnum
-				zeroVal,                        // attndims
-				negOneVal,                      // attcacheoff
+				attRelID,                        // attrelid
+				tree.NewDName(column.Name),      // attname
+				typOid(colTyp),                  // atttypid
+				zeroVal,                         // attstattarget
+				typLen(colTyp),                  // attlen
+				tree.NewDInt(tree.DInt(attNum)), // attnum
+				zeroVal,                         // attndims
+				negOneVal,                       // attcacheoff
 				tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
 				tree.DNull, // attbyval (see pg_type.typbyval)
 				tree.DNull, // attstorage
@@ -511,7 +511,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		// Columns for table.
 		if err := forEachColumnInTable(table, func(column *descpb.ColumnDescriptor) error {
 			tableID := tableOid(table.ID)
-			return addColumn(column, tableID, column.GetLogicalColumnID())
+			return addColumn(column, tableID, column.GetPGAttributeNum())
 		}); err != nil {
 			return err
 		}
@@ -521,7 +521,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 			return forEachColumnInIndex(table, index,
 				func(column *descpb.ColumnDescriptor) error {
 					idxID := h.IndexOid(table.ID, index.ID)
-					return addColumn(column, idxID, column.GetLogicalColumnID())
+					return addColumn(column, idxID, column.GetPGAttributeNum())
 				},
 			)
 		})

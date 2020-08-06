@@ -792,6 +792,7 @@ func TestLint(t *testing.T) {
 			":!rpc/nodedialer/nodedialer_test.go",
 			":!util/grpcutil/grpc_util_test.go",
 			":!cli/systembench/network_test_server.go",
+			":!server/testserver.go",
 		)
 		if err != nil {
 			t.Fatal(err)

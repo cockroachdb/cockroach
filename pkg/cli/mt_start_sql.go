@@ -31,6 +31,28 @@ var mtStartSQLCmd = &cobra.Command{
 Start a standalone SQL server.
 
 This functionality is **experimental** and for internal use only.
+
+The following certificates are required:
+
+- ca.crt, node.{crt,key}: CA cert and key pair for serving the SQL endpoint.
+  Note that under no circumstances should the node certs be shared with those of
+  the same name used at the KV layer, as this would pose a severe security risk.
+- ca-client-tenant.crt, client-tenant.X.{crt,key}: CA cert and key pair for
+  authentication and authorization with the KV layer (as tenant X).
+- ca-server-tenant.crt: to authenticate KV layer.
+
+                 ca.crt        ca-client-tenant.crt        ca-server-tenant.crt
+user ---------------> sql server ----------------------------> kv
+ client.Y.crt    node.crt      client-tenant.X.crt         server-tenant.crt
+ client.Y.key    node.key      client-tenant.X.key         server-tenant.key
+
+Note that CA certificates need to be present on the "other" end of the arrow as
+well unless it can be verified using a trusted root certificate store. That is,
+
+- ca.crt needs to be passed in the Postgres connection string (sslrootcert) if
+  sslmode=verify-ca.
+- ca-server-tenant.crt needs to be present on the SQL server.
+- ca-client-tenant.crt needs to be present on the KV server.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runStartSQL),

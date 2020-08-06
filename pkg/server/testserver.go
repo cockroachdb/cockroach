@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -559,7 +560,7 @@ func makeSQLServerArgs(
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
-	dummyRPCServer := rpc.NewServer(rpcContext)
+	dummyRPCServer := grpc.NewServer()
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer: serverpb.MakeOptionalStatusServer(nil),
