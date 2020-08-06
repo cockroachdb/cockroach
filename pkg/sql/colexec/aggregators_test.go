@@ -47,11 +47,8 @@ type aggregatorTestCase struct {
 	input          tuples
 	unorderedInput bool
 	expected       tuples
-	// {output}BatchSize() if not 0 are passed in to NewOrderedAggregator to
-	// divide input/output batches.
-	batchSize       int
-	outputBatchSize int
-	name            string
+	inputBatchSize int
+	name           string
 
 	// convToDecimal will convert any float64s to apd.Decimals. If a string is
 	// encountered, a best effort is made to convert that string to an
@@ -137,11 +134,8 @@ func (tc *aggregatorTestCase) init() error {
 	if tc.typs == nil {
 		tc.typs = defaultTyps
 	}
-	if tc.batchSize == 0 {
-		tc.batchSize = coldata.BatchSize()
-	}
-	if tc.outputBatchSize == 0 {
-		tc.outputBatchSize = coldata.BatchSize()
+	if tc.inputBatchSize == 0 {
+		tc.inputBatchSize = coldata.BatchSize()
 	}
 	return nil
 }
@@ -157,8 +151,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			expected: tuples{
 				{1},
 			},
-			name:            "OneTuple",
-			outputBatchSize: 4,
+			name: "OneTuple",
 		},
 		{
 			input: tuples{
@@ -183,8 +176,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 				{4},
 				{5},
 			},
-			batchSize: 2,
-			name:      "MultiGroup",
+			inputBatchSize: 2,
+			name:           "MultiGroup",
 		},
 		{
 			input: tuples{
@@ -198,8 +191,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 				{6},
 				{9},
 			},
-			batchSize: 1,
-			name:      "CarryBetweenInputBatches",
+			inputBatchSize: 1,
+			name:           "CarryBetweenInputBatches",
 		},
 		{
 			input: tuples{
@@ -215,9 +208,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 				{5},
 				{6},
 			},
-			batchSize:       2,
-			outputBatchSize: 1,
-			name:            "CarryBetweenOutputBatches",
+			inputBatchSize: 2,
+			name:           "CarryBetweenOutputBatches",
 		},
 		{
 			input: tuples{
@@ -243,9 +235,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 				{7},
 				{8},
 			},
-			batchSize:       3,
-			outputBatchSize: 1,
-			name:            "CarryBetweenInputAndOutputBatches",
+			inputBatchSize: 3,
+			name:           "CarryBetweenInputAndOutputBatches",
 		},
 		{
 			input: tuples{
@@ -257,10 +248,9 @@ func TestAggregatorOneFunc(t *testing.T) {
 			expected: tuples{
 				{10},
 			},
-			batchSize:       1,
-			outputBatchSize: 1,
-			name:            "NoGroupingCols",
-			groupCols:       []uint32{},
+			inputBatchSize: 1,
+			name:           "NoGroupingCols",
+			groupCols:      []uint32{},
 		},
 		{
 			input: tuples{
@@ -272,12 +262,11 @@ func TestAggregatorOneFunc(t *testing.T) {
 			expected: tuples{
 				{10},
 			},
-			batchSize:       1,
-			outputBatchSize: 1,
-			name:            "UnusedInputColumns",
-			typs:            []*types.T{types.Int, types.Int, types.Int},
-			groupCols:       []uint32{1, 2},
-			aggCols:         [][]uint32{{0}},
+			inputBatchSize: 1,
+			name:           "UnusedInputColumns",
+			typs:           []*types.T{types.Int, types.Int, types.Int},
+			groupCols:      []uint32{1, 2},
+			aggCols:        [][]uint32{{0}},
 		},
 		{
 			input: tuples{
@@ -334,7 +323,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 		if !tc.unorderedInput {
 			log.Infof(ctx, "%s", tc.name)
-			tupleSource := newOpTestInput(tc.batchSize, tc.input, tc.typs)
+			tupleSource := newOpTestInput(tc.inputBatchSize, tc.input, tc.typs)
 			a, err := NewOrderedAggregator(
 				testAllocator,
 				tupleSource,
@@ -349,9 +338,6 @@ func TestAggregatorOneFunc(t *testing.T) {
 			}
 
 			out := newOpTestOutput(a, tc.expected)
-			// Explicitly reinitialize the aggregator with the given output batch
-			// size.
-			a.(*orderedAggregator).initWithInputAndOutputBatchSize(tc.batchSize, tc.outputBatchSize)
 			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
@@ -500,10 +486,10 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{2, 1.0, "1.0", 2.0, 6.0},
 				{2, 2.0, "2.0", 6.0, 6.0},
 			},
-			batchSize: 1,
-			typs:      []*types.T{types.Int, types.Decimal, types.Bytes, types.Decimal},
-			name:      "MultiGroupColsWithPointerTypes",
-			groupCols: []uint32{0, 1, 2},
+			inputBatchSize: 1,
+			typs:           []*types.T{types.Int, types.Decimal, types.Bytes, types.Decimal},
+			name:           "MultiGroupColsWithPointerTypes",
+			groupCols:      []uint32{0, 1, 2},
 			aggCols: [][]uint32{
 				{0}, {1}, {2}, {3}, {3},
 			},

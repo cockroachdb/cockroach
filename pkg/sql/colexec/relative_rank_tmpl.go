@@ -283,7 +283,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	r.partitionsState.spillingQueue = newSpillingQueue(
 		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	// {{end}}
@@ -291,14 +291,14 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	r.peerGroupsState.spillingQueue = newSpillingQueue(
 		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	// {{end}}
 	r.bufferedTuples = newSpillingQueue(
 		r.allocator, r.inputTypes,
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
 	r.output = r.allocator.NewMemBatchWithMaxCapacity(append(r.inputTypes, types.Float))
 	// {{if .IsPercentRank}}
