@@ -216,5 +216,8 @@ DELETE FROM [$num_ref_id AS t]
 statement error pq: user testuser does not have UPDATE privilege on relation num_ref
 UPDATE [$num_ref_id AS t] SET d=1
 
+# The @<num> reference is by type OID, which is
+# type desc ID + oid.CockroachPredefinedOIDMax. This error reports that the
+# type desc with ID 15210 is not found, hence the slightly different error message.
 statement error pq: type with ID 15210 does not exist
-SELECT 1::@15210
+SELECT 1::@115210
