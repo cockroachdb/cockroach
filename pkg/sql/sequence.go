@@ -33,6 +33,44 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+func (p *planner) GetSerialSequenceNameFromColumn(
+	ctx context.Context, tn *tree.TableName, columnName tree.Name,
+) (*tree.TableName, error) {
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
+	if err != nil {
+		return nil, err
+	}
+	for _, col := range tableDesc.Columns {
+		if col.ColName() == columnName {
+			// Seems like we have no way of detecting whether this was done using "SERIAL".
+			// Guess by assuming it is SERIAL if it is only used by 1 sequence.
+			if len(col.UsesSequenceIds) == 1 {
+				seq, err := p.Descriptors().GetTableVersionByID(
+					ctx,
+					p.txn,
+					col.UsesSequenceIds[0],
+					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc),
+				)
+				if err != nil {
+					return nil, err
+				}
+				// Ensure they are part of the same catalog and schema.
+				if seq.GetParentID() == tableDesc.GetParentID() && seq.GetParentSchemaID() == tableDesc.GetParentSchemaID() {
+					return tree.NewTableNameWithSchema(
+						tree.Name(tn.Catalog()),
+						tree.Name(tn.Schema()),
+						tree.Name(seq.GetName()),
+					), nil
+				}
+			}
+			return nil, nil
+		}
+	}
+	return nil, sqlbase.NewUndefinedColumnError(string(columnName))
+}
+
 // IncrementSequence implements the tree.SequenceOperators interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
 	if p.EvalContext().TxnReadOnly {

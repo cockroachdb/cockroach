@@ -88,6 +88,12 @@ func NewTableName(db, tbl Name) *TableName {
 	return &tn
 }
 
+// NewTableNameWithSchema creates a new fully qualified table name.
+func NewTableNameWithSchema(db, schema, tbl Name) *TableName {
+	tn := MakeTableNameWithSchema(db, schema, tbl)
+	return &tn
+}
+
 // MakeTableNameWithSchema creates a new fully qualified table name.
 func MakeTableNameWithSchema(db, schema, tbl Name) TableName {
 	return TableName{objName{
