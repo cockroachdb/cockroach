@@ -99,7 +99,9 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
+	if err := tableDesc.ForeachIndex(sqlbase.IndexOpts{
+		AddMutations: true,
+	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
 		if indexSubzoneExists {
 			idxSpan := tableDesc.IndexSpan(codec, idxDesc.ID)
