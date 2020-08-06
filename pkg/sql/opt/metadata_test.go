@@ -259,3 +259,67 @@ func TestIndexColumns(t *testing.T) {
 		}
 	}
 }
+
+// TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
+func TestDuplicateTable(t *testing.T) {
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var md opt.Metadata
+	tn := tree.NewUnqualifiedTableName("a")
+	a := md.AddTable(cat.Table(tn), tn)
+	b := a.ColumnID(0)
+	b2 := a.ColumnID(1)
+
+	tabMeta := md.TableMeta(a)
+	tabMeta.SetConstraints(&memo.VariableExpr{Col: b})
+	tabMeta.AddComputedCol(b2, &memo.VariableExpr{Col: b})
+	tabMeta.AddPartialIndexPredicate(1, &memo.VariableExpr{Col: b})
+
+	// remap is a simple function that can only remap column IDs in a
+	// memo.VariableExpr, useful in the context of this test only.
+	remap := func(e opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+		v := e.(*memo.VariableExpr)
+		newColID, ok := colMap.Get(int(v.Col))
+		if !ok {
+			return e
+		}
+		return &memo.VariableExpr{Col: opt.ColumnID(newColID)}
+	}
+
+	// Duplicate the table.
+	dupA := md.DuplicateTable(a, remap)
+	dupTabMeta := md.TableMeta(dupA)
+	dupB := dupA.ColumnID(0)
+	dupB2 := dupA.ColumnID(1)
+
+	if dupTabMeta.Constraints == nil {
+		t.Fatalf("expected constraints to be duplicated")
+	}
+
+	col := dupTabMeta.Constraints.(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected constraints to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if dupTabMeta.ComputedCols == nil || dupTabMeta.ComputedCols[dupB2] == nil {
+		t.Fatalf("expected computed cols to be duplicated")
+	}
+
+	col = dupTabMeta.ComputedCols[dupB2].(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if dupTabMeta.PartialIndexPredicates == nil || dupTabMeta.PartialIndexPredicates[1] == nil {
+		t.Fatalf("expected partial index predicates to be duplicated")
+	}
+
+	col = dupTabMeta.PartialIndexPredicates[1].(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)
+	}
+}

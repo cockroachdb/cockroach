@@ -269,6 +269,30 @@ func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.Col
 	return cols.Difference(reducedCols)
 }
 
+// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
+// of the keys of colMap with the corresponding values. If column IDs are
+// encountered in the input ScalarExpr that are not keys in colMap, they are not
+// remapped.
+func (c *CustomFuncs) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// The column ID is not in colMap so no replacement is required.
+				return e
+			}
+			return c.f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return c.f.Replace(e, replace)
+	}
+
+	return replace(scalar).(opt.ScalarExpr)
+}
+
 // ----------------------------------------------------------------------
 //
 // Outer column functions
@@ -990,4 +1014,38 @@ func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 // second.
 func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
 	return first.Compare(c.f.evalCtx, second) == 1
+}
+
+// ----------------------------------------------------------------------
+//
+// Scan functions
+//   General functions related to scan operators.
+//
+// ----------------------------------------------------------------------
+
+// DuplicateScanPrivate constructs a new ScanPrivate with new table and column
+// IDs. Only the Index, Flags and Locking fields are copied from the old
+// ScanPrivate, so the new ScanPrivate will not have constraints even if the old
+// one did.
+func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	md := c.mem.Metadata()
+	tabMeta := md.TableMeta(sp.Table)
+	newTableID := md.DuplicateTable(sp.Table, c.RemapCols)
+
+	// Build a new set of column IDs from the new TableMeta.
+	var newColIDs opt.ColSet
+	cols := sp.Cols
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		ord := tabMeta.MetaID.ColumnOrdinal(col)
+		newColID := newTableID.ColumnID(ord)
+		newColIDs.Add(newColID)
+	}
+
+	return &memo.ScanPrivate{
+		Table:   newTableID,
+		Index:   sp.Index,
+		Cols:    newColIDs,
+		Flags:   sp.Flags,
+		Locking: sp.Locking,
+	}
 }
