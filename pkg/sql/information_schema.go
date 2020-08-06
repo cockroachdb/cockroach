@@ -405,7 +405,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					scNameStr,                    // table_schema
 					tree.NewDString(table.Name),  // table_name
 					tree.NewDString(column.Name), // column_name
-					tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // ordinal_position
+					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                    // column_default
 					yesOrNoDatum(column.Nullable), // is_nullable
 					tree.NewDString(column.Type.InformationSchemaName()), // data_type

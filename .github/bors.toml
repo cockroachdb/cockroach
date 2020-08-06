@@ -5,9 +5,17 @@
 #
 # This is left at being compile only as a rough heuristic to detect merge-skew.
 # We don't bother running/waiting on the full CI for merge commits.
-status = ["Compile Builds (Unit Tests)"]
+#
+# TODO(irfansharif): It'd be nice if we could use the build/builder.sh checkout
+# as pulled out in the github CI target, with pre-compiled C++ deps, etc. in
+# order to run the final `mkrelease` step. That would bring `bors r+` to merge
+# down to about a minute or so on our CI machines.
+status = ["Compile Build (Cockroach)"]
 
-# List of commit statuses that must pass on the PR commit when it is r+-ed.
+# List of commit statuses that must not be failing on the PR commit when it is
+# r+-ed. If it's still in progress (for e.g. if CI is still running), bors will
+# construct the merge commit in parallel and simply wait for success right
+# before merging.
 pr_status = ["license/cla", "GitHub CI (Cockroach)"]
 
 # List of PR labels that may not be attached to a PR when it is r+-ed.

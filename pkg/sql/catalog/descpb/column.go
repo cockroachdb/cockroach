@@ -117,15 +117,15 @@ func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	return nil
 }
 
-// GetLogicalColumnID returns the LogicalColumnID of the ColumnDescriptor
-// if the LogicalColumnID is set (non-zero). Returns the ID of the
-// ColumnDescriptor if the LogicalColumnID is not set.
-func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
-	if desc.LogicalColumnID != 0 {
-		return desc.LogicalColumnID
+// GetPGAttributeNum returns the PGAttributeNum of the ColumnDescriptor
+// if the PGAttributeNum is set (non-zero). Returns the ID of the
+// ColumnDescriptor if the PGAttributeNum is not set.
+func (desc ColumnDescriptor) GetPGAttributeNum() uint32 {
+	if desc.PGAttributeNum != 0 {
+		return desc.PGAttributeNum
 	}
 
-	return desc.ID
+	return uint32(desc.ID)
 }
 
 // SQLString returns the SQL statement describing the column.

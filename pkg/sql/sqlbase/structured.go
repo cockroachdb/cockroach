@@ -3259,10 +3259,10 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(
 		}
 	}
 
-	// Set newCol's LogicalColumnID to oldCol's ID. This makes
+	// Set newCol's PGAttributeNum to oldCol's ID. This makes
 	// newCol display like oldCol in catalog tables.
-	newCol.LogicalColumnID = oldCol.ID
-	oldCol.LogicalColumnID = 0
+	newCol.PGAttributeNum = oldCol.GetPGAttributeNum()
+	oldCol.PGAttributeNum = 0
 
 	// Mark oldCol as being the result of an AlterColumnType. This allows us
 	// to generate better errors for failing inserts.
