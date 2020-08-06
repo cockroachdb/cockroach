@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -412,7 +413,7 @@ func GetDatabaseID(
 	if name == sqlbase.SystemDatabaseName {
 		return keys.SystemDatabaseID, nil
 	}
-	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
+	found, dbID, err := LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return descpb.InvalidID, err
 	}
@@ -508,4 +509,33 @@ func GetDatabaseDescriptorsFromIDs(
 		results = append(results, sqlbase.NewImmutableDatabaseDescriptor(*db))
 	}
 	return results, nil
+}
+
+// ConditionalGetTableDescFromTxn validates that the supplied TableDescriptor
+// matches the one currently stored in kv. This simulates a CPut and returns a
+// ConditionFailedError on mismatch. We don't directly use CPut with protos
+// because the marshaling is not guaranteed to be stable and also because it's
+// sensitive to things like missing vs default values of fields.
+func ConditionalGetTableDescFromTxn(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation sqlbase.TableDescriptor,
+) ([]byte, error) {
+	key := sqlbase.MakeDescMetadataKey(codec, expectation.GetID())
+	existingKV, err := txn.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	var existing *descpb.Descriptor
+	var existingTable *descpb.TableDescriptor
+	if existingKV.Value != nil {
+		existing = &descpb.Descriptor{}
+		if err := existingKV.Value.GetProto(existing); err != nil {
+			return nil, errors.Wrapf(err,
+				"decoding current table descriptor value for id: %d", expectation.GetID())
+		}
+		existingTable = sqlbase.TableFromDescriptor(existing, existingKV.Value.Timestamp)
+	}
+	if !expectation.TableDesc().Equal(existingTable) {
+		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
+	}
+	return existingKV.Value.TagAndDataBytes(), nil
 }

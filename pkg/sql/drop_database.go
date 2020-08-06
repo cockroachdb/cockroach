@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -264,7 +265,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	b.Del(descKey)
 
 	for _, schemaToDelete := range n.schemasToDelete {
-		if err := sqlbase.RemoveSchemaNamespaceEntry(
+		if err := catalogkv.RemoveSchemaNamespaceEntry(
 			ctx,
 			p.txn,
 			p.ExecCfg().Codec,
@@ -275,7 +276,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	err := sqlbase.RemoveDatabaseNamespaceEntry(
+	err := catalogkv.RemoveDatabaseNamespaceEntry(
 		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
