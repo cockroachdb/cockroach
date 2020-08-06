@@ -705,7 +705,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 	typs := []*types.T{types.Int}
 	// Never-ending input of 0s.
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
 	in := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
@@ -1204,7 +1204,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 

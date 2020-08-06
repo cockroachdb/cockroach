@@ -145,7 +145,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	ctx := context.Background()
 
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
@@ -202,7 +202,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	ctx := context.Background()
 
 	typs := []*types.T{types.Int, types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
