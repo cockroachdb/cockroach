@@ -648,14 +648,18 @@ func (m *pgDumpReader) readFile(
 			if importing && conv == nil {
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
+			var targetColMapInd []int
 			if conv != nil {
-				if expected, got := len(conv.VisibleCols), len(i.Columns); expected != got {
-					return errors.Errorf("expected %d columns, got %d", expected, got)
-				}
-				for colI, col := range i.Columns {
-					if string(col) != conv.VisibleCols[colI].Name {
-						return errors.Errorf("COPY columns do not match table columns for table %s", name)
+				targetColMapInd = make([]int, len(i.Columns))
+				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				for j := range i.Columns {
+					colName := string(i.Columns[j])
+					ind, ok := m.colMap[conv][colName]
+					if !ok {
+						return errors.Newf("targeted column %q not found", colName)
 					}
+					conv.IsTargetCol[ind] = struct{}{}
+					targetColMapInd[j] = ind
 				}
 			}
 			for {
@@ -680,17 +684,18 @@ func (m *pgDumpReader) readFile(
 				}
 				switch row := row.(type) {
 				case copyData:
-					if expected, got := len(conv.VisibleCols), len(row); expected != got {
+					if expected, got := len(i.Columns), len(row); expected != got {
 						return makeRowErr("", count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
+						ind := targetColMapInd[i]
 						if s == nil {
-							conv.Datums[i] = tree.DNull
+							conv.Datums[ind] = tree.DNull
 						} else {
-							conv.Datums[i], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+							conv.Datums[ind], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[ind], *s, conv.EvalCtx)
 							if err != nil {
-								col := conv.VisibleCols[i]
+								col := conv.VisibleCols[ind]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
 									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
