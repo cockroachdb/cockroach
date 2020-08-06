@@ -574,12 +574,13 @@ func (s *Server) newConnExecutor(
 	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]*PreparedPortal),
+		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]*PreparedPortal),
+		portals:   make(map[string]PreparedPortal),
 	}
+	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.tables = TableCollection{
 		leaseMgr:          s.cfg.LeaseManager,
 		databaseCache:     s.dbCache.getDatabaseCache(),
@@ -760,8 +761,13 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if closeType != panicClose {
 		// Close all statements and prepared portals.
-		ex.extraTxnState.prepStmtsNamespace.resetTo(ctx, prepStmtNamespace{})
-		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(ctx, prepStmtNamespace{})
+		ex.extraTxnState.prepStmtsNamespace.resetTo(
+			ctx, prepStmtNamespace{}, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
+			ctx, prepStmtNamespace{}, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
+		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -882,6 +888,12 @@ type connExecutor struct {
 		// collections, but these collections are periodically reconciled.
 		prepStmtsNamespaceAtTxnRewindPos prepStmtNamespace
 
+		// prepStmtsNamespaceMemAcc is the memory account that is shared
+		// between prepStmtsNamespace and prepStmtsNamespaceAtTxnRewindPos. It
+		// tracks the memory usage of portals and should be closed upon
+		// connExecutor's closure.
+		prepStmtsNamespaceMemAcc mon.BoundAccount
+
 		// onTxnFinish (if non-nil) will be called when txn is finished (either
 		// committed or aborted). It is set when txn is started but can remain
 		// unset when txn is executed within another higher-level txn.
@@ -995,7 +1007,7 @@ type prepStmtNamespace struct {
 	// session.
 	prepStmts map[string]*PreparedStatement
 	// portals contains the portals currently available on the session.
-	portals map[string]*PreparedPortal
+	portals map[string]PreparedPortal
 }
 
 func (ns prepStmtNamespace) String() string {
@@ -1015,13 +1027,15 @@ func (ns prepStmtNamespace) String() string {
 // references are release and all the to's references are duplicated.
 //
 // An empty `to` can be passed in to deallocate everything.
-func (ns *prepStmtNamespace) resetTo(ctx context.Context, to prepStmtNamespace) {
+func (ns *prepStmtNamespace) resetTo(
+	ctx context.Context, to prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+) {
 	for name, p := range ns.prepStmts {
 		p.decRef(ctx)
 		delete(ns.prepStmts, name)
 	}
 	for name, p := range ns.portals {
-		p.decRef(ctx)
+		p.decRef(ctx, prepStmtsNamespaceMemAcc, name)
 		delete(ns.portals, name)
 	}
 
@@ -1048,7 +1062,7 @@ func (ex *connExecutor) resetExtraTxnState(
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
-		p.decRef(ctx)
+		p.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
 
@@ -1248,10 +1262,10 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
 
-		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
+		portalName := tcmd.Name
+		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
 		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidCursorName, "unknown portal %q", tcmd.Name)
+			err := pgerror.Newf(pgcode.InvalidCursorName, "unknown portal %q", portalName)
 			ev = eventNonRetriableErr{IsCommit: fsm.False}
 			payload = eventNonRetriableErrPayload{err: err}
 			res = ex.clientComm.CreateErrorResult(pos)
@@ -1291,18 +1305,11 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			pos, portal.OutFormats,
 			ex.sessionData.DataConversion,
 			tcmd.Limit,
-			tcmd.Name,
+			portalName,
 			ex.implicitTxn(),
 		)
 		res = stmtRes
-		curStmt := Statement{
-			Statement:     portal.Stmt.Statement,
-			Prepared:      portal.Stmt,
-			ExpectedTypes: portal.Stmt.Columns,
-			AnonymizedStr: portal.Stmt.AnonymizedStr,
-		}
-		stmtCtx := withStatement(ctx, ex.curStmt)
-		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
+		ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
 		if err != nil {
 			return err
 		}
@@ -1677,14 +1684,16 @@ func (ex *connExecutor) generateID() ClusterWideID {
 // prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) {
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespace)
+		ctx, ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
 }
 
 // commitPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
 // not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) {
 	ex.extraTxnState.prepStmtsNamespace.resetTo(
-		ctx, ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos)
+		ctx, ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
 }
 
 // getRewindTxnCapability checks whether rewinding to the position previously
@@ -2373,7 +2382,9 @@ func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool 
 
 // DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
-	ps.ex.extraTxnState.prepStmtsNamespace.resetTo(ctx, prepStmtNamespace{})
+	ps.ex.extraTxnState.prepStmtsNamespace.resetTo(
+		ctx, prepStmtNamespace{}, &ps.ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
 }
 
 // contextStatementKey is an empty type for the handle associated with the
