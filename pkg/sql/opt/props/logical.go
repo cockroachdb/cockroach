@@ -39,9 +39,6 @@ const (
 	// populated.
 	UnfilteredCols
 
-	// JoinSize is set when the Relational.Rule.JoinSize field is populated.
-	JoinSize
-
 	// WithUses is set when the Shared.Rule.WithUses field is populated.
 	WithUses
 )
@@ -274,11 +271,6 @@ type Relational struct {
 		// UnfilteredCols is lazily populated by GetJoinMultiplicityFromInputs. It
 		// is only valid once the Rule.Available.UnfilteredCols bit has been set.
 		UnfilteredCols opt.ColSet
-
-		// JoinSize is the number of nodes in the root's connected component after
-		// removing all non-inner-join nodes in the tree. It is used to only reorder
-		// joins via ReorderJoins up to a certain limit.
-		JoinSize int
 	}
 }
 

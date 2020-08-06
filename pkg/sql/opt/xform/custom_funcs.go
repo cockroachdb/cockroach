@@ -2582,42 +2582,11 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	}
 }
 
-// deriveJoinSize returns the number of nodes in the root's connected component
-// after removing all non-join nodes in the tree (can be zero). It is used to
-// decide whether join reordering rules should fire.
-func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
-	relProps := e.Relational()
-	if relProps.IsAvailable(props.JoinSize) {
-		return relProps.Rule.JoinSize
-	}
-	relProps.SetAvailable(props.JoinSize)
-
-	switch j := e.(type) {
-	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
-		*memo.LeftJoinExpr, *memo.FullJoinExpr:
-		if !j.Private().(*memo.JoinPrivate).Flags.Empty() {
-			// A join with flags cannot be reordered; don't consider it for join size.
-			relProps.Rule.JoinSize = 0
-		} else {
-			left := j.Child(0).(memo.RelExpr)
-			right := j.Child(1).(memo.RelExpr)
-			relProps.Rule.JoinSize = 1 + c.deriveJoinSize(left) + c.deriveJoinSize(right)
-		}
-
-	default:
-		relProps.Rule.JoinSize = 0
-	}
-
-	return relProps.Rule.JoinSize
-}
-
 // ShouldReorderJoins returns whether the optimizer should attempt to find
-// a better ordering of inner joins. This is the case if:
-//   1. The given expression is the first expression of its group. This is to
-//      avoid duplicate work (for example, matching on the commuted version of
-//      a join that has already been reordered).
-//   2. The size of the join tree is greater than one and does not exceed
-//      ReorderJoinsLimit.
+// a better ordering of inner joins. This is the case if the given expression is
+// the first expression of its group, and the join tree rooted at the expression
+// has not previously been reordered. This is to avoid duplicate work. In
+// addition, a join cannot be reordered if it has join hints.
 func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 	// Only match the first expression of a group to avoid duplicate work.
 	if root != root.FirstExpr() {
@@ -2628,16 +2597,10 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 	if !ok {
 		panic(errors.AssertionFailedf("operator does not have a join private: %v", root.Op()))
 	}
-	if private.WasReordered {
-		// All orderings have already been considered for the join tree rooted at
-		// this join.
-		return false
-	}
 
-	// Don't match if joinSize is 1, because only commutation is possible for a
-	// single join.
-	joinSize := c.deriveJoinSize(root)
-	return joinSize > 1 && joinSize <= c.e.evalCtx.SessionData.ReorderJoinsLimit
+	// Ensure that this join expression was not added to the memo by a previous
+	// reordering, as well as that the join does not have hints.
+	return !private.WasReordered && c.NoJoinHints(private)
 }
 
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The

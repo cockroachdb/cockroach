@@ -3,20 +3,15 @@
 # =============================================================================
 
 # ReorderJoins matches the first expression of an inner join group and adds to
-# the memo all valid join orderings that do not introduce cross joins.
-# Currently, ReorderJoins can only reorder InnerJoins. If the join has join
-# hints or the size of the join tree exceeds ReorderJoinsLimit, the join tree is
-# not reordered. For more information, see the comment in join_order_builder.go.
+# the memo all valid join orderings that do not introduce cross joins. If the
+# join has join hints or is the result of a previous join reordering, the join
+# tree is not reordered. For more information, see the comment in
+# join_order_builder.go.
 #
 # Citations: [8]
 [ReorderJoins, Explore]
 (InnerJoin | SemiJoin | AntiJoin | LeftJoin | FullJoin
-    *
-    *
-    *
-    $joinPrivate:* &
-        (NoJoinHints $joinPrivate) &
-        (ShouldReorderJoins (Root))
+    * & (ShouldReorderJoins (Root))
 )
 =>
 (ReorderJoins)

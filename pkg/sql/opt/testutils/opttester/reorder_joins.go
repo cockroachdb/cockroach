@@ -47,6 +47,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 	// to add to the memo during each call to Reorder.
 	var joinsConsidered int
 	var treeNum = 1
+	var relsJoinedLast string
 
 	o.JoinOrderBuilder().NotifyOnReorder(
 		func(
@@ -72,9 +73,9 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			}
 			ot.builder.WriteString("\n")
 			treeNum++
+			relsJoinedLast = ""
 		})
 
-	var relsJoinedLast string
 	o.JoinOrderBuilder().NotifyOnAddJoin(func(left, right, all, refs []memo.RelExpr, op opt.Operator) {
 		relsToJoin := outputRels(all, names)
 		if relsToJoin != relsJoinedLast {
