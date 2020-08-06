@@ -116,6 +116,7 @@ func NewUniquenessConstraintViolationError(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return pgerror.Newf(pgcode.UniqueViolation,

@@ -113,6 +113,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		descpb.ScanLockingStrength_FOR_NONE,
 		true, /* isCheck */
 		&sqlbase.DatumAlloc{},
+		nil, /* memMonitor */
 		args...,
 	); err != nil {
 		t.Fatal(err)

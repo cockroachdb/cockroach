@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -31,9 +32,11 @@ type KVFetcher struct {
 	bytesRead     int64
 	Span          roachpb.Span
 	newSpan       bool
+	acc           mon.BoundAccount
 }
 
 // NewKVFetcher creates a new KVFetcher.
+// If mon is non-nil, this fetcher will track its fetches and must be Closed.
 func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
@@ -41,17 +44,20 @@ func NewKVFetcher(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr descpb.ScanLockingStrength,
+	mon *mon.BytesMonitor,
 ) (*KVFetcher, error) {
-	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
-	)
-	return newKVFetcher(&kvBatchFetcher), err
+	kvBatchFetcher, err := makeKVBatchFetcher(txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr, mon)
+	return newKVFetcher(&kvBatchFetcher, mon), err
 }
 
-func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
-	return &KVFetcher{
+func newKVFetcher(batchFetcher kvBatchFetcher, mon *mon.BytesMonitor) *KVFetcher {
+	ret := &KVFetcher{
 		kvBatchFetcher: batchFetcher,
 	}
+	if mon != nil {
+		ret.acc = mon.MakeBoundAccount()
+	}
+	return ret
 }
 
 // GetBytesRead returns the number of bytes read by this fetcher.
@@ -107,16 +113,44 @@ func (f *KVFetcher) NextKV(
 			}, newSpan, nil
 		}
 
+		monitoring := f.acc.Monitor() != nil
+
+		const tokenFetchAllocation = 1 << 10
+		if monitoring && f.acc.Used() < tokenFetchAllocation {
+			// Pre-reserve a token fraction of the maximum amount of memory this scan
+			// could return. Most of the time, scans won't use this amount of memory,
+			// so it's unnecessary to reserve it all. We reserve something rather than
+			// nothing at all to preserve some accounting.
+			if err := f.acc.ResizeTo(ctx, tokenFetchAllocation); err != nil {
+				return ok, kv, false, err
+			}
+		}
 		ok, f.kvs, f.batchResponse, f.Span, err = f.nextBatch(ctx)
 		if err != nil {
 			return ok, kv, false, err
+		}
+		returnedBytes := int64(len(f.batchResponse))
+		if monitoring && returnedBytes > f.acc.Used() {
+			// Resize up to the actual amount of bytes we got back from the fetch,
+			// but don't ratchet down. We would much prefer to over-account, and the
+			// worst we can over-account by is around 10 MB, the maximum fetch size.
+			if err := f.acc.ResizeTo(ctx, returnedBytes); err != nil {
+				return ok, kv, false, err
+			}
 		}
 		if !ok {
 			return false, kv, false, nil
 		}
 		f.newSpan = true
-		f.bytesRead += int64(len(f.batchResponse))
+		f.bytesRead += returnedBytes
 	}
+}
+
+// Close releases the resources held by this KVFetcher. It must be called
+// at the end of execution if the fetcher was provisioned with a memory
+// monitor.
+func (f *KVFetcher) Close(ctx context.Context) {
+	f.acc.Close(ctx)
 }
 
 // SpanKVFetcher is a kvBatchFetcher that returns a set slice of kvs.

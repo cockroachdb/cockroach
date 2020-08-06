@@ -124,6 +124,8 @@ func (cb *ColumnBackfiller) init(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&cb.alloc,
+		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
+		nil, /* memMonitor */
 		tableArgs,
 	)
 }
@@ -433,6 +435,8 @@ func (ib *IndexBackfiller) Init(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&ib.alloc,
+		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
+		nil, /* memMonitor */
 		tableArgs,
 	)
 }
