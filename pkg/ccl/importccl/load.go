@@ -204,13 +204,13 @@ func Load(
 			st := cluster.MakeTestingClusterSettings()
 
 			affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
-			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
+			// A nil txn is safe because it is only used by sql.NewTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
 			var txn *kv.Txn
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
-			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.GetID(), keys.PublicSchemaID,
+			desc, err := sql.NewTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.GetID(), keys.PublicSchemaID,
 				0 /* table ID */, ts, privs, affected, nil, evalCtx, evalCtx.SessionData, false /* temporary */)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make table desc")
