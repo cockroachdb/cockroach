@@ -310,7 +310,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.GetID()), colNum,
+					"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), colNum,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
 					"%s IS NOT NULL", column.Name,
@@ -1259,7 +1259,7 @@ CREATE TABLE information_schema.table_constraints (
 					colNum++
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.GetID()), colNum,
+						"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), colNum,
 					))
 					if !col.Nullable {
 						if err := addRow(

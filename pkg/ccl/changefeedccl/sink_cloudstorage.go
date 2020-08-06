@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -390,13 +391,13 @@ func (s *cloudStorageSink) getOrCreateFile(
 
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, _, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	file := s.getOrCreateFile(table.Name, table.Version)
+	file := s.getOrCreateFile(table.GetName(), table.GetVersion())
 
 	// TODO(dan): Memory monitoring for this
 	if _, err := file.Write(value); err != nil {
