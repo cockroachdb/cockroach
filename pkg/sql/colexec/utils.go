@@ -91,7 +91,7 @@ func newPartitionerToOperator(
 	return &partitionerToOperator{
 		partitioner:  partitioner,
 		partitionIdx: partitionIdx,
-		batch:        allocator.NewMemBatch(types),
+		batch:        allocator.NewMemBatchWithMaxCapacity(types),
 	}
 }
 
@@ -119,9 +119,9 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 func newAppendOnlyBufferedBatch(
-	allocator *colmem.Allocator, typs []*types.T, initialSize int,
+	allocator *colmem.Allocator, typs []*types.T,
 ) *appendOnlyBufferedBatch {
-	batch := allocator.NewMemBatchWithSize(typs, initialSize)
+	batch := allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
 	return &appendOnlyBufferedBatch{
 		Batch:   batch,
 		colVecs: batch.ColVecs(),

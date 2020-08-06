@@ -150,7 +150,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbase.Operator {
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatchWithSize(typs, batchSize)
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)

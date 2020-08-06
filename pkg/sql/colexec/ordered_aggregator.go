@@ -170,12 +170,12 @@ func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSiz
 	// overflow when outputting.
 	a.scratch.inputSize = inputSize * 2
 	a.scratch.outputSize = outputSize
-	a.scratch.Batch = a.allocator.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
+	a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, a.scratch.inputSize)
 	for i := 0; i < len(a.outputTypes); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
-	a.unsafeBatch = a.allocator.NewMemBatchWithSize(a.outputTypes, outputSize)
+	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, outputSize)
 }
 
 func (a *orderedAggregator) Init() {

@@ -100,7 +100,7 @@ func TestSelectInInt64(t *testing.T) {
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col1 := batch.ColVec(0).Int64()
 
 	for i := 0; i < coldata.BatchSize(); i++ {

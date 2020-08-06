@@ -86,21 +86,21 @@ func TestBatchReset(t *testing.T) {
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Exact length, reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Insufficient capacity, don't reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsInt, 2, false)
 
 	// Selection vector gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
 	b.SetSelection(true)
 	b.Selection()[0] = 7
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Nulls gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1, coldata.StandardColumnFactory)
+	b = coldata.NewMemBatchWithCapacity(typsInt, 1, coldata.StandardColumnFactory)
 	b.ColVec(0).Nulls().SetNull(0)
 	resetAndCheck(b, typsInt, 1, true)
 

@@ -207,7 +207,7 @@ func newHashTable(
 			differs: make([]bool, coldata.BatchSize()),
 		},
 
-		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes, 0 /* initialSize */),
+		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes),
 		keyCols:           eqCols,
 		numBuckets:        numBuckets,
 		allowNullEquality: allowNullEquality,

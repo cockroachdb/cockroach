@@ -231,7 +231,7 @@ func benchmarkLogicalProjOp(
 	}
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := testAllocator.NewMemBatch([]*types.T{types.Bool, types.Bool})
+	batch := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{types.Bool, types.Bool})
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
 	for i := 0; i < coldata.BatchSize(); i++ {

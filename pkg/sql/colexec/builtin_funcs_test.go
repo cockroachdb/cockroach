@@ -95,7 +95,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		},
 	}
 
-	batch := testAllocator.NewMemBatch([]*types.T{types.Int})
+	batch := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
 	col := batch.ColVec(0).Int64()
 
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -159,7 +159,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	typs := []*types.T{types.String, types.Int, types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	outputIdx := 3
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()

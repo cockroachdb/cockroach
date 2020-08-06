@@ -297,7 +297,7 @@ var _ colexecbase.Operator = &singleTupleNoInputOperator{}
 // batches on all consecutive calls.
 func NewSingleTupleNoInputOp(allocator *colmem.Allocator) colexecbase.Operator {
 	return &singleTupleNoInputOperator{
-		batch: allocator.NewMemBatchWithSize(nil /* types */, 1 /* size */),
+		batch: allocator.NewMemBatchWithFixedCapacity(nil /* types */, 1 /* size */),
 	}
 }
 

@@ -419,7 +419,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.testingKnobs.outputBatchSize)
+			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, o.testingKnobs.outputBatchSize)
 		}
 		available := o.testingKnobs.outputBatchSize - o.mu.pendingBatch.Length()
 		numAppended := toAppend

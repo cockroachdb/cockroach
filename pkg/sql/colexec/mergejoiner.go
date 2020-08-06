@@ -540,7 +540,7 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	if o.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
-	o.output = o.unlimitedAllocator.NewMemBatchWithSize(outputTypes, outBatchSize)
+	o.output = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(outputTypes, outBatchSize)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
@@ -554,18 +554,16 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 		o.unlimitedAllocator, o.left.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
-	o.proberState.lBufferedGroup.firstTuple = make([]coldata.Vec, len(o.left.sourceTypes))
-	for colIdx, t := range o.left.sourceTypes {
-		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(t, 1)
-	}
+	o.proberState.lBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
+		o.left.sourceTypes, 1, /* capacity */
+	).ColVecs()
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
-	o.proberState.rBufferedGroup.firstTuple = make([]coldata.Vec, len(o.right.sourceTypes))
-	for colIdx, t := range o.right.sourceTypes {
-		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(t, 1)
-	}
+	o.proberState.rBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
+		o.right.sourceTypes, 1, /* capacity */
+	).ColVecs()
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -596,29 +594,18 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	}
 	var (
 		bufferedGroup *mjBufferedGroup
-		scratchBatch  coldata.Batch
 		sourceTypes   []*types.T
 	)
 	if input == &o.left {
 		sourceTypes = o.left.sourceTypes
 		bufferedGroup = &o.proberState.lBufferedGroup
-		// TODO(yuzefovich): uncomment when spillingQueue actually copies the
-		// enqueued batches when those are kept in memory.
-		//if o.scratch.lBufferedGroupBatch == nil {
-		//	o.scratch.lBufferedGroupBatch = o.unlimitedAllocator.NewMemBatch(o.left.sourceTypes)
-		//}
-		//scratchBatch = o.scratch.lBufferedGroupBatch
 	} else {
 		sourceTypes = o.right.sourceTypes
 		bufferedGroup = &o.proberState.rBufferedGroup
-		// TODO(yuzefovich): uncomment when spillingQueue actually copies the
-		// enqueued batches when those are kept in memory.
-		//if o.scratch.rBufferedGroupBatch == nil {
-		//	o.scratch.rBufferedGroupBatch = o.unlimitedAllocator.NewMemBatch(o.right.sourceTypes)
-		//}
-		//scratchBatch = o.scratch.rBufferedGroupBatch
 	}
-	scratchBatch = o.unlimitedAllocator.NewMemBatchWithSize(sourceTypes, groupLength)
+	// TODO(yuzefovich): reuse the same scratch batches when spillingQueue
+	// actually copies the enqueued batch when those are kept in memory.
+	scratchBatch := o.unlimitedAllocator.NewMemBatchWithFixedCapacity(sourceTypes, groupLength)
 	if bufferedGroup.numTuples == 0 {
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
 			for colIdx := range sourceTypes {

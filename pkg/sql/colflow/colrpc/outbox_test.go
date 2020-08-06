@@ -114,7 +114,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		b := testAllocator.NewMemBatch(typs)
+		b := testAllocator.NewMemBatchWithMaxCapacity(typs)
 		b.SetLength(0)
 		input.Add(b, typs)
 

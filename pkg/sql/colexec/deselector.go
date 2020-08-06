@@ -79,7 +79,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 
 func (p *deselectorOp) resetOutput() {
 	if p.output == nil {
-		p.output = p.allocator.NewMemBatch(p.inputTypes)
+		p.output = p.allocator.NewMemBatchWithMaxCapacity(p.inputTypes)
 	} else {
 		p.output.ResetInternalBatch()
 	}

@@ -91,7 +91,7 @@ func NewRepeatableBatchSource(
 		}
 		numToCopy = maxIdx + 1
 	}
-	output := allocator.NewMemBatchWithSize(typs, numToCopy)
+	output := allocator.NewMemBatchWithFixedCapacity(typs, numToCopy)
 	src := &RepeatableBatchSource{
 		colVecs:   batch.ColVecs(),
 		typs:      typs,

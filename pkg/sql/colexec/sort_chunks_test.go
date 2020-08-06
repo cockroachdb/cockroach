@@ -266,7 +266,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								for i := range typs {
 									typs[i] = types.Int
 								}
-								batch := testAllocator.NewMemBatch(typs)
+								batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 								batch.SetLength(coldata.BatchSize())
 								ordCols := make([]execinfrapb.Ordering_Column, nCols)
 								for i := range ordCols {

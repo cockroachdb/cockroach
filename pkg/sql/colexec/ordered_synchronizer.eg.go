@@ -256,7 +256,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]int, len(o.inputs))
-	o.output = o.allocator.NewMemBatch(o.typs)
+	o.output = o.allocator.NewMemBatchWithMaxCapacity(o.typs)
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
 	for i, outVec := range o.output.ColVecs() {

@@ -95,9 +95,7 @@ type topKSorter struct {
 
 func (t *topKSorter) Init() {
 	t.input.Init()
-	t.topK = newAppendOnlyBufferedBatch(
-		t.allocator, t.inputTypes, 0, /* initialSize */
-	)
+	t.topK = newAppendOnlyBufferedBatch(t.allocator, t.inputTypes)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
 		t.comparators[i] = GetVecComparator(typ, 2)
@@ -199,7 +197,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 
 func (t *topKSorter) resetOutput() {
 	if t.output == nil {
-		t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, coldata.BatchSize())
+		t.output = t.allocator.NewMemBatchWithMaxCapacity(t.inputTypes)
 	} else {
 		t.output.ResetInternalBatch()
 	}
