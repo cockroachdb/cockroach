@@ -31,6 +31,13 @@ var _ tree.EvalDatabase = &DummySequenceOperators{}
 var errSequenceOperators = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing sequence operations in this context")
 
+// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
+	ctx context.Context, tn *tree.TableName, columnName tree.Name,
+) (*tree.TableName, error) {
+	return nil, errors.WithStack(errSequenceOperators)
+}
+
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
