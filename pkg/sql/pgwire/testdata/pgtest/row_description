@@ -262,8 +262,32 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
 
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"{hello,goodbye}"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT b FROM tab4"}
+----
+
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
 
 until
 DataRow
