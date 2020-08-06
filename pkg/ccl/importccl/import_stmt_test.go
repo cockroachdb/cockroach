@@ -877,6 +877,27 @@ COPY t (a, b, c) FROM stdin;
 			},
 		},
 		{
+			name: "ALTER COLUMN x SET NOT NULL",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE t (a INT8 PRIMARY KEY, b INT8);
+				ALTER TABLE t ALTER COLUMN a SET NOT NULL;
+			`,
+			query: map[string][][]string{
+				`SHOW CREATE TABLE t`: {
+					{
+						"t",
+						`CREATE TABLE public.t (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+)`,
+					},
+				},
+			},
+		},
+		{
 			name: "non-public schema",
 			typ:  "PGDUMP",
 			data: "create table s.t (i INT8)",

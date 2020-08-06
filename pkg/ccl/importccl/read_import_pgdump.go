@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -127,7 +128,9 @@ func (p *postgreStream) Next() (interface{}, error) {
 	}
 	if err := p.s.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			err = errors.HandledWithMessage(err, "line too long")
+			err = wrapWithLineTooLongHint(
+				errors.HandledWithMessage(err, "line too long"),
+			)
 		}
 		return nil, err
 	}
@@ -382,6 +385,15 @@ func readPostgresStmt(
 					return errors.Errorf("unsupported statement: %s", stmt)
 				}
 				create.Defs = append(create.Defs, cmd.ColumnDef)
+			case *tree.AlterTableSetNotNull:
+				for i, def := range create.Defs {
+					def, ok := def.(*tree.ColumnTableDef)
+					if !ok || def.Name != cmd.Column {
+						continue
+					}
+					def.Nullable.Nullability = tree.NotNull
+					create.Defs[i] = def
+				}
 			case *tree.AlterTableValidateConstraint:
 				// ignore
 			default:
@@ -773,4 +785,12 @@ func (m *pgDumpReader) readFile(
 		}
 	}
 	return nil
+}
+
+func wrapWithLineTooLongHint(err error) error {
+	return errors.WithHintf(
+		err,
+		"use `max_row_size` to increase the maximum line limit (default: %s).",
+		humanizeutil.IBytes(defaultScanBuffer),
+	)
 }

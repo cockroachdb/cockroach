@@ -170,7 +170,9 @@ func (p *postgreStreamCopy) Next() (copyData, error) {
 	scanned := p.s.Scan()
 	if err := p.s.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			err = errors.New("line too long")
+			err = wrapWithLineTooLongHint(
+				errors.New("line too long"),
+			)
 		}
 		return nil, err
 	}
