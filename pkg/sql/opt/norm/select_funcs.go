@@ -39,7 +39,7 @@ func (c *CustomFuncs) MapSetOpFilterLeft(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
 	colMap := makeMapFromColLists(set.OutCols, set.LeftCols)
-	return c.MapFiltersItemCols(filter, colMap)
+	return c.RemapCols(filter.Condition, colMap)
 }
 
 // MapSetOpFilterRight maps the filter onto the right expression by replacing
@@ -50,48 +50,23 @@ func (c *CustomFuncs) MapSetOpFilterRight(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
 	colMap := makeMapFromColLists(set.OutCols, set.RightCols)
-	return c.MapFiltersItemCols(filter, colMap)
+	return c.RemapCols(filter.Condition, colMap)
 }
 
 // makeMapFromColLists maps each column ID in src to a column ID in dst. The
 // columns IDs are mapped based on their relative positions in the column lists,
 // e.g. the third item in src maps to the third item in dst. The lists must be
 // of equal length.
-func makeMapFromColLists(src opt.ColList, dst opt.ColList) util.FastIntMap {
+func makeMapFromColLists(src opt.ColList, dst opt.ColList) opt.ColMap {
 	if len(src) != len(dst) {
 		panic(errors.AssertionFailedf("src and dst must have the same length, src: %v, dst: %v", src, dst))
 	}
 
-	var colMap util.FastIntMap
+	var colMap opt.ColMap
 	for colIndex, outColID := range src {
 		colMap.Set(int(outColID), int(dst[colIndex]))
 	}
 	return colMap
-}
-
-// MapFiltersItemCols maps filter expressions by replacing occurrences of
-// the keys of colMap with the corresponding values. Outer columns are not
-// replaced.
-func (c *CustomFuncs) MapFiltersItemCols(
-	filter *memo.FiltersItem, colMap util.FastIntMap,
-) opt.ScalarExpr {
-	// Recursively walk the scalar sub-tree looking for references to columns
-	// that need to be replaced and then replace them appropriately.
-	var replace ReplaceFunc
-	replace = func(nd opt.Expr) opt.Expr {
-		switch t := nd.(type) {
-		case *memo.VariableExpr:
-			dstCol, ok := colMap.Get(int(t.Col))
-			if !ok {
-				// It is not part of the output cols so no replacement required.
-				return nd
-			}
-			return c.f.ConstructVariable(opt.ColumnID(dstCol))
-		}
-		return c.f.Replace(nd, replace)
-	}
-
-	return replace(filter.Condition).(opt.ScalarExpr)
 }
 
 // GroupingAndConstCols returns the grouping columns and ConstAgg columns (for
