@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,7 +88,6 @@ type ParallelUnorderedSynchronizer struct {
 	// allows the ParallelUnorderedSynchronizer to wait only on internal
 	// goroutines.
 	internalWaitGroup *sync.WaitGroup
-	cancelFn          context.CancelFunc
 	batchCh           chan *unorderedSynchronizerMsg
 	errCh             chan error
 
@@ -188,18 +184,6 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	s.setState(parallelUnorderedSynchronizerStateRunning)
-	var (
-		cancelFn context.CancelFunc
-		// internalCancellation is an atomic that will be set to 1 if cancelFn is
-		// called (i.e. this is an internal cancellation), so that input goroutines
-		// know not propagate this cancellation.
-		internalCancellation int32
-	)
-	ctx, cancelFn = contextutil.WithCancel(ctx)
-	s.cancelFn = func() {
-		atomic.StoreInt32(&internalCancellation, 1)
-		cancelFn()
-	}
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
@@ -223,21 +207,6 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.externalWaitGroup.Done()
 			}()
 			sendErr := func(err error) {
-				ctxCanceled := errors.Is(err, context.Canceled)
-				grpcCtxCanceled := grpcutil.IsContextCanceled(err)
-				queryCanceled := errors.Is(err, sqlbase.QueryCanceledError)
-				// TODO(yuzefovich): should we be swallowing flow and stream
-				// context cancellation errors regardless whether the
-				// cancellation is internal? The reasoning is that if another
-				// operator encounters an error, the context is likely to get
-				// canceled with this synchronizer seeing the "fallout".
-				if atomic.LoadInt32(&internalCancellation) == 1 && (ctxCanceled || grpcCtxCanceled || queryCanceled) {
-					// If the synchronizer performed the internal cancellation,
-					// we need to swallow context cancellation and "query
-					// canceled" errors since they could occur as part of
-					// "graceful" shutdown of synchronizer's inputs.
-					return
-				}
 				select {
 				// Non-blocking write to errCh, if an error is present the main
 				// goroutine will use that and cancel all inputs.
@@ -328,10 +297,9 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 		select {
 		case err := <-s.errCh:
 			if err != nil {
-				// If we got an error from one of our inputs, cancel all inputs and
-				// propagate this error through a panic.
-				s.cancelFn()
-				s.internalWaitGroup.Wait()
+				// If we got an error from one of our inputs, propagate this error
+				// through a panic. The caller should then proceed to call DrainMeta,
+				// which will take care of closing any inputs.
 				colexecerror.InternalError(err)
 			}
 		case msg := <-s.batchCh:
@@ -412,6 +380,9 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 			exitLoop = true
 		}
 	}
+	// Wait for all inputs to exit. They should have observed a draining state and
+	// exited.
+	s.internalWaitGroup.Wait()
 	s.setState(parallelUnorderedSynchronizerStateDone)
 	return s.bufferedMeta
 }
