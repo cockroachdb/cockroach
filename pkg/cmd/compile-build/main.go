@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// compile-builds attempts to compile all CRDB builds we support.
-
 package main
 
 import (
+	"flag"
 	"go/build"
 	"log"
 
@@ -25,7 +24,17 @@ func main() {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
 
-	for _, target := range release.SupportedTargets {
+	var compileAll = flag.Bool("all", false, "compile all supported builds (darwin, linux, windows)")
+	flag.Parse()
+
+	// We compile just the first supported target unless we explicitly told to
+	// cross compile.
+	targets := release.SupportedTargets[:1]
+	if *compileAll {
+		targets = release.SupportedTargets
+	}
+
+	for _, target := range targets {
 		if err := release.MakeRelease(
 			target,
 			pkg.Dir,
