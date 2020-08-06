@@ -782,36 +782,68 @@ func backupPlanHook(
 		}
 
 		var spans []roachpb.Span
-		var tenants []BackupManifest_Tenant
+		var tenantRows []tree.Datums
 		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			id := backupStmt.Targets.Tenant.ToUint64()
 
-			res, err := p.ExecCfg().InternalExecutor.QueryRow(
+			tenID := backupStmt.Targets.Tenant
+			id := backupStmt.Targets.Tenant.ToUint64()
+			ds, err := p.ExecCfg().InternalExecutor.QueryRow(
 				ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
-				`SELECT active, info FROM system.tenants WHERE id = $1`, id,
+				`SELECT id, active, info FROM system.tenants WHERE id = $1`, id,
 			)
+
 			if err != nil {
 				return err
 			}
-			if res == nil {
-				return errors.Errorf("tenant %d does not exist", id)
-			}
-			if !tree.MustBeDBool(res[0]) {
-				return errors.Errorf("tenant %d is not active", id)
-			}
-			var info []byte
-			if res[1] != tree.DNull {
-				info = []byte(tree.MustBeDBytes(res[1]))
+
+			if ds == nil {
+				return errors.Errorf("tenant %s does not exist", tenID)
 			}
 
-			prefix := keys.MakeTenantPrefix(backupStmt.Targets.Tenant)
-			spans = []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
-			tenants = []BackupManifest_Tenant{{ID: id, Info: info}}
+			if !tree.MustBeDBool(ds[1]) {
+				return errors.Errorf("tenant %d is not active", id)
+			}
+
+			tenantRows = append(tenantRows, ds)
 		} else {
-			spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, revs)
+			spans = append(spans, spansForAllTableIndexes(p.ExecCfg().Codec, tables, revs)...)
+
+			// Include all tenants.
+			// TODO(tbg): make conditional on cluster setting.
+			var err error
+			tenantRows, err = p.ExecCfg().InternalExecutor.Query(
+				ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
+				`SELECT id, active, info FROM system.tenants`,
+			)
+
+			if err != nil {
+				return err
+			}
+		}
+
+		var tenants []BackupManifest_Tenant
+		for _, row := range tenantRows {
+			// TODO isn't there a general problem here with tenant IDs > MaxInt64?
+			id := uint64(tree.MustBeDInt(row[0]))
+
+			var info []byte
+			if row[2] != tree.DNull {
+				info = []byte(tree.MustBeDBytes(row[2]))
+			}
+
+			prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(id))
+			spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+			tenants = append(tenants, BackupManifest_Tenant{ID: id, Info: info})
+		}
+
+		if len(tenants) > 0 && backupStmt.Options.CaptureRevisionHistory {
+			return errors.UnimplementedError(
+				errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
+				"can not backup tenants with revision history",
+			)
 		}
 
 		if len(prevBackups) > 0 {
