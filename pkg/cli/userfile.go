@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -33,7 +34,7 @@ const (
 
 var userFileUploadCmd = &cobra.Command{
 	Use:   "upload <source> <destination>",
-	Short: "Upload file from source to destination",
+	Short: "upload file from source to destination",
 	Long: `
 Uploads a file to the user scoped file storage using a SQL connection.
 `,
@@ -43,12 +44,38 @@ Uploads a file to the user scoped file storage using a SQL connection.
 
 var userFileListCmd = &cobra.Command{
 	Use:   "ls <file|dir glob>",
-	Short: "List files matching the provided glob",
+	Short: "list files matching the provided pattern",
 	Long: `
-Lists the files stored in the user scoped file storage which match the glob, using a SQL connection.
+Lists the files stored in the user scoped file storage which match the provided pattern,
+using a SQL connection. If no pattern is provided, all files in the specified
+(or default, if unspecified) user scoped file storage will be listed.
 `,
 	Args: cobra.MinimumNArgs(0),
 	RunE: maybeShoutError(runUserFileList),
+}
+
+var userFileDeleteCmd = &cobra.Command{
+	Use:   "delete <file|dir glob>",
+	Short: "delete files matching the provided pattern",
+	Long: `
+Deletes the files stored in the user scoped file storage which match the provided pattern,
+using a SQL connection. If passed pattern '*', all files in the specified
+(or default, if unspecified) user scoped file storage will be deleted. Deletions are not
+atomic, and all deletions prior to the first failure will occur. 
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: maybeShoutError(runUserFileDelete),
+}
+
+func runUserFileDelete(cmd *cobra.Command, args []string) error {
+	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	glob := args[0]
+	return deleteUserFile(context.Background(), conn, glob)
 }
 
 func runUserFileList(cmd *cobra.Command, args []string) error {
@@ -142,7 +169,7 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 func constructUserfileListURI(glob, user string) string {
 	// User has not specified a glob pattern and so we construct a URI which will
 	// list all the files stored in the UserFileTableStorage.
-	if glob == "" {
+	if glob == "" || glob == "*" {
 		userFileURL := url.URL{
 			Scheme: defaultUserfileScheme,
 			Host:   defaultQualifiedNamePrefix + user,
@@ -196,7 +223,8 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 		QualifiedTableName: userfileParsedURL.Host,
 		Path:               userfileParsedURL.Path,
 	}
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf, conn.conn.(driver.QueryerContext))
+	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf,
+		conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
@@ -210,6 +238,66 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 		fmt.Println(file)
 	}
 
+	return nil
+}
+
+func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
+
+	connURL, err := url.Parse(conn.url)
+	if err != nil {
+		return err
+	}
+
+	userfileListURI := constructUserfileListURI(glob, connURL.User.Username())
+	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
+	if err != nil {
+		return err
+	}
+
+	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
+	if err != nil {
+		return err
+	}
+	userFileTableConf := roachpb.ExternalStorage_FileTable{
+		User:               connURL.User.Username(),
+		QualifiedTableName: userfileParsedURL.Host,
+	}
+	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf,
+		conn.conn.(cloud.SQLConnI))
+	if err != nil {
+		return err
+	}
+
+	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		var deleteFileBasename string
+		if userfileParsedURL.Path == "" {
+			// ListFiles will return absolute userfile URIs which will require
+			// parsing.
+			parsedFile, err := url.ParseRequestURI(file)
+			if err != nil {
+				return errors.WithDetailf(err, "deletion failed at %s", file)
+			}
+			deleteFileBasename = parsedFile.Path
+		} else {
+			// ListFiles returns relative filepaths without a leading /. All files are
+			// stored with a prefix / in the underlying user scoped tables.
+			deleteFileBasename = path.Join("/", file)
+		}
+		err = f.Delete(ctx, deleteFileBasename)
+		if err != nil {
+			return errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
+		}
+
+		fmt.Printf("deleted userfile://%s%s\n", userfileParsedURL.Host, deleteFileBasename)
+	}
 	return nil
 }
 
@@ -286,6 +374,7 @@ func uploadUserFile(
 var userFileCmds = []*cobra.Command{
 	userFileUploadCmd,
 	userFileListCmd,
+	userFileDeleteCmd,
 }
 
 var userFileCmd = &cobra.Command{
