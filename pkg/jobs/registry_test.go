@@ -66,7 +66,7 @@ func TestRegistryCancelation(t *testing.T) {
 		roachpb.Version{Major: 20, Minor: 1},
 		true)
 	sqlStorage := slstorage.NewStorage(stopper, clock, db, nil, settings)
-	sqlInstance := slinstance.NewSqlInstance(stopper, clock, sqlStorage, settings)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, sqlStorage, settings)
 	registry := MakeRegistry(
 		log.AmbientContext{},
 		stopper,
