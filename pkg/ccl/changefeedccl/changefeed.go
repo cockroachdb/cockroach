@@ -267,7 +267,7 @@ func emitEntries(
 			}
 		}
 		if err := sink.EmitRow(
-			ctx, row.tableDesc.TableDesc(), keyCopy, valueCopy, row.updated,
+			ctx, row.tableDesc, keyCopy, valueCopy, row.updated,
 		); err != nil {
 			return err
 		}
