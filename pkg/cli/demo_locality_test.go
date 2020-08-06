@@ -12,7 +12,10 @@
 
 package cli
 
-import "github.com/cockroachdb/cockroach/pkg/security"
+import (
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 func Example_demo_locality() {
 	c := newCLITest(cliTestParams{noServer: true})
@@ -30,6 +33,10 @@ func Example_demo_locality() {
 	// find the certs that demo sets up.
 	security.ResetAssetLoader()
 	for _, cmd := range testData {
+		// `demo` sets up a server and log file redirection, which asserts
+		// that the logging subsystem has not been initialized yet.  Fake
+		// this to be true.
+		log.TestingResetActive()
 		c.RunWithArgs(cmd)
 	}
 

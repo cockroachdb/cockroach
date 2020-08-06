@@ -536,7 +536,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	if err := getStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	if a, e := len(wrapper.Files), 2; a != e {
+	if a, e := len(wrapper.Files), 1; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
 	}
 
@@ -706,17 +706,14 @@ func TestStatusLogRedaction(t *testing.T) {
 			if err := getStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 				t.Fatal(err)
 			}
-			// We expect a main log and a stderr log.
-			if a, e := len(wrapper.Files), 2; a != e {
+			// We expect only the main log.
+			if a, e := len(wrapper.Files), 1; a != e {
 				t.Fatalf("expected %d log files; got %d: %+v", e, a, wrapper.Files)
 			}
-			var file log.FileInfo
-			// Find the main log.
-			for _, f := range wrapper.Files {
-				if !strings.Contains("stderr", f.Name) {
-					file = f
-					break
-				}
+			file := wrapper.Files[0]
+			// Assert that the log that's present is not a stderr log.
+			if strings.Contains("stderr", file.Name) {
+				t.Fatalf("expected main log, found %v", file.Name)
 			}
 
 			for _, tc := range testData {
