@@ -26,6 +26,7 @@ import Stack from "assets/stack.svg";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
+import { ReplicatedSizeTooltip } from "src/views/databases/containers/databases/tooltips";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
@@ -83,7 +84,7 @@ export class DatabaseSummaryTables extends DatabaseSummaryBase {
                   className: "expand-link", // don't pad the td element to allow the link to expand
                 },
                 {
-                  title: "Size",
+                  title: <ReplicatedSizeTooltip tableName={dbID}>{"Replicated Size"}</ReplicatedSizeTooltip>,
                   cell: (tableInfo) => Bytes(tableInfo.physicalSize),
                   sort: (tableInfo) => tableInfo.physicalSize,
                 },

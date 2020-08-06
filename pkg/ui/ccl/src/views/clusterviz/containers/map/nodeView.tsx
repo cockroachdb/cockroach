@@ -94,6 +94,7 @@ export class NodeView extends React.Component<NodeViewProps> {
           <CapacityArc
             usableCapacity={usable}
             usedCapacity={used}
+            nodeLabel={`Node ${node.desc.node_id}`}
           />
           <Sparklines nodes={[`${node.desc.node_id}`]} />
         </g>

@@ -18,6 +18,7 @@ import { Bytes } from "src/util/format";
 import Loading from "src/views/shared/components/loading";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { NonTableStatsResponseMessage } from "src/util/api";
+import { TimeSeriesTooltip } from "src/views/databases/containers/databases/tooltips";
 import "src/views/shared/components/sortabletable/sortabletable.styl";
 
 interface TimeSeriesSummaryProps {
@@ -62,9 +63,11 @@ export class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
           </thead>
           <tbody>
             <tr className="sort-table__row sort-table__row--body">
-              <td className="sort-table__cell">
-                Time Series
-              </td>
+                <td className="sort-table__cell">
+                  <TimeSeriesTooltip>
+                    Time Series
+                  </TimeSeriesTooltip>
+                </td>
               <td className="sort-table__cell">
                 { Bytes(FixLong(this.props.nonTableStats.time_series_stats.approximate_disk_bytes).toNumber()) }
               </td>
