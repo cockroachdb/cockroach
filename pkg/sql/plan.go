@@ -324,6 +324,15 @@ type planMaybePhysical struct {
 	physPlan *physicalPlanTop
 }
 
+func makePlanMaybePhysical(physPlan *PhysicalPlan, planNodesToClose []planNode) planMaybePhysical {
+	return planMaybePhysical{
+		physPlan: &physicalPlanTop{
+			PhysicalPlan:     physPlan,
+			planNodesToClose: planNodesToClose,
+		},
+	}
+}
+
 func (p *planMaybePhysical) isPhysicalPlan() bool {
 	return p.physPlan != nil
 }

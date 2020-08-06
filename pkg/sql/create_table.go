@@ -215,10 +215,10 @@ func getTableCreateParams(
 		if err != nil {
 			return nil, 0, err
 		}
-		tKey = sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
+		tKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
 	}
 
-	exists, id, err := sqlbase.LookupObjectID(
+	exists, id, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.

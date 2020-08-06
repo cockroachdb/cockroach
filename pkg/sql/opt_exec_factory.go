@@ -1756,11 +1756,7 @@ func (ef *execFactory) ConstructErrorIfRows(
 
 // ConstructOpaque is part of the exec.Factory interface.
 func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
-	o, ok := metadata.(*opaqueMetadata)
-	if !ok {
-		return nil, errors.AssertionFailedf("unexpected OpaqueMetadata object type %T", metadata)
-	}
-	return o.plan, nil
+	return constructOpaque(metadata)
 }
 
 // ConstructAlterTableSplit is part of the exec.Factory interface.

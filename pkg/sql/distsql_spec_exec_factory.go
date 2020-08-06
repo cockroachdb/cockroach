@@ -110,7 +110,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 			return nil, err
 		}
 		physPlan.ResultColumns = cols
-		return planMaybePhysical{physPlan: &physicalPlanTop{PhysicalPlan: physPlan}}, nil
+		return makePlanMaybePhysical(physPlan, nil /* planNodesToClose */), nil
 	}
 	recommendation := shouldDistribute
 	for _, exprs := range rows {
@@ -147,10 +147,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		return nil, err
 	}
 	physPlan.ResultColumns = cols
-	return planMaybePhysical{physPlan: &physicalPlanTop{
-		PhysicalPlan:     physPlan,
-		planNodesToClose: planNodesToClose,
-	}}, nil
+	return makePlanMaybePhysical(physPlan, planNodesToClose), nil
 }
 
 // ConstructScan implements exec.Factory interface by combining the logic that
@@ -168,10 +165,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 					return nil, err
 				}
 				physPlan.ResultColumns = d.columns
-				return planMaybePhysical{physPlan: &physicalPlanTop{
-					PhysicalPlan:     physPlan,
-					planNodesToClose: []planNode{d},
-				}}, nil
+				return makePlanMaybePhysical(physPlan, []planNode{d}), nil
 			},
 		)
 	}
@@ -292,7 +286,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &physicalPlanTop{PhysicalPlan: &p}}, err
+	return makePlanMaybePhysical(&p, nil /* planNodesToClose */), err
 }
 
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
@@ -781,12 +775,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// TODO(yuzefovich): we might also need to look at the distribution of
 	// subqueries and postqueries.
 	physPlan.Distribution = p.main.physPlan.Distribution
-	return planMaybePhysical{
-		physPlan: &physicalPlanTop{
-			PhysicalPlan:     physPlan,
-			planNodesToClose: []planNode{explainNode},
-		},
-	}, nil
+	return makePlanMaybePhysical(physPlan, []planNode{explainNode}), nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(
@@ -901,7 +890,16 @@ func (e *distSQLSpecExecFactory) ConstructErrorIfRows(
 }
 
 func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: opaque")
+	plan, err := constructOpaque(metadata)
+	if err != nil {
+		return nil, err
+	}
+	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan)
+	if err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = planColumns(plan)
+	return makePlanMaybePhysical(physPlan, []planNode{plan}), nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableSplit(
@@ -1025,8 +1023,5 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 		rightPlanDistribution: rightPhysPlan.Distribution,
 	}, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns
-	return planMaybePhysical{physPlan: &physicalPlanTop{
-		PhysicalPlan:     p,
-		planNodesToClose: append(leftPlan.physPlan.planNodesToClose, rightPlan.physPlan.planNodesToClose...),
-	}}, nil
+	return makePlanMaybePhysical(p, append(leftPlan.physPlan.planNodesToClose, rightPlan.physPlan.planNodesToClose...)), nil
 }

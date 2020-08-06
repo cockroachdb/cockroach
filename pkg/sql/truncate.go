@@ -190,7 +190,7 @@ func (p *planner) truncateTable(
 	// structured.proto
 	//
 	// TODO(vivek): Fix properly along with #12123.
-	key := sqlbase.MakeObjectNameKey(
+	key := catalogkv.MakeObjectNameKey(
 		ctx, p.ExecCfg().Settings,
 		newTableDesc.ParentID,
 		newTableDesc.GetParentSchemaID(),
@@ -198,7 +198,7 @@ func (p *planner) truncateTable(
 	).Key(p.ExecCfg().Codec)
 
 	// Remove the old namespace entry.
-	if err := sqlbase.RemoveObjectNamespaceEntry(
+	if err := catalogkv.RemoveObjectNamespaceEntry(
 		ctx, p.txn, p.execCfg.Codec,
 		tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableDesc.GetName(),
 		traceKV); err != nil {
