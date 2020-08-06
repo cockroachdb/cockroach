@@ -36,7 +36,7 @@ import (
 
 func descForTable(
 	t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
-) *sqlbase.ImmutableTableDescriptor {
+) *sqlbase.MutableTableDescriptor {
 	t.Helper()
 	parsed, err := parser.Parse(create)
 	if err != nil {
@@ -54,7 +54,7 @@ func descForTable(
 
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
-		desc, err := sql.MakeSequenceTableDesc(
+		desc, err := sql.NewSequenceTableDesc(
 			name,
 			tree.SequenceOptions{},
 			parent,
@@ -68,7 +68,7 @@ func descForTable(
 		if err != nil {
 			t.Fatal(err)
 		}
-		fks.resolver[name] = &desc
+		fks.resolver[name] = desc
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
@@ -77,10 +77,10 @@ func descForTable(
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}
-	if err := fixDescriptorFKState(table.TableDesc()); err != nil {
+	if err := fixDescriptorFKState(table); err != nil {
 		t.Fatal(err)
 	}
-	return table.Immutable().(*sqlbase.ImmutableTableDescriptor)
+	return table
 }
 
 var testEvalCtx = &tree.EvalContext{

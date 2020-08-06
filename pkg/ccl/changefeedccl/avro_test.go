@@ -59,7 +59,7 @@ func parseTableDesc(createTableStmt string) (sqlbase.TableDescriptor, error) {
 	return mutDesc, mutDesc.ValidateTable()
 }
 
-func parseValues(tableDesc *descpb.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+func parseValues(tableDesc sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := &tree.EvalContext{}
@@ -81,7 +81,7 @@ func parseValues(tableDesc *descpb.TableDescriptor, values string) ([]sqlbase.En
 	for _, rowTuple := range valuesClause.Rows {
 		var row sqlbase.EncDatumRow
 		for colIdx, expr := range rowTuple {
-			col := &tableDesc.Columns[colIdx]
+			col := tableDesc.GetColumnAtIdx(colIdx)
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 				ctx, expr, col.Type, "avro", &semaCtx, tree.VolatilityStable)
 			if err != nil {
@@ -250,7 +250,7 @@ func TestAvroSchema(t *testing.T) {
 			// roundtrippedSchema can be used to recreate the original `CREATE
 			// TABLE`.
 
-			rows, err := parseValues(tableDesc.TableDesc(), `VALUES `+test.values)
+			rows, err := parseValues(tableDesc, `VALUES `+test.values)
 			require.NoError(t, err)
 
 			for _, row := range rows {
@@ -444,7 +444,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
 			require.NoError(t, err)
-			rows, err := parseValues(tableDesc.TableDesc(), `VALUES (1, `+test.sql+`)`)
+			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
 			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
@@ -558,9 +558,9 @@ func TestAvroMigration(t *testing.T) {
 			readerSchema, err := tableToAvroSchema(readerDesc, avroSchemaNoSuffix)
 			require.NoError(t, err)
 
-			writerRows, err := parseValues(writerDesc.TableDesc(), `VALUES `+test.writerValues)
+			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
 			require.NoError(t, err)
-			expectedRows, err := parseValues(readerDesc.TableDesc(), `VALUES `+test.expectedValues)
+			expectedRows, err := parseValues(readerDesc, `VALUES `+test.expectedValues)
 			require.NoError(t, err)
 
 			for i := range writerRows {

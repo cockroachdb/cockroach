@@ -244,7 +244,7 @@ func readPostgresCreateTable(
 			}
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
-				desc, err := sql.MakeSequenceTableDesc(
+				desc, err := sql.NewSequenceTableDesc(
 					name,
 					seq.Options,
 					parentID,
@@ -258,8 +258,8 @@ func readPostgresCreateTable(
 				if err != nil {
 					return nil, err
 				}
-				fks.resolver[desc.Name] = &desc
-				ret = append(ret, &desc)
+				fks.resolver[desc.Name] = desc
+				ret = append(ret, desc)
 			}
 			backrefs := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 			for _, create := range createTbl {
@@ -288,7 +288,7 @@ func readPostgresCreateTable(
 						return nil, err
 					}
 				}
-				if err := fixDescriptorFKState(desc.TableDesc()); err != nil {
+				if err := fixDescriptorFKState(desc); err != nil {
 					return nil, err
 				}
 			}

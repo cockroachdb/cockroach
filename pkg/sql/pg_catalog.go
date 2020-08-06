@@ -2810,7 +2810,7 @@ CREATE TABLE pg_catalog.pg_type (
 					if err != nil {
 						return err
 					}
-					nspOid := h.NamespaceOid(db, sc.Name)
+					nspOid := h.NamespaceOid(db.GetID(), sc.Name)
 					typ, err := typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 					if err != nil {
 						return err
@@ -2855,7 +2855,7 @@ CREATE TABLE pg_catalog.pg_type (
 				if err != nil {
 					return false, err
 				}
-				nspOid = h.NamespaceOid(db, sc.Name)
+				nspOid = h.NamespaceOid(db.GetID(), sc.Name)
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err

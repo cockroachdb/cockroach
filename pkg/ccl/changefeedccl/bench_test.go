@@ -134,7 +134,7 @@ func makeBenchSink() *benchSink {
 func (s *benchSink) EmitRow(
 	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	return s.emit(int64(len(k) + len(v)))
+	return s.emit(int64(len(key) + len(value)))
 }
 func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc.Timestamp) error {
 	var noTopic string
