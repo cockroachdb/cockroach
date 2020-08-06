@@ -79,6 +79,11 @@ func resolveNewTypeName(
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (typeKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+	if name.Schema() == tree.PublicSchema {
+		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
+			return nil, 0, sqlbase.NewTypeAlreadyExistsError(name.String())
+		}
+	}
 	// Get the ID of the schema the type is being created in.
 	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.ID, name.Schema())
 	if err != nil {
