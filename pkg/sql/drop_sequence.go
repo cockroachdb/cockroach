@@ -161,7 +161,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 	isColumnDrop bool,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
-		seqLookup, err := p.LookupTableByID(ctx, sequenceID)
+		seqDesc, err := p.LookupTableByID(ctx, sequenceID)
 		if err != nil {
 			// Special case error swallowing for #50711 and #50781, which can cause a
 			// column to own sequences that have been dropped/do not exist.
@@ -172,16 +172,16 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			}
 			return err
 		}
-		seqDesc := seqLookup.Desc
-		affectsNoColumns := len(seqDesc.DependedOnBy) == 0
+		dependedOnBy := seqDesc.GetDependedOnBy()
+		affectsNoColumns := len(dependedOnBy) == 0
 		// It is okay if the sequence is depended on by columns that are being
 		// dropped in the same transaction
-		canBeSafelyRemoved := len(seqDesc.DependedOnBy) == 1 && seqDesc.DependedOnBy[0].ID == desc.ID
+		canBeSafelyRemoved := len(dependedOnBy) == 1 && dependedOnBy[0].ID == desc.ID
 		// If only the column is being dropped, no other columns of the table can
 		// depend on that sequence either
 		if isColumnDrop {
-			canBeSafelyRemoved = canBeSafelyRemoved && len(seqDesc.DependedOnBy[0].ColumnIDs) == 1 &&
-				seqDesc.DependedOnBy[0].ColumnIDs[0] == col.ID
+			canBeSafelyRemoved = canBeSafelyRemoved && len(dependedOnBy[0].ColumnIDs) == 1 &&
+				dependedOnBy[0].ColumnIDs[0] == col.ID
 		}
 
 		canRemove := affectsNoColumns || canBeSafelyRemoved
