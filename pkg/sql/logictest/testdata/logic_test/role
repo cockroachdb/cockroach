@@ -627,9 +627,12 @@ admin     newgroup  false
 admin     root      true
 newgroup  testuser  false
 
+
+user root
 statement ok
 CREATE DATABASE db2
 
+user testuser
 statement ok
 DROP DATABASE db1
 
@@ -737,6 +740,13 @@ DROP USER user1
 
 user root
 
+# Remove owned table to prepare testuser for dropping.
+statement ok
+REVOKE ALL ON db2.foo FROM newgroup
+
+statement ok
+DROP TABLE db2.foo
+
 # The user does not have direct privileges on anything, so we can drop it.
 statement ok
 DROP USER testuser
@@ -747,11 +757,8 @@ SELECT * FROM system.role_members
 role      member    isAdmin
 admin     root      true
 
-statement error cannot drop role/user newgroup: grants still exist on db2, db2.public.foo
+statement error cannot drop role/user newgroup: grants still exist on db2
 DROP ROLE newgroup
-
-statement ok
-REVOKE ALL ON db2.* FROM newgroup
 
 statement ok
 REVOKE ALL ON DATABASE db2 FROM newgroup
