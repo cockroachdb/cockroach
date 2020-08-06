@@ -468,7 +468,10 @@ func TestJoinReader(t *testing.T) {
 
 					var res sqlbase.EncDatumRows
 					for {
-						row := out.NextNoMeta(t)
+						row, meta := out.Next()
+						if meta != nil && meta.Metrics == nil {
+							t.Fatalf("unexpected metadata %+v", meta)
+						}
 						if row == nil {
 							break
 						}
@@ -595,7 +598,10 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 
 	count := 0
 	for {
-		row := out.NextNoMeta(t)
+		row, meta := out.Next()
+		if meta != nil && meta.Metrics == nil {
+			t.Fatalf("unexpected metadata %+v", meta)
+		}
 		if row == nil {
 			break
 		}
@@ -1078,7 +1084,8 @@ func BenchmarkJoinReader(b *testing.B) {
 									spilled = true
 								}
 								meta := output.DrainMeta(ctx)
-								if meta != nil {
+								if len(meta) != 1 || meta[0].Metrics == nil {
+									// Expect a single metadata payload with Metrics set.
 									b.Fatalf("unexpected metadata: %v", meta)
 								}
 								if output.NumRowsDisposed() != expectedNumOutputRows {
