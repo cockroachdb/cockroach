@@ -80,7 +80,13 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	name := strings.Join(nameParts, "/")
 	nodes := makeClusterSpec(b.Nodes+1, opts...)
 	r.Add(testSpec{
-		Name:    name,
+		Name: name,
+		// These tests don't have pass/fail conditions so we don't want to run them
+		// nightly. Currently they're only good for printing the results of a search
+		// for --max-rate.
+		// TODO(andrei): output something to roachperf and start running them
+		// nightly.
+		Tags:    []string{"manual"},
 		Owner:   OwnerKV,
 		Cluster: nodes,
 		Run: func(ctx context.Context, t *test, c *cluster) {
