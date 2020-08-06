@@ -109,11 +109,13 @@ func NewUniquenessConstraintViolationError(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return err

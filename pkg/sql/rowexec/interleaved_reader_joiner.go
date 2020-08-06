@@ -264,9 +264,15 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	return newState, unmatchedAncestor, nil
 }
 
+func (irj *interleavedReaderJoiner) close() {
+	if irj.InternalClose() {
+		irj.fetcher.Close(irj.Ctx)
+	}
+}
+
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	irj.InternalClose()
+	irj.close()
 }
 
 var _ execinfra.Processor = &interleavedReaderJoiner{}
@@ -370,7 +376,7 @@ func newInterleavedReaderJoiner(
 	}
 
 	if err := irj.initRowFetcher(
-		spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
+		flowCtx.EvalCtx.Ctx(), spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -403,6 +409,7 @@ func newInterleavedReaderJoiner(
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
+	ctx context.Context,
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
 	tableInfos []tableInfo,
 	reverseScan bool,
@@ -430,11 +437,13 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	}
 
 	return irj.fetcher.Init(
+		ctx,
 		reverseScan,
 		lockStr,
 		true, /* returnRangeInfo */
 		true, /* isCheck */
 		alloc,
+		irj.MemMonitor,
 		args...,
 	)
 }
@@ -443,7 +452,7 @@ func (irj *interleavedReaderJoiner) generateTrailingMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
-	irj.InternalClose()
+	irj.close()
 	return trailingMeta
 }
 

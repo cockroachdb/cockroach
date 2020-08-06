@@ -125,11 +125,13 @@ func newIndexSkipTableReader(
 	}
 
 	if err := t.fetcher.Init(
+		flowCtx.EvalCtx.Context,
 		t.reverse,
 		spec.LockingStrength,
 		true,  /* returnRangeInfo */
 		false, /* isCheck */
 		&t.alloc,
+		nil, /* memMon */
 		tableArgs,
 	); err != nil {
 		return nil, err

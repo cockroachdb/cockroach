@@ -99,6 +99,7 @@ func newIndexJoiner(
 	}
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
+		flowCtx.EvalCtx.Ctx(),
 		&fetcher,
 		&ij.desc,
 		0, /* primary index */
@@ -106,6 +107,7 @@ func newIndexJoiner(
 		false, /* reverse */
 		ij.Out.NeededColumns(),
 		false, /* isCheck */
+		flowCtx.EvalCtx.Mon,
 		&ij.alloc,
 		spec.Visibility,
 		spec.LockingStrength,

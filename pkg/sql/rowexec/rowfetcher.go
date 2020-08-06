@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // rowFetcher is an interface used to abstract a row fetcher so that a stat
@@ -49,10 +50,13 @@ type rowFetcher interface {
 	GetBytesRead() int64
 	GetRangesInfo() []roachpb.RangeInfo
 	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
+	// Close releases any resources held by this fetcher.
+	Close(ctx context.Context)
 }
 
 // initRowFetcher initializes the fetcher.
 func initRowFetcher(
+	ctx context.Context,
 	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
@@ -60,6 +64,7 @@ func initRowFetcher(
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
+	mon *mon.BytesMonitor,
 	alloc *sqlbase.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStr sqlbase.ScanLockingStrength,
@@ -82,8 +87,9 @@ func initRowFetcher(
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+
 	if err := fetcher.Init(
-		reverseScan, lockStr, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
+		ctx, reverseScan, lockStr, true /* returnRangeInfo */, isCheck, alloc, mon, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
