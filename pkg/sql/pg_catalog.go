@@ -399,11 +399,11 @@ CREATE TABLE pg_catalog.pg_attrdef (
 )`,
 	virtualMany, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table *sqlbase.ImmutableTableDescriptor,
+		table sqlbase.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		colNum := 0
-		return forEachColumnInTable(table, func(column *descpb.ColumnDescriptor) error {
+		return table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
 			colNum++
 			if column.DefaultExpr == nil {
 				// pg_attrdef only expects rows for columns with default values.
@@ -426,8 +426,8 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				defSrc = tree.NewDString(ctx.String())
 			}
 			return addRow(
-				h.ColumnOid(table.ID, column.ID),                    // oid
-				tableOid(table.ID),                                  // adrelid
+				h.ColumnOid(table.GetID(), column.ID),               // oid
+				tableOid(table.GetID()),                             // adrelid
 				tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // adnum
 				defSrc, // adbin
 				defSrc, // adsrc
@@ -467,7 +467,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table *sqlbase.ImmutableTableDescriptor,
+		table sqlbase.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
@@ -509,21 +509,24 @@ CREATE TABLE pg_catalog.pg_attribute (
 		}
 
 		// Columns for table.
-		if err := forEachColumnInTable(table, func(column *descpb.ColumnDescriptor) error {
-			tableID := tableOid(table.ID)
+		if err := table.ForeachPublicColumn(func(column *descpb.ColumnDescriptor) error {
+			tableID := tableOid(table.GetID())
 			return addColumn(column, tableID, column.GetPGAttributeNum())
 		}); err != nil {
 			return err
 		}
 
 		// Columns for each index.
-		return forEachIndexInTable(table, func(index *descpb.IndexDescriptor) error {
-			return forEachColumnInIndex(table, index,
-				func(column *descpb.ColumnDescriptor) error {
-					idxID := h.IndexOid(table.ID, index.ID)
-					return addColumn(column, idxID, column.GetPGAttributeNum())
-				},
-			)
+		columnIdxMap := table.ColumnIdxMap()
+		return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+			for _, colID := range index.ColumnIDs {
+				idxID := h.IndexOid(table.GetID(), index.ID)
+				column := table.GetColumnAtIdx(columnIdxMap[colID])
+				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	})
 
@@ -686,7 +689,7 @@ CREATE TABLE pg_catalog.pg_class (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table *sqlbase.ImmutableTableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table sqlbase.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
@@ -699,26 +702,26 @@ CREATE TABLE pg_catalog.pg_class (
 		}
 		namespaceOid := h.NamespaceOid(db, scName)
 		if err := addRow(
-			tableOid(table.ID),        // oid
-			tree.NewDName(table.Name), // relname
-			namespaceOid,              // relnamespace
-			oidZero,                   // reltype (PG creates a composite type in pg_type for each table)
-			oidZero,                   // reloftype (PG creates a composite type in pg_type for each table)
-			tree.DNull,                // relowner
-			relAm,                     // relam
-			oidZero,                   // relfilenode
-			oidZero,                   // reltablespace
-			tree.DNull,                // relpages
-			tree.DNull,                // reltuples
-			zeroVal,                   // relallvisible
-			oidZero,                   // reltoastrelid
+			tableOid(table.GetID()),        // oid
+			tree.NewDName(table.GetName()), // relname
+			namespaceOid,                   // relnamespace
+			oidZero,                        // reltype (PG creates a composite type in pg_type for each table)
+			oidZero,                        // reloftype (PG creates a composite type in pg_type for each table)
+			tree.DNull,                     // relowner
+			relAm,                          // relam
+			oidZero,                        // relfilenode
+			oidZero,                        // reltablespace
+			tree.DNull,                     // relpages
+			tree.DNull,                     // reltuples
+			zeroVal,                        // relallvisible
+			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 			tree.DBoolFalse,         // relisshared
 			relPersistencePermanent, // relPersistence
 			tree.DBoolFalse,         // relistemp
 			relKind,                 // relkind
-			tree.NewDInt(tree.DInt(len(table.Columns))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.Checks))),  // relchecks
+			tree.NewDInt(tree.DInt(len(table.GetPublicColumns()))), // relnatts
+			tree.NewDInt(tree.DInt(len(table.GetChecks()))),        // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
@@ -739,30 +742,30 @@ CREATE TABLE pg_catalog.pg_class (
 		}
 
 		// Indexes.
-		return forEachIndexInTable(table, func(index *descpb.IndexDescriptor) error {
+		return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 			indexType := forwardIndexOid
 			if index.Type == descpb.IndexDescriptor_INVERTED {
 				indexType = invertedIndexOid
 			}
 			return addRow(
-				h.IndexOid(table.ID, index.ID), // oid
-				tree.NewDName(index.Name),      // relname
-				namespaceOid,                   // relnamespace
-				oidZero,                        // reltype
-				oidZero,                        // reloftype
-				tree.DNull,                     // relowner
-				indexType,                      // relam
-				oidZero,                        // relfilenode
-				oidZero,                        // reltablespace
-				tree.DNull,                     // relpages
-				tree.DNull,                     // reltuples
-				zeroVal,                        // relallvisible
-				oidZero,                        // reltoastrelid
-				tree.DBoolFalse,                // relhasindex
-				tree.DBoolFalse,                // relisshared
-				relPersistencePermanent,        // relPersistence
-				tree.DBoolFalse,                // relistemp
-				relKindIndex,                   // relkind
+				h.IndexOid(table.GetID(), index.ID), // oid
+				tree.NewDName(index.Name),           // relname
+				namespaceOid,                        // relnamespace
+				oidZero,                             // reltype
+				oidZero,                             // reloftype
+				tree.DNull,                          // relowner
+				indexType,                           // relam
+				oidZero,                             // relfilenode
+				oidZero,                             // reltablespace
+				tree.DNull,                          // relpages
+				tree.DNull,                          // reltuples
+				zeroVal,                             // relallvisible
+				oidZero,                             // reltoastrelid
+				tree.DBoolFalse,                     // relhasindex
+				tree.DBoolFalse,                     // relisshared
+				relPersistencePermanent,             // relPersistence
+				tree.DBoolFalse,                     // relistemp
+				relKindIndex,                        // relkind
 				tree.NewDInt(tree.DInt(len(index.ColumnNames))), // relnatts
 				zeroVal,         // relchecks
 				tree.DBoolFalse, // relhasoids
@@ -858,7 +861,7 @@ func populateTableConstraints(
 	h oidHasher,
 	db *sqlbase.ImmutableDatabaseDescriptor,
 	scName string,
-	table *sqlbase.ImmutableTableDescriptor,
+	table sqlbase.TableDescriptor,
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
@@ -867,7 +870,7 @@ func populateTableConstraints(
 		return err
 	}
 	namespaceOid := h.NamespaceOid(db, scName)
-	tblOid := tableOid(table.ID)
+	tblOid := tableOid(table.GetID())
 	for conName, con := range conInfo {
 		oid := tree.DNull
 		contype := tree.DNull
@@ -888,7 +891,7 @@ func populateTableConstraints(
 		case descpb.ConstraintTypePK:
 			oid = h.PrimaryKeyConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypePKey
-			conindid = h.IndexOid(table.ID, con.Index.ID)
+			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
 			var err error
 			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
@@ -936,7 +939,7 @@ func populateTableConstraints(
 		case descpb.ConstraintTypeUnique:
 			oid = h.UniqueConstraintOid(db, scName, table.TableDesc(), con.Index)
 			contype = conTypeUnique
-			conindid = h.IndexOid(table.ID, con.Index.ID)
+			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 			var err error
 			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 				return err
@@ -1008,7 +1011,7 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (sqlbase.TableDescr
 	if err != nil {
 		return nil, err
 	}
-	return table.Desc, nil
+	return table, nil
 }
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(
@@ -1039,14 +1042,14 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	virtualOpts virtualOpts,
 	includesIndexEntries bool,
 	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor,
-		scName string, table *sqlbase.ImmutableTableDescriptor, lookup simpleSchemaResolver,
+		scName string, table sqlbase.TableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
 ) virtualSchemaTable {
 	populateAll := func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor, lookup tableLookupFn) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor, lookup tableLookupFn) error {
 				return populateFromTable(ctx, p, h, db, scName, table, lookup, addRow)
 			})
 	}
@@ -1085,18 +1088,18 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
-					if (!table.Desc.IsVirtualTable() && table.Desc.ParentID != db.GetID()) ||
-						table.Desc.Dropped() ||
-						!userCanSeeTable(ctx, p, table.Desc, true /*allowAdding*/) {
+					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
+						table.Dropped() ||
+						!userCanSeeTable(ctx, p, table, true /*allowAdding*/) {
 						return false, nil
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), table.Desc.GetParentSchemaID())
+					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), table.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, scName, table.Desc, scResolver,
+					if err := populateFromTable(ctx, p, h, db, scName, table, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1309,15 +1312,15 @@ CREATE TABLE pg_catalog.pg_depend (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db *sqlbase.ImmutableDatabaseDescriptor,
 			scName string,
-			table *sqlbase.ImmutableTableDescriptor,
+			table sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			pgConstraintTableOid := tableOid(pgConstraintsDesc.ID)
 			pgClassTableOid := tableOid(pgClassDesc.ID)
 			if table.IsSequence() &&
-				!table.SequenceOpts.SequenceOwner.Equal(descpb.TableDescriptor_SequenceOpts_SequenceOwner{}) {
-				refObjID := tableOid(table.SequenceOpts.SequenceOwner.OwnerTableID)
-				refObjSubID := tree.NewDInt(tree.DInt(table.SequenceOpts.SequenceOwner.OwnerColumnID))
+				!table.GetSequenceOpts().SequenceOwner.Equal(descpb.TableDescriptor_SequenceOpts_SequenceOwner{}) {
+				refObjID := tableOid(table.GetSequenceOpts().SequenceOwner.OwnerTableID)
+				refObjSubID := tree.NewDInt(tree.DInt(table.GetSequenceOpts().SequenceOwner.OwnerColumnID))
 				objID := tableOid(table.GetID())
 				return addRow(
 					pgConstraintTableOid, // classid
@@ -1645,9 +1648,9 @@ CREATE TABLE pg_catalog.pg_index (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
-				tableOid := tableOid(table.ID)
-				return forEachIndexInTable(table, func(index *descpb.IndexDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
+				tableOid := tableOid(table.GetID())
+				return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, isPrimary bool) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.ID)
 					isReady := isMutation && isWriteOnly
@@ -1686,13 +1689,12 @@ CREATE TABLE pg_catalog.pg_index (
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
 					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
-					isPrimary := table.PrimaryIndex.ID == index.ID && table.IsPhysicalTable()
 					if err != nil {
 						return err
 					}
 					return addRow(
-						h.IndexOid(table.ID, index.ID), // indexrelid
-						tableOid,                       // indrelid
+						h.IndexOid(table.GetID(), index.ID), // indexrelid
+						tableOid,                            // indrelid
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))), // indnatts
 						tree.MakeDBool(tree.DBool(index.Unique)),        // indisunique
 						tree.MakeDBool(tree.DBool(isPrimary)),           // indisprimary
@@ -1733,21 +1735,21 @@ CREATE TABLE pg_catalog.pg_indexes (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor, tableLookup tableLookupFn) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor, tableLookup tableLookupFn) error {
 				scNameName := tree.NewDName(scName)
-				tblName := tree.NewDName(table.Name)
-				return forEachIndexInTable(table, func(index *descpb.IndexDescriptor) error {
+				tblName := tree.NewDName(table.GetName())
+				return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 					def, err := indexDefFromDescriptor(ctx, p, db, table, index, tableLookup)
 					if err != nil {
 						return err
 					}
 					return addRow(
-						h.IndexOid(table.ID, index.ID), // oid
-						scNameName,                     // schemaname
-						tblName,                        // tablename
-						tree.NewDName(index.Name),      // indexname
-						tree.DNull,                     // tablespace
-						tree.NewDString(def),           // indexdef
+						h.IndexOid(table.GetID(), index.ID), // oid
+						scNameName,                          // schemaname
+						tblName,                             // tablename
+						tree.NewDName(index.Name),           // indexname
+						tree.DNull,                          // tablespace
+						tree.NewDString(def),                // indexdef
 					)
 				})
 			})
@@ -1761,13 +1763,13 @@ func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
 	db *sqlbase.ImmutableDatabaseDescriptor,
-	table *sqlbase.ImmutableTableDescriptor,
+	table sqlbase.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	tableLookup tableLookupFn,
 ) (string, error) {
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
-		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.Name)),
+		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
 		Unique:   index.Unique,
 		Columns:  make(tree.IndexElemList, len(index.ColumnNames)),
 		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
@@ -2419,13 +2421,13 @@ CREATE TABLE pg_catalog.pg_sequence (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
-				opts := table.SequenceOpts
+				opts := table.GetSequenceOpts()
 				return addRow(
-					tableOid(table.ID),                      // seqrelid
+					tableOid(table.GetID()),                 // seqrelid
 					tree.NewDOid(tree.DInt(oid.T_int8)),     // seqtypid
 					tree.NewDInt(tree.DInt(opts.Start)),     // seqstart
 					tree.NewDInt(tree.DInt(opts.Increment)), // seqincrement
@@ -2553,15 +2555,15 @@ CREATE TABLE pg_catalog.pg_tables (
 		// empty -- listing tables across databases can yield duplicate
 		// schema/table names.
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
 				if !table.IsTable() {
 					return nil
 				}
 				return addRow(
-					tree.NewDName(scName),     // schemaname
-					tree.NewDName(table.Name), // tablename
-					tree.DNull,                // tableowner
-					tree.DNull,                // tablespace
+					tree.NewDName(scName),          // schemaname
+					tree.NewDName(table.GetName()), // tablename
+					tree.DNull,                     // tableowner
+					tree.DNull,                     // tablespace
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
 					tree.DBoolFalse, // hasrules
 					tree.DBoolFalse, // hastriggers
@@ -3058,7 +3060,7 @@ CREATE TABLE pg_catalog.pg_views (
 		// Note: pg_views is not well defined if the dbContext is empty,
 		// because it does not distinguish views in separate databases.
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*virtual schemas do not have views*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, desc *sqlbase.ImmutableTableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, desc sqlbase.TableDescriptor) error {
 				if !desc.IsView() {
 					return nil
 				}
@@ -3071,10 +3073,10 @@ CREATE TABLE pg_catalog.pg_views (
 				// TODO(a-robinson): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDName(scName),           // schemaname
-					tree.NewDName(desc.Name),        // viewname
-					tree.DNull,                      // viewowner
-					tree.NewDString(desc.ViewQuery), // definition
+					tree.NewDName(scName),                // schemaname
+					tree.NewDName(desc.GetName()),        // viewname
+					tree.DNull,                           // viewowner
+					tree.NewDString(desc.GetViewQuery()), // definition
 				)
 			})
 	},
