@@ -12,6 +12,7 @@ package opt_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -30,7 +31,7 @@ func TestMetadata(t *testing.T) {
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
-	md.AddUserDefinedType(types.MakeEnum(15210, 15418))
+	md.AddUserDefinedType(types.MakeEnum(152100, 154180))
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -56,8 +57,9 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected views")
 	}
 
-	md.AddUserDefinedType(types.MakeEnum(15150, 15251))
+	md.AddUserDefinedType(types.MakeEnum(151500, 152510))
 	if len(md.AllUserDefinedTypes()) != 1 {
+		fmt.Println(md)
 		t.Fatalf("unexpected types")
 	}
 
@@ -91,7 +93,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected view")
 	}
 
-	if ts := mdNew.AllUserDefinedTypes(); len(ts) != 1 && ts[15150].Equal(types.MakeEnum(15150, 15251)) {
+	if ts := mdNew.AllUserDefinedTypes(); len(ts) != 1 && ts[151500].Equal(types.MakeEnum(151500, 152510)) {
 		t.Fatalf("unexpected type")
 	}
 

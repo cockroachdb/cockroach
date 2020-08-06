@@ -35,6 +35,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
+    "github.com/lib/pq/oid"
 )
 
 // MaxUint is the maximum value of an uint.
@@ -8318,7 +8319,7 @@ simple_typename:
 | '@' iconst32
   {
     id := $2.int32()
-    $$.val = &tree.IDTypeReference{ID: uint32(id)}
+    $$.val = &tree.OIDTypeReference{OID: oid.Oid(id)}
   }
 | complex_type_name
   {
