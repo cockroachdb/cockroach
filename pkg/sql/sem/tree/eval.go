@@ -2953,6 +2953,12 @@ type PrivilegedAccessor interface {
 // be used from EvalContext.
 type SequenceOperators interface {
 	EvalDatabase
+
+	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
+	// provided it is part of a SERIAL sequence.
+	// Returns an empty string if the sequence name does not exist.
+	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
+
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
