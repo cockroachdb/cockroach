@@ -122,6 +122,10 @@ message RestoreDetails {
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
   repeated BackupLocalityInfo backup_locality_info = 7 [(gogoproto.nullable) = false];
   repeated sqlbase.TableDescriptor table_descs = 5;
+  // TypeDescs contains the type descriptors written as part of this restore.
+  // Note that it does not include type descriptors existing in the cluster
+  // that backed up types are remapped to.
+  repeated sqlbase.TypeDescriptor type_descs = 14;
   message Tenant {
     uint64 id = 1 [(gogoproto.customname) = "ID"];
     bytes info = 2;
