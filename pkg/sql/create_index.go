@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -209,7 +208,8 @@ func MakeIndexDescriptor(
 	if n.Predicate != nil {
 		// TODO(mgartner): remove this once partial indexes are fully supported.
 		if !params.SessionData().PartialIndexes {
-			return nil, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"session variable experimental_partial_indexes is set to false, cannot create a partial index")
 		}
 
 		idxValidator := schemaexpr.NewIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
