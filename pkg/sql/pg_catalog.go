@@ -700,7 +700,7 @@ CREATE TABLE pg_catalog.pg_class (
 			relKind = relKindSequence
 			relAm = oidZero
 		}
-		namespaceOid := h.NamespaceOid(db, scName)
+		namespaceOid := h.NamespaceOid(db.GetID(), scName)
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
@@ -796,7 +796,7 @@ CREATE TABLE pg_catalog.pg_collation (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-			namespaceOid := h.NamespaceOid(db, pgCatalogName)
+			namespaceOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 			for _, tag := range collate.Supported() {
 				collName := tag.String()
 				if err := addRow(
@@ -869,7 +869,7 @@ func populateTableConstraints(
 	if err != nil {
 		return err
 	}
-	namespaceOid := h.NamespaceOid(db, scName)
+	namespaceOid := h.NamespaceOid(db.GetID(), scName)
 	tblOid := tableOid(table.GetID())
 	for conName, con := range conInfo {
 		oid := tree.DNull
@@ -889,7 +889,7 @@ func populateTableConstraints(
 		var err error
 		switch con.Kind {
 		case descpb.ConstraintTypePK:
-			oid = h.PrimaryKeyConstraintOid(db, scName, table.TableDesc(), con.Index)
+			oid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
@@ -900,7 +900,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(table.PrimaryKeyString())
 
 		case descpb.ConstraintTypeFK:
-			oid = h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
+			oid = h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
@@ -937,7 +937,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(buf.String())
 
 		case descpb.ConstraintTypeUnique:
-			oid = h.UniqueConstraintOid(db, scName, table.TableDesc(), con.Index)
+			oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
 			contype = conTypeUnique
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 			var err error
@@ -951,7 +951,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case descpb.ConstraintTypeCheck:
-			oid = h.CheckConstraintOid(db, scName, table.TableDesc(), con.CheckConstraint)
+			oid = h.CheckConstraintOid(db.GetID(), scName, table.GetID(), con.CheckConstraint)
 			contype = conTypeCheck
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
@@ -1354,7 +1354,7 @@ CREATE TABLE pg_catalog.pg_depend (
 				} else {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db, scName, table.TableDesc(), con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -1914,10 +1914,10 @@ CREATE TABLE pg_catalog.pg_namespace (
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
 				return forEachSchemaName(ctx, p, db, func(s string, _ bool) error {
 					return addRow(
-						h.NamespaceOid(db, s), // oid
-						tree.NewDString(s),    // nspname
-						tree.DNull,            // nspowner
-						tree.DNull,            // nspacl
+						h.NamespaceOid(db.GetID(), s), // oid
+						tree.NewDString(s),            // nspname
+						tree.DNull,                    // nspowner
+						tree.DNull,                    // nspacl
 					)
 				})
 			})
@@ -1956,7 +1956,7 @@ CREATE TABLE pg_catalog.pg_operator (
 )`,
 	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		nspOid := h.NamespaceOid(db, pgCatalogName)
+		nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
 			var leftType, rightType *tree.DOid
 			switch params.Length() {
@@ -2165,7 +2165,7 @@ CREATE TABLE pg_catalog.pg_proc (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 				for _, name := range builtins.AllBuiltinNames {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
@@ -2787,7 +2787,7 @@ CREATE TABLE pg_catalog.pg_type (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
@@ -2813,7 +2813,7 @@ CREATE TABLE pg_catalog.pg_type (
 				addRow func(...tree.Datum) error) (bool, error) {
 
 				h := makeOidHasher()
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 				coid := tree.MustBeDOid(constraint)
 				ooid := oid.Oid(int(coid.DInt))
 
@@ -3271,8 +3271,8 @@ func (h oidHasher) getOid() *tree.DOid {
 	return tree.NewDOid(tree.DInt(i))
 }
 
-func (h oidHasher) writeDB(db *sqlbase.ImmutableDatabaseDescriptor) {
-	h.writeUInt32(uint32(db.GetID()))
+func (h oidHasher) writeDB(dbID descpb.ID) {
+	h.writeUInt32(uint32(dbID))
 }
 
 func (h oidHasher) writeSchema(scName string) {
@@ -3297,9 +3297,9 @@ func (h oidHasher) writeForeignKeyConstraint(fk *descpb.ForeignKeyConstraint) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(db *sqlbase.ImmutableDatabaseDescriptor, scName string) *tree.DOid {
+func (h oidHasher) NamespaceOid(dbID descpb.ID, scName string) *tree.DOid {
 	h.writeTypeTag(namespaceTypeTag)
-	h.writeDB(db)
+	h.writeDB(dbID)
 	h.writeSchema(scName)
 	return h.getOid()
 }
@@ -3319,58 +3319,46 @@ func (h oidHasher) ColumnOid(tableID descpb.ID, columnID descpb.ColumnID) *tree.
 }
 
 func (h oidHasher) CheckConstraintOid(
-	db *sqlbase.ImmutableDatabaseDescriptor,
-	scName string,
-	table *descpb.TableDescriptor,
-	check *descpb.TableDescriptor_CheckConstraint,
+	dbID descpb.ID, scName string, tableID descpb.ID, check *descpb.TableDescriptor_CheckConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
-	h.writeDB(db)
+	h.writeDB(dbID)
 	h.writeSchema(scName)
-	h.writeTable(table.ID)
+	h.writeTable(tableID)
 	h.writeCheckConstraint(check)
 	return h.getOid()
 }
 
 func (h oidHasher) PrimaryKeyConstraintOid(
-	db *sqlbase.ImmutableDatabaseDescriptor,
-	scName string,
-	table *descpb.TableDescriptor,
-	pkey *descpb.IndexDescriptor,
+	dbID descpb.ID, scName string, tableID descpb.ID, pkey *descpb.IndexDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(pKeyConstraintTypeTag)
-	h.writeDB(db)
+	h.writeDB(dbID)
 	h.writeSchema(scName)
-	h.writeTable(table.ID)
+	h.writeTable(tableID)
 	h.writeIndex(pkey.ID)
 	return h.getOid()
 }
 
 func (h oidHasher) ForeignKeyConstraintOid(
-	db *sqlbase.ImmutableDatabaseDescriptor,
-	scName string,
-	table *descpb.TableDescriptor,
-	fk *descpb.ForeignKeyConstraint,
+	dbID descpb.ID, scName string, tableID descpb.ID, fk *descpb.ForeignKeyConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
-	h.writeDB(db)
+	h.writeDB(dbID)
 	h.writeSchema(scName)
-	h.writeTable(table.ID)
+	h.writeTable(tableID)
 	h.writeForeignKeyConstraint(fk)
 	return h.getOid()
 }
 
 func (h oidHasher) UniqueConstraintOid(
-	db *sqlbase.ImmutableDatabaseDescriptor,
-	scName string,
-	table *descpb.TableDescriptor,
-	index *descpb.IndexDescriptor,
+	dbID descpb.ID, scName string, tableID descpb.ID, indexID descpb.IndexID,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
-	h.writeDB(db)
+	h.writeDB(dbID)
 	h.writeSchema(scName)
-	h.writeTable(table.ID)
-	h.writeIndex(index.ID)
+	h.writeTable(tableID)
+	h.writeIndex(indexID)
 	return h.getOid()
 }
 
