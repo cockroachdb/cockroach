@@ -421,15 +421,12 @@ message GeoMetadata {
 // that will be serialized to disk, unlike other user defined type metadata
 // that is only stored in memory once a type is resolved.
 message PersistentUserDefinedTypeMetadata {
-  // StableTypeID is the ID of the backing TypeDescriptor for this type.
-  optional uint32 stable_type_id = 1
-    [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
-
-  // StableArrayTypeID is the ID of the TypeDescriptor that defines the backs
-  // the automatically generated array type for this type. StableArrayTypeID
+  // ArrayTypeOID is the OID of the array type for this user defined type. It
   // is only set for user defined types that aren't arrays.
-  optional uint32 stable_array_type_id = 2
-    [(gogoproto.nullable) = false, (gogoproto.customname) = "StableArrayTypeID"];
+  optional uint32 array_type_oid = 2
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeOID", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
+
+  reserved 1;
 }
 
 // T is a wrapper around InternalType.
@@ -524,6 +521,6 @@ message InternalType {
     // GeoMetadata is populated for geospatial types.
     optional GeoMetadata geo_metadata = 14;
 
-    // UDTMetadata is populated for user defined types.
+    // UDTMetadata is populated for user defined types that are not arrays.
     optional PersistentUserDefinedTypeMetadata udt_metadata = 15 [(gogoproto.customname) = "UDTMetadata"];
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 const (
@@ -170,8 +171,8 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
-// ResolveTypeByID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
+// ResolveTypeByOID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
 	return nil, errors.Newf("test catalog cannot handle user defined types")
 }
 

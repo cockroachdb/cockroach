@@ -53,8 +53,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkTyp := func(desc typDesc) *sqlbase.ImmutableTypeDescriptor {
 			return sqlbase.NewImmutableTypeDescriptor(desc)
 		}
-		typeExpr := "'hello'::@15 = 'hello'::@15"
-		typeArrExpr := "'hello'::@16 = 'hello'::@16"
+		toOid := sqlbase.TypeIDToOID
+		typeExpr := "'hello'::@100015 = 'hello'::@100015"
+		typeArrExpr := "'hello'::@100016 = 'hello'::@100016"
 		descriptors = []sqlbase.Descriptor{
 			mkDB(0, "system"),
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
@@ -73,15 +74,15 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			// array of the user defined type, and that is tracked by the ArrayTypeID
 			// field on the type descriptor.
 			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 8, Name: "enum1", ArrayTypeID: 9, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 9, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(8, 9)}),
-			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 10, Name: "enum_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeEnum(8, 9)}}}),
-			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 11, Name: "enum_arr_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeArray(types.MakeEnum(8, 9))}}}),
+			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 9, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(8), toOid(9))}),
+			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 10, Name: "enum_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeEnum(toOid(8), toOid(9))}}}),
+			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 11, Name: "enum_arr_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeArray(types.MakeEnum(toOid(8), toOid(9)))}}}),
 			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 12, Name: "enum2", ArrayTypeID: 13, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 13, Name: "_enum2", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(12, 13)}),
+			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 13, Name: "_enum2", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(12), toOid(13))}),
 			// Create some user defined types that are used in table expressions.
 			mkDB(14, "udts_expr"),
 			mkTyp(descpb.TypeDescriptor{ParentID: 14, ID: 15, Name: "enum1", ArrayTypeID: 16, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 14, ID: 16, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(15, 16)}),
+			mkTyp(descpb.TypeDescriptor{ParentID: 14, ID: 16, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(15), toOid(16))}),
 			// Create a table with a default expression.
 			mkTable(tbDesc{
 				ID:       17,
