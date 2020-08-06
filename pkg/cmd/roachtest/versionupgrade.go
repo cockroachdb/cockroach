@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var v201 = roachpb.Version{Major: 20, Minor: 1}
@@ -100,6 +101,20 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], 10 /* maxOps */, 2 /* concurrency */)
+	backupStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		// This check was introduced for the system.tenants table and the associated
+		// changes to full-cluster backup to include tenants. It mostly wants to
+		// check that 20.1 (which does not have system.tenants) and 20.2 (which
+		// does have the table) can both run full cluster backups.
+		//
+		// This step can be removed once 20.2 is released.
+		if u.binaryVersion(ctx, t, 1).Major != 20 {
+			return
+		}
+		dest := fmt.Sprintf("nodelocal://0/%d", timeutil.Now().UnixNano())
+		_, err := u.conn(ctx, t, 1).ExecContext(ctx, `BACKUP TO $1`, dest)
+		require.NoError(t, err)
+	}
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
 	// then start an upgrade that is rolled back, and finally start and finalize
@@ -134,6 +149,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		// Run a quick schemachange workload in between each upgrade.
 		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
 		schemaChangeStep,
+		backupStep,
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
 		// exercises this in more detail, so here we just rely on things working
@@ -141,15 +157,18 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		binaryUpgradeStep(c.All(), predecessorVersion),
 		testFeaturesStep,
 		schemaChangeStep,
+		backupStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
 		binaryUpgradeStep(c.All(), ""),
 		allowAutoUpgradeStep(1),
 		testFeaturesStep,
 		schemaChangeStep,
+		backupStep,
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
 		schemaChangeStep,
+		backupStep,
 	)
 
 	u.run(ctx, t)
