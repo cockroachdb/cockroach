@@ -1035,7 +1035,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()

@@ -45,7 +45,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	batch := coldata.NewMemBatchWithSize(typs, 1 /* size */, coldataext.NewExtendedColumnFactory(nil /*evalCtx */))
+	batch := coldata.NewMemBatchWithCapacity(typs, 1 /* capacity */, coldataext.NewExtendedColumnFactory(nil /*evalCtx */))
 	for i := 0; i < nCols; i++ {
 		typeOffset, dataOffset, _, typ, err := encoding.DecodeValueTag(buf)
 		fmt.Println(typ)

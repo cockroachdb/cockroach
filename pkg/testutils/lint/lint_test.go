@@ -1561,11 +1561,11 @@ func TestLint(t *testing.T) {
 			"-nE",
 			// We prohibit usage of:
 			// - coldata.NewMemBatch
-			// - coldata.NewMemBatchWithSize
+			// - coldata.NewMemBatchWithCapacity
 			// - coldata.NewMemColumn
 			// - coldata.Batch.AppendCol
 			// TODO(yuzefovich): prohibit call to coldata.NewMemBatchNoCols.
-			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|Column)|\.AppendCol)\(`),
+			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithCapacity|Column)|\.AppendCol)\(`),
 			"--",
 			// TODO(yuzefovich): prohibit calling coldata.* methods from other
 			// sql/col* packages.

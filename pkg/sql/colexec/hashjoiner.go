@@ -238,7 +238,9 @@ func (hj *hashJoiner) Init() {
 		probeMode,
 	)
 
-	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)
+	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithFixedCapacity(
+		hj.spec.right.sourceTypes, 0, /* size */
+	)
 	hj.state = hjBuilding
 }
 
@@ -594,7 +596,7 @@ func (hj *hashJoiner) resetOutput() {
 		if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
 			outputTypes = append(outputTypes, hj.spec.right.sourceTypes...)
 		}
-		hj.output = hj.allocator.NewMemBatch(outputTypes)
+		hj.output = hj.allocator.NewMemBatchWithMaxCapacity(outputTypes)
 	} else {
 		hj.output.ResetInternalBatch()
 	}
