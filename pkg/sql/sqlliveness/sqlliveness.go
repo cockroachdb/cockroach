@@ -45,6 +45,7 @@ type SQLInstance interface {
 	Session(context.Context) (Session, error)
 }
 
+// Session represents a SQL instance lock with expiration.
 type Session interface {
 	ID() SessionID
 

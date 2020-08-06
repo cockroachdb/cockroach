@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Functions deprecated in release 20.2 that should be removed in release 21.1.
 package jobs
 
 import (
@@ -28,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// Functions deprecated in release 20.2 that should be removed in release 21.1.
 
 var (
 	nodeLivenessLogLimiter = log.Every(5 * time.Second)

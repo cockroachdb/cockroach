@@ -101,7 +101,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		sqlStorage := slstorage.NewStorage(
 			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor), s.ClusterSettings(),
 		)
-		sqlInstance := slinstance.NewSqlInstance(s.Stopper(), clock, sqlStorage, s.ClusterSettings())
+		sqlInstance := slinstance.NewSQLInstance(s.Stopper(), clock, sqlStorage, s.ClusterSettings())
 		r := jobs.MakeRegistry(
 			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db,
 			s.InternalExecutor().(sqlutil.InternalExecutor), idContainer, sqlInstance,

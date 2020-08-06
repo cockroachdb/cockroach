@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DefaultGCInterval specifies duration between attempts to delete extant
+// sessions that have expired.
 var DefaultGCInterval = settings.RegisterNonNegativeDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",

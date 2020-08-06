@@ -397,7 +397,7 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 		return nil, errors.Wrap(err, "error getting live session")
 	}
 	jobID := r.makeJobID()
-	start := time.Now()
+	start := timeutil.Now()
 	if txn != nil {
 		start = txn.ReadTimestamp().GoTime()
 	}
