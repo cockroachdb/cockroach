@@ -13,7 +13,7 @@
     "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
   },
   "dependencies": {
-    "@cockroachlabs/admin-ui-components": "^0.1.9",
+    "@cockroachlabs/admin-ui-components": "^0.1.10",
     "analytics-node": "^3.4.0-beta.1",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
