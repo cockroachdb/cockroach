@@ -205,7 +205,7 @@ func newJoinReader(
 
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
-		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		flowCtx.EvalCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
 	)
 	if err != nil {
@@ -232,7 +232,7 @@ func newJoinReader(
 		if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 			limit = 1
 		}
-		jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
+		jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joinreader-limited")
 		jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
 		drc := rowcontainer.NewDiskBackedIndexedRowContainer(
 			nil, /* ordering */
@@ -630,6 +630,9 @@ func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.lookedUpRows != nil {
 			jr.lookedUpRows.Close(jr.Ctx)
+		}
+		if jr.fetcher != nil {
+			jr.fetcher.Close(jr.Ctx)
 		}
 		jr.MemMonitor.Stop(jr.Ctx)
 		if jr.diskMonitor != nil {

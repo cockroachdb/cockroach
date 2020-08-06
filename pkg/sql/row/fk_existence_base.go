@@ -11,6 +11,7 @@
 package row
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -117,6 +118,7 @@ type fkExistenceCheckBaseHelper struct {
 //   TODO(knz): this should become homogeneous across the 3 packages
 //   sql, sqlbase, row. The proliferation is annoying.
 func makeFkExistenceCheckBaseHelper(
+	ctx context.Context,
 	txn *kv.Txn,
 	otherTables FkTableMetadata,
 	ref *sqlbase.ForeignKeyConstraint,
@@ -147,11 +149,13 @@ func makeFkExistenceCheckBaseHelper(
 	}
 	rf := &Fetcher{}
 	if err := rf.Init(
+		ctx,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		alloc,
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return ret, err

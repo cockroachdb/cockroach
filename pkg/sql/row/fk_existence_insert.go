@@ -75,7 +75,8 @@ func makeFkExistenceCheckHelperForInsert(
 			return h, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find suitable search index for fk %q", ref.Name)
 		}
-		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc, CheckInserts)
+		fk, err := makeFkExistenceCheckBaseHelper(ctx, txn, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc,
+			CheckInserts)
 		if err == errSkipUnusedFK {
 			continue
 		}

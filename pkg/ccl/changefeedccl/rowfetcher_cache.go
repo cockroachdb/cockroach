@@ -103,11 +103,13 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 
 	var rf row.Fetcher
 	if err := rf.Init(
+		context.TODO(),
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&c.a,
+		nil, /* memMonitor */
 		row.FetcherTableArgs{
 			Spans:            tableDesc.AllIndexSpans(),
 			Desc:             tableDesc,

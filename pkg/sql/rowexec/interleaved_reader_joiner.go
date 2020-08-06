@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -264,9 +265,15 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	return newState, unmatchedAncestor, nil
 }
 
+func (irj *interleavedReaderJoiner) close() {
+	if irj.InternalClose() {
+		irj.fetcher.Close(irj.Ctx)
+	}
+}
+
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	irj.InternalClose()
+	irj.close()
 }
 
 var _ execinfra.Processor = &interleavedReaderJoiner{}
@@ -369,12 +376,6 @@ func newInterleavedReaderJoiner(
 		descendantJoinSide: descendantJoinSide,
 	}
 
-	if err := irj.initRowFetcher(
-		spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
-	); err != nil {
-		return nil, err
-	}
-
 	irj.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	// TODO(richardwu): Generalize this to 2+ tables.
@@ -399,10 +400,17 @@ func newInterleavedReaderJoiner(
 		return nil, err
 	}
 
+	if err := irj.initRowFetcher(
+		flowCtx.EvalCtx.Ctx(), spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
+	); err != nil {
+		return nil, err
+	}
+
 	return irj, nil
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
+	ctx context.Context,
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
 	tableInfos []tableInfo,
 	reverseScan bool,
@@ -429,12 +437,18 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		}
 	}
 
+	var memMon *mon.BytesMonitor
+	if accountForKVBytes.Get(&irj.EvalCtx.Settings.SV) {
+		memMon = irj.MemMonitor
+	}
 	return irj.fetcher.Init(
+		ctx,
 		reverseScan,
 		lockStr,
 		true, /* returnRangeInfo */
 		true, /* isCheck */
 		alloc,
+		memMon,
 		args...,
 	)
 }
@@ -443,7 +457,7 @@ func (irj *interleavedReaderJoiner) generateTrailingMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
-	irj.InternalClose()
+	irj.close()
 	return trailingMeta
 }
 

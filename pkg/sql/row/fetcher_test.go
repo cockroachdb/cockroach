@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,18 +69,20 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 }
 
 func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	entries []initFetcherArgs, reverseScan bool, alloc *sqlbase.DatumAlloc, memMon *mon.BytesMonitor,
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
 	fetcherArgs := makeFetcherArgs(entries)
 
 	if err := fetcher.Init(
+		context.Background(),
 		reverseScan,
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		alloc,
+		memMon,
 		fetcherArgs...,
 	); err != nil {
 		return nil, err
@@ -158,7 +164,7 @@ func TestNextRowSingle(t *testing.T) {
 				},
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /* memMon */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -278,7 +284,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				},
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -340,6 +346,71 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	}
 }
 
+func TestRowFetcherMemoryLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	oneMegString := make([]byte, 1<<20)
+	for i := range oneMegString {
+		oneMegString[i] = '!'
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tableName := "wide_table"
+	sqlutils.CreateTable(
+		t, sqlDB, tableName,
+		"k INT PRIMARY KEY, v STRING",
+		10,
+		func(i int) []tree.Datum {
+			return []tree.Datum{
+				tree.NewDInt(tree.DInt(i)),
+				tree.NewDString(string(oneMegString)),
+			}
+		})
+
+	tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, 1)
+
+	args := []initFetcherArgs{
+		{
+			tableDesc:       tableDesc,
+			indexIdx:        0,
+			valNeededForCol: valNeededForCol,
+		},
+	}
+
+	alloc := &sqlbase.DatumAlloc{}
+
+	settings := cluster.MakeTestingClusterSettings()
+
+	// Give a 1 megabyte limit to the memory monitor, so that
+	// we can test whether scans of wide tables are prevented if
+	// we have insufficient memory to do them.
+	memMon := mon.MakeMonitor("test", mon.MemoryResource, nil, nil, -1, 1000, settings)
+	memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1<<20))
+	defer memMon.Stop(ctx)
+	rf, err := initFetcher(args, false /*reverseScan*/, alloc, &memMon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rf.Close(ctx)
+
+	err = rf.StartScan(
+		context.Background(),
+		kv.NewTxn(ctx, kvDB, 0),
+		roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
+		false, /*limitBatches*/
+		0,     /*limitHint*/
+		false, /*traceKV*/
+	)
+	assert.Error(t, err)
+	assert.Equal(t, pgerror.GetPGCode(err), pgcode.OutOfMemory)
+}
+
 // Regression test for #29374. Ensure that RowFetcher can handle multi-span
 // fetches where individual batches end in the middle of a multi-column family
 // row with not-null columns.
@@ -390,7 +461,7 @@ INDEX(c)
 		},
 	}
 
-	rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+	rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -570,7 +641,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				},
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -931,7 +1002,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			lookupSpans, _ = roachpb.MergeSpans(lookupSpans)
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1038,12 +1109,12 @@ func TestRowFetcherReset(t *testing.T) {
 		},
 	}
 	da := sqlbase.DatumAlloc{}
-	fetcher, err := initFetcher(args, false, &da)
+	fetcher, err := initFetcher(args, false, &da, nil /*memMon*/)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	resetFetcher, err := initFetcher(args, false, &da)
+	resetFetcher, err := initFetcher(args, false /*reverseScan*/, &da, nil /*memMon*/)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1058,7 +1129,8 @@ func TestRowFetcherReset(t *testing.T) {
 
 	fetcherArgs := makeFetcherArgs(args)
 	if err := resetFetcher.Init(
-		false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, fetcherArgs...,
+		ctx, false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, nil, /* memMonitor */
+		fetcherArgs...,
 	); err != nil {
 		t.Fatal(err)
 	}

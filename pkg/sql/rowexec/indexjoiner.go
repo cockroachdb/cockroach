@@ -90,7 +90,7 @@ func newIndexJoiner(
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				ij.InternalClose()
+				ij.close()
 				return ij.generateMeta(ctx)
 			},
 		},
@@ -99,6 +99,7 @@ func newIndexJoiner(
 	}
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
+		flowCtx.EvalCtx,
 		&fetcher,
 		&ij.desc,
 		0, /* primary index */
@@ -196,7 +197,7 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 // ConsumerClosed is part of the RowSource interface.
 func (ij *indexJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ij.InternalClose()
+	ij.close()
 }
 
 func (ij *indexJoiner) generateSpans(row sqlbase.EncDatumRow) (roachpb.Spans, error) {
@@ -242,6 +243,12 @@ func (ij *indexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
 	}
 	return nil
+}
+
+func (ij *indexJoiner) close() {
+	if ij.InternalClose() {
+		ij.fetcher.Close(ij.Ctx)
+	}
 }
 
 // DrainMeta is part of the MetadataSource interface.

@@ -83,7 +83,7 @@ func makeFkExistenceCheckHelperForDelete(
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
 				err, "failed to find a suitable index on table %d for deletion", ref.ReferencedTableID)
 		}
-		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
+		fk, err := makeFkExistenceCheckBaseHelper(ctx, txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
 			CheckDeletes)
 		if err == errSkipUnusedFK {
 			continue

@@ -165,6 +165,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -173,6 +174,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor for the slow case of truncate.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err
@@ -285,6 +288,7 @@ func (td *tableDeleter) deleteIndexScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		ctx,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -293,6 +297,8 @@ func (td *tableDeleter) deleteIndexScan(
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err
