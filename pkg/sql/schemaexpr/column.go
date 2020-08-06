@@ -66,7 +66,7 @@ func DequalifyColumnRefs(
 func FormatColumnForDisplay(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	tbl *sqlbase.ImmutableTableDescriptor,
+	tbl sqlbase.TableDescriptor,
 	desc *descpb.ColumnDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)

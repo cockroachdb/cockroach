@@ -484,19 +484,16 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 //  of having its own logic for lookups.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
-) (catalog.TableEntry, error) {
+) (*sqlbase.ImmutableTableDescriptor, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
-		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
+		return entry.desc, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Descriptors().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if catalog.HasAddingTableError(err) {
-			return catalog.TableEntry{IsAdding: true}, nil
-		}
-		return catalog.TableEntry{}, err
+		return nil, err
 	}
-	return catalog.TableEntry{Desc: table}, nil
+	return table, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
