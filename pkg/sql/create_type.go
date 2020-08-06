@@ -79,6 +79,14 @@ func resolveNewTypeName(
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (typeKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+	// Check we are not creating a type which conflicts with an alias available
+	// as a built-in type in CockroachDB but an extension type on the public
+	// schema for PostgreSQL.
+	if name.Schema() == tree.PublicSchema {
+		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
+			return nil, 0, sqlbase.NewTypeAlreadyExistsError(name.String())
+		}
+	}
 	// Get the ID of the schema the type is being created in.
 	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.ID, name.Schema())
 	if err != nil {
