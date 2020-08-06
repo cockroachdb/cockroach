@@ -857,6 +857,17 @@ COPY t (a, b, c) FROM stdin;
 			},
 		},
 		{
+			name: "case sensitive table names",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE t ("sPoNgE" int8);
+				INSERT INTO t ("sPoNgE") VALUES (1337);
+			`,
+			query: map[string][][]string{
+				`SELECT * from t`: {{"1337"}},
+			},
+		},
+		{
 			name: "sequence",
 			typ:  "PGDUMP",
 			data: `
