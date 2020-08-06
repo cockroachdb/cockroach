@@ -328,7 +328,7 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.machine.batch = allocator.NewMemBatch(typs)
+	rf.machine.batch = allocator.NewMemBatchWithMaxCapacity(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
 	// If the fetcher is requested to produce a timestamp column, pull out the
 	// column as a decimal and save it.

@@ -196,7 +196,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	}
 
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatchWithSize(typs, 1 /* size */)
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, 1 /* size */)
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported

@@ -712,7 +712,7 @@ func (s *opTestInput) Init() {
 		}
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
-	s.batch = testAllocator.NewMemBatch(s.typs)
+	s.batch = testAllocator.NewMemBatchWithMaxCapacity(s.typs)
 
 	s.selection = make([]int, coldata.BatchSize())
 	for i := range s.selection {
@@ -884,7 +884,7 @@ func (s *opFixedSelTestInput) Init() {
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 
-	s.batch = testAllocator.NewMemBatch(s.typs)
+	s.batch = testAllocator.NewMemBatchWithMaxCapacity(s.typs)
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
@@ -1306,7 +1306,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batchLen := 10
 	if coldata.BatchSize() < batchLen {
 		batchLen = coldata.BatchSize()
@@ -1331,7 +1331,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	rng, _ := randutil.NewPseudoRand()
 	batchSize := 10
 	if batchSize > coldata.BatchSize() {
@@ -1406,7 +1406,7 @@ func newChunkingBatchSource(typs []*types.T, cols []coldata.Vec, len int) *chunk
 }
 
 func (c *chunkingBatchSource) Init() {
-	c.batch = testAllocator.NewMemBatch(c.typs)
+	c.batch = testAllocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
 		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())

@@ -22,7 +22,7 @@ import (
 func CopyBatch(
 	original coldata.Batch, typs []*types.T, factory coldata.ColumnFactory,
 ) coldata.Batch {
-	b := coldata.NewMemBatchWithSize(typs, original.Length(), factory)
+	b := coldata.NewMemBatchWithCapacity(typs, original.Length(), factory)
 	b.SetLength(original.Length())
 	for colIdx, col := range original.ColVecs() {
 		b.ColVec(colIdx).Copy(coldata.CopySliceArgs{

@@ -131,8 +131,7 @@ type Vec interface {
 
 	// Capacity returns the capacity of the Golang's slice that is underlying
 	// this Vec. Note that if there is no "slice" (like in case of flat bytes),
-	// the "capacity" of such object is undefined, so is the behavior of this
-	// method.
+	// then "capacity" of such object is equal to the number of elements.
 	Capacity() int
 }
 
@@ -149,7 +148,7 @@ type memColumn struct {
 
 // ColumnFactory is an interface that can construct columns for Batches.
 type ColumnFactory interface {
-	MakeColumn(t *types.T, n int) Column
+	MakeColumn(t *types.T, length int) Column
 }
 
 type defaultColumnFactory struct{}
@@ -158,31 +157,31 @@ type defaultColumnFactory struct{}
 // explicitly supported by the vectorized engine (i.e. not datum-backed).
 var StandardColumnFactory ColumnFactory = &defaultColumnFactory{}
 
-func (cf *defaultColumnFactory) MakeColumn(t *types.T, n int) Column {
+func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
-		return make(Bools, n)
+		return make(Bools, length)
 	case types.BytesFamily:
-		return NewBytes(n)
+		return NewBytes(length)
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return make(Int16s, n)
+			return make(Int16s, length)
 		case 32:
-			return make(Int32s, n)
+			return make(Int32s, length)
 		case 0, 64:
-			return make(Int64s, n)
+			return make(Int64s, length)
 		default:
 			panic(fmt.Sprintf("unexpected integer width: %d", t.Width()))
 		}
 	case types.FloatFamily:
-		return make(Float64s, n)
+		return make(Float64s, length)
 	case types.DecimalFamily:
-		return make(Decimals, n)
+		return make(Decimals, length)
 	case types.TimestampTZFamily:
-		return make(Times, n)
+		return make(Times, length)
 	case types.IntervalFamily:
-		return make(Durations, n)
+		return make(Durations, length)
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
@@ -190,12 +189,12 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, n int) Column {
 
 // NewMemColumn returns a new memColumn, initialized with a length using the
 // given column factory.
-func NewMemColumn(t *types.T, n int, factory ColumnFactory) Vec {
+func NewMemColumn(t *types.T, length int, factory ColumnFactory) Vec {
 	return &memColumn{
 		t:                   t,
 		canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()),
-		col:                 factory.MakeColumn(t, n),
-		nulls:               NewNulls(n),
+		col:                 factory.MakeColumn(t, length),
+		nulls:               NewNulls(length),
 	}
 }
 
@@ -340,7 +339,7 @@ func (m *memColumn) Capacity() int {
 	case types.BoolFamily:
 		return cap(m.col.(Bools))
 	case types.BytesFamily:
-		panic("Capacity should not be called on Vec of Bytes type")
+		return m.Bytes().Len()
 	case types.IntFamily:
 		switch m.t.Width() {
 		case 16:

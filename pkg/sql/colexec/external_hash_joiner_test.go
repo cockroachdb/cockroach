@@ -135,7 +135,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 		},
 	}
 	sourceTypes := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	// We don't need to set the data since zero values in the columns work.
 	batch.SetLength(coldata.BatchSize())
 	nBatches := 2
@@ -205,7 +205,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
 		for i := 0; i < coldata.BatchSize(); i++ {

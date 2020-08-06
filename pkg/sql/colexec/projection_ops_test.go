@@ -194,7 +194,7 @@ func TestRandomComparisons(t *testing.T) {
 		if typ.Family() == types.UuidFamily {
 			bytesFixedLength = 16
 		}
-		b := testAllocator.NewMemBatchWithSize(typs, numTuples)
+		b := testAllocator.NewMemBatchWithFixedCapacity(typs, numTuples)
 		lVec := b.ColVec(0)
 		rVec := b.ColVec(1)
 		ret := b.ColVec(2)
@@ -301,7 +301,7 @@ func benchmarkProjOp(
 	if rightConst {
 		typs = typs[:1]
 	}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	nullProb := 0.0
 	if hasNulls {
 		nullProb = nullProbability

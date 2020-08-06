@@ -81,7 +81,7 @@ func (c *Columnarizer) Init() {
 	// internal objects several times if Init method is called more than once, so
 	// we have this check in place.
 	if c.initStatus == OperatorNotInitialized {
-		c.batch = c.allocator.NewMemBatch(c.typs)
+		c.batch = c.allocator.NewMemBatchWithMaxCapacity(c.typs)
 		c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
 		for i := range c.buffered {
 			c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
