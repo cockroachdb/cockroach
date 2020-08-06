@@ -55,7 +55,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
-	actual := testAllocator.NewMemBatchWithSize(typs, b.Length())
+	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
 	require.NoError(t, c.ArrowToBatch(arrowData, actual))
 
 	coldata.AssertEquivalentBatches(t, expected, actual)
@@ -85,7 +85,7 @@ func roundTripBatch(
 	if err := r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		return nil, err
 	}
-	actual := testAllocator.NewMemBatchWithSize(typs, b.Length())
+	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
 	if err := c.ArrowToBatch(arrowDataOut, actual); err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			data, err := c.BatchToArrow(batch)
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			result := testAllocator.NewMemBatch([]*types.T{typ})
+			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {
