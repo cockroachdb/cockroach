@@ -17,30 +17,22 @@ import (
 )
 
 func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *concatHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
 	a.curAgg = zeroBytesValue
-	a.nulls.UnsetNulls()
 }
 
-func (a *concatHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *concatHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *concatHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
-	inputLen := batch.Length()
-	vec, sel := batch.ColVec(int(inputIdxs[0])), batch.Selection()
+func (a *concatHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -99,23 +91,18 @@ func (a *concatHashAgg) Compute(batch coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *concatHashAgg) Flush() {
+func (a *concatHashAgg) Flush(outputIdx int) {
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec}, func() {
 			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
+				a.nulls.SetNull(outputIdx)
 			} else {
-				a.col.Set(a.curIdx, a.curAgg)
+				a.col.Set(outputIdx, a.curAgg)
 			}
 			a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
-			// release reference to curAgg eagerly
+			// Release the reference to curAgg eagerly.
 			a.curAgg = nil
-			a.curIdx++
 		})
-}
-
-func (a *concatHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 func (a *concatHashAgg) aggValMemoryUsage() int64 {
@@ -126,11 +113,9 @@ func (a *concatHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(sizeOfConcatHashAgg * a.allocSize)
 		a.aggFuncs = make([]concatHashAgg, a.allocSize)
-		for i := range a.aggFuncs {
-			a.aggFuncs[i].allocator = a.allocator
-		}
 	}
 	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
 }
@@ -150,19 +135,14 @@ type concatHashAggAlloc struct {
 }
 
 type concatHashAgg struct {
-	// allocator is the allocator used to create this aggregateFunc
-	// memory usage of output vector and curAgg varies during aggregation,
-	// we need the allocator to monitor this change.
+	hashAggregateFuncBase
 	allocator *colmem.Allocator
-	curIdx    int
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool

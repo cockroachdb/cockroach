@@ -72,17 +72,16 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 
 type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	groups []bool
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
 	// {{end}}
 	scratch struct {
-		curIdx int
 		// curAgg holds the running total, so we can index into the slice once per
 		// group, instead of on each iteration.
 		curAgg _RET_GOTYPE
 		// vec points to the output vector we are updating.
 		vec []_RET_GOTYPE
-		// nulls points to the output null vector that we are updating.
-		nulls *coldata.Nulls
 		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 		// for the group that is currently being aggregated.
 		foundNonNullForCurrentGroup bool
@@ -102,30 +101,28 @@ var _ aggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
 
 const sizeOfSum_SUMKIND_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(sum_SUMKIND_TYPE_AGGKINDAgg{}))
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, v coldata.Vec) {
+func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
-	a.scratch.vec = v._RET_TYPE()
-	a.scratch.nulls = v.Nulls()
+	a.scratch.vec = vec._RET_TYPE()
 	a.Reset()
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
-	a.scratch.curIdx = 0
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.scratch.foundNonNullForCurrentGroup = false
-	a.scratch.nulls.UnsetNulls()
 }
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) CurrentOutputIndex() int {
-	return a.scratch.curIdx
-}
-
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) SetOutputIndex(idx int) {
-	a.scratch.curIdx = idx
-}
-
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -137,8 +134,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint3
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	if nulls.MaybeHasNulls() {
 		if sel != nil {
@@ -167,20 +163,21 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint3
 	}
 }
 
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush() {
+func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	// {{end}}
 	if !a.scratch.foundNonNullForCurrentGroup {
-		a.scratch.nulls.SetNull(a.scratch.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+		a.scratch.vec[outputIdx] = a.scratch.curAgg
 	}
-	a.scratch.curIdx++
-}
-
-func (a *sum_SUMKIND_TYPE_AGGKINDAgg) HandleEmptyInputScalar() {
-	a.scratch.nulls.SetNull(0)
 }
 
 type sum_SUMKIND_TYPE_AGGKINDAggAlloc struct {
@@ -215,11 +212,11 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
 		if !a.scratch.foundNonNullForCurrentGroup {
-			a.scratch.nulls.SetNull(a.scratch.curIdx)
+			a.nulls.SetNull(a.curIdx)
 		} else {
-			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+			a.scratch.vec[a.curIdx] = a.scratch.curAgg
 		}
-		a.scratch.curIdx++
+		a.curIdx++
 		// {{with .Global}}
 		a.scratch.curAgg = zero_RET_TYPEValue
 		// {{end}}

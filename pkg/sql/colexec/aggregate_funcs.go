@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -69,20 +70,80 @@ type aggregateFunc interface {
 	// Compute computes the aggregation on the input batch.
 	// Note: the implementations should be careful to account for their memory
 	// usage.
-	Compute(batch coldata.Batch, inputIdxs []uint32)
+	Compute(vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int)
 
 	// Flush flushes the result of aggregation on the last group. It should be
-	// called once after input batches have been Compute()'d.
+	// called once after input batches have been Compute()'d. outputIdx is only
+	// used in case of hash aggregation - for ordered aggregation the aggregate
+	// function itself should maintain the output index to write to.
 	// Note: the implementations are free to not account for the memory used
 	// for the result of aggregation of the last group.
-	Flush()
+	Flush(outputIdx int)
 
 	// HandleEmptyInputScalar populates the output for a case of an empty input
 	// when the aggregate function is in scalar context. The output must always
 	// be a single value (either null or zero, depending on the function).
-	// TODO(yuzefovich): we can pull scratch field of aggregates into a shared
-	// aggregator and implement this method once on the shared base.
 	HandleEmptyInputScalar()
+}
+
+type orderedAggregateFuncBase struct {
+	groups []bool
+	// curIdx tracks the current output index of this function.
+	curIdx int
+	// nulls is the nulls vector of the output vector of this function.
+	nulls *coldata.Nulls
+}
+
+func (o *orderedAggregateFuncBase) Init(groups []bool, vec coldata.Vec) {
+	o.groups = groups
+	o.nulls = vec.Nulls()
+}
+
+func (o *orderedAggregateFuncBase) Reset() {
+	o.curIdx = 0
+	o.nulls.UnsetNulls()
+}
+
+func (o *orderedAggregateFuncBase) CurrentOutputIndex() int {
+	return o.curIdx
+}
+
+func (o *orderedAggregateFuncBase) SetOutputIndex(idx int) {
+	o.curIdx = idx
+}
+
+func (o *orderedAggregateFuncBase) HandleEmptyInputScalar() {
+	// Most aggregate functions return a single NULL value on an empty input
+	// in the scalar context (the exceptions are COUNT aggregates which need
+	// to overwrite this method).
+	o.nulls.SetNull(0)
+}
+
+type hashAggregateFuncBase struct {
+	// nulls is the nulls vector of the output vector of this function.
+	nulls *coldata.Nulls
+}
+
+func (h *hashAggregateFuncBase) Init(_ []bool, vec coldata.Vec) {
+	h.nulls = vec.Nulls()
+}
+
+func (h *hashAggregateFuncBase) Reset() {
+	h.nulls.UnsetNulls()
+}
+
+func (h *hashAggregateFuncBase) CurrentOutputIndex() int {
+	colexecerror.InternalError("CurrentOutputIndex called with hash aggregation")
+	// This code is unreachable, but the compiler cannot infer that.
+	return 0
+}
+
+func (h *hashAggregateFuncBase) SetOutputIndex(int) {
+	colexecerror.InternalError("SetOutputIndex called with hash aggregation")
+}
+
+func (h *hashAggregateFuncBase) HandleEmptyInputScalar() {
+	colexecerror.InternalError("HandleEmptyInputScalar called with hash aggregation")
 }
 
 // aggregateFuncAlloc is an aggregate function allocator that pools allocations

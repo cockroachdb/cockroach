@@ -92,9 +92,8 @@ func newMaxOrderedAggAlloc(
 }
 
 type minBoolOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -103,8 +102,6 @@ type minBoolOrderedAgg struct {
 	col coldata.Bools
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -114,31 +111,22 @@ var _ aggregateFunc = &minBoolOrderedAgg{}
 
 const sizeOfminBoolOrderedAgg = int64(unsafe.Sizeof(minBoolOrderedAgg{}))
 
-func (a *minBoolOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Bool()
-	a.nulls = v.Nulls()
+func (a *minBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Bool()
 	a.Reset()
 }
 
 func (a *minBoolOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minBoolOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minBoolOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minBoolOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -340,20 +328,22 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minBoolOrderedAgg) Flush() {
+func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minBoolOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minBoolOrderedAggAlloc struct {
@@ -375,9 +365,8 @@ func (a *minBoolOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minBytesOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -386,8 +375,6 @@ type minBytesOrderedAgg struct {
 	col *coldata.Bytes
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -397,31 +384,22 @@ var _ aggregateFunc = &minBytesOrderedAgg{}
 
 const sizeOfminBytesOrderedAgg = int64(unsafe.Sizeof(minBytesOrderedAgg{}))
 
-func (a *minBytesOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Bytes()
-	a.nulls = v.Nulls()
+func (a *minBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Bytes()
 	a.Reset()
 }
 
 func (a *minBytesOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minBytesOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minBytesOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minBytesOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -595,20 +573,22 @@ func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minBytesOrderedAgg) Flush() {
+func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minBytesOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type minBytesOrderedAggAlloc struct {
@@ -630,9 +610,8 @@ func (a *minBytesOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minDecimalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -641,8 +620,6 @@ type minDecimalOrderedAgg struct {
 	col coldata.Decimals
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -652,31 +629,22 @@ var _ aggregateFunc = &minDecimalOrderedAgg{}
 
 const sizeOfminDecimalOrderedAgg = int64(unsafe.Sizeof(minDecimalOrderedAgg{}))
 
-func (a *minDecimalOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Decimal()
-	a.nulls = v.Nulls()
+func (a *minDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Decimal()
 	a.Reset()
 }
 
 func (a *minDecimalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minDecimalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minDecimalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minDecimalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -846,20 +814,22 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minDecimalOrderedAgg) Flush() {
+func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minDecimalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx].Set(&a.curAgg)
+	}
 }
 
 type minDecimalOrderedAggAlloc struct {
@@ -881,9 +851,8 @@ func (a *minDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minInt16OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -892,8 +861,6 @@ type minInt16OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -903,31 +870,22 @@ var _ aggregateFunc = &minInt16OrderedAgg{}
 
 const sizeOfminInt16OrderedAgg = int64(unsafe.Sizeof(minInt16OrderedAgg{}))
 
-func (a *minInt16OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *minInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *minInt16OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minInt16OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minInt16OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minInt16OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -1141,20 +1099,22 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minInt16OrderedAgg) Flush() {
+func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minInt16OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minInt16OrderedAggAlloc struct {
@@ -1176,9 +1136,8 @@ func (a *minInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minInt32OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -1187,8 +1146,6 @@ type minInt32OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1198,31 +1155,22 @@ var _ aggregateFunc = &minInt32OrderedAgg{}
 
 const sizeOfminInt32OrderedAgg = int64(unsafe.Sizeof(minInt32OrderedAgg{}))
 
-func (a *minInt32OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *minInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *minInt32OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minInt32OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minInt32OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minInt32OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -1436,20 +1384,22 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minInt32OrderedAgg) Flush() {
+func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minInt32OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minInt32OrderedAggAlloc struct {
@@ -1471,9 +1421,8 @@ func (a *minInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minInt64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -1482,8 +1431,6 @@ type minInt64OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1493,31 +1440,22 @@ var _ aggregateFunc = &minInt64OrderedAgg{}
 
 const sizeOfminInt64OrderedAgg = int64(unsafe.Sizeof(minInt64OrderedAgg{}))
 
-func (a *minInt64OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *minInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *minInt64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minInt64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minInt64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minInt64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -1731,20 +1669,22 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minInt64OrderedAgg) Flush() {
+func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minInt64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minInt64OrderedAggAlloc struct {
@@ -1766,9 +1706,8 @@ func (a *minInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minFloat64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -1777,8 +1716,6 @@ type minFloat64OrderedAgg struct {
 	col coldata.Float64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -1788,31 +1725,22 @@ var _ aggregateFunc = &minFloat64OrderedAgg{}
 
 const sizeOfminFloat64OrderedAgg = int64(unsafe.Sizeof(minFloat64OrderedAgg{}))
 
-func (a *minFloat64OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Float64()
-	a.nulls = v.Nulls()
+func (a *minFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Float64()
 	a.Reset()
 }
 
 func (a *minFloat64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minFloat64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minFloat64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minFloat64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -2058,20 +1986,22 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minFloat64OrderedAgg) Flush() {
+func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minFloat64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minFloat64OrderedAggAlloc struct {
@@ -2093,9 +2023,8 @@ func (a *minFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minTimestampOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -2104,8 +2033,6 @@ type minTimestampOrderedAgg struct {
 	col coldata.Times
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2115,31 +2042,22 @@ var _ aggregateFunc = &minTimestampOrderedAgg{}
 
 const sizeOfminTimestampOrderedAgg = int64(unsafe.Sizeof(minTimestampOrderedAgg{}))
 
-func (a *minTimestampOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Timestamp()
-	a.nulls = v.Nulls()
+func (a *minTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Timestamp()
 	a.Reset()
 }
 
 func (a *minTimestampOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minTimestampOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minTimestampOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minTimestampOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -2337,20 +2255,22 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minTimestampOrderedAgg) Flush() {
+func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minTimestampOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minTimestampOrderedAggAlloc struct {
@@ -2372,9 +2292,8 @@ func (a *minTimestampOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minIntervalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -2383,8 +2302,6 @@ type minIntervalOrderedAgg struct {
 	col coldata.Durations
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2394,31 +2311,22 @@ var _ aggregateFunc = &minIntervalOrderedAgg{}
 
 const sizeOfminIntervalOrderedAgg = int64(unsafe.Sizeof(minIntervalOrderedAgg{}))
 
-func (a *minIntervalOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Interval()
-	a.nulls = v.Nulls()
+func (a *minIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Interval()
 	a.Reset()
 }
 
 func (a *minIntervalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minIntervalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minIntervalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minIntervalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -2588,20 +2496,22 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minIntervalOrderedAgg) Flush() {
+func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minIntervalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type minIntervalOrderedAggAlloc struct {
@@ -2623,9 +2533,8 @@ func (a *minIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type minDatumOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -2634,8 +2543,6 @@ type minDatumOrderedAgg struct {
 	col coldata.DatumVec
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2645,31 +2552,22 @@ var _ aggregateFunc = &minDatumOrderedAgg{}
 
 const sizeOfminDatumOrderedAgg = int64(unsafe.Sizeof(minDatumOrderedAgg{}))
 
-func (a *minDatumOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Datum()
-	a.nulls = v.Nulls()
+func (a *minDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Datum()
 	a.Reset()
 }
 
 func (a *minDatumOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *minDatumOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *minDatumOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *minDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *minDatumOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -2847,20 +2745,22 @@ func (a *minDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *minDatumOrderedAgg) Flush() {
+func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *minDatumOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type minDatumOrderedAggAlloc struct {
@@ -2882,9 +2782,8 @@ func (a *minDatumOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxBoolOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -2893,8 +2792,6 @@ type maxBoolOrderedAgg struct {
 	col coldata.Bools
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -2904,31 +2801,22 @@ var _ aggregateFunc = &maxBoolOrderedAgg{}
 
 const sizeOfmaxBoolOrderedAgg = int64(unsafe.Sizeof(maxBoolOrderedAgg{}))
 
-func (a *maxBoolOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Bool()
-	a.nulls = v.Nulls()
+func (a *maxBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Bool()
 	a.Reset()
 }
 
 func (a *maxBoolOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxBoolOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxBoolOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxBoolOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -3130,20 +3018,22 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxBoolOrderedAgg) Flush() {
+func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxBoolOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxBoolOrderedAggAlloc struct {
@@ -3165,9 +3055,8 @@ func (a *maxBoolOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxBytesOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -3176,8 +3065,6 @@ type maxBytesOrderedAgg struct {
 	col *coldata.Bytes
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3187,31 +3074,22 @@ var _ aggregateFunc = &maxBytesOrderedAgg{}
 
 const sizeOfmaxBytesOrderedAgg = int64(unsafe.Sizeof(maxBytesOrderedAgg{}))
 
-func (a *maxBytesOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Bytes()
-	a.nulls = v.Nulls()
+func (a *maxBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Bytes()
 	a.Reset()
 }
 
 func (a *maxBytesOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxBytesOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxBytesOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxBytesOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -3385,20 +3263,22 @@ func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxBytesOrderedAgg) Flush() {
+func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxBytesOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type maxBytesOrderedAggAlloc struct {
@@ -3420,9 +3300,8 @@ func (a *maxBytesOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxDecimalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -3431,8 +3310,6 @@ type maxDecimalOrderedAgg struct {
 	col coldata.Decimals
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3442,31 +3319,22 @@ var _ aggregateFunc = &maxDecimalOrderedAgg{}
 
 const sizeOfmaxDecimalOrderedAgg = int64(unsafe.Sizeof(maxDecimalOrderedAgg{}))
 
-func (a *maxDecimalOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Decimal()
-	a.nulls = v.Nulls()
+func (a *maxDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Decimal()
 	a.Reset()
 }
 
 func (a *maxDecimalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxDecimalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxDecimalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxDecimalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -3636,20 +3504,22 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxDecimalOrderedAgg) Flush() {
+func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxDecimalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx].Set(&a.curAgg)
+	}
 }
 
 type maxDecimalOrderedAggAlloc struct {
@@ -3671,9 +3541,8 @@ func (a *maxDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxInt16OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -3682,8 +3551,6 @@ type maxInt16OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3693,31 +3560,22 @@ var _ aggregateFunc = &maxInt16OrderedAgg{}
 
 const sizeOfmaxInt16OrderedAgg = int64(unsafe.Sizeof(maxInt16OrderedAgg{}))
 
-func (a *maxInt16OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *maxInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *maxInt16OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxInt16OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxInt16OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxInt16OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -3931,20 +3789,22 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxInt16OrderedAgg) Flush() {
+func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxInt16OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxInt16OrderedAggAlloc struct {
@@ -3966,9 +3826,8 @@ func (a *maxInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxInt32OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -3977,8 +3836,6 @@ type maxInt32OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -3988,31 +3845,22 @@ var _ aggregateFunc = &maxInt32OrderedAgg{}
 
 const sizeOfmaxInt32OrderedAgg = int64(unsafe.Sizeof(maxInt32OrderedAgg{}))
 
-func (a *maxInt32OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *maxInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *maxInt32OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxInt32OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxInt32OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxInt32OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -4226,20 +4074,22 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxInt32OrderedAgg) Flush() {
+func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxInt32OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxInt32OrderedAggAlloc struct {
@@ -4261,9 +4111,8 @@ func (a *maxInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxInt64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -4272,8 +4121,6 @@ type maxInt64OrderedAgg struct {
 	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4283,31 +4130,22 @@ var _ aggregateFunc = &maxInt64OrderedAgg{}
 
 const sizeOfmaxInt64OrderedAgg = int64(unsafe.Sizeof(maxInt64OrderedAgg{}))
 
-func (a *maxInt64OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Int64()
-	a.nulls = v.Nulls()
+func (a *maxInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Int64()
 	a.Reset()
 }
 
 func (a *maxInt64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxInt64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxInt64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxInt64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -4521,20 +4359,22 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxInt64OrderedAgg) Flush() {
+func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxInt64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxInt64OrderedAggAlloc struct {
@@ -4556,9 +4396,8 @@ func (a *maxInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxFloat64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -4567,8 +4406,6 @@ type maxFloat64OrderedAgg struct {
 	col coldata.Float64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4578,31 +4415,22 @@ var _ aggregateFunc = &maxFloat64OrderedAgg{}
 
 const sizeOfmaxFloat64OrderedAgg = int64(unsafe.Sizeof(maxFloat64OrderedAgg{}))
 
-func (a *maxFloat64OrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Float64()
-	a.nulls = v.Nulls()
+func (a *maxFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Float64()
 	a.Reset()
 }
 
 func (a *maxFloat64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxFloat64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxFloat64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxFloat64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -4848,20 +4676,22 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxFloat64OrderedAgg) Flush() {
+func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxFloat64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxFloat64OrderedAggAlloc struct {
@@ -4883,9 +4713,8 @@ func (a *maxFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxTimestampOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -4894,8 +4723,6 @@ type maxTimestampOrderedAgg struct {
 	col coldata.Times
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -4905,31 +4732,22 @@ var _ aggregateFunc = &maxTimestampOrderedAgg{}
 
 const sizeOfmaxTimestampOrderedAgg = int64(unsafe.Sizeof(maxTimestampOrderedAgg{}))
 
-func (a *maxTimestampOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Timestamp()
-	a.nulls = v.Nulls()
+func (a *maxTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Timestamp()
 	a.Reset()
 }
 
 func (a *maxTimestampOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxTimestampOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxTimestampOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxTimestampOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -5127,20 +4945,22 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxTimestampOrderedAgg) Flush() {
+func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxTimestampOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxTimestampOrderedAggAlloc struct {
@@ -5162,9 +4982,8 @@ func (a *maxTimestampOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxIntervalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -5173,8 +4992,6 @@ type maxIntervalOrderedAgg struct {
 	col coldata.Durations
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -5184,31 +5001,22 @@ var _ aggregateFunc = &maxIntervalOrderedAgg{}
 
 const sizeOfmaxIntervalOrderedAgg = int64(unsafe.Sizeof(maxIntervalOrderedAgg{}))
 
-func (a *maxIntervalOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Interval()
-	a.nulls = v.Nulls()
+func (a *maxIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Interval()
 	a.Reset()
 }
 
 func (a *maxIntervalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxIntervalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxIntervalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxIntervalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -5378,20 +5186,22 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxIntervalOrderedAgg) Flush() {
+func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxIntervalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type maxIntervalOrderedAggAlloc struct {
@@ -5413,9 +5223,8 @@ func (a *maxIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 }
 
 type maxDatumOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
@@ -5424,8 +5233,6 @@ type maxDatumOrderedAgg struct {
 	col coldata.DatumVec
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -5435,31 +5242,22 @@ var _ aggregateFunc = &maxDatumOrderedAgg{}
 
 const sizeOfmaxDatumOrderedAgg = int64(unsafe.Sizeof(maxDatumOrderedAgg{}))
 
-func (a *maxDatumOrderedAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v.Datum()
-	a.nulls = v.Nulls()
+func (a *maxDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	a.vec = vec
+	a.col = vec.Datum()
 	a.Reset()
 }
 
 func (a *maxDatumOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *maxDatumOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *maxDatumOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *maxDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *maxDatumOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -5637,20 +5435,22 @@ func (a *maxDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *maxDatumOrderedAgg) Flush() {
+func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *maxDatumOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type maxDatumOrderedAggAlloc struct {

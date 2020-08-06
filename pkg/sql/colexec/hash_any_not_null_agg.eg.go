@@ -86,11 +86,10 @@ func newAnyNotNullHashAggAlloc(
 // anyNotNullBoolHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBoolHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Bools
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      bool
 	foundNonNullForCurrentGroup bool
 }
@@ -100,27 +99,20 @@ var _ aggregateFunc = &anyNotNullBoolHashAgg{}
 const sizeOfAnyNotNullBoolHashAgg = int64(unsafe.Sizeof(anyNotNullBoolHashAgg{}))
 
 func (a *anyNotNullBoolHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bool()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullBoolHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullBoolHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullBoolHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullBoolHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -128,8 +120,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -222,19 +213,17 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullBoolHashAgg) Flush() {
+func (a *anyNotNullBoolHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullBoolHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullBoolHashAggAlloc struct {
@@ -258,11 +247,10 @@ func (a *anyNotNullBoolHashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullBytesHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBytesHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         *coldata.Bytes
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      []byte
 	foundNonNullForCurrentGroup bool
 }
@@ -272,27 +260,20 @@ var _ aggregateFunc = &anyNotNullBytesHashAgg{}
 const sizeOfAnyNotNullBytesHashAgg = int64(unsafe.Sizeof(anyNotNullBytesHashAgg{}))
 
 func (a *anyNotNullBytesHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullBytesHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullBytesHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullBytesHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullBytesHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -300,8 +281,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -394,19 +374,17 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullBytesHashAgg) Flush() {
+func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(a.curIdx, a.curAgg)
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullBytesHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullBytesHashAggAlloc struct {
@@ -430,11 +408,10 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullDecimalHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDecimalHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Decimals
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -444,27 +421,20 @@ var _ aggregateFunc = &anyNotNullDecimalHashAgg{}
 const sizeOfAnyNotNullDecimalHashAgg = int64(unsafe.Sizeof(anyNotNullDecimalHashAgg{}))
 
 func (a *anyNotNullDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Decimal()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullDecimalHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullDecimalHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullDecimalHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullDecimalHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -472,8 +442,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -566,19 +535,17 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 	)
 }
 
-func (a *anyNotNullDecimalHashAgg) Flush() {
+func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx].Set(&a.curAgg)
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullDecimalHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullDecimalHashAggAlloc struct {
@@ -602,11 +569,10 @@ func (a *anyNotNullDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt16HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt16HashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Int16s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int16
 	foundNonNullForCurrentGroup bool
 }
@@ -616,27 +582,20 @@ var _ aggregateFunc = &anyNotNullInt16HashAgg{}
 const sizeOfAnyNotNullInt16HashAgg = int64(unsafe.Sizeof(anyNotNullInt16HashAgg{}))
 
 func (a *anyNotNullInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int16()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt16HashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt16HashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullInt16HashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullInt16HashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -644,8 +603,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -738,19 +696,17 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullInt16HashAgg) Flush() {
+func (a *anyNotNullInt16HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullInt16HashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullInt16HashAggAlloc struct {
@@ -774,11 +730,10 @@ func (a *anyNotNullInt16HashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt32HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt32HashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Int32s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int32
 	foundNonNullForCurrentGroup bool
 }
@@ -788,27 +743,20 @@ var _ aggregateFunc = &anyNotNullInt32HashAgg{}
 const sizeOfAnyNotNullInt32HashAgg = int64(unsafe.Sizeof(anyNotNullInt32HashAgg{}))
 
 func (a *anyNotNullInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int32()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt32HashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt32HashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullInt32HashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullInt32HashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -816,8 +764,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -910,19 +857,17 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullInt32HashAgg) Flush() {
+func (a *anyNotNullInt32HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullInt32HashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullInt32HashAggAlloc struct {
@@ -946,11 +891,10 @@ func (a *anyNotNullInt32HashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt64HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt64HashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Int64s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int64
 	foundNonNullForCurrentGroup bool
 }
@@ -960,27 +904,20 @@ var _ aggregateFunc = &anyNotNullInt64HashAgg{}
 const sizeOfAnyNotNullInt64HashAgg = int64(unsafe.Sizeof(anyNotNullInt64HashAgg{}))
 
 func (a *anyNotNullInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt64HashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt64HashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullInt64HashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullInt64HashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -988,8 +925,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1082,19 +1018,17 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullInt64HashAgg) Flush() {
+func (a *anyNotNullInt64HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullInt64HashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullInt64HashAggAlloc struct {
@@ -1118,11 +1052,10 @@ func (a *anyNotNullInt64HashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullFloat64HashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullFloat64HashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Float64s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      float64
 	foundNonNullForCurrentGroup bool
 }
@@ -1132,27 +1065,20 @@ var _ aggregateFunc = &anyNotNullFloat64HashAgg{}
 const sizeOfAnyNotNullFloat64HashAgg = int64(unsafe.Sizeof(anyNotNullFloat64HashAgg{}))
 
 func (a *anyNotNullFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Float64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullFloat64HashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullFloat64HashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullFloat64HashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullFloat64HashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -1160,8 +1086,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1254,19 +1179,17 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 	)
 }
 
-func (a *anyNotNullFloat64HashAgg) Flush() {
+func (a *anyNotNullFloat64HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullFloat64HashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullFloat64HashAggAlloc struct {
@@ -1290,11 +1213,10 @@ func (a *anyNotNullFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullTimestampHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullTimestampHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Times
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      time.Time
 	foundNonNullForCurrentGroup bool
 }
@@ -1304,27 +1226,20 @@ var _ aggregateFunc = &anyNotNullTimestampHashAgg{}
 const sizeOfAnyNotNullTimestampHashAgg = int64(unsafe.Sizeof(anyNotNullTimestampHashAgg{}))
 
 func (a *anyNotNullTimestampHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullTimestampHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullTimestampHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullTimestampHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullTimestampHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -1332,8 +1247,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1426,19 +1340,17 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 	)
 }
 
-func (a *anyNotNullTimestampHashAgg) Flush() {
+func (a *anyNotNullTimestampHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullTimestampHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullTimestampHashAggAlloc struct {
@@ -1462,11 +1374,10 @@ func (a *anyNotNullTimestampHashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullIntervalHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullIntervalHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.Durations
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      duration.Duration
 	foundNonNullForCurrentGroup bool
 }
@@ -1476,27 +1387,20 @@ var _ aggregateFunc = &anyNotNullIntervalHashAgg{}
 const sizeOfAnyNotNullIntervalHashAgg = int64(unsafe.Sizeof(anyNotNullIntervalHashAgg{}))
 
 func (a *anyNotNullIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Interval()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullIntervalHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullIntervalHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullIntervalHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullIntervalHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -1504,8 +1408,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1598,19 +1501,17 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullIntervalHashAgg) Flush() {
+func (a *anyNotNullIntervalHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullIntervalHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullIntervalHashAggAlloc struct {
@@ -1634,11 +1535,10 @@ func (a *anyNotNullIntervalHashAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullDatumHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDatumHashAgg struct {
+	hashAggregateFuncBase
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
 	col                         coldata.DatumVec
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      interface{}
 	foundNonNullForCurrentGroup bool
 }
@@ -1648,27 +1548,20 @@ var _ aggregateFunc = &anyNotNullDatumHashAgg{}
 const sizeOfAnyNotNullDatumHashAgg = int64(unsafe.Sizeof(anyNotNullDatumHashAgg{}))
 
 func (a *anyNotNullDatumHashAgg) Init(groups []bool, vec coldata.Vec) {
+	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Datum()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullDatumHashAgg) Reset() {
-	a.curIdx = 0
+	a.hashAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullDatumHashAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNullDatumHashAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullDatumHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNullDatumHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	if a.foundNonNullForCurrentGroup {
 		// We have already seen non-null for the current group, and since there
 		// is at most a single group when performing hash aggregation, we can
@@ -1676,8 +1569,7 @@ func (a *anyNotNullDatumHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1770,19 +1662,17 @@ func (a *anyNotNullDatumHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNullDatumHashAgg) Flush() {
+func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
 	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(a.curIdx, a.curAgg)
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
 	}
-	a.curIdx++
-}
-
-func (a *anyNotNullDatumHashAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
 }
 
 type anyNotNullDatumHashAggAlloc struct {

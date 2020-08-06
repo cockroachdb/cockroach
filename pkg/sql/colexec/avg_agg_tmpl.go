@@ -76,10 +76,11 @@ func newAvg_AGGKINDAggAlloc(
 
 type avg_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	groups []bool
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
 	// {{end}}
 	scratch struct {
-		curIdx int
 		// curSum keeps track of the sum of elements belonging to the current group,
 		// so we can index into the slice once per group, instead of on each
 		// iteration.
@@ -89,8 +90,6 @@ type avg_TYPE_AGGKINDAgg struct {
 		curCount int64
 		// vec points to the output vector.
 		vec []_RET_GOTYPE
-		// nulls points to the output null vector that we are updating.
-		nulls *coldata.Nulls
 		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 		// for the group that is currently being aggregated.
 		foundNonNullForCurrentGroup bool
@@ -109,32 +108,30 @@ var _ aggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
 const sizeOfAvg_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(avg_TYPE_AGGKINDAgg{}))
 
-func (a *avg_TYPE_AGGKINDAgg) Init(groups []bool, v coldata.Vec) {
+func (a *avg_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
 	// {{end}}
-	a.scratch.vec = v._RET_TYPE()
-	a.scratch.nulls = v.Nulls()
+	a.scratch.vec = vec._RET_TYPE()
 	a.Reset()
 }
 
 func (a *avg_TYPE_AGGKINDAgg) Reset() {
-	a.scratch.curIdx = 0
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.scratch.curSum = zero_RET_TYPEValue
 	a.scratch.curCount = 0
 	a.scratch.foundNonNullForCurrentGroup = false
-	a.scratch.nulls.UnsetNulls()
 }
 
-func (a *avg_TYPE_AGGKINDAgg) CurrentOutputIndex() int {
-	return a.scratch.curIdx
-}
-
-func (a *avg_TYPE_AGGKINDAgg) SetOutputIndex(idx int) {
-	a.scratch.curIdx = idx
-}
-
-func (a *avg_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *avg_TYPE_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -145,8 +142,7 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
 	// {{end}}
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	if nulls.MaybeHasNulls() {
 		if sel != nil {
@@ -175,20 +171,21 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *avg_TYPE_AGGKINDAgg) Flush() {
+func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	// {{end}}
 	if !a.scratch.foundNonNullForCurrentGroup {
-		a.scratch.nulls.SetNull(a.scratch.curIdx)
+		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
+		_ASSIGN_DIV_INT64(a.scratch.vec[outputIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
 	}
-	a.scratch.curIdx++
-}
-
-func (a *avg_TYPE_AGGKINDAgg) HandleEmptyInputScalar() {
-	a.scratch.nulls.SetNull(0)
 }
 
 type avg_TYPE_AGGKINDAggAlloc struct {
@@ -223,13 +220,13 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
 		if !a.scratch.foundNonNullForCurrentGroup {
-			a.scratch.nulls.SetNull(a.scratch.curIdx)
+			a.nulls.SetNull(a.curIdx)
 		} else {
 			// {{with .Global}}
-			_ASSIGN_DIV_INT64(a.scratch.vec[a.scratch.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
+			_ASSIGN_DIV_INT64(a.scratch.vec[a.curIdx], a.scratch.curSum, a.scratch.curCount, a.scratch.vec, _, _)
 			// {{end}}
 		}
-		a.scratch.curIdx++
+		a.curIdx++
 		// {{with .Global}}
 		a.scratch.curSum = zero_RET_TYPEValue
 		// {{end}}
