@@ -135,6 +135,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor for the slow case of truncate.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err
@@ -257,6 +259,8 @@ func (td *tableDeleter) deleteIndexScan(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		td.alloc,
+		// TODO(bulkio): this might need a memory monitor.
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return resume, err

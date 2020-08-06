@@ -117,6 +117,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&c.a,
+		nil, /* memMonitor */
 		row.FetcherTableArgs{
 			Spans:            tableDesc.AllIndexSpans(c.codec),
 			Desc:             tableDesc,

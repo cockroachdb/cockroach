@@ -115,6 +115,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		params.p.alloc,
+		nil, /* memMonitor */
 		allTables...,
 	); err != nil {
 		return err
