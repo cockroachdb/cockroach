@@ -1499,7 +1499,7 @@ CREATE TABLE pg_catalog.pg_enum (
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typOID := tree.NewDOid(tree.DInt(types.StableTypeIDToOID(uint32(typDesc.GetID()))))
+			typOID := tree.NewDOid(tree.DInt(sqlbase.TypeIDToOID(typDesc.GetID())))
 			for i, member := range typDesc.EnumMembers {
 				if err := addRow(
 					h.EnumEntryOid(typOID, member.PhysicalRepresentation),
@@ -2825,7 +2825,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Check if it is a user defined type.
-				id := descpb.ID(types.UserDefinedTypeOIDToID(ooid))
+				id := sqlbase.UserDefinedTypeOIDToID(ooid)
 				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, sqlbase.ErrDescriptorNotFound) {

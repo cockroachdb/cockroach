@@ -201,7 +201,7 @@ func calcArrayOid(elemTyp *T) oid.Oid {
 		return unknownArrayOid
 
 	case EnumFamily:
-		return StableTypeIDToOID(elemTyp.StableArrayTypeID())
+		return elemTyp.UserDefinedArrayOID()
 	}
 
 	// Map the OID of the array element type to the corresponding array OID.

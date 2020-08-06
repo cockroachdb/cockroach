@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -171,7 +172,7 @@ FROM
 		// Try to construct type information from the resulting row.
 		switch {
 		case len(members) > 0:
-			typ := types.MakeEnum(uint32(id), 0 /* arrayTypeID */)
+			typ := types.MakeEnum(sqlbase.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
 			typ.TypeMeta = types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
 					Schema: scName,

@@ -8239,7 +8239,7 @@ simple_typename:
 | '@' iconst32
   {
     id := $2.int32()
-    $$.val = &tree.IDTypeReference{ID: uint32(id)}
+    $$.val = &tree.OIDTypeReference{OID: oid.Oid(id)}
   }
 | complex_type_name
   {
