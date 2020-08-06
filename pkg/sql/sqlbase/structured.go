@@ -1048,10 +1048,10 @@ func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
 	visitor := &tree.TypeCollectorVisitor{
-		IDs: make(map[uint32]struct{}),
+		OIDs: make(map[oid.Oid]struct{}),
 	}
 
-	addIDsInExpr := func(exprStr *string) error {
+	addOIDsInExpr := func(exprStr *string) error {
 		expr, err := parser.ParseExpr(*exprStr)
 		if err != nil {
 			return err
@@ -1060,15 +1060,15 @@ func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
 		return nil
 	}
 
-	if err := ForEachExprStringInTableDesc(desc, addIDsInExpr); err != nil {
+	if err := ForEachExprStringInTableDesc(desc, addOIDsInExpr); err != nil {
 		return nil, err
 	}
 
 	// For each of the collected type IDs in the table descriptor expressions,
 	// collect the closure of ID's referenced.
 	ids := make(map[descpb.ID]struct{})
-	for id := range visitor.IDs {
-		typDesc, err := getType(descpb.ID(id))
+	for id := range visitor.OIDs {
+		typDesc, err := getType(UserDefinedTypeOIDToID(id))
 		if err != nil {
 			return nil, err
 		}
