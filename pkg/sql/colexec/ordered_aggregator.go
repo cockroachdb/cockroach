@@ -257,7 +257,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
 		batch := a.input.Next(ctx)
-		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batch.Length() > 0
+		batchLength := batch.Length()
+		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batchLength > 0
 		if !a.seenNonEmptyBatch {
 			// The input has zero rows.
 			if a.isScalar {
@@ -272,18 +273,24 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.scratch.resumeIdx = 0
 			}
 		} else {
-			if batch.Length() > 0 {
+			if batchLength > 0 {
+				sel := batch.Selection()
+				inputVecs := batch.ColVecs()
 				for i, fn := range a.aggregateFuncs {
-					fn.Compute(batch, a.aggCols[i])
+					fn.Compute(inputVecs, a.aggCols[i], batchLength, sel)
 				}
 			} else {
 				for _, fn := range a.aggregateFuncs {
-					fn.Flush()
+					// The aggregate function itself is responsible for
+					// tracking the output index, so we pass in an invalid
+					// index which will allow us to catch cases when the
+					// implementation is misbehaving.
+					fn.Flush(-1 /* outputIdx */)
 				}
 			}
 			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
-		if batch.Length() == 0 {
+		if batchLength == 0 {
 			a.done = true
 			break
 		}

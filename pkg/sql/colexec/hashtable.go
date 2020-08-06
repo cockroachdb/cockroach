@@ -252,7 +252,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 		// ht.next is used to store the computed hash value of each key.
 		ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
 		ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
-		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, ht.vals.Length())
+		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, uint64(ht.vals.Length()))
 	case hashTableDistinctBuildMode:
 		for {
 			batch := input.Next(ctx)
@@ -260,59 +260,56 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 				break
 			}
 
-			srcVecs := batch.ColVecs()
-
-			for i := 0; i < nKeyCols; i++ {
-				ht.probeScratch.keys[i] = srcVecs[ht.keyCols[i]]
-			}
-
-			ht.computeBuckets(ctx, ht.probeScratch.next[1:], ht.probeScratch.keys, batch.Length(), batch.Selection())
-			copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
-
-			// We should not zero out the entire `first` buffer here since the size of
-			// the `first` buffer same as the hash range (2^16) by default. The size
-			// of the hashBuffer is same as the batch size which is often a lot
-			// smaller than the hash range. Since we are only concerned with tuples
-			// inside the hashBuffer, we only need to zero out the corresponding
-			// entries in the `first` buffer that occurred in the hashBuffer.
-			for _, hash := range ht.probeScratch.hashBuffer[:batch.Length()] {
-				ht.probeScratch.first[hash] = 0
-			}
-
-			ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1, batch.Length())
-
+			ht.computeHashAndBuildChains(ctx, batch)
 			ht.removeDuplicates(batch, ht.probeScratch.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
 
-			numBuffered := ht.vals.Length()
 			// We only check duplicates when there is at least one buffered
 			// tuple.
-			if numBuffered > 0 {
+			if ht.vals.Length() > 0 {
 				ht.removeDuplicates(batch, ht.probeScratch.keys, ht.buildScratch.first, ht.buildScratch.next, ht.checkBuildForDistinct)
 			}
 
-			ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
-				ht.vals.append(batch, 0 /* startIdx */, batch.Length())
-			})
-
-			ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:batch.Length()]...)
-			ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, batch.Length())
+			ht.appendAllDistinct(ctx, batch)
 		}
 	default:
 		colexecerror.InternalError(fmt.Sprintf("hashTable in unhandled state"))
 	}
 }
 
-// removeDuplicates checks the tuples in the probe table against another table
-// and updates the selection vector of the probe table to only include distinct
-// tuples. The table removeDuplicates will check against is specified by
-// `first`, `next` vectors and `duplicatesChecker`. `duplicatesChecker` takes
-// a slice of key columns of the probe table, number of tuple to check and the
-// selection vector of the probe table and returns number of tuples that needs
-// to be checked for next iteration. It populates the ht.probeScratch.headID to
-// point to the keyIDs that need to be included in probe table's selection
-// vector.
+// computeHashAndBuildChains computes the hash codes of the tuples in batch and
+// then builds 'next' chains between those tuples. The goal is to separate all
+// tuples in batch into singly linked lists containing only tuples with the
+// same hash code. Those 'next' chains are stored in ht.probeScratch.next.
+func (ht *hashTable) computeHashAndBuildChains(ctx context.Context, batch coldata.Batch) {
+	srcVecs := batch.ColVecs()
+	for i, keyCol := range ht.keyCols {
+		ht.probeScratch.keys[i] = srcVecs[keyCol]
+	}
+
+	ht.computeBuckets(ctx, ht.probeScratch.next[1:], ht.probeScratch.keys, batch.Length(), batch.Selection())
+	copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
+
+	// We should not zero out the entire `first` buffer here since the size of
+	// the `first` buffer same as the hash range (2^16) by default. The size
+	// of the hashBuffer is same as the batch size which is often a lot
+	// smaller than the hash range. Since we are only concerned with tuples
+	// inside the hashBuffer, we only need to zero out the corresponding
+	// entries in the `first` buffer that occurred in the hashBuffer.
+	for _, hash := range ht.probeScratch.hashBuffer[:batch.Length()] {
+		ht.probeScratch.first[hash] = 0
+	}
+
+	ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1 /* offset */, uint64(batch.Length()))
+}
+
+// findBuckets finds the buckets for all tuples in batch when probing against a
+// hash table that is specified by 'first' and 'next' vectors as well as
+// 'duplicatesChecker'. `duplicatesChecker` takes a slice of key columns of the
+// batch, number of tuples to check, and the selection vector of the batch, and
+// it returns number of tuples that needs to be checked for next iteration.
+// The "buckets" are specified by equal values in ht.probeScratch.headID.
 // NOTE: *first* and *next* vectors should be properly populated.
-func (ht *hashTable) removeDuplicates(
+func (ht *hashTable) findBuckets(
 	batch coldata.Batch,
 	keyCols []coldata.Vec,
 	first, next []uint64,
@@ -332,8 +329,32 @@ func (ht *hashTable) removeDuplicates(
 		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
 		ht.findNext(next, nToCheck)
 	}
+}
 
+// removeDuplicates updates the selection vector of the batch to only include
+// distinct tuples when probing against a hash table specified by 'first' and
+// 'next' vectors as well as 'duplicatesChecker'.
+// NOTE: *first* and *next* vectors should be properly populated.
+func (ht *hashTable) removeDuplicates(
+	batch coldata.Batch,
+	keyCols []coldata.Vec,
+	first, next []uint64,
+	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+) {
+	ht.findBuckets(batch, keyCols, first, next, duplicatesChecker)
 	ht.updateSel(batch)
+}
+
+// appendAllDistinct appends all tuples from batch to the hash table. It
+// assumes that all tuples are distinct and that ht.probeScratch.hashBuffer
+// contains the hash codes for all of them.
+func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch) {
+	numBuffered := uint64(ht.vals.Length())
+	ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
+		ht.vals.append(batch, 0 /* startIdx */, batch.Length())
+	})
+	ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:batch.Length()]...)
+	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, uint64(batch.Length()))
 }
 
 // checkCols performs a column by column checkCol on the key columns.
@@ -395,7 +416,7 @@ func (ht *hashTable) computeBuckets(
 
 // buildNextChains builds the hash map from the computed hash values.
 func (ht *hashTable) buildNextChains(
-	ctx context.Context, first, next []uint64, offset, batchSize int,
+	ctx context.Context, first, next []uint64, offset, batchSize uint64,
 ) {
 	// The loop direction here is reversed to ensure that when we are building the
 	// next chain for the probe table, the keyID in each equality chain inside
@@ -407,7 +428,6 @@ func (ht *hashTable) buildNextChains(
 	// distinct, therefore we can be sure that when we emit a tuple, there cannot
 	// potentially be other tuples with the same key.
 	for id := offset + batchSize - 1; id >= offset; id-- {
-		ht.cancelChecker.check(ctx)
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
 		hash := next[id]
@@ -415,14 +435,15 @@ func (ht *hashTable) buildNextChains(
 		// This is to ensure that `first` always points to the tuple with smallest
 		// keyID in each equality chain. firstKeyID==0 means it is the first tuple
 		// that we have encountered with the given hash value.
-		if firstKeyID == 0 || uint64(id) < firstKeyID {
+		if firstKeyID == 0 || id < firstKeyID {
 			next[id] = first[hash]
-			first[hash] = uint64(id)
+			first[hash] = id
 		} else {
 			next[id] = next[firstKeyID]
-			next[firstKeyID] = uint64(id)
+			next[firstKeyID] = id
 		}
 	}
+	ht.cancelChecker.checkEveryCall(ctx)
 }
 
 // maybeAllocate* methods make sure that the passed in array is allocated and
@@ -469,10 +490,75 @@ func (ht *hashTable) lookupInitial(ctx context.Context, batchSize int, sel []int
 // findNext determines the id of the next key inside the groupID buckets for
 // each equality column key in toCheck.
 func (ht *hashTable) findNext(next []uint64, nToCheck uint64) {
-	for i := uint64(0); i < nToCheck; i++ {
-		ht.probeScratch.groupID[ht.probeScratch.toCheck[i]] =
-			next[ht.probeScratch.groupID[ht.probeScratch.toCheck[i]]]
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		ht.probeScratch.groupID[toCheck] = next[ht.probeScratch.groupID[toCheck]]
 	}
+}
+
+// checkBuildForDistinct finds all tuples in probeVecs that are *not* present in
+// buffered tuples stored in ht.vals. It stores the probeVecs's distinct tuples'
+// keyIDs in headID buffer.
+// NOTE: It assumes that probeVecs does not contain any duplicates itself.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
+func (ht *hashTable) checkBuildForDistinct(
+	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
+) uint64 {
+	if probeSel == nil {
+		colexecerror.InternalError("invalid selection vector")
+	}
+	copy(ht.probeScratch.distinct, zeroBoolColumn)
+
+	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
+	nDiffers := uint64(0)
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		if ht.probeScratch.distinct[toCheck] {
+			ht.probeScratch.distinct[toCheck] = false
+			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
+			ht.probeScratch.headID[toCheck] = toCheck + 1
+		} else if ht.probeScratch.differs[toCheck] {
+			// Continue probing in this next chain for the probe key.
+			ht.probeScratch.differs[toCheck] = false
+			ht.probeScratch.toCheck[nDiffers] = toCheck
+			nDiffers++
+		}
+	}
+	return nDiffers
+}
+
+// checkBuildForAggregation finds all tuples in probeVecs that *are* present in
+// buffered tuples stored in ht.vals. For each present tuple at position i it
+// stores keyID of its duplicate in headID[i], for all non-present tuples the
+// corresponding headID value is left unchanged.
+// NOTE: It assumes that probeVecs does not contain any duplicates itself.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
+func (ht *hashTable) checkBuildForAggregation(
+	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
+) uint64 {
+	if probeSel == nil {
+		colexecerror.InternalError("invalid selection vector")
+	}
+	copy(ht.probeScratch.distinct, zeroBoolColumn)
+
+	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
+	nDiffers := uint64(0)
+	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+		if !ht.probeScratch.distinct[toCheck] {
+			// If the tuple is distinct, it doesn't have a duplicate in the
+			// hash table already, so we skip it.
+			if ht.probeScratch.differs[toCheck] {
+				// We have a hash collision, so we need to continue probing
+				// against the next tuples in the hash chain.
+				ht.probeScratch.differs[toCheck] = false
+				ht.probeScratch.toCheck[nDiffers] = toCheck
+				nDiffers++
+			} else {
+				// This tuple has a duplicate in the hash table, so we remember
+				// keyID of that duplicate.
+				ht.probeScratch.headID[toCheck] = ht.probeScratch.groupID[toCheck]
+			}
+		}
+	}
+	return nDiffers
 }
 
 // reset resets the hashTable for reuse.

@@ -15,12 +15,10 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -36,7 +34,7 @@ const (
 	hashAggregatorAggregating hashAggregatorState = iota
 
 	// hashAggregatorOutputting is the state in which the hashAggregator is
-	// writing its aggregation results to output buffer after.
+	// writing its aggregation results to the output buffer.
 	hashAggregatorOutputting
 
 	// hashAggregatorDone is the state in which the hashAggregator has finished
@@ -44,96 +42,51 @@ const (
 	hashAggregatorDone
 )
 
-// hashAggregator is an operator that performs aggregation based on specified
-// grouping columns. This operator performs aggregation in online fashion. It
-// reads the input one batch at a time, hashes each tuple from the batch and
-// groups the tuples with same hash code into same group. Then aggregation
-// function is lazily created for each group. The tuples in that group will be
-// then passed into the aggregation function. After the input is exhausted, the
-// operator begins to write the result into an output buffer. The output row
-// ordering of this operator is arbitrary.
+// hashAggregator is an operator that performs aggregation based on the
+// specified grouping columns. This operator performs aggregation in online
+// fashion. It reads from the input one batch at a time, groups all tuples into
+// the equality chains, probes heads of those chains against already existing
+// buckets and creates new buckets for new groups. After the input is
+// exhausted, the operator begins to write the result into an output buffer.
+// The output row ordering of this operator is arbitrary.
+// Note that throughout this file "buckets" and "groups" mean the same thing
+// and are used interchangeably.
 type hashAggregator struct {
 	OneInputNode
 
 	allocator *colmem.Allocator
 
-	aggCols  [][]uint32
-	aggTypes [][]*types.T
-	aggFuncs []execinfrapb.AggregatorSpec_Func
+	aggCols [][]uint32
 
 	inputTypes  []*types.T
 	outputTypes []*types.T
 
-	// aggFuncMap stores the mapping from hash code to a vector of aggregation
-	// functions. Each aggregation function is stored along with keys that
-	// corresponds to the group the aggregation function operates on. This is to
-	// handle hash collisions.
-	aggFuncMap hashAggFuncMap
+	// buckets contains all aggregation groups that we have so far. There is
+	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
+	// the buckets has been flushed, buckets will be sliced up accordingly.
+	buckets []*hashAggFuncs
+	// ht stores tuples that are "heads" of the corresponding aggregation
+	// groups ("head" here means the tuple that was first seen from the group).
+	ht *hashTable
 
 	// state stores the current state of hashAggregator.
 	state hashAggregatorState
 
 	scratch struct {
-		// sels stores the intermediate selection vector for each hash code. It
-		// is maintained in such a way that when for a particular hashCode
-		// there are no tuples in the batch, the corresponding int slice is of
-		// length 0. Also, onlineAgg() method will reset all modified slices to
-		// have zero length once it is done processing all tuples in the batch,
-		// this allows us to not reset the slices for all possible hash codes.
-		//
-		// Instead of having a map from hashCode to []int (which could result
-		// in having many int slices), we are using a constant number of such
-		// slices and have a "map" from hashCode to a "slot" in sels that does
-		// the "translation." The key insight here is that we will have at most
-		// coldata.BatchSize() different hashCodes at once.
-		sels [][]int
-		// hashCodeForSelsSlot stores the hashCode that corresponds to a slot
-		// in sels slice. For example, if we have tuples with the following
-		// hashCodes = {0, 2, 0, 0, 1, 2, 1}, then we will have:
-		//   hashCodeForSelsSlot = {0, 2, 1}
-		//   sels[0] = {0, 2, 3}
-		//   sels[1] = {1, 5}
-		//   sels[2] = {4, 6}
-		// Note that we're not using Golang's map for this purpose because
-		// although, in theory, it has O(1) amortized lookup cost, in practice,
-		// it is faster to do a linear search for a particular hashCode in this
-		// slice: given that we have at most coldata.BatchSize() number of
-		// different hashCodes - which is a constant - we get
-		// O(coldata.BatchSize()) = O(1) lookup cost. And now we have two cases
-		// to consider:
-		// 1. we have few distinct hashCodes (large group sizes), then the
-		// overhead of linear search will be significantly lower than of a
-		// lookup in map
-		// 2. we have many distinct hashCodes (small group sizes), then the
-		// map *might* outperform the linear search, but the time spent in
-		// other parts of the hash aggregator will dominate the total runtime,
-		// so this would not matter.
-		hashCodeForSelsSlot []uint64
+		// eqChains stores the chains of tuples from the current batch that are
+		// equal on the grouping columns (meaning that all tuples from the
+		// batch will be included into one of these chains). These chains must
+		// be set to zero length once the batch has been processed so that the
+		// memory could be reused.
+		eqChains [][]int
 
-		// diff is a boolean vector that is used as a scratch for match
-		// function.
-		diff []bool
+		// intSlice and anotherIntSlice are simply scratch int slices that are
+		// reused for several purposes by the hashAggregator.
+		intSlice        []int
+		anotherIntSlice []int
 	}
 
-	// keyMapping stores the key values for each aggregation group. It is a
-	// bufferedBatch because in the worst case where all keys in the grouping
-	// columns are distinct, we need to store every single key in the input.
-	keyMapping *appendOnlyBufferedBatch
-
-	output struct {
-		coldata.Batch
-
-		// pendingOutput indicates if there is more data that needs to be returned.
-		pendingOutput bool
-
-		// resumeHashCode is the hash code that hashAggregator should start reading
-		// from on the next iteration of Next().
-		resumeHashCode uint64
-
-		// resumeIdx is the index of the vector corresponding to the resumeHashCode
-		// that hashAggregator should start reading from on the next iteration of Next().
-		resumeIdx int
-	}
+	output coldata.Batch
 
 	testingKnobs struct {
 		// numOfHashBuckets is the number of hash buckets that each tuple will be
@@ -145,18 +98,8 @@ type hashAggregator struct {
 	// groupCols stores the indices of the grouping columns.
 	groupCols []uint32
 
-	// groupTypes stores the types of the grouping columns.
-	groupTypes                 []*types.T
-	groupCanonicalTypeFamilies []types.Family
-
-	// hashBuffer stores hash values for each tuple in the buffered batch.
-	hashBuffer []uint64
-
-	aggFnsAlloc    *aggregateFuncsAlloc
-	hashAlloc      hashAggFuncsAlloc
-	cancelChecker  CancelChecker
-	overloadHelper overloadHelper
-	datumAlloc     sqlbase.DatumAlloc
+	aggFnsAlloc *aggregateFuncsAlloc
+	hashAlloc   hashAggFuncsAlloc
 }
 
 var _ colexecbase.Operator = &hashAggregator{}
@@ -165,7 +108,7 @@ var _ colexecbase.Operator = &hashAggregator{}
 // aggregator's allocators. This number was chosen after running benchmarks of
 // 'sum' aggregation on ints and decimals with varying group sizes (powers of 2
 // from 1 to 4096).
-const hashAggregatorAllocSize = 64
+const hashAggregatorAllocSize = 128
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
@@ -186,51 +129,43 @@ func NewHashAggregator(
 		)
 	}
 
-	groupTypes := make([]*types.T, len(groupCols))
-	for i, colIdx := range groupCols {
-		groupTypes[i] = typs[colIdx]
-	}
-
-	aggFnsAlloc, err := newAggregateFuncsAlloc(allocator, aggTyps, aggFns, hashAggregatorAllocSize, true /* isHashAgg */)
-
+	aggFnsAlloc, err := newAggregateFuncsAlloc(
+		allocator, aggTyps, aggFns, hashAggregatorAllocSize, true, /* isHashAgg */
+	)
 	hashAgg := &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
-
-		aggCols:    aggCols,
-		aggFuncs:   aggFns,
-		aggTypes:   aggTyps,
-		aggFuncMap: make(hashAggFuncMap),
-
-		state:       hashAggregatorAggregating,
-		inputTypes:  typs,
-		outputTypes: outputTypes,
-
-		groupCols:                  groupCols,
-		groupTypes:                 groupTypes,
-		groupCanonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(groupTypes),
-
-		aggFnsAlloc: aggFnsAlloc,
-		hashAlloc:   hashAggFuncsAlloc{allocator: allocator},
+		aggCols:      aggCols,
+		state:        hashAggregatorAggregating,
+		inputTypes:   typs,
+		outputTypes:  outputTypes,
+		groupCols:    groupCols,
+		aggFnsAlloc:  aggFnsAlloc,
+		hashAlloc:    hashAggFuncsAlloc{allocator: allocator},
 	}
-	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	return hashAgg, err
 }
 
 func (op *hashAggregator) Init() {
 	op.input.Init()
-	op.output.Batch = op.allocator.NewMemBatch(op.outputTypes)
-
-	op.scratch.sels = make([][]int, coldata.BatchSize())
-	op.scratch.hashCodeForSelsSlot = make([]uint64, coldata.BatchSize())
-	op.scratch.diff = make([]bool, coldata.BatchSize())
-	// Eventually, op.keyMapping will contain as many tuples as there are
-	// groups in the input, but we don't know that number upfront, so we
-	// allocate it with some reasonably sized constant capacity.
-	op.keyMapping = newAppendOnlyBufferedBatch(
-		op.allocator, op.groupTypes, coldata.BatchSize(),
+	op.output = op.allocator.NewMemBatch(op.outputTypes)
+	op.scratch.eqChains = make([][]int, coldata.BatchSize())
+	op.scratch.intSlice = make([]int, coldata.BatchSize())
+	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
+	// TODO(yuzefovich): tune this.
+	numOfHashBuckets := uint64(HashTableNumBuckets)
+	if op.testingKnobs.numOfHashBuckets != 0 {
+		numOfHashBuckets = op.testingKnobs.numOfHashBuckets
+	}
+	op.ht = newHashTable(
+		op.allocator,
+		numOfHashBuckets,
+		op.inputTypes,
+		op.groupCols,
+		true, /* allowNullEquality */
+		hashTableDistinctBuildMode,
+		hashTableDefaultProbeMode,
 	)
-	op.hashBuffer = make([]uint64, coldata.BatchSize())
 }
 
 func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
@@ -239,62 +174,29 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorAggregating:
 			b := op.input.Next(ctx)
 			if b.Length() == 0 {
+				// TODO(yuzefovich): we no longer need the hash table, so we
+				// could be releasing its memory here.
 				op.state = hashAggregatorOutputting
 				continue
 			}
-			op.buildSelectionForEachHashCode(ctx, b)
-			op.onlineAgg(b)
+			// TODO(yuzefovich): benchmark whether it is beneficial to buffer
+			// up several batches from the input before proceeding to online
+			// aggregation.
+			op.onlineAgg(ctx, b)
 		case hashAggregatorOutputting:
-			curOutputIdx := 0
 			op.output.ResetInternalBatch()
-
-			// If there is pending output, we try to finish outputting the aggregation
-			// result in the same bucket. If we cannot finish, we update resumeIdx and
-			// return the current batch.
-			if op.output.pendingOutput {
-				remainingAggFuncs := op.aggFuncMap[op.output.resumeHashCode][op.output.resumeIdx:]
-				for groupIdx, aggFunc := range remainingAggFuncs {
-					if curOutputIdx < coldata.BatchSize() {
-						for _, fn := range aggFunc.fns {
-							fn.SetOutputIndex(curOutputIdx)
-							fn.Flush()
-						}
-					} else {
-						op.output.resumeIdx = op.output.resumeIdx + groupIdx
-						op.output.SetLength(curOutputIdx)
-
-						return op.output
-					}
-					curOutputIdx++
+			curOutputIdx := 0
+			for curOutputIdx < coldata.BatchSize() && curOutputIdx < len(op.buckets) {
+				bucket := op.buckets[curOutputIdx]
+				for _, fn := range bucket.fns {
+					fn.Flush(curOutputIdx)
 				}
-				delete(op.aggFuncMap, op.output.resumeHashCode)
+				curOutputIdx++
 			}
-
-			op.output.pendingOutput = false
-
-			for aggHashCode, aggFuncs := range op.aggFuncMap {
-				for groupIdx, aggFunc := range aggFuncs {
-					if curOutputIdx < coldata.BatchSize() {
-						for _, fn := range aggFunc.fns {
-							fn.SetOutputIndex(curOutputIdx)
-							fn.Flush()
-						}
-					} else {
-						// If current batch is filled, we record where we left off
-						// and then return the current batch.
-						op.output.resumeIdx = groupIdx
-						op.output.resumeHashCode = aggHashCode
-						op.output.pendingOutput = true
-						op.output.SetLength(curOutputIdx)
-
-						return op.output
-					}
-					curOutputIdx++
-				}
-				delete(op.aggFuncMap, aggHashCode)
+			op.buckets = op.buckets[curOutputIdx:]
+			if len(op.buckets) == 0 {
+				op.state = hashAggregatorDone
 			}
-
-			op.state = hashAggregatorDone
 			op.output.SetLength(curOutputIdx)
 			return op.output
 		case hashAggregatorDone:
@@ -307,111 +209,148 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b coldata.Batch) {
-	nKeys := b.Length()
-	hashBuffer := op.hashBuffer[:nKeys]
+// onlineAgg groups all tuples in b into equality chains, then probes the
+// heads of those chains against already existing groups, aggregates matched
+// chains into the corresponding buckets and creates new buckets for new
+// aggregation groups.
+//
+// Let's go through an example of how this function works: our input stream
+// contains the following tuples:
+//   {-3}, {-3}, {-2}, {-1}, {-4}, {-1}, {-1}, {-4}.
+// (Note that negative values are chosen in order to visually distinguish them
+// from the IDs that we'll be working with below.)
+// We will use coldata.BatchSize() == 4 and let's assume that we will use a
+// simple hash function h(i) = i % 2 with two buckets in the hash table.
+//
+// I. we get a batch [-3, -3, -2, -1].
+//   1. a) compute hash buckets: probeScratch.next = [reserved, 1, 1, 0, 1]
+//      b) build 'next' chains between hash buckets:
+//           probeScratch.first = [3, 1] (length of first == # of hash buckets)
+//           probeScratch.next = [reserved, 2, 4, 0, 0]
+//         (Note that we have a hash collision in the bucket with hash 1.)
+//      c) find "equality" buckets (populate headID):
+//           probeScratch.headID = [1, 1, 3, 4]
+//         (This means that tuples at position 0 and 1 are the same, and the
+//          tuple at position headID-1 is the head of the equality chain.)
+//   2. divide all tuples into the equality chains based on headID:
+//        eqChains[0] = [0, 1]
+//        eqChains[1] = [2]
+//        eqChains[2] = [3]
+//      The special "heads of equality chains" selection vector is [0, 2, 3].
+//   3. we don't have any existing buckets yet, so this step is a noop.
+//   4. each of the three equality chains contains tuples from a separate
+//      aggregation group, so we perform aggregation on each of them in turn.
+//   After we do so, we will have three buckets and the hash table will contain
+//   three tuples (with buckets and tuples corresponding to each other):
+//     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>]
+//     ht.vals = [-3, -2, -1].
+//   We have fully processed the first batch.
+//
+// II. we get a batch [-4, -1, -1, -4].
+//   1. a) compute hash buckets: probeScratch.next = [reserved, 0, 1, 1, 0]
+//      b) build 'next' chains between hash buckets:
+//           probeScratch.first = [1, 2]
+//           probeScratch.next = [reserved, 4, 3, 0, 0]
+//      c) find "equality" buckets:
+//           probeScratch.headID = [1, 2, 2, 1]
+//   2. divide all tuples into the equality chains based on headID:
+//        eqChains[0] = [0, 3]
+//        eqChains[1] = [1, 2]
+//      The special "heads of equality chains" selection vector is [0, 1].
+//   3. probe that special "heads" selection vector against the tuples already
+//      present in the hash table:
+//        probeScratch.headID = [0, 3]
+//      Value 0 indicates that the first equality chain doesn't have an
+//      existing bucket, but the second chain does and the ID of its bucket is
+//      headID-1 = 2. We aggregate the second equality chain into that bucket.
+//   4. the first equality chain contains tuples from a new aggregation group,
+//      so we create a new bucket for it and perform the aggregation.
+//   After we do so, we will have four buckets and the hash table will contain
+//   four tuples:
+//     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>, <bucket for -4>]
+//     ht.vals = [-3, -2, -1, -4].
+//   We have fully processed the second batch.
+//
+//  We have processed the input fully, so we're ready to emit the output.
+func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
+	inputVecs := b.ColVecs()
+	// Step 1: find "equality" buckets: we compute the hash buckets for all
+	// tuples, build 'next' chains between them, and then find equality buckets
+	// for the tuples.
+	op.ht.computeHashAndBuildChains(ctx, b)
+	op.ht.findBuckets(
+		b, op.ht.probeScratch.keys, op.ht.probeScratch.first,
+		op.ht.probeScratch.next, op.ht.checkProbeForDistinct,
+	)
 
-	initHash(hashBuffer, nKeys, defaultInitHashValue)
+	// Step 2: now that we have op.ht.probeScratch.headID populated we can
+	// populate the equality chains.
+	eqChainsCount, eqChainsHeadsSel := op.populateEqChains(b)
+	b.SetLength(eqChainsCount)
 
-	for _, colIdx := range op.groupCols {
-		rehash(ctx,
-			hashBuffer,
-			b.ColVec(int(colIdx)),
-			nKeys,
-			b.Selection(),
-			op.cancelChecker,
-			op.overloadHelper,
-			&op.datumAlloc,
+	// Make a copy of the selection vector that contains heads of the
+	// corresponding equality chains because the underlying memory will be
+	// modified below.
+	eqChainsHeads := op.scratch.intSlice[:eqChainsCount]
+	copy(eqChainsHeads, eqChainsHeadsSel)
+
+	// Step 3: if we have any existing buckets, we need to probe the heads of
+	// the equality chains (which the selection vector on b currently contains)
+	// against the heads of the existing groups.
+	if len(op.buckets) > 0 {
+		op.ht.findBuckets(
+			b, op.ht.probeScratch.keys, op.ht.buildScratch.first,
+			op.ht.buildScratch.next, op.ht.checkBuildForAggregation,
 		)
-	}
-
-	if op.testingKnobs.numOfHashBuckets != 0 {
-		finalizeHash(hashBuffer, nKeys, op.testingKnobs.numOfHashBuckets)
-	}
-
-	op.populateSels(b, hashBuffer)
-}
-
-// onlineAgg probes aggFuncMap using the built sels map and lazily creates
-// aggFunctions for each group if it doesn't not exist. Then it calls Compute()
-// on each aggregation function to perform aggregation.
-func (op *hashAggregator) onlineAgg(b coldata.Batch) {
-	for selsSlot, hashCode := range op.scratch.hashCodeForSelsSlot {
-		remaining := op.scratch.sels[selsSlot]
-
-		var anyMatched bool
-
-		// Stage 1: Probe aggregate functions for each hash code and perform
-		//          aggregation.
-		if aggFuncs, ok := op.aggFuncMap[hashCode]; ok {
-			for _, aggFunc := range aggFuncs {
-				// We write the selection vector of matched tuples directly
-				// into the selection vector of b and selection vector of
-				// unmatched tuples into 'remaining'.'remaining' will reuse the
-				// underlying memory allocated for 'sel' to avoid extra
-				// allocation and copying.
-				anyMatched, remaining = aggFunc.match(
-					remaining, b, op.groupCols, op.groupTypes,
-					op.groupCanonicalTypeFamilies, op.keyMapping,
-					op.scratch.diff[:len(remaining)], false, /* firstDefiniteMatch */
-				)
-				if anyMatched {
-					aggFunc.compute(b, op.aggCols)
-				}
+		for eqChainsSlot, headID := range op.ht.probeScratch.headID[:eqChainsCount] {
+			if headID != 0 {
+				// Tuples in this equality chain belong to an already existing
+				// group.
+				eqChain := op.scratch.eqChains[eqChainsSlot]
+				bucket := op.buckets[headID-1]
+				bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
+				// We have fully processed this equality chain, so we need to
+				// reset its length.
+				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
 			}
-		} else {
-			// No aggregate functions exist for this hashCode, create one.
-			op.aggFuncMap[hashCode] = op.hashAlloc.newHashAggFuncsSlice()
 		}
+		copy(op.ht.probeScratch.headID[:eqChainsCount], zeroUint64Column)
+		copy(op.ht.probeScratch.differs[:eqChainsCount], zeroBoolColumn)
+	}
 
-		// Stage 2: Build aggregate function that doesn't exist, then perform
-		//          aggregation on the newly created aggregate function.
-		for len(remaining) > 0 {
-			// Record the selection vector index of the beginning of the group.
-			groupStartIdx := remaining[0]
-
-			// Build new agg functions.
-			keyIdx := op.keyMapping.Length()
-			aggFunc := op.hashAlloc.newHashAggFuncs()
-			aggFunc.keyIdx = keyIdx
-
-			// Store the key of the current aggregating group into keyMapping.
-			op.allocator.PerformOperation(op.keyMapping.ColVecs(), func() {
-				for keyIdx, colIdx := range op.groupCols {
-					// TODO(azhng): Try to preallocate enough memory so instead of
-					// .Append() we can use execgen.SET to improve the
-					// performance.
-					op.keyMapping.ColVec(keyIdx).Append(coldata.SliceArgs{
-						Src:         b.ColVec(int(colIdx)),
-						DestIdx:     aggFunc.keyIdx,
-						SrcStartIdx: groupStartIdx,
-						SrcEndIdx:   groupStartIdx + 1,
-					})
-				}
-				op.keyMapping.SetLength(keyIdx + 1)
-			})
-
-			aggFunc.fns = op.aggFnsAlloc.makeAggregateFuncs()
-			op.aggFuncMap[hashCode] = append(op.aggFuncMap[hashCode], aggFunc)
-
-			// Select rest of the tuples that matches the current key. We don't need
-			// to check if there is any match since 'remaining[0]' will always be
-			// matched.
-			_, remaining = aggFunc.match(
-				remaining, b, op.groupCols, op.groupTypes,
-				op.groupCanonicalTypeFamilies, op.keyMapping,
-				op.scratch.diff[:len(remaining)], true, /* firstDefiniteMatch */
-			)
-
-			// aggFunc knows that all selected tuples in b belong to the same
+	// Step 4: now we go over all equality chains and check whether there are
+	// any that haven't been processed yet (they will be of non-zero length).
+	// If we find any, we'll create a new bucket for each.
+	newGroupsHeadsSel := op.scratch.anotherIntSlice[:0]
+	newGroupCount := 0
+	for eqChainSlot, eqChain := range op.scratch.eqChains[:eqChainsCount] {
+		if len(eqChain) > 0 {
+			// Tuples in this equality chain belong to a new aggregation group,
+			// so we'll create a new bucket and make sure that the head of this
+			// equality chain is appended to the hash table in the
+			// corresponding position.
+			bucket := op.hashAlloc.newHashAggFuncs()
+			bucket.fns = op.aggFnsAlloc.makeAggregateFuncs()
+			op.buckets = append(op.buckets, bucket)
+			// bucket knows that all selected tuples in b belong to the same
 			// single group, so we can pass 'nil' for the first argument.
-			aggFunc.init(nil /* group */, op.output.Batch)
-			aggFunc.compute(b, op.aggCols)
+			bucket.init(nil /* group */, op.output)
+			bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
+			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
+			// We need to compact the hash buffer according to the new groups
+			// head tuples selection vector we're building.
+			op.ht.probeScratch.hashBuffer[newGroupCount] = op.ht.probeScratch.hashBuffer[eqChainSlot]
+			newGroupCount++
+			op.scratch.eqChains[eqChainSlot] = op.scratch.eqChains[eqChainSlot][:0]
 		}
+	}
 
-		// We have processed all tuples with this hashCode, so we should reset
-		// the length of the corresponding slice.
-		op.scratch.sels[selsSlot] = op.scratch.sels[selsSlot][:0]
+	if newGroupCount > 0 {
+		// We have created new buckets, so we need to append the heads of those
+		// buckets to the hash table.
+		copy(b.Selection(), newGroupsHeadsSel)
+		b.SetLength(newGroupCount)
+		op.ht.appendAllDistinct(ctx, b)
 	}
 }
 
@@ -421,37 +360,20 @@ func (op *hashAggregator) reset(ctx context.Context) {
 	if r, ok := op.input.(resetter); ok {
 		r.reset(ctx)
 	}
-
-	op.aggFuncMap = hashAggFuncMap{}
+	op.buckets = op.buckets[:0]
 	op.state = hashAggregatorAggregating
-
+	op.ht.reset(ctx)
 	op.output.ResetInternalBatch()
 	op.output.SetLength(0)
-	op.output.pendingOutput = false
-
-	op.keyMapping.ResetInternalBatch()
-	op.keyMapping.SetLength(0)
 }
 
 // hashAggFuncs stores the aggregation functions for the corresponding
-// aggregating group.
+// aggregation group.
 type hashAggFuncs struct {
-	// keyIdx is the index of key of the current aggregating group, which is
-	// stored in the hashAggregator keyMapping batch.
-	keyIdx int
-
 	fns []aggregateFunc
 }
 
-const (
-	sizeOfHashAggFuncs    = unsafe.Sizeof(hashAggFuncs{})
-	sizeOfHashAggFuncsPtr = unsafe.Sizeof(&hashAggFuncs{})
-)
-
-// TODO(yuzefovich): we need to account for memory used by this map. It is
-// likely that we will replace Golang's map with our vectorized hash table, so
-// we might hold off with fixing the accounting until then.
-type hashAggFuncMap map[uint64][]*hashAggFuncs
+const sizeOfHashAggFuncs = unsafe.Sizeof(hashAggFuncs{})
 
 func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
 	for fnIdx, fn := range v.fns {
@@ -459,18 +381,17 @@ func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
 	}
 }
 
-func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
+func (v *hashAggFuncs) compute(vecs []coldata.Vec, aggCols [][]uint32, inputLen int, sel []int) {
 	for fnIdx, fn := range v.fns {
-		fn.Compute(b, aggCols[fnIdx])
+		fn.Compute(vecs, aggCols[fnIdx], inputLen, sel)
 	}
 }
 
 // hashAggFuncsAlloc is a utility struct that batches allocations of
-// hashAggFuncs and slices of pointers to hashAggFuncs.
+// hashAggFuncs.
 type hashAggFuncsAlloc struct {
 	allocator *colmem.Allocator
 	buf       []hashAggFuncs
-	ptrBuf    []*hashAggFuncs
 }
 
 func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
@@ -480,17 +401,5 @@ func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
 	}
 	ret := &a.buf[0]
 	a.buf = a.buf[1:]
-	return ret
-}
-
-func (a *hashAggFuncsAlloc) newHashAggFuncsSlice() []*hashAggFuncs {
-	if len(a.ptrBuf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfHashAggFuncsPtr))
-		a.ptrBuf = make([]*hashAggFuncs, hashAggregatorAllocSize)
-	}
-	// Since we don't expect a lot of hash collisions we only give out small
-	// amount of memory here.
-	ret := a.ptrBuf[0:0:1]
-	a.ptrBuf = a.ptrBuf[1:]
 	return ret
 }

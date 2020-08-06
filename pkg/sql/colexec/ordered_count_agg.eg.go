@@ -27,10 +27,8 @@ func newCountRowsOrderedAggAlloc(
 
 // countRowsOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsOrderedAgg struct {
-	groups []bool
+	orderedAggregateFuncBase
 	vec    []int64
-	nulls  *coldata.Nulls
-	curIdx int
 	curAgg int64
 }
 
@@ -39,29 +37,19 @@ var _ aggregateFunc = &countRowsOrderedAgg{}
 const sizeOfCountRowsOrderedAgg = int64(unsafe.Sizeof(countRowsOrderedAgg{}))
 
 func (a *countRowsOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *countRowsOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.curAgg = 0
-	a.nulls.UnsetNulls()
 }
 
-func (a *countRowsOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *countRowsOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *countRowsOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	sel := b.Selection()
+func (a *countRowsOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	var i int
 
 	{
@@ -93,12 +81,17 @@ func (a *countRowsOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *countRowsOrderedAgg) Flush() {
-	a.vec[a.curIdx] = a.curAgg
+func (a *countRowsOrderedAgg) Flush(outputIdx int) {
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
+	a.vec[outputIdx] = a.curAgg
 }
 
 func (a *countRowsOrderedAgg) HandleEmptyInputScalar() {
+	// COUNT aggregates are special because they return zero in case of an
+	// empty input in the scalar context.
 	a.vec[0] = 0
 }
 
@@ -130,10 +123,8 @@ func newCountOrderedAggAlloc(
 
 // countOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countOrderedAgg struct {
-	groups []bool
+	orderedAggregateFuncBase
 	vec    []int64
-	nulls  *coldata.Nulls
-	curIdx int
 	curAgg int64
 }
 
@@ -142,35 +133,25 @@ var _ aggregateFunc = &countOrderedAgg{}
 const sizeOfCountOrderedAgg = int64(unsafe.Sizeof(countOrderedAgg{}))
 
 func (a *countOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *countOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.curAgg = 0
-	a.nulls.UnsetNulls()
 }
 
-func (a *countOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *countOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *countOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	sel := b.Selection()
+func (a *countOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 	var i int
 
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
-	nulls := b.ColVec(int(inputIdxs[0])).Nulls()
+	nulls := vecs[inputIdxs[0]].Nulls()
 	if nulls.MaybeHasNulls() {
 		if sel != nil {
 			for _, i = range sel[:inputLen] {
@@ -232,12 +213,17 @@ func (a *countOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
-func (a *countOrderedAgg) Flush() {
-	a.vec[a.curIdx] = a.curAgg
+func (a *countOrderedAgg) Flush(outputIdx int) {
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
+	a.vec[outputIdx] = a.curAgg
 }
 
 func (a *countOrderedAgg) HandleEmptyInputScalar() {
+	// COUNT aggregates are special because they return zero in case of an
+	// empty input in the scalar context.
 	a.vec[0] = 0
 }
 

@@ -214,3 +214,23 @@ SELECT c.a FROM c JOIN d ON d.b = c.b
 
 statement ok
 RESET vectorize
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colfetcher.ColBatchScan

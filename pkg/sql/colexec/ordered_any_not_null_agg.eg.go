@@ -86,12 +86,10 @@ func newAnyNotNullOrderedAggAlloc(
 // anyNotNullBoolOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBoolOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Bools
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      bool
 	foundNonNullForCurrentGroup bool
 }
@@ -101,31 +99,22 @@ var _ aggregateFunc = &anyNotNullBoolOrderedAgg{}
 const sizeOfAnyNotNullBoolOrderedAgg = int64(unsafe.Sizeof(anyNotNullBoolOrderedAgg{}))
 
 func (a *anyNotNullBoolOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bool()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullBoolOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullBoolOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullBoolOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullBoolOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -249,19 +238,21 @@ func (a *anyNotNullBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 	)
 }
 
-func (a *anyNotNullBoolOrderedAgg) Flush() {
+func (a *anyNotNullBoolOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullBoolOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullBoolOrderedAggAlloc struct {
@@ -285,12 +276,10 @@ func (a *anyNotNullBoolOrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullBytesOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullBytesOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         *coldata.Bytes
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      []byte
 	foundNonNullForCurrentGroup bool
 }
@@ -300,31 +289,22 @@ var _ aggregateFunc = &anyNotNullBytesOrderedAgg{}
 const sizeOfAnyNotNullBytesOrderedAgg = int64(unsafe.Sizeof(anyNotNullBytesOrderedAgg{}))
 
 func (a *anyNotNullBytesOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Bytes()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullBytesOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullBytesOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullBytesOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullBytesOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -448,19 +428,21 @@ func (a *anyNotNullBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullBytesOrderedAgg) Flush() {
+func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullBytesOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type anyNotNullBytesOrderedAggAlloc struct {
@@ -484,12 +466,10 @@ func (a *anyNotNullBytesOrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullDecimalOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDecimalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Decimals
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -499,31 +479,22 @@ var _ aggregateFunc = &anyNotNullDecimalOrderedAgg{}
 const sizeOfAnyNotNullDecimalOrderedAgg = int64(unsafe.Sizeof(anyNotNullDecimalOrderedAgg{}))
 
 func (a *anyNotNullDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Decimal()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullDecimalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullDecimalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullDecimalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullDecimalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -647,19 +618,21 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint3
 	)
 }
 
-func (a *anyNotNullDecimalOrderedAgg) Flush() {
+func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullDecimalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx].Set(&a.curAgg)
+	}
 }
 
 type anyNotNullDecimalOrderedAggAlloc struct {
@@ -683,12 +656,10 @@ func (a *anyNotNullDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt16OrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt16OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Int16s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int16
 	foundNonNullForCurrentGroup bool
 }
@@ -698,31 +669,22 @@ var _ aggregateFunc = &anyNotNullInt16OrderedAgg{}
 const sizeOfAnyNotNullInt16OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt16OrderedAgg{}))
 
 func (a *anyNotNullInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int16()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt16OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt16OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullInt16OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullInt16OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -846,19 +808,21 @@ func (a *anyNotNullInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullInt16OrderedAgg) Flush() {
+func (a *anyNotNullInt16OrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullInt16OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullInt16OrderedAggAlloc struct {
@@ -882,12 +846,10 @@ func (a *anyNotNullInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt32OrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt32OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Int32s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int32
 	foundNonNullForCurrentGroup bool
 }
@@ -897,31 +859,22 @@ var _ aggregateFunc = &anyNotNullInt32OrderedAgg{}
 const sizeOfAnyNotNullInt32OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt32OrderedAgg{}))
 
 func (a *anyNotNullInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int32()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt32OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt32OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullInt32OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullInt32OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1045,19 +998,21 @@ func (a *anyNotNullInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullInt32OrderedAgg) Flush() {
+func (a *anyNotNullInt32OrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullInt32OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullInt32OrderedAggAlloc struct {
@@ -1081,12 +1036,10 @@ func (a *anyNotNullInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullInt64OrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullInt64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Int64s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      int64
 	foundNonNullForCurrentGroup bool
 }
@@ -1096,31 +1049,22 @@ var _ aggregateFunc = &anyNotNullInt64OrderedAgg{}
 const sizeOfAnyNotNullInt64OrderedAgg = int64(unsafe.Sizeof(anyNotNullInt64OrderedAgg{}))
 
 func (a *anyNotNullInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Int64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullInt64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullInt64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullInt64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullInt64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1244,19 +1188,21 @@ func (a *anyNotNullInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullInt64OrderedAgg) Flush() {
+func (a *anyNotNullInt64OrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullInt64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullInt64OrderedAggAlloc struct {
@@ -1280,12 +1226,10 @@ func (a *anyNotNullInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullFloat64OrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullFloat64OrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Float64s
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      float64
 	foundNonNullForCurrentGroup bool
 }
@@ -1295,31 +1239,22 @@ var _ aggregateFunc = &anyNotNullFloat64OrderedAgg{}
 const sizeOfAnyNotNullFloat64OrderedAgg = int64(unsafe.Sizeof(anyNotNullFloat64OrderedAgg{}))
 
 func (a *anyNotNullFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Float64()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullFloat64OrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullFloat64OrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullFloat64OrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullFloat64OrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1443,19 +1378,21 @@ func (a *anyNotNullFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint3
 	)
 }
 
-func (a *anyNotNullFloat64OrderedAgg) Flush() {
+func (a *anyNotNullFloat64OrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullFloat64OrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullFloat64OrderedAggAlloc struct {
@@ -1479,12 +1416,10 @@ func (a *anyNotNullFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullTimestampOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullTimestampOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Times
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      time.Time
 	foundNonNullForCurrentGroup bool
 }
@@ -1494,31 +1429,22 @@ var _ aggregateFunc = &anyNotNullTimestampOrderedAgg{}
 const sizeOfAnyNotNullTimestampOrderedAgg = int64(unsafe.Sizeof(anyNotNullTimestampOrderedAgg{}))
 
 func (a *anyNotNullTimestampOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Timestamp()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullTimestampOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullTimestampOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullTimestampOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullTimestampOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1642,19 +1568,21 @@ func (a *anyNotNullTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uin
 	)
 }
 
-func (a *anyNotNullTimestampOrderedAgg) Flush() {
+func (a *anyNotNullTimestampOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullTimestampOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullTimestampOrderedAggAlloc struct {
@@ -1678,12 +1606,10 @@ func (a *anyNotNullTimestampOrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullIntervalOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullIntervalOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.Durations
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      duration.Duration
 	foundNonNullForCurrentGroup bool
 }
@@ -1693,31 +1619,22 @@ var _ aggregateFunc = &anyNotNullIntervalOrderedAgg{}
 const sizeOfAnyNotNullIntervalOrderedAgg = int64(unsafe.Sizeof(anyNotNullIntervalOrderedAgg{}))
 
 func (a *anyNotNullIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Interval()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullIntervalOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullIntervalOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullIntervalOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullIntervalOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -1841,19 +1758,21 @@ func (a *anyNotNullIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint
 	)
 }
 
-func (a *anyNotNullIntervalOrderedAgg) Flush() {
+func (a *anyNotNullIntervalOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col[a.curIdx] = a.curAgg
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullIntervalOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col[outputIdx] = a.curAgg
+	}
 }
 
 type anyNotNullIntervalOrderedAggAlloc struct {
@@ -1877,12 +1796,10 @@ func (a *anyNotNullIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 // anyNotNullDatumOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDatumOrderedAgg struct {
+	orderedAggregateFuncBase
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         coldata.DatumVec
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      interface{}
 	foundNonNullForCurrentGroup bool
 }
@@ -1892,31 +1809,22 @@ var _ aggregateFunc = &anyNotNullDatumOrderedAgg{}
 const sizeOfAnyNotNullDatumOrderedAgg = int64(unsafe.Sizeof(anyNotNullDatumOrderedAgg{}))
 
 func (a *anyNotNullDatumOrderedAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
 	a.col = vec.Datum()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNullDatumOrderedAgg) Reset() {
-	a.curIdx = 0
+	a.orderedAggregateFuncBase.Reset()
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNullDatumOrderedAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
+func (a *anyNotNullDatumOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
 
-func (a *anyNotNullDatumOrderedAgg) SetOutputIndex(idx int) {
-	a.curIdx = idx
-}
-
-func (a *anyNotNullDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 
 	a.allocator.PerformOperation(
@@ -2040,19 +1948,21 @@ func (a *anyNotNullDatumOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 	)
 }
 
-func (a *anyNotNullDatumOrderedAgg) Flush() {
+func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		a.col.Set(a.curIdx, a.curAgg)
-	}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
-}
-
-func (a *anyNotNullDatumOrderedAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		a.col.Set(outputIdx, a.curAgg)
+	}
 }
 
 type anyNotNullDatumOrderedAggAlloc struct {
