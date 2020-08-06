@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -130,7 +131,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, _, err = sqlbase.LookupObjectID(
+	exists, _, err = catalogkv.LookupObjectID(
 		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, tableDesc.Name,
 	)
 	if err == nil && exists {
@@ -156,7 +157,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	newTbKey := sqlbase.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
+	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, tableDesc.Name).Key(p.ExecCfg().Codec)
 
 	b := &kv.Batch{}

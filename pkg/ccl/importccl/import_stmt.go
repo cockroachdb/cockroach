@@ -988,7 +988,7 @@ func prepareExistingTableDescForIngestion(
 	// upgrade and downgrade, because IMPORT does not operate in mixed-version
 	// states.
 	// TODO(jordan,lucy): remove this comment once 19.2 is released.
-	existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, existing)
+	existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, existing)
 	if err != nil {
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
@@ -1272,7 +1272,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			// upgrade and downgrade, because IMPORT does not operate in mixed-version
 			// states.
 			// TODO(jordan,lucy): remove this comment once 19.2 is released.
-			existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
+			existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
 			if err != nil {
 				return errors.Wrap(err, "publishing tables")
 			}
@@ -1404,7 +1404,7 @@ func (r *importResumer) dropTables(
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			newTableDesc.DropTime = dropTime
-			if err := sqlbase.RemovePublicTableNamespaceEntry(
+			if err := catalogkv.RemovePublicTableNamespaceEntry(
 				ctx, txn, execCfg.Codec, newTableDesc.ParentID, newTableDesc.Name,
 			); err != nil {
 				return err
@@ -1418,7 +1418,7 @@ func (r *importResumer) dropTables(
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
 		// states.
 		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
+		existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
 		if err != nil {
 			return errors.Wrap(err, "rolling back tables")
 		}

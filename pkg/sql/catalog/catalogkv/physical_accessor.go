@@ -52,7 +52,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return sysDB, nil
 	}
 
-	found, descID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
+	found, descID, err := LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return nil, err
 	} else if !found {
@@ -245,7 +245,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == descpb.InvalidID {
 		var found bool
-		found, descID, err = sqlbase.LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
+		found, descID, err = LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
 		if err != nil {
 			return nil, err
 		}

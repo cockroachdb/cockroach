@@ -660,7 +660,7 @@ func fullClusterTargets(
 func lookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
 ) (descpb.ID, error) {
-	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, codec, name)
+	found, id, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
 	if err != nil {
 		return descpb.InvalidID, err
 	}
@@ -680,7 +680,7 @@ func CheckObjectExists(
 	parentSchemaID descpb.ID,
 	name string,
 ) error {
-	found, id, err := sqlbase.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
+	found, id, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
 	if err != nil {
 		return err
 	}
