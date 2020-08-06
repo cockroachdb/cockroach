@@ -22,7 +22,7 @@ import (
 
 func TestPrivilege(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	descriptor := NewDefaultPrivilegeDescriptor()
+	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRole)
 
 	testCases := []struct {
 		grantee       string // User to grant/revoke privileges on.
@@ -121,29 +121,32 @@ func TestCheckPrivilege(t *testing.T) {
 		priv privilege.Kind
 		exp  bool
 	}{
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"foo", privilege.CREATE, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"bar", privilege.CREATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"bar", privilege.DROP, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"foo", privilege.DROP, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
 			"foo", privilege.CREATE, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"foo", privilege.ALL, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
 			"foo", privilege.ALL, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{}),
+		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
 			"foo", privilege.ALL, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{}),
+		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
 			"foo", privilege.CREATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRole),
 			"foo", privilege.UPDATE, false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRole),
 			"foo", privilege.DROP, true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.ALL}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.ALL},
+			security.AdminRole),
 			"foo", privilege.DROP, true},
 	}
 
@@ -163,17 +166,19 @@ func TestAnyPrivilege(t *testing.T) {
 		user string
 		exp  bool
 	}{
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}, security.AdminRole),
 			"bar", false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}, security.AdminRole),
 			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{}),
+		{NewPrivilegeDescriptor("foo", privilege.List{}, security.AdminRole),
 			"foo", false},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRole),
 			"foo", true},
-		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP},
+			security.AdminRole),
 			"bar", false},
 	}
 
@@ -189,7 +194,7 @@ func TestAnyPrivilege(t *testing.T) {
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	id := ID(keys.MinUserDescID)
-	descriptor := NewDefaultPrivilegeDescriptor()
+	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRole)
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +247,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		// Valid: root user has one of the allowable privilege sets.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(
 			privilege.List{privilege.SELECT, privilege.GRANT},
+			security.AdminRole,
 		)
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
@@ -264,6 +270,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		// Valid: root has exactly the allowed privileges.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(
 			privilege.List{privilege.SELECT, privilege.GRANT},
+			security.AdminRole,
 		)
 
 		// Valid: foo has a subset of the allowed privileges.
@@ -287,7 +294,8 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 	{
 		// Invalid: root has a non-allowable privilege set.
-		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE})
+		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE},
+			security.AdminRole)
 		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}

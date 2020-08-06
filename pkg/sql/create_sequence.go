@@ -89,8 +89,7 @@ func doCreateSequence(
 		return err
 	}
 
-	// Inherit permissions from the database descriptor.
-	privs := dbDesc.GetPrivileges()
+	privs := createInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User)
 
 	if isTemporary {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)

@@ -74,23 +74,41 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	userNames := make(map[string]struct{})
-	for _, name := range names {
+	// Now check whether the user still has permission or ownership on any
+	// object in the database.
+	type objectAndType struct {
+		ObjectType string
+		ObjectName string
+	}
+
+	// userNames maps users to the objects they own
+	userNames := make(map[string][]objectAndType)
+	for i := range names {
+		name := names[i]
 		normalizedUsername, err := NormalizeAndValidateUsername(name)
 		if err != nil {
 			return err
 		}
-		userNames[normalizedUsername] = struct{}{}
+
+		// Update the name in the names slice since we will re-use the name later.
+		names[i] = normalizedUsername
+		userNames[normalizedUsername] = make([]objectAndType, 0)
 	}
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	defer f.Close()
 
-	// Now check whether the user still has permission on any object in the database.
-
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
 		func(db *sqlbase.ImmutableDatabaseDescriptor) error {
+			if _, ok := userNames[db.GetPrivileges().Owner]; ok {
+				userNames[db.GetPrivileges().Owner] = append(
+					userNames[db.GetPrivileges().Owner],
+					objectAndType{
+						ObjectType: "database",
+						ObjectName: db.GetName(),
+					})
+			}
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
 					if f.Len() > 0 {
@@ -115,11 +133,23 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
 	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
+	// TODO(richardjcai): Also need to add privilege checking for types and
+	// user defined schemas when they are added.
+	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		if !tableIsVisible(table, true /*allowAdding*/) {
 			continue
+		}
+		if _, ok := userNames[table.GetPrivileges().Owner]; ok {
+			userNames[table.GetPrivileges().Owner] = append(
+				userNames[table.GetPrivileges().Owner],
+				objectAndType{
+					ObjectType: "table",
+					ObjectName: table.GetName(),
+				})
 		}
 		for _, u := range table.GetPrivileges().Users {
 			if _, ok := userNames[u.User]; ok {
@@ -144,11 +174,26 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			}
 			fnl.FormatName(name)
 		}
-		return pgerror.Newf(pgcode.Grouping,
+		return pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot drop role%s/user%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
 			fnl.String(), f.String(),
 		)
+	}
+
+	for _, name := range names {
+		// Did the user own any objects?
+		ownedObjects := userNames[name]
+		if len(ownedObjects) > 0 {
+			objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
+			for _, obj := range ownedObjects {
+				objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+			}
+			objects := objectsMsg.CloseAndGetString()
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"role %s cannot be dropped because some objects depend on it%s",
+				name, objects)
+		}
 	}
 
 	// All safe - do the work.

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 	for inner, should := range map[Descriptor]bool{
 		NewImmutableTableDescriptor(descpb.TableDescriptor{}):                    true,
 		NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}): false,
-		NewInitialDatabaseDescriptor(42, "db"):                                   false,
+		NewInitialDatabaseDescriptor(42, "db", security.AdminRole):               false,
 		NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                 false,
 		NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                  false,
 	} {

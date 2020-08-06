@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -238,6 +239,10 @@ func readPostgresCreateTable(
 		stmt, err := ps.Next()
 		if err == io.EOF {
 			ret := make([]*sqlbase.MutableTableDescriptor, 0, len(createTbl))
+			owner := security.AdminRole
+			if params.SessionData() != nil {
+				owner = params.SessionData().User
+			}
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.MakeSequenceTableDesc(
@@ -247,7 +252,7 @@ func readPostgresCreateTable(
 					keys.PublicSchemaID,
 					id,
 					hlc.Timestamp{WallTime: walltime},
-					descpb.NewDefaultPrivilegeDescriptor(),
+					descpb.NewDefaultPrivilegeDescriptor(owner),
 					false, /* temporary */
 					&params,
 				)

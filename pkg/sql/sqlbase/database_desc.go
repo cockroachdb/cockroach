@@ -52,9 +52,11 @@ type MutableDatabaseDescriptor struct {
 
 // NewInitialDatabaseDescriptor constructs a new DatabaseDescriptor for an
 // initial version from an id and name.
-func NewInitialDatabaseDescriptor(id descpb.ID, name string) *ImmutableDatabaseDescriptor {
+func NewInitialDatabaseDescriptor(
+	id descpb.ID, name string, owner string,
+) *ImmutableDatabaseDescriptor {
 	return NewInitialDatabaseDescriptorWithPrivileges(id, name,
-		descpb.NewDefaultPrivilegeDescriptor())
+		descpb.NewDefaultPrivilegeDescriptor(owner))
 }
 
 // NewInitialDatabaseDescriptorWithPrivileges constructs a new DatabaseDescriptor for an
