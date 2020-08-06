@@ -1475,7 +1475,8 @@ func MakeTableDesc(
 			if d.Predicate != nil {
 				// TODO(mgartner): remove this once partial indexes are fully supported.
 				if !sessionData.PartialIndexes {
-					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+					return desc, pgerror.Newf(pgcode.FeatureNotSupported,
+						"session variable experimental_partial_indexes is set to false, cannot create a partial index")
 				}
 
 				expr, err := idxValidator.Validate(d.Predicate)
@@ -1521,7 +1522,8 @@ func MakeTableDesc(
 			if d.Predicate != nil {
 				// TODO(mgartner): remove this once partial indexes are fully supported.
 				if !sessionData.PartialIndexes {
-					return desc, unimplemented.NewWithIssue(9683, "partial indexes are not supported")
+					return desc, pgerror.Newf(pgcode.FeatureNotSupported,
+						"session variable experimental_partial_indexes is set to false, cannot create a partial index")
 				}
 
 				expr, err := idxValidator.Validate(d.Predicate)
