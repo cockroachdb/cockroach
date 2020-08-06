@@ -15,12 +15,32 @@ import {
   nodeLivenessIssues,
   clusterGlossary,
   reviewOfCockroachTerminology,
+  howAreCapacityMetricsCalculatedOverview,
 } from "src/util/docs";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 
-export const UsedCapacityTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const CapacityUsageTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>Usage of disk space by CockroachDB data.</p>
+        <p>
+          <Anchor href={howAreCapacityMetricsCalculatedOverview} target="_blank">
+            How are these metrics calculated?
+          </Anchor>
+        </p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
+);
+
+export const UsedTooltip: React.FC<TooltipProps> = (props) => (
+  <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -32,14 +52,13 @@ export const UsedCapacityTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const UsableCapacityTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const UsableTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -54,14 +73,13 @@ export const UsableCapacityTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const LiveNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const LiveNodesTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -69,14 +87,13 @@ export const LiveNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const SuspectNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const SuspectNodesTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -91,14 +108,13 @@ export const SuspectNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const DeadNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const DeadNodesTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -109,14 +125,13 @@ export const DeadNodesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const TotalRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-  children,
-}) => (
+export const TotalRangesTooltip: React.FC<TooltipProps> = (props) => (
   <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
@@ -130,23 +145,19 @@ export const TotalRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
       </div>
     }
   >
-    {children}
+    {props.children}
   </Tooltip>
 );
 
-export const UnderReplicatedRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-    children,
-  }) => (
-    <Tooltip
+export const UnderReplicatedRangesTooltip: React.FC<TooltipProps> = (props) => (
+  <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
         <p>
           {"Number of "}
-          <Anchor
-            href={reviewOfCockroachTerminology}
-            target="_blank"
-          >
+          <Anchor href={reviewOfCockroachTerminology} target="_blank">
             under-replicated ranges
           </Anchor>
           {" in the cluster. A non-zero number indicates an unstable cluster."}
@@ -154,23 +165,19 @@ export const UnderReplicatedRangesTooltip: React.FC<React.PropsWithChildren<{}>>
       </div>
     }
   >
-      {children}
-    </Tooltip>
-  );
+    {props.children}
+  </Tooltip>
+);
 
-export const  UnavailableRangesTooltip: React.FC<React.PropsWithChildren<{}>> = ({
-    children,
-  }) => (
-    <Tooltip
+export const UnavailableRangesTooltip: React.FC<TooltipProps> = (props) => (
+  <Tooltip
+    {...props}
     placement="bottom"
     title={
       <div className="tooltip__table--title">
         <p>
           {"Number of "}
-          <Anchor
-            href={reviewOfCockroachTerminology}
-            target="_blank"
-          >
+          <Anchor href={reviewOfCockroachTerminology} target="_blank">
             unavailable ranges
           </Anchor>
           {" in the cluster. A non-zero number indicates an unstable cluster."}
@@ -178,6 +185,6 @@ export const  UnavailableRangesTooltip: React.FC<React.PropsWithChildren<{}>> = 
       </div>
     }
   >
-      {children}
-    </Tooltip>
-  );
+    {props.children}
+  </Tooltip>
+);

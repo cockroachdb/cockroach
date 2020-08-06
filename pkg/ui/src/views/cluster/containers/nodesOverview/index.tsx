@@ -38,7 +38,7 @@ import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 import TableSection from "./tableSection";
 import "./nodes.styl";
 
-import { getStatusDescription, getNodeStatusDescription, NodeCountTooltip, UptimeTooltip, ReplicasTooltip, CapacityUseTooltip, MemoryUseTooltip, CPUsTooltip, VersionTooltip, StatusTooltip } from "./tooltips";
+import { getStatusDescription, getNodeStatusDescription, NodeCountTooltip, UptimeTooltip, ReplicasTooltip, NodelistCapacityUsageTooltip, MemoryUseTooltip, CPUsTooltip, VersionTooltip, StatusTooltip } from "./tooltips";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -241,11 +241,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       width: "10%",
     },
     {
-      key: "capacityUse",
+      key: "capacityUsage",
       title: (
-        <CapacityUseTooltip>
-          Capacity Use
-        </CapacityUseTooltip>
+        <NodelistCapacityUsageTooltip>
+          Capacity Usage
+        </NodelistCapacityUsageTooltip>
       ),
       render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
       sorter: (a, b) =>
