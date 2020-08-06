@@ -919,6 +919,10 @@ func createImportingDescriptors(
 
 			details.PrepareCompleted = true
 			details.TableDescs = tableDescs
+			details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
+			for i := range typesToWrite {
+				details.TypeDescs[i] = typesToWrite[i].TypeDesc()
+			}
 
 			// Update the job once all descs have been prepared for ingestion.
 			err := r.job.WithTxn(txn).SetDetails(ctx, details)
@@ -1204,13 +1208,14 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 				return err
 			}
 		}
-		return r.dropTables(ctx, execCfg.JobRegistry, txn)
+		return r.dropDescriptors(ctx, execCfg.JobRegistry, txn)
 	})
 }
 
-// dropTables implements the OnFailOrCancel logic.
-// TODO (rohany): Needs to be updated for user defined types.
-func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *kv.Txn) error {
+// dropDescriptors implements the OnFailOrCancel logic.
+func (r *restoreResumer) dropDescriptors(
+	ctx context.Context, jr *jobs.Registry, txn *kv.Txn,
+) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// No need to mark the tables as dropped if they were not even created in the
@@ -1246,6 +1251,25 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 			tableToDrop.DescriptorProto(),
 			existingDescVal,
 		)
+	}
+
+	// Drop the type descriptors that this restore created.
+	for i := range details.TypeDescs {
+		// TypeDescriptors don't have a GC job process, so we can just write them
+		// as dropped here.
+		typDesc := details.TypeDescs[i]
+		if err := catalogkv.RemoveObjectNamespaceEntry(
+			ctx,
+			txn,
+			keys.SystemSQLCodec,
+			typDesc.ParentID,
+			typDesc.ParentSchemaID,
+			typDesc.Name,
+			false, /* kvTrace */
+		); err != nil {
+			return err
+		}
+		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
 	// Queue a GC job.
