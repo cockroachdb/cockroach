@@ -130,16 +130,16 @@ func TestProvisional(t *testing.T) {
 				branch:        `provisional_201901010101_v0.0.1-alpha`,
 			},
 			expectedCmds: []string{
-				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
+				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
 				"env=[] args=[make archive ARCHIVE_BASE=cockroach-v0.0.1-alpha ARCHIVE=cockroach-v0.0.1-alpha.src.tgz BUILDINFO_TAG=v0.0.1-alpha]",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz " +
-					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-amd64.tgz " +
+					"CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz " +
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip " +
 					"CONTENTS <binary stuff>",
@@ -156,20 +156,12 @@ func TestProvisional(t *testing.T) {
 				sha:           `00SHA00`,
 			},
 			expectedCmds: []string{
-				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
-				"s3://cockroach//cockroach/cockroach.darwin-amd64.00SHA00 " +
-					"CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
-				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache " +
-					"REDIRECT /cockroach/cockroach.darwin-amd64.00SHA00",
-				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
-				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib",
-				"s3://cockroach//cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
-				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib",
 				"s3://cockroach//cockroach/cockroach.linux-gnu-amd64.00SHA00 " +
 					"CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache " +
@@ -178,6 +170,14 @@ func TestProvisional(t *testing.T) {
 				"s3://cockroach/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so",
 				"s3://cockroach//cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so",
+				"s3://cockroach//cockroach/cockroach.darwin-amd64.00SHA00 " +
+					"CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache " +
+					"REDIRECT /cockroach/cockroach.darwin-amd64.00SHA00",
+				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib",
+				"s3://cockroach//cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib",
 				"s3://cockroach//cockroach/cockroach.windows-amd64.00SHA00.exe " +
 					"CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache " +
@@ -231,16 +231,16 @@ func TestBless(t *testing.T) {
 				branch:    `provisional_201901010101_v0.0.1`,
 			},
 			expectedGets: []string{
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-amd64.tgz",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.src.tgz",
 			},
 			expectedPuts: []string{
-				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz/no-cache " +
-					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz/no-cache " +
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-amd64.tgz",
+				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz/no-cache " +
+					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip/no-cache " +
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-latest.src.tgz/no-cache " +
