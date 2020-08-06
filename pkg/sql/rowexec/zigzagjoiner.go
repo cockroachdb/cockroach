@@ -301,7 +301,14 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		execinfra.ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				// producerMeta appends any extra metadata to the z.returnedMeta
+				// field, so we can just return that afterwards.
+				z.producerMeta(nil /* err */)
+				return z.returnedMeta
+			},
+		}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -462,6 +469,7 @@ func (z *zigzagJoiner) setupInfo(
 		false, /* reverse */
 		neededCols,
 		false, /* check */
+		flowCtx.EvalCtx.Mon,
 		info.alloc,
 		execinfra.ScanVisibilityPublic,
 		// NB: zigzag joins are disabled when a row-level locking clause is
@@ -486,9 +494,10 @@ func (z *zigzagJoiner) setupInfo(
 }
 
 func (z *zigzagJoiner) close() {
-	if z.InternalClose() {
-		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
+	for i := range z.infos {
+		z.infos[i].fetcher.Close(z.Ctx)
 	}
+	log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 }
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
@@ -497,7 +506,7 @@ func (z *zigzagJoiner) close() {
 // nil indicating that we're done producing rows even though no error occurred.
 func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
 	var meta *execinfrapb.ProducerMetadata
-	if !z.Closed {
+	if z.InternalClose() {
 		if err != nil {
 			meta = &execinfrapb.ProducerMetadata{Err: err}
 		} else if trace := execinfra.GetTraceData(z.Ctx); trace != nil {
@@ -976,7 +985,9 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	z.close()
+	if z.InternalClose() {
+		z.close()
+	}
 }
 
 // DrainMeta is part of the MetadataSource interface.

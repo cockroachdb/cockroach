@@ -257,7 +257,7 @@ func newInvertedJoiner(
 	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, &ij.alloc, execinfra.ScanVisibilityPublic,
+		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		nil, /* systemColumns */
 	)
@@ -618,6 +618,9 @@ func (ij *invertedJoiner) ConsumerClosed() {
 
 func (ij *invertedJoiner) close() {
 	if ij.InternalClose() {
+		if ij.fetcher != nil {
+			ij.fetcher.Close(ij.Ctx)
+		}
 		if ij.keyRows != nil {
 			ij.keyRows.Close(ij.Ctx)
 		}
