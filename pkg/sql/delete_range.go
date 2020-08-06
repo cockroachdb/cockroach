@@ -185,6 +185,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 	if err := d.fetcher.Init(
+		params.ctx,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -193,6 +194,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&params.p.alloc,
+		nil, /* memMonitor */
 		allTables...,
 	); err != nil {
 		return err

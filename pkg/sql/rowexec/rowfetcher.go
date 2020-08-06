@@ -16,11 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // rowFetcher is an interface used to abstract a row fetcher so that a stat
@@ -49,10 +52,22 @@ type rowFetcher interface {
 	GetBytesRead() int64
 	GetRangesInfo() []roachpb.RangeInfo
 	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
+	// Close releases any resources held by this fetcher.
+	Close(ctx context.Context)
 }
+
+// accountForKVBytes is a cluster setting that adds memory accounting to MVCCScan
+// results in 20.1.7+. This feature is on in 20.2, and the cluster setting is
+// removed in 20.2.
+var accountForKVBytes = settings.RegisterBoolSetting(
+	"sql.scan_memory_accounting.enabled",
+	"whether bytes returned from scans are added to memory accounting",
+	false,
+)
 
 // initRowFetcher initializes the fetcher.
 func initRowFetcher(
+	evalCtx *tree.EvalContext,
 	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
@@ -82,8 +97,13 @@ func initRowFetcher(
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+
+	var memMon *mon.BytesMonitor
+	if accountForKVBytes.Get(&evalCtx.Settings.SV) {
+		memMon = evalCtx.Mon
+	}
 	if err := fetcher.Init(
-		reverseScan, lockStr, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
+		evalCtx.Context, reverseScan, lockStr, true /* returnRangeInfo */, isCheck, alloc, memMon, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

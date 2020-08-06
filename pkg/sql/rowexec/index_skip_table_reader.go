@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -124,12 +125,18 @@ func newIndexSkipTableReader(
 		ValNeededForCol:  neededColumns,
 	}
 
+	var memMon *mon.BytesMonitor
+	if accountForKVBytes.Get(&flowCtx.EvalCtx.Settings.SV) {
+		memMon = flowCtx.EvalCtx.Mon
+	}
 	if err := t.fetcher.Init(
+		flowCtx.EvalCtx.Ctx(),
 		t.reverse,
 		spec.LockingStrength,
 		true,  /* returnRangeInfo */
 		false, /* isCheck */
 		&t.alloc,
+		memMon, /* memMon */
 		tableArgs,
 	); err != nil {
 		return nil, err
@@ -248,15 +255,21 @@ func (t *indexSkipTableReader) Release() {
 }
 
 func (t *indexSkipTableReader) ConsumerClosed() {
-	t.InternalClose()
+	t.close()
 }
 
 func (t *indexSkipTableReader) generateTrailingMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
 	trailingMeta := t.generateMeta(ctx)
-	t.InternalClose()
+	t.close()
 	return trailingMeta
+}
+
+func (t *indexSkipTableReader) close() {
+	if t.InternalClose() {
+		t.fetcher.Close(t.Ctx)
+	}
 }
 
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {

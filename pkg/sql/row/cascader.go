@@ -414,11 +414,13 @@ func (c *cascader) addIndexPKRowFetcher(
 	isSecondary := table.PrimaryIndex.ID != index.ID
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Ctx(),
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		c.alloc,
+		nil, /* memMonitor */
 		FetcherTableArgs{
 			Desc:             table,
 			Index:            index,
@@ -479,6 +481,7 @@ func (c *cascader) addRowDeleter(
 	}
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Ctx(),
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -487,6 +490,7 @@ func (c *cascader) addRowDeleter(
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		c.alloc,
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return Deleter{}, Fetcher{}, err
@@ -545,6 +549,7 @@ func (c *cascader) addRowUpdater(
 	}
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Ctx(),
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -553,6 +558,7 @@ func (c *cascader) addRowUpdater(
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		c.alloc,
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return Updater{}, Fetcher{}, err
