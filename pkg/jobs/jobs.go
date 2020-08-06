@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -696,7 +697,13 @@ func (j *Job) load(ctx context.Context) error {
 	var createdBy *CreatedByInfo
 
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		const stmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+		const newStmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+		const oldStmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
+		hasCreatedBy := j.registry.settings.Version.IsActive(ctx, clusterversion.VersionAlterSystemJobsAddCreatedByColumns)
+		stmt := oldStmt
+		if hasCreatedBy {
+			stmt = newStmt
+		}
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt, *j.ID())
@@ -714,8 +721,11 @@ func (j *Job) load(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		createdBy, err = unmarshalCreatedBy(row[2], row[3])
-		return err
+		if hasCreatedBy {
+			createdBy, err = unmarshalCreatedBy(row[2], row[3])
+			return err
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
