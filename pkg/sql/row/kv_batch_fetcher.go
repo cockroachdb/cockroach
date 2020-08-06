@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,6 +74,7 @@ type txnKVFetcher struct {
 
 	origSpan         roachpb.Span
 	remainingBatches [][]byte
+	mon              *mon.BytesMonitor
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -185,6 +187,7 @@ func makeKVBatchFetcher(
 	firstBatchLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	mon *mon.BytesMonitor,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -194,7 +197,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
 	)
 }
 
@@ -208,6 +211,7 @@ func makeKVBatchFetcherWithSendFunc(
 	firstBatchLimit int64,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	mon *mon.BytesMonitor,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -260,10 +264,15 @@ func makeKVBatchFetcherWithSendFunc(
 		firstBatchLimit: firstBatchLimit,
 		lockStrength:    lockStrength,
 		lockWaitPolicy:  lockWaitPolicy,
+		mon:             mon,
 	}, nil
 }
 
-// fetch retrieves spans from the kv
+// maxScanResponseBytes is the maximum number of bytes a scan request can
+// return.
+const maxScanResponseBytes = 10 * (1 << 20)
+
+// fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.WaitPolicy = f.getWaitPolicy()
@@ -276,7 +285,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// is only a "small" amount of data to be read, and wants to preserve
 		// concurrency for this request inside of DistSender, which setting
 		// TargetBytes would interfere with.
-		ba.Header.TargetBytes = 10 * (1 << 20)
+		ba.Header.TargetBytes = maxScanResponseBytes
 	}
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()

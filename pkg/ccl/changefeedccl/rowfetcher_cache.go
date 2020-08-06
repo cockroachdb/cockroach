@@ -113,12 +113,14 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 
 	var rf row.Fetcher
 	if err := rf.Init(
+		context.TODO(),
 		c.codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&c.a,
+		nil, /* memMonitor */
 		row.FetcherTableArgs{
 			Spans:            tableDesc.AllIndexSpans(c.codec),
 			Desc:             tableDesc,
