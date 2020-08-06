@@ -75,7 +75,6 @@ func newSpillingQueue(
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	batchSize int,
 	diskAcc *mon.BoundAccount,
 ) *spillingQueue {
 	// Reduce the memory limit by what the DiskQueue may need to buffer
@@ -84,7 +83,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, batchSize))
+	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
@@ -114,10 +113,9 @@ func newRewindableSpillingQueue(
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	batchSize int,
 	diskAcc *mon.BoundAccount,
 ) *spillingQueue {
-	q := newSpillingQueue(unlimitedAllocator, typs, memoryLimit, cfg, fdSemaphore, batchSize, diskAcc)
+	q := newSpillingQueue(unlimitedAllocator, typs, memoryLimit, cfg, fdSemaphore, diskAcc)
 	q.rewindable = true
 	return q
 }

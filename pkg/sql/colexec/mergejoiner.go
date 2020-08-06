@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -489,8 +488,7 @@ type mergeJoinBase struct {
 	right              mergeJoinInput
 
 	// Output buffer definition.
-	output          coldata.Batch
-	outputBatchSize int
+	output coldata.Batch
 	// outputReady is a flag to indicate that merge joiner is ready to emit an
 	// output batch.
 	outputReady bool
@@ -532,34 +530,23 @@ func (o *mergeJoinBase) InternalMemoryUsage() int {
 }
 
 func (o *mergeJoinBase) Init() {
-	o.initWithOutputBatchSize(coldata.BatchSize())
-}
-
-func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
 	if o.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
-	o.output = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(outputTypes, outBatchSize)
+	o.output = o.unlimitedAllocator.NewMemBatchWithMaxCapacity(outputTypes)
 	o.left.source.Init()
 	o.right.source.Init()
-	o.outputBatchSize = outBatchSize
-	// If there are no output columns, then the operator is for a COUNT query,
-	// in which case we treat the output batch size as the max int.
-	if o.output.Width() == 0 {
-		o.outputBatchSize = math.MaxInt64
-	}
-
 	o.proberState.lBufferedGroup.spillingQueue = newSpillingQueue(
 		o.unlimitedAllocator, o.left.sourceTypes, o.memoryLimit,
-		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
+		o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
 	)
 	o.proberState.lBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.left.sourceTypes, 1, /* capacity */
 	).ColVecs()
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
-		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
+		o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
 	)
 	o.proberState.rBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.right.sourceTypes, 1, /* capacity */
