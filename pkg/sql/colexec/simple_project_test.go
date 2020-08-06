@@ -78,7 +78,7 @@ func TestSimpleProjectOp(t *testing.T) {
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
 		typs := []*types.T{types.Int, types.Int}
-		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), typs, 1 /* usableCount */)
+		input := newFiniteBatchSource(testAllocator.NewMemBatchWithMaxCapacity(typs), typs, 1 /* usableCount */)
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
 	})

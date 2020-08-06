@@ -142,7 +142,7 @@ func NewHashAggregator(
 
 func (op *hashAggregator) Init() {
 	op.input.Init()
-	op.output = op.allocator.NewMemBatch(op.outputTypes)
+	op.output = op.allocator.NewMemBatchWithMaxCapacity(op.outputTypes)
 	op.scratch.eqChains = make([][]int, coldata.BatchSize())
 	op.scratch.intSlice = make([]int, coldata.BatchSize())
 	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())

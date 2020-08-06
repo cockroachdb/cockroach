@@ -130,7 +130,7 @@ func NewInbox(
 		flowCtx:    ctx,
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
-	i.scratch.b = allocator.NewMemBatch(typs)
+	i.scratch.b = allocator.NewMemBatchWithMaxCapacity(typs)
 	return i, nil
 }
 

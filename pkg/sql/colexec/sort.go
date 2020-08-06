@@ -127,10 +127,8 @@ func newAllSpooler(
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = newAppendOnlyBufferedBatch(
-		p.allocator, p.inputTypes, 0, /* initialSize */
-	)
-	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
+	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes)
+	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
 
 func (p *allSpooler) spool(ctx context.Context) {
@@ -398,7 +396,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 func (p *sortOp) resetOutput() {
 	if p.output == nil {
-		p.output = p.allocator.NewMemBatch(p.inputTypes)
+		p.output = p.allocator.NewMemBatchWithMaxCapacity(p.inputTypes)
 	} else {
 		p.output.ResetInternalBatch()
 	}

@@ -2233,7 +2233,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	benchMemAccount := testMemMonitor.MakeBoundAccount()

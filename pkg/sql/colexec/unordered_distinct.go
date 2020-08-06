@@ -44,7 +44,7 @@ func NewUnorderedDistinct(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		ht:           ht,
-		output:       allocator.NewMemBatch(typs),
+		output:       allocator.NewMemBatchWithMaxCapacity(typs),
 	}
 }
 
