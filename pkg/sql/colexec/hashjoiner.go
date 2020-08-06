@@ -173,9 +173,6 @@ type hashJoiner struct {
 	// output stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
 	output coldata.Batch
-	// outputBatchSize specifies the desired length of the output batch which by
-	// default is coldata.BatchSize() but can be varied in tests.
-	outputBatchSize int
 
 	// probeState is used in hjProbing state.
 	probeState struct {
@@ -324,7 +321,7 @@ func (hj *hashJoiner) emitUnmatched() {
 
 	nResults := 0
 
-	for nResults < hj.outputBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.Length() {
+	for nResults < hj.output.Capacity() && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.Length() {
 		if !hj.probeState.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
 			hj.probeState.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
@@ -688,10 +685,9 @@ func NewHashJoiner(
 	allocator *colmem.Allocator, spec HashJoinerSpec, leftSource, rightSource colexecbase.Operator,
 ) colexecbase.Operator {
 	hj := &hashJoiner{
-		twoInputNode:    newTwoInputNode(leftSource, rightSource),
-		allocator:       allocator,
-		spec:            spec,
-		outputBatchSize: coldata.BatchSize(),
+		twoInputNode: newTwoInputNode(leftSource, rightSource),
+		allocator:    allocator,
+		spec:         spec,
 	}
 	hj.probeState.buildIdx = make([]int, coldata.BatchSize())
 	hj.probeState.probeIdx = make([]int, coldata.BatchSize())
