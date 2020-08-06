@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package catalogkv
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -69,20 +70,20 @@ func RemoveObjectNamespaceEntry(
 	KVTrace bool,
 ) error {
 	b := txn.NewBatch()
-	var toDelete []DescriptorKey
+	var toDelete []sqlbase.DescriptorKey
 	// The (parentID, name) mapping could be in either the new system.namespace
 	// or the deprecated version. Thus we try to remove the mapping from both.
 	if parentID == keys.RootNamespaceID {
-		toDelete = append(toDelete, NewDatabaseKey(name))
+		toDelete = append(toDelete, sqlbase.NewDatabaseKey(name))
 		// TODO(solon): This can be completely removed in 20.2.
-		toDelete = append(toDelete, NewDeprecatedDatabaseKey(name))
+		toDelete = append(toDelete, sqlbase.NewDeprecatedDatabaseKey(name))
 	} else if parentSchemaID == keys.RootNamespaceID {
 		// Schemas were introduced in 20.1.
-		toDelete = append(toDelete, NewSchemaKey(parentID, name))
+		toDelete = append(toDelete, sqlbase.NewSchemaKey(parentID, name))
 	} else {
-		toDelete = append(toDelete, NewTableKey(parentID, parentSchemaID, name))
+		toDelete = append(toDelete, sqlbase.NewTableKey(parentID, parentSchemaID, name))
 		// TODO(solon): This can be completely removed in 20.2.
-		toDelete = append(toDelete, NewDeprecatedTableKey(parentID, name))
+		toDelete = append(toDelete, sqlbase.NewDeprecatedTableKey(parentID, name))
 	}
 	for _, delKey := range toDelete {
 		if KVTrace {
@@ -128,18 +129,18 @@ func MakeObjectNameKey(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-) DescriptorKey {
+) sqlbase.DescriptorKey {
 	// TODO(solon): This if condition can be removed in 20.2
 	if !settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
-		return NewDeprecatedTableKey(parentID, name)
+		return sqlbase.NewDeprecatedTableKey(parentID, name)
 	}
-	var key DescriptorKey
+	var key sqlbase.DescriptorKey
 	if parentID == keys.RootNamespaceID {
-		key = NewDatabaseKey(name)
+		key = sqlbase.NewDatabaseKey(name)
 	} else if parentSchemaID == keys.RootNamespaceID {
-		key = NewSchemaKey(parentID, name)
+		key = sqlbase.NewSchemaKey(parentID, name)
 	} else {
-		key = NewTableKey(parentID, parentSchemaID, name)
+		key = sqlbase.NewTableKey(parentID, parentSchemaID, name)
 	}
 	return key
 }
@@ -147,14 +148,14 @@ func MakeObjectNameKey(
 // MakePublicTableNameKey is a wrapper around MakeObjectNameKey for public tables.
 func MakePublicTableNameKey(
 	ctx context.Context, settings *cluster.Settings, parentID descpb.ID, name string,
-) DescriptorKey {
+) sqlbase.DescriptorKey {
 	return MakeObjectNameKey(ctx, settings, parentID, keys.PublicSchemaID, name)
 }
 
 // MakeDatabaseNameKey is a wrapper around MakeObjectNameKey for databases.
 func MakeDatabaseNameKey(
 	ctx context.Context, settings *cluster.Settings, name string,
-) DescriptorKey {
+) sqlbase.DescriptorKey {
 	return MakeObjectNameKey(ctx, settings, keys.RootNamespaceID, keys.RootNamespaceID, name)
 }
 
@@ -169,13 +170,13 @@ func LookupObjectID(
 	parentSchemaID descpb.ID,
 	name string,
 ) (bool, descpb.ID, error) {
-	var key DescriptorKey
+	var key sqlbase.DescriptorKey
 	if parentID == keys.RootNamespaceID {
-		key = NewDatabaseKey(name)
+		key = sqlbase.NewDatabaseKey(name)
 	} else if parentSchemaID == keys.RootNamespaceID {
-		key = NewSchemaKey(parentID, name)
+		key = sqlbase.NewSchemaKey(parentID, name)
 	} else {
-		key = NewTableKey(parentID, parentSchemaID, name)
+		key = sqlbase.NewTableKey(parentID, parentSchemaID, name)
 	}
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key.Key(codec))
 	res, err := txn.Get(ctx, key.Key(codec))
@@ -202,11 +203,11 @@ func LookupObjectID(
 		return false, descpb.InvalidID, nil
 	}
 
-	var dKey DescriptorKey
+	var dKey sqlbase.DescriptorKey
 	if parentID == keys.RootNamespaceID {
-		dKey = NewDeprecatedDatabaseKey(name)
+		dKey = sqlbase.NewDeprecatedDatabaseKey(name)
 	} else {
-		dKey = NewDeprecatedTableKey(parentID, name)
+		dKey = sqlbase.NewDeprecatedTableKey(parentID, name)
 	}
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", dKey.Key(codec))
 	res, err = txn.Get(ctx, dKey.Key(codec))

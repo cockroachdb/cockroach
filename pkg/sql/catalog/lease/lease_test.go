@@ -2337,7 +2337,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	interestingTable.Store(tableID)
 
 	// Launch a goroutine to query foo. It will be blocked in lease acquisition.
-	selectDone := make(chan error)
+	selectDone := make(chan error, 1)
 	go func() {
 		var count int
 		selectDone <- db2.QueryRow("SELECT count(*) FROM foo").Scan(&count)
@@ -2348,7 +2348,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 
 	// Launch a goroutine to perform a schema change which will lead to new
 	// versions.
-	alterErrCh := make(chan error)
+	alterErrCh := make(chan error, 1)
 	go func() {
 		_, err := db1.Exec("ALTER TABLE foo ADD COLUMN j INT DEFAULT 1")
 		alterErrCh <- err
@@ -2356,8 +2356,14 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 
 	// Make sure we get an update. Note that this is after we have already
 	// acquired a lease on the old version but have not yet recorded that fact.
-	desc := <-descUpdateChan
-	require.Equal(t, descpb.DescriptorVersion(2), sqlbase.GetDescriptorVersion(desc))
+	select {
+	case err := <-alterErrCh:
+		t.Fatalf("alter succeeded before expected: %v", err)
+	case err := <-selectDone:
+		t.Fatalf("select succeeded before expected: %v", err)
+	case desc := <-descUpdateChan:
+		require.Equal(t, descpb.DescriptorVersion(2), sqlbase.GetDescriptorVersion(desc))
+	}
 
 	// Allow the original lease acquisition to proceed.
 	close(toUnblockForLeaseAcquisition)

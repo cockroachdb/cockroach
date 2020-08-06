@@ -300,7 +300,7 @@ func WriteDescriptors(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			dKey := sqlbase.MakeDatabaseNameKey(ctx, settings, desc.GetName())
+			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
 			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
 		}
 		for i := range tables {
@@ -344,7 +344,7 @@ func WriteDescriptors(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			tkey := sqlbase.MakeObjectNameKey(
+			tkey := catalogkv.MakeObjectNameKey(
 				ctx,
 				settings,
 				table.GetParentID(),
@@ -369,7 +369,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, typ.ParentID, typ.Name)
+			tkey := catalogkv.MakePublicTableNameKey(ctx, settings, typ.ParentID, typ.Name)
 			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.ID, nil)
 		}
 
@@ -1115,7 +1115,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
+			existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
@@ -1233,11 +1233,11 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 		prev := tableToDrop.Immutable().(sqlbase.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP
-		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
+		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
+		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
