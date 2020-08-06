@@ -3,16 +3,16 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	bytes "bytes"
+	fmt "fmt"
+	io "io"
+	math "math"
 
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-
-import bytes "bytes"
-
-import io "io"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	proto "github.com/gogo/protobuf/proto"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -555,7 +555,9 @@ func (*ReadWithinUncertaintyIntervalError) Descriptor() ([]byte, []int) {
 func (m *ReadWithinUncertaintyIntervalError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ReadWithinUncertaintyIntervalError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ReadWithinUncertaintyIntervalError) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1176,7 +1178,9 @@ func (*TransactionRetryWithProtoRefreshError) Descriptor() ([]byte, []int) {
 func (m *TransactionRetryWithProtoRefreshError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TransactionRetryWithProtoRefreshError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TransactionRetryWithProtoRefreshError) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1214,7 +1218,9 @@ func (*TxnAlreadyEncounteredErrorError) Descriptor() ([]byte, []int) {
 func (m *TxnAlreadyEncounteredErrorError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *TxnAlreadyEncounteredErrorError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *TxnAlreadyEncounteredErrorError) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -1845,7 +1851,12 @@ func (m *ErrorDetail) GetIndeterminateCommit() *IndeterminateCommitError {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*ErrorDetail) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+func (*ErrorDetail) XXX_OneofFuncs() (
+	func(msg proto.Message, b *proto.Buffer) error,
+	func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error),
+	func(msg proto.Message) (n int),
+	[]interface{},
+) {
 	return _ErrorDetail_OneofMarshaler, _ErrorDetail_OneofUnmarshaler, _ErrorDetail_OneofSizer, []interface{}{
 		(*ErrorDetail_NotLeaseHolder)(nil),
 		(*ErrorDetail_RangeNotFound)(nil),
@@ -2029,7 +2040,9 @@ func _ErrorDetail_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	return nil
 }
 
-func _ErrorDetail_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+func _ErrorDetail_OneofUnmarshaler(
+	msg proto.Message, tag, wire int, b *proto.Buffer,
+) (bool, error) {
 	m := msg.(*ErrorDetail)
 	switch tag {
 	case 1: // value.not_lease_holder

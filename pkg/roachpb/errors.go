@@ -159,6 +159,10 @@ func (e *Error) String() string {
 
 type internalError Error
 
+func (e *internalError) Type() ErrorDetailType {
+	return InternalErrType
+}
+
 func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }
@@ -178,7 +182,56 @@ type ErrorDetailInterface interface {
 	error
 	// message returns an error message.
 	message(*Error) string
+	// Type returns the error's type.
+	Type() ErrorDetailType
 }
+
+// ErrorDetailType identifies the type of KV error.
+type ErrorDetailType int
+
+// This lists all ErrorDetail types. The numeric values in this list are used to
+// identify corresponding timeseries. The values correspond to the proto oneof
+// values.
+//go:generate stringer -type=ErrorDetailType
+const (
+	NotLeaseHolderErrType                   ErrorDetailType = 1
+	RangeNotFoundErrType                    ErrorDetailType = 2
+	RangeKeyMismatchErrType                 ErrorDetailType = 3
+	ReadWithinUncertaintyIntervalErrType    ErrorDetailType = 4
+	TransactionAbortedErrType               ErrorDetailType = 5
+	TransactionPushErrType                  ErrorDetailType = 6
+	TransactionRetryErrType                 ErrorDetailType = 7
+	TransactionStatusErrType                ErrorDetailType = 8
+	WriteIntentErrType                      ErrorDetailType = 9
+	WriteTooOldErrType                      ErrorDetailType = 10
+	OpRequiresTxnErrType                    ErrorDetailType = 11
+	ConditionFailedErrType                  ErrorDetailType = 12
+	LeaseRejectedErrType                    ErrorDetailType = 13
+	NodeUnavailableErrType                  ErrorDetailType = 14
+	RaftGroupDeletedErrType                 ErrorDetailType = 16
+	ReplicaCorruptionErrType                ErrorDetailType = 17
+	ReplicaTooOldErrType                    ErrorDetailType = 18
+	AmbiguousResultErrType                  ErrorDetailType = 26
+	StoreNotFoundErrType                    ErrorDetailType = 27
+	TransactionRetryWithProtoRefreshErrType ErrorDetailType = 28
+	IntegerOverflowErrType                  ErrorDetailType = 31
+	UnsupportedRequestErrType               ErrorDetailType = 32
+	BatchTimestampBeforeGCErrType           ErrorDetailType = 34
+	TxnAlreadyEncounteredErrType            ErrorDetailType = 35
+	IntentMissingErrType                    ErrorDetailType = 36
+	MergeInProgressErrType                  ErrorDetailType = 37
+	RangeFeedRetryErrType                   ErrorDetailType = 38
+	IndeterminateCommitErrType              ErrorDetailType = 39
+
+	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
+	// The value 22 is chosen because it's reserved in the errors proto.
+	CommunicationErrType ErrorDetailType = 22
+	// InternalErrType indicates a pErr that doesn't contain a recognized error
+	// detail. The value 25 is chosen because it's reserved in the errors proto.
+	InternalErrType ErrorDetailType = 25
+
+	NumErrors ErrorDetailType = 40
+)
 
 // GoError returns a Go error converted from Error.
 func (e *Error) GoError() error {
@@ -296,6 +349,10 @@ func (e *NodeUnavailableError) Error() string {
 	return e.message(nil)
 }
 
+func (e *NodeUnavailableError) Type() ErrorDetailType {
+	return NodeUnavailableErrType
+}
+
 func (*NodeUnavailableError) message(_ *Error) string {
 	return "node unavailable; try another peer"
 }
@@ -304,6 +361,10 @@ var _ ErrorDetailInterface = &NodeUnavailableError{}
 
 func (e *NotLeaseHolderError) Error() string {
 	return e.message(nil)
+}
+
+func (e *NotLeaseHolderError) Type() ErrorDetailType {
+	return NotLeaseHolderErrType
 }
 
 func (e *NotLeaseHolderError) message(_ *Error) string {
@@ -330,6 +391,10 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}
+
+func (e *LeaseRejectedError) Type() ErrorDetailType {
+	return LeaseRejectedErrType
+}
 
 func (e *LeaseRejectedError) Error() string {
 	return e.message(nil)
@@ -360,6 +425,10 @@ func (e *RangeNotFoundError) message(_ *Error) string {
 		msg += fmt.Sprintf(" on s%d", e.StoreID)
 	}
 	return msg
+}
+
+func (e *RangeNotFoundError) Type() ErrorDetailType {
+	return RangeNotFoundErrType
 }
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
@@ -410,6 +479,10 @@ func (e *RangeKeyMismatchError) message(_ *Error) string {
 	desc := &e.Ranges()[0].Desc
 	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s; suggested ranges: %s",
 		e.RequestStartKey, e.RequestEndKey, desc.StartKey, desc.EndKey, e.Ranges())
+}
+
+func (e *RangeKeyMismatchError) Type() ErrorDetailType {
+	return RangeKeyMismatchErrType
 }
 
 // Ranges returns the range info for the range that the request was erroneously
@@ -464,6 +537,10 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
 }
 
+func (e *AmbiguousResultError) Type() ErrorDetailType {
+	return AmbiguousResultErrType
+}
+
 // ClientVisibleAmbiguousError implements the ClientVisibleAmbiguousError interface.
 func (e *AmbiguousResultError) ClientVisibleAmbiguousError() {}
 
@@ -482,6 +559,10 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
 
+func (e *TransactionAbortedError) Type() ErrorDetailType {
+	return TransactionAbortedErrType
+}
+
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
@@ -494,6 +575,10 @@ func (e *TransactionRetryWithProtoRefreshError) Error() string {
 
 func (e *TransactionRetryWithProtoRefreshError) message(_ *Error) string {
 	return fmt.Sprintf("TransactionRetryWithProtoRefreshError: %s", e.Msg)
+}
+
+func (e *TransactionRetryWithProtoRefreshError) Type() ErrorDetailType {
+	return TransactionRetryWithProtoRefreshErrType
 }
 
 var _ ClientVisibleRetryError = &TransactionRetryWithProtoRefreshError{}
@@ -551,6 +636,10 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
 
+func (e *TransactionPushError) Type() ErrorDetailType {
+	return TransactionPushErrType
+}
+
 var _ ErrorDetailInterface = &TransactionPushError{}
 var _ transactionRestartError = &TransactionPushError{}
 
@@ -574,6 +663,10 @@ func (e *TransactionRetryError) Error() string {
 
 func (e *TransactionRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
+}
+
+func (e *TransactionRetryError) Type() ErrorDetailType {
+	return TransactionRetryErrType
 }
 
 func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
@@ -603,6 +696,10 @@ func NewTransactionCommittedStatusError() *TransactionStatusError {
 
 func (e *TransactionStatusError) Error() string {
 	return fmt.Sprintf("TransactionStatusError: %s (%s)", e.Msg, e.Reason)
+}
+
+func (e *TransactionStatusError) Type() ErrorDetailType {
+	return TransactionStatusErrType
 }
 
 func (e *TransactionStatusError) message(pErr *Error) string {
@@ -648,6 +745,10 @@ func (e *WriteIntentError) message(_ *Error) string {
 	return buf.String()
 }
 
+func (e *WriteIntentError) Type() ErrorDetailType {
+	return WriteIntentErrType
+}
+
 var _ ErrorDetailInterface = &WriteIntentError{}
 
 // NewWriteTooOldError creates a new write too old error. The function accepts
@@ -672,6 +773,10 @@ func (e *WriteTooOldError) message(_ *Error) string {
 
 func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
+}
+
+func (e *WriteTooOldError) Type() ErrorDetailType {
+	return WriteTooOldErrType
 }
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
@@ -716,6 +821,10 @@ func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
 		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, ts.String())
 }
 
+func (e *ReadWithinUncertaintyIntervalError) Type() ErrorDetailType {
+	return ReadWithinUncertaintyIntervalErrType
+}
+
 func (*ReadWithinUncertaintyIntervalError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
@@ -731,6 +840,10 @@ func (e *OpRequiresTxnError) message(_ *Error) string {
 	return "the operation requires transactional context"
 }
 
+func (e *OpRequiresTxnError) Type() ErrorDetailType {
+	return OpRequiresTxnErrType
+}
+
 var _ ErrorDetailInterface = &OpRequiresTxnError{}
 
 func (e *ConditionFailedError) Error() string {
@@ -741,6 +854,10 @@ func (e *ConditionFailedError) message(_ *Error) string {
 	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
 }
 
+func (e *ConditionFailedError) Type() ErrorDetailType {
+	return ConditionFailedErrType
+}
+
 var _ ErrorDetailInterface = &ConditionFailedError{}
 
 func (e *RaftGroupDeletedError) Error() string {
@@ -749,6 +866,10 @@ func (e *RaftGroupDeletedError) Error() string {
 
 func (*RaftGroupDeletedError) message(_ *Error) string {
 	return "raft group deleted"
+}
+
+func (e *RaftGroupDeletedError) Type() ErrorDetailType {
+	return RaftGroupDeletedErrType
 }
 
 var _ ErrorDetailInterface = &RaftGroupDeletedError{}
@@ -771,6 +892,10 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 	return msg
 }
 
+func (e *ReplicaCorruptionError) Type() ErrorDetailType {
+	return ReplicaCorruptionErrType
+}
+
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
 
 // NewReplicaTooOldError initializes a new ReplicaTooOldError.
@@ -786,6 +911,10 @@ func (e *ReplicaTooOldError) Error() string {
 
 func (*ReplicaTooOldError) message(_ *Error) string {
 	return "sender replica too old, discarding message"
+}
+
+func (e *ReplicaTooOldError) Type() ErrorDetailType {
+	return ReplicaTooOldErrType
 }
 
 var _ ErrorDetailInterface = &ReplicaTooOldError{}
@@ -805,6 +934,10 @@ func (e *StoreNotFoundError) message(_ *Error) string {
 	return fmt.Sprintf("store %d was not found", e.StoreID)
 }
 
+func (e *StoreNotFoundError) Type() ErrorDetailType {
+	return StoreNotFoundErrType
+}
+
 var _ ErrorDetailInterface = &StoreNotFoundError{}
 
 func (e *TxnAlreadyEncounteredErrorError) Error() string {
@@ -816,6 +949,10 @@ func (e *TxnAlreadyEncounteredErrorError) message(_ *Error) string {
 		"txn already encountered an error; cannot be used anymore (previous err: %s)",
 		e.PrevError,
 	)
+}
+
+func (e *TxnAlreadyEncounteredErrorError) Type() ErrorDetailType {
+	return TxnAlreadyEncounteredErrType
 }
 
 var _ ErrorDetailInterface = &TxnAlreadyEncounteredErrorError{}
@@ -830,6 +967,10 @@ func (e *IntegerOverflowError) message(_ *Error) string {
 		e.Key, e.CurrentValue, e.IncrementValue)
 }
 
+func (e *IntegerOverflowError) Type() ErrorDetailType {
+	return IntegerOverflowErrType
+}
+
 var _ ErrorDetailInterface = &IntegerOverflowError{}
 
 func (e *UnsupportedRequestError) Error() string {
@@ -840,6 +981,10 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 	return "unsupported request"
 }
 
+func (e *UnsupportedRequestError) Type() ErrorDetailType {
+	return UnsupportedRequestErrType
+}
+
 var _ ErrorDetailInterface = &UnsupportedRequestError{}
 
 func (e *BatchTimestampBeforeGCError) Error() string {
@@ -848,6 +993,10 @@ func (e *BatchTimestampBeforeGCError) Error() string {
 
 func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
 	return fmt.Sprintf("batch timestamp %v must be after replica GC threshold %v", e.Timestamp, e.Threshold)
+}
+
+func (e *BatchTimestampBeforeGCError) Type() ErrorDetailType {
+	return BatchTimestampBeforeGCErrType
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
@@ -872,6 +1021,10 @@ func (e *IntentMissingError) message(_ *Error) string {
 	return fmt.Sprintf("intent missing%s", detail)
 }
 
+func (e *IntentMissingError) Type() ErrorDetailType {
+	return IntentMissingErrType
+}
+
 func (*IntentMissingError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
@@ -885,6 +1038,10 @@ func (e *MergeInProgressError) Error() string {
 
 func (e *MergeInProgressError) message(_ *Error) string {
 	return "merge in progress"
+}
+
+func (e *MergeInProgressError) Type() ErrorDetailType {
+	return MergeInProgressErrType
 }
 
 var _ ErrorDetailInterface = &MergeInProgressError{}
@@ -904,6 +1061,10 @@ func (e *RangeFeedRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("retry rangefeed (%s)", e.Reason)
 }
 
+func (e *RangeFeedRetryError) Type() ErrorDetailType {
+	return RangeFeedRetryErrType
+}
+
 var _ ErrorDetailInterface = &RangeFeedRetryError{}
 
 // NewIndeterminateCommitError initializes a new IndeterminateCommitError.
@@ -921,6 +1082,10 @@ func (e *IndeterminateCommitError) message(pErr *Error) string {
 		return s
 	}
 	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
+}
+
+func (e *IndeterminateCommitError) Type() ErrorDetailType {
+	return IndeterminateCommitErrType
 }
 
 var _ ErrorDetailInterface = &IndeterminateCommitError{}

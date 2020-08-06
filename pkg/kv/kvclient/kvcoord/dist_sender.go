@@ -114,6 +114,12 @@ var (
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderErrCountTmpl = metric.Metadata{
+		Name:        "distsender.rpc.err.%s",
+		Help:        "Number of %s errors received",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -166,6 +172,7 @@ type DistSenderMetrics struct {
 	RangeLookups            *metric.Counter
 	SlowRPCs                *metric.Gauge
 	MethodCounts            [roachpb.NumMethods]*metric.Counter
+	ErrCounts               [roachpb.NumErrors]*metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -187,6 +194,13 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		meta := metaDistSenderMethodCountTmpl
 		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
 		meta.Help = fmt.Sprintf(meta.Help, method)
+		m.MethodCounts[i] = metric.NewCounter(meta)
+	}
+	for i := range m.ErrCounts {
+		errType := roachpb.ErrorDetailType(i).String()
+		meta := metaDistSenderErrCountTmpl
+		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(errType))
+		meta.Help = fmt.Sprintf(meta.Help, errType)
 		m.MethodCounts[i] = metric.NewCounter(meta)
 	}
 	return m
@@ -1808,6 +1822,7 @@ func (ds *DistSender) sendToReplicas(
 			LeaseSequence:        routing.entry.Lease.Sequence,
 		}
 		br, err = transport.SendNext(ctx, ba)
+		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
 			// For most connection errors, we cannot tell whether or not the request
@@ -1878,6 +1893,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 			}
 		} else {
+			br.Error.GoError()
 			// If the reply contains a timestamp, update the local HLC with it.
 			if br.Error != nil {
 				log.VErrEventf(ctx, 2, "%v", br.Error)
@@ -1971,6 +1987,17 @@ func (ds *DistSender) sendToReplicas(
 			// sender changed its mind or the request timed out.
 			return nil, errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
 		}
+	}
+}
+
+func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err error) {
+	if err == nil && br.Error == nil {
+		return
+	}
+	if err != nil {
+		ds.metrics.ErrCounts[roachpb.CommunicationErrType].Inc(1)
+	} else {
+		ds.metrics.ErrCounts[br.Error.GetDetail().Type()].Inc(1)
 	}
 }
 
