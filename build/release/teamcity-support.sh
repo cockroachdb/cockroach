@@ -1,8 +1,8 @@
 # Common helpers for teamcity-*.sh scripts.
 
 remove_files_on_exit() {
-  rm .google-credentials.json
-  rm .cockroach-teamcity-key
+  rm -f .google-credentials.json
+  rm -f .cockroach-teamcity-key
 }
 trap remove_files_on_exit EXIT
 
