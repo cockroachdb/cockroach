@@ -76,6 +76,13 @@ const (
 	// initiated schema change rollback has completed.
 	EventLogFinishSchemaRollback EventLogType = "finish_schema_change_rollback"
 
+	// EventLogCreateType is recorded when a type is created.
+	EventLogCreateType EventLogType = "create_type"
+	// EventLogDropType is recorded when a type is dropped.
+	EventLogDropType EventLogType = "drop_type"
+	// EventAlterType is recorded when a type is altered.
+	EventLogAlterType EventLogType = "alter_type"
+
 	// EventLogNodeJoin is recorded when a node joins the cluster.
 	EventLogNodeJoin EventLogType = "node_join"
 	// EventLogNodeRestart is recorded when an existing node rejoins the cluster

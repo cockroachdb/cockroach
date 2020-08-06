@@ -69,7 +69,25 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return n.desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec)
+
+	// Validate the type descriptor after the changes.
+	if err := n.desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+		return err
+	}
+
+	// Write a log event.
+	return MakeEventLogger(params.p.ExecCfg()).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogAlterType,
+		int32(n.desc.ID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			TypeName  string
+			Statement string
+			User      string
+		}{n.desc.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.p.User()},
+	)
 }
 
 func (p *planner) addEnumValue(
