@@ -216,7 +216,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
 		)
 
-		cfg.sqlInstance = slinstance.NewSqlInstance(
+		cfg.sqlInstance = slinstance.NewSQLInstance(
 			cfg.stopper, cfg.clock, cfg.sqlLivenessStorage, cfg.Settings,
 		)
 
