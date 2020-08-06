@@ -455,3 +455,38 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 100  110  100  foo  true
 300  330  300  foo  true
 400  400  400  foo  true
+
+# Regression tests for #52318. Mutations on partial indexes in the
+# DELETE_AND_WRITE_ONLY state should update the indexes correctly.
+
+statement ok
+CREATE TABLE t52318 (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX (a)
+)
+
+statement ok
+BEGIN; CREATE INDEX i ON t52318 (a) WHERE b > 5
+
+statement ok
+INSERT INTO t52318 (a, b) VALUES (1, 1), (6, 6)
+
+query II
+SELECT * FROM t52318 WHERE b > 5
+----
+6  6
+
+statement ok
+UPDATE t52318 SET b = b + 1
+
+query II
+SELECT * FROM t52318 WHERE b > 5
+----
+6  7
+
+statement ok
+DELETE FROM t52318
+
+statement ok
+COMMIT
