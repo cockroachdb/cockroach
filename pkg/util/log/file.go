@@ -224,12 +224,14 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // create creates a new log file and returns the file and its
 // filename. If the file is created successfully, create also attempts
 // to update the symlink for that tag, ignoring errors.
+//
+// It is invalid to call this with an unset output directory.
 func create(
 	logDir *DirName, prefix string, t time.Time, lastRotation int64,
-) (f *os.File, updatedRotation int64, filename string, err error) {
+) (f *os.File, updatedRotation int64, filename, symlink string, err error) {
 	dir, isSet := logDir.get()
 	if !isSet {
-		return nil, lastRotation, "", errDirectoryNotSet
+		return nil, lastRotation, "", "", errDirectoryNotSet
 	}
 
 	// Ensure that the timestamp of the new file name is greater than
@@ -243,28 +245,27 @@ func create(
 
 	// Generate the file name.
 	name, link := logName(prefix, t)
+	symlink = filepath.Join(dir, link)
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err == nil {
-		symlink := filepath.Join(dir, link)
+	return f, updatedRotation, fname, symlink, errors.Wrapf(err, "log: cannot create output file")
+}
 
-		// Symlinks are best-effort.
-
-		if err := os.Remove(symlink); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(OrigStderr, "log: failed to remove symlink %s: %s", symlink, err)
-		}
-		if err := os.Symlink(filepath.Base(fname), symlink); err != nil {
-			// On Windows, this will be the common case, as symlink creation
-			// requires special privileges.
-			// See: https://docs.microsoft.com/en-us/windows/device-security/security-policy-settings/create-symbolic-links
-			if runtime.GOOS != "windows" {
-				fmt.Fprintf(OrigStderr, "log: failed to create symlink %s: %s", symlink, err)
-			}
+func createSymlink(fname, symlink string) {
+	// Symlinks are best-effort.
+	if err := os.Remove(symlink); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(OrigStderr, "log: failed to remove symlink %s: %s\n", symlink, err)
+	}
+	if err := os.Symlink(filepath.Base(fname), symlink); err != nil {
+		// On Windows, this will be the common case, as symlink creation
+		// requires special privileges.
+		// See: https://docs.microsoft.com/en-us/windows/device-security/security-policy-settings/create-symbolic-links
+		if runtime.GOOS != "windows" {
+			fmt.Fprintf(OrigStderr, "log: failed to create symlink %s: %s\n", symlink, err)
 		}
 	}
-	return f, updatedRotation, fname, errors.Wrapf(err, "log: cannot create log")
 }
 
 // ListLogFiles returns a slice of FileInfo structs for each log file

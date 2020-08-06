@@ -428,6 +428,10 @@ func TestCorruptData(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("corrupt spans", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
 
@@ -447,10 +451,6 @@ func TestCorruptData(t *testing.T) {
 			[]byte("junk"), rec.ID.String())
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
-
-		// Set the log scope so we can introspect the logged errors.
-		scope := log.Scope(t)
-		defer scope.Close(t)
 
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to unmarshal spans for " + rec.ID.String() + ": ")
@@ -474,6 +474,10 @@ func TestCorruptData(t *testing.T) {
 		}
 	})
 	t.Run("corrupt hlc timestamp", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
 
@@ -497,10 +501,6 @@ func TestCorruptData(t *testing.T) {
 			d.String(), rec.ID.String())
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
-
-		// Set the log scope so we can introspect the logged errors.
-		scope := log.Scope(t)
-		defer scope.Close(t)
 
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +

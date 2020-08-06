@@ -252,8 +252,6 @@ func checkDemoConfiguration(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
-	defer log.ScopeWithoutFiles().Close()
-
 	if gen, err = checkDemoConfiguration(cmd, gen); err != nil {
 		return err
 	}
