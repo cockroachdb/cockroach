@@ -88,6 +88,21 @@ type ImmutableTableDescriptor struct {
 	// outboundFKs []*ForeignKeyConstraint
 }
 
+// GetPrimaryIndexID returns the ID of the primary index.
+func (desc *ImmutableTableDescriptor) GetPrimaryIndexID() descpb.IndexID {
+	return desc.PrimaryIndex.ID
+}
+
+// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
+func (desc *ImmutableTableDescriptor) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
+	return desc.GetIndexes()
+}
+
+// IsTemporary returns true if this is a temporary table.
+func (desc *ImmutableTableDescriptor) IsTemporary() bool {
+	return desc.GetTemporary()
+}
+
 // GetPublicColumns return the public columns in the descriptor.
 func (desc *ImmutableTableDescriptor) GetPublicColumns() []descpb.ColumnDescriptor {
 	return desc.Columns
@@ -596,26 +611,96 @@ func (desc *ImmutableTableDescriptor) AllActiveAndInactiveForeignKeys() []*descp
 	return fks
 }
 
+// ForeachPublicColumn runs a function on all public columns.
+func (desc *ImmutableTableDescriptor) ForeachPublicColumn(
+	f func(column *descpb.ColumnDescriptor) error,
+) error {
+	for i := range desc.Columns {
+		if err := f(&desc.Columns[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ForeachNonDropIndex runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
 	f func(*descpb.IndexDescriptor) error,
 ) error {
-	if desc.IsPhysicalTable() {
-		if err := f(&desc.PrimaryIndex); err != nil {
+	if err := desc.ForeachIndex(IndexOpts{AddMutations: true}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+		return f(idxDesc)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ForeachIndex runs a function on the set of indexes as specified by opts.
+func (desc *ImmutableTableDescriptor) ForeachIndex(
+	opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
+) error {
+	if desc.IsPhysicalTable() || opts.NonPhysicalPrimaryIndex {
+		if err := f(&desc.PrimaryIndex, true /* isPrimary */); err != nil {
 			return err
 		}
 	}
 	for i := range desc.Indexes {
-		if err := f(&desc.Indexes[i]); err != nil {
+		if err := f(&desc.Indexes[i], false /* isPrimary */); err != nil {
 			return err
 		}
 	}
+	if !opts.AddMutations && !opts.DropMutations {
+		return nil
+	}
 	for _, m := range desc.Mutations {
-		if idx := m.GetIndex(); idx != nil && m.Direction == descpb.DescriptorMutation_ADD {
-			if err := f(idx); err != nil {
-				return err
-			}
+		idx := m.GetIndex()
+		if idx == nil ||
+			(m.Direction == descpb.DescriptorMutation_ADD && !opts.AddMutations) ||
+			(m.Direction == descpb.DescriptorMutation_DROP && !opts.DropMutations) {
+			continue
+		}
+		if err := f(idx, false /* isPrimary */); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForeachDependedOnBy runs a function on all indexes, including those being
+// added in the mutations.
+func (desc *ImmutableTableDescriptor) ForeachDependedOnBy(
+	f func(dep *descpb.TableDescriptor_Reference) error,
+) error {
+	for i := range desc.DependedOnBy {
+		if err := f(&desc.DependedOnBy[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForeachOutboundFK calls f for every outbound foreign key in desc until an
+// error is returned.
+func (desc *ImmutableTableDescriptor) ForeachOutboundFK(
+	f func(constraint *descpb.ForeignKeyConstraint) error,
+) error {
+	for i := range desc.OutboundFKs {
+		if err := f(&desc.OutboundFKs[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForeachInboundFK calls f for every inbound foreign key in desc until an
+// error is returned.
+func (desc *ImmutableTableDescriptor) ForeachInboundFK(
+	f func(fk *descpb.ForeignKeyConstraint) error,
+) error {
+	for i := range desc.InboundFKs {
+		if err := f(&desc.InboundFKs[i]); err != nil {
+			return err
 		}
 	}
 	return nil

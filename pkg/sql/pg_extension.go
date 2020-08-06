@@ -47,16 +47,16 @@ func postgisColumnsTablePopulator(
 			p,
 			dbContext,
 			hideVirtual,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
 				if !table.IsPhysicalTable() {
 					return nil
 				}
 				if p.CheckAnyPrivilege(ctx, table) != nil {
 					return nil
 				}
-				for _, colDesc := range table.Columns {
+				return table.ForeachPublicColumn(func(colDesc *descpb.ColumnDescriptor) error {
 					if colDesc.Type.Family() != matchingFamily {
-						continue
+						return nil
 					}
 					m, err := colDesc.Type.GeoMetadata()
 					if err != nil {
@@ -84,7 +84,7 @@ func postgisColumnsTablePopulator(
 						shapeName = geopb.ShapeType_Geometry.String()
 					}
 
-					if err := addRow(
+					return addRow(
 						tree.NewDString(db.GetName()),
 						tree.NewDString(scName),
 						tree.NewDString(table.GetName()),
@@ -92,11 +92,8 @@ func postgisColumnsTablePopulator(
 						datumNDims,
 						tree.NewDInt(tree.DInt(m.SRID)),
 						tree.NewDString(strings.ToUpper(shapeName)),
-					); err != nil {
-						return err
-					}
-				}
-				return nil
+					)
+				})
 			},
 		)
 	}

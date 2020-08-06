@@ -78,31 +78,31 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
-	if desc.Temporary {
+	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
 	}
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i := range desc.Columns {
+	for i := range desc.GetPublicColumns() {
 		if i > 0 {
 			f.WriteString(", ")
 		}
-		f.FormatNameP(&desc.Columns[i].Name)
+		f.FormatNameP(&desc.GetColumnAtIdx(i).Name)
 	}
 	f.WriteString(") AS ")
-	f.WriteString(desc.ViewQuery)
+	f.WriteString(desc.GetViewQuery())
 	return f.CloseAndGetString(), nil
 }
 
 // showComments prints out the COMMENT statements sufficient to populate a
 // table's comments, including its index and column comments.
 func showComments(
-	tn *tree.TableName, table *sqlbase.ImmutableTableDescriptor, tc *tableComments, buf *bytes.Buffer,
+	tn *tree.TableName, table sqlbase.TableDescriptor, tc *tableComments, buf *bytes.Buffer,
 ) error {
 	if tc == nil {
 		return nil
@@ -159,7 +159,7 @@ func showComments(
 func showForeignKeyConstraint(
 	buf *bytes.Buffer,
 	dbPrefix string,
-	originTable *sqlbase.ImmutableTableDescriptor,
+	originTable sqlbase.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	lCtx simpleSchemaResolver,
 	searchPath sessiondata.SearchPath,
@@ -219,16 +219,16 @@ func showForeignKeyConstraint(
 // ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func ShowCreateSequence(
-	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
-	if desc.Temporary {
+	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
 	}
 	f.WriteString("SEQUENCE ")
 	f.FormatNode(tn)
-	opts := desc.SequenceOpts
+	opts := desc.GetSequenceOpts()
 	f.Printf(" MINVALUE %d", opts.MinValue)
 	f.Printf(" MAXVALUE %d", opts.MaxValue)
 	f.Printf(" INCREMENT %d", opts.Increment)
@@ -241,8 +241,8 @@ func ShowCreateSequence(
 
 // showFamilyClause creates the FAMILY clauses for a CREATE statement, writing them
 // to tree.FmtCtx f
-func showFamilyClause(desc *sqlbase.ImmutableTableDescriptor, f *tree.FmtCtx) {
-	for _, fam := range desc.Families {
+func showFamilyClause(desc sqlbase.TableDescriptor, f *tree.FmtCtx) {
+	for _, fam := range desc.GetFamilies() {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
 			if _, err := desc.FindActiveColumnByID(colID); err == nil {
@@ -404,10 +404,7 @@ func ShowCreatePartitioning(
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
 func showConstraintClause(
-	ctx context.Context,
-	desc *sqlbase.ImmutableTableDescriptor,
-	semaCtx *tree.SemaContext,
-	f *tree.FmtCtx,
+	ctx context.Context, desc sqlbase.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		if e.Hidden {

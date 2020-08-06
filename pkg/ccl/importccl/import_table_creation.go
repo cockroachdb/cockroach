@@ -313,6 +313,8 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableEntry, error) {
-	return catalog.TableEntry{}, errSchemaResolver
+func (r fkResolver) LookupTableByID(
+	ctx context.Context, id descpb.ID,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	return nil, errSchemaResolver
 }

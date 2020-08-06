@@ -585,7 +585,9 @@ func ensureInterleavesIncluded(tables []sqlbase.TableDescriptor) error {
 	}
 
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+		if err := table.ForeachIndex(sqlbase.IndexOpts{
+			AddMutations: true,
+		}, func(index *descpb.IndexDescriptor, _ bool) error {
 			for _, a := range index.Interleave.Ancestors {
 				if !inBackup[a.TableID] {
 					return errors.Errorf(
