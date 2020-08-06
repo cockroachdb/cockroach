@@ -108,6 +108,9 @@ var tableAnnIDCount TableAnnID
 const maxTableAnnIDCount = 2
 
 // TableMeta stores information about one of the tables stored in the metadata.
+//
+// NOTE: Metadata.DuplicateTable must be kept in sync with changes to this
+// struct.
 type TableMeta struct {
 	// MetaID is the identifier for this table that is unique within the query
 	// metadata.
@@ -147,8 +150,8 @@ type TableMeta struct {
 	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
-	// PartialIndexPredicates is a map from an index ordinal on the table to
-	// a ScalarExpr representing the predicate on the corresponding partial
+	// PartialIndexPredicates is a map from index ordinals on the table to
+	// *FiltersExprs representing the predicate on the corresponding partial
 	// index. If an index is not a partial index, it will not have an entry in
 	// the map.
 	PartialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
