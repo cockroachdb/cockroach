@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -389,7 +390,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 // indexToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as columns in the index.
 func indexToAvroSchema(
-	tableDesc sqlbase.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
@@ -436,7 +437,7 @@ const (
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
-	tableDesc sqlbase.TableDescriptor, nameSuffix string,
+	tableDesc catalog.TableDescriptor, nameSuffix string,
 ) (*avroDataRecord, error) {
 	name := SQLNameToAvroName(tableDesc.GetName())
 	if nameSuffix != avroSchemaNoSuffix {

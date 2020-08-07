@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -841,7 +842,7 @@ func writeZoneConfig(
 	ctx context.Context,
 	txn *kv.Txn,
 	targetID descpb.ID,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	zone *zonepb.ZoneConfig,
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
@@ -921,7 +922,7 @@ func RemoveIndexZoneConfigs(
 	if err != nil {
 		return err
 	}
-	tableDesc := desc.(sqlbase.TableDescriptor)
+	tableDesc := desc.(catalog.TableDescriptor)
 
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {

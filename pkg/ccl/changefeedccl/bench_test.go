@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -132,7 +132,7 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	return s.emit(int64(len(key) + len(value)))
 }
