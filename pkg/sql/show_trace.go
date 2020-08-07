@@ -16,14 +16,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // showTraceNode is a planNode that processes session trace data.
 type showTraceNode struct {
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	compact bool
 
 	// If set, the trace will also include "KV trace" messages - verbose messages
@@ -41,11 +41,11 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 
 	// Ensure the messages are sorted in age order, so that the user
 	// does not get confused.
-	ageColIdx := sqlbase.GetTraceAgeColumnIdx(n.Compact)
+	ageColIdx := colinfo.GetTraceAgeColumnIdx(n.Compact)
 	node = &sortNode{
 		plan: node,
-		ordering: sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
+		ordering: colinfo.ColumnOrdering{
+			colinfo.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
 	}
 
@@ -68,9 +68,9 @@ func (p *planner) makeShowTraceNode(compact bool, kvTracingEnabled bool) *showTr
 	}
 	if compact {
 		// We make a copy here because n.columns can be mutated to rename columns.
-		n.columns = append(n.columns, sqlbase.ShowCompactTraceColumns...)
+		n.columns = append(n.columns, colinfo.ShowCompactTraceColumns...)
 	} else {
-		n.columns = append(n.columns, sqlbase.ShowTraceColumns...)
+		n.columns = append(n.columns, colinfo.ShowTraceColumns...)
 	}
 	return n
 }

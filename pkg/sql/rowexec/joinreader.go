@@ -14,11 +14,13 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -76,8 +78,8 @@ type joinReader struct {
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
 	fetcher            rowFetcher
-	alloc              sqlbase.DatumAlloc
-	rowAlloc           sqlbase.EncDatumRowAlloc
+	alloc              rowenc.DatumAlloc
+	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
 	readerType         joinReaderType
 
@@ -96,7 +98,7 @@ type joinReader struct {
 	rowsRead int64
 
 	// State variables for each batch of input rows.
-	scratchInputRows sqlbase.EncDatumRows
+	scratchInputRows rowenc.EncDatumRows
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -162,7 +164,7 @@ func newJoinReader(
 	jr.readerType = readerType
 
 	// Add all requested system columns to the output.
-	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(jr.desc.TableDesc(), spec.SystemColumns)
+	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +371,7 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 }
 
 // Next is part of the RowSource interface.
-func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The lookup join is implemented as follows:
 	// - Read the input rows in batches.
 	// - For each batch, map the rows onto index keys and perform an index
@@ -379,7 +381,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 	// - Join the index rows with the corresponding input rows and buffer the
 	//   results in jr.toEmit.
 	for jr.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch jr.runningState {
 		case jrReadingInput:
@@ -504,7 +506,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 // prepares for another input batch.
 func (jr *joinReader) emitRow() (
 	joinReaderState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	rowToEmit, nextState, err := jr.strategy.nextRowToEmit(jr.Ctx)

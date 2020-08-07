@@ -14,27 +14,27 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var alloc = sqlbase.DatumAlloc{}
+var alloc = rowenc.DatumAlloc{}
 
 func TestEncDatumRowsToColVecBool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Test input: [[false, true], [true, false]]
-	rows := sqlbase.EncDatumRows{
-		sqlbase.EncDatumRow{
-			sqlbase.EncDatum{Datum: tree.DBoolFalse},
-			sqlbase.EncDatum{Datum: tree.DBoolTrue},
+	rows := rowenc.EncDatumRows{
+		rowenc.EncDatumRow{
+			rowenc.EncDatum{Datum: tree.DBoolFalse},
+			rowenc.EncDatum{Datum: tree.DBoolTrue},
 		},
-		sqlbase.EncDatumRow{
-			sqlbase.EncDatum{Datum: tree.DBoolTrue},
-			sqlbase.EncDatum{Datum: tree.DBoolFalse},
+		rowenc.EncDatumRow{
+			rowenc.EncDatum{Datum: tree.DBoolTrue},
+			rowenc.EncDatum{Datum: tree.DBoolFalse},
 		},
 	}
 	vec := testAllocator.NewMemColumn(types.Bool, 2)
@@ -65,9 +65,9 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 func TestEncDatumRowsToColVecInt16(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rows := sqlbase.EncDatumRows{
-		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(17)}},
-		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(42)}},
+	rows := rowenc.EncDatumRows{
+		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(17)}},
+		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(42)}},
 	}
 	vec := testAllocator.NewMemColumn(types.Int2, 2)
 	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, types.Int2, &alloc); err != nil {
@@ -84,9 +84,9 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 func TestEncDatumRowsToColVecString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rows := sqlbase.EncDatumRows{
-		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("foo")}},
-		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("bar")}},
+	rows := rowenc.EncDatumRows{
+		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDString("foo")}},
+		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDString("bar")}},
 	}
 	vec := testAllocator.NewMemColumn(types.Bytes, 2)
 	for _, width := range []int32{0, 25} {
@@ -108,7 +108,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	nRows := 3
-	rows := make(sqlbase.EncDatumRows, nRows)
+	rows := make(rowenc.EncDatumRows, nRows)
 	expected := testAllocator.NewMemColumn(types.Decimal, 3)
 	for i, s := range []string{"1.0000", "-3.12", "NaN"} {
 		var err error
@@ -116,7 +116,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows[i] = sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: dec}}
+		rows[i] = rowenc.EncDatumRow{rowenc.EncDatum{Datum: dec}}
 		expected.Decimal()[i] = dec.Decimal
 	}
 	vec := testAllocator.NewMemColumn(types.Decimal, 3)

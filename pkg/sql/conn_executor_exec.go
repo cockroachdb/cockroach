@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -863,7 +864,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
-	var cols sqlbase.ResultColumns
+	var cols colinfo.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
 	}
@@ -1267,7 +1268,7 @@ func (ex *connExecutor) runObserverStatement(
 func (ex *connExecutor) runShowSyntax(
 	ctx context.Context, stmt string, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ShowSyntaxColumns)
+	res.SetColumns(ctx, colinfo.ShowSyntaxColumns)
 	var commErr error
 	parser.RunShowSyntax(ctx, stmt,
 		func(ctx context.Context, field, msg string) {
@@ -1286,7 +1287,7 @@ func (ex *connExecutor) runShowSyntax(
 func (ex *connExecutor) runShowTransactionState(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
@@ -1295,7 +1296,7 @@ func (ex *connExecutor) runShowTransactionState(
 func (ex *connExecutor) runShowLastQueryStatistics(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ShowLastQueryStatisticsColumns)
+	res.SetColumns(ctx, colinfo.ShowLastQueryStatisticsColumns)
 
 	phaseTimes := &ex.statsCollector.previousPhaseTimes
 	runLat := phaseTimes.getRunLatency().Seconds()

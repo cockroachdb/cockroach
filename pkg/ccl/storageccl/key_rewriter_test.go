@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -79,7 +80,7 @@ func TestKeyRewriter(t *testing.T) {
 	}
 
 	t.Run("normal", func(t *testing.T) {
-		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
@@ -98,7 +99,7 @@ func TestKeyRewriter(t *testing.T) {
 	})
 
 	t.Run("prefix end", func(t *testing.T) {
-		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+		key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable, desc.PrimaryIndex.ID)).PrefixEnd()
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
@@ -128,7 +129,7 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		key := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable, desc.PrimaryIndex.ID)
+		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := newKr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)

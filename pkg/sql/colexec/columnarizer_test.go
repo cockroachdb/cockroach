@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -39,7 +39,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	// internal batch is reset.
 	nRows := coldata.BatchSize() * 2
 	nCols := len(typs)
-	rows := sqlbase.MakeIntRows(nRows, nCols)
+	rows := rowenc.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
@@ -111,7 +111,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
-	rows := sqlbase.MakeIntRows(nRows, nCols)
+	rows := rowenc.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()

@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -174,7 +175,7 @@ func MakeColumnDefDescs(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := ValidateColumnDefType(resType); err != nil {
+	if err := colinfo.ValidateColumnDefType(resType); err != nil {
 		return nil, nil, nil, err
 	}
 	col.Type = resType
@@ -273,48 +274,6 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
-// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
-// appends directly to keyPrefix.
-func EncodeColumns(
-	columnIDs []descpb.ColumnID,
-	directions directions,
-	colMap map[descpb.ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
-) (key []byte, containsNull bool, err error) {
-	key = keyPrefix
-	for colIdx, id := range columnIDs {
-		val := findColumnValue(id, colMap, values)
-		if val == tree.DNull {
-			containsNull = true
-		}
-
-		dir, err := directions.get(colIdx)
-		if err != nil {
-			return nil, containsNull, err
-		}
-
-		if key, err = EncodeTableKey(key, val, dir); err != nil {
-			return nil, containsNull, err
-		}
-	}
-	return key, containsNull, nil
-}
-
-// GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) ([]*types.T, error) {
-	types := make([]*types.T, len(columnIDs))
-	for i, id := range columnIDs {
-		col, err := desc.FindActiveColumnByID(id)
-		if err != nil {
-			return nil, err
-		}
-		types[i] = col.Type
-	}
-	return types, nil
-}
-
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 	ctx context.Context, dg catalog.DescGetter,
@@ -322,7 +281,7 @@ func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 	var tableLookup catalog.TableLookupFn
 	if dg != nil {
 		tableLookup = func(id descpb.ID) (catalog.TableDescriptor, error) {
-			return getTableDescFromID(ctx, dg, id)
+			return catalog.GetTableDescFromID(ctx, dg, id)
 		}
 	}
 	return desc.collectConstraintInfo(tableLookup)

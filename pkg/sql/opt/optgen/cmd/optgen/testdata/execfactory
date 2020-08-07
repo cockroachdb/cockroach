@@ -13,7 +13,7 @@ define Values {
     Rows [][]tree.TypedExpr
     # Columns is a field that has a multi-line
     # comment.
-    Columns sqlbase.ResultColumns
+    Columns colinfo.ResultColumns
 }
 ----
 ----
@@ -22,13 +22,13 @@ define Values {
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Factory defines the interface for building an execution plan, which consists
@@ -73,7 +73,7 @@ type Factory interface {
 		rows [][]tree.TypedExpr,
 		// columns is a field that has a multi-line
 		// comment.
-		columns sqlbase.ResultColumns,
+		columns colinfo.ResultColumns,
 	) (Node, error)
 }
 
@@ -99,7 +99,7 @@ func (StubFactory) ConstructScan(
 
 func (StubFactory) ConstructValues(
 	rows [][]tree.TypedExpr,
-	columns sqlbase.ResultColumns,
+	columns colinfo.ResultColumns,
 ) (Node, error) {
 	return struct{}{}, nil
 }

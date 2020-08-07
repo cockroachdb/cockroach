@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -32,7 +33,7 @@ type rowFetcherCache struct {
 	leaseMgr *lease.Manager
 	fetchers map[idVersion]*row.Fetcher
 
-	a sqlbase.DatumAlloc
+	a rowenc.DatumAlloc
 }
 
 type idVersion struct {
@@ -57,7 +58,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		return nil, err
 	}
 	for skippedCols := 0; ; {
-		remaining, tableID, _, err := sqlbase.DecodePartialTableIDIndexID(key)
+		remaining, tableID, _, err := rowenc.DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return nil, err
 		}

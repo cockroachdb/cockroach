@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -651,8 +651,8 @@ type geoDatumsToInvertedExpr struct {
 	typ          *types.T
 	getSpanExpr  getSpanExprForGeoIndexFn
 
-	row   sqlbase.EncDatumRow
-	alloc sqlbase.DatumAlloc
+	row   rowenc.EncDatumRow
+	alloc rowenc.DatumAlloc
 }
 
 var _ invertedexpr.DatumsToInvertedExpr = &geoDatumsToInvertedExpr{}
@@ -792,7 +792,7 @@ func NewGeoDatumsToInvertedExpr(
 
 // Convert implements the invertedexpr.DatumsToInvertedExpr interface.
 func (g *geoDatumsToInvertedExpr) Convert(
-	ctx context.Context, datums sqlbase.EncDatumRow,
+	ctx context.Context, datums rowenc.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	g.row = datums
 	g.evalCtx.PushIVarContainer(g)

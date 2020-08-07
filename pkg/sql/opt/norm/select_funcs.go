@@ -11,9 +11,9 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -24,7 +24,7 @@ func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
 	filterProps := src.ScalarProps()
 	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
 		colType := c.f.Metadata().ColumnMeta(i).Type
-		if sqlbase.HasCompositeKeyEncoding(colType) {
+		if colinfo.HasCompositeKeyEncoding(colType) {
 			return false
 		}
 	}

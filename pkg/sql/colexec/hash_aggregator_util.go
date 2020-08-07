@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
@@ -49,7 +49,7 @@ func newHashAggregatorHelper(
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 ) hashAggregatorHelper {
 	hasDistinct, hasFilterAgg := false, false
 	aggFilter := make([]int, len(spec.Aggregations))
@@ -249,9 +249,9 @@ type filteringDistinctHashAggregatorHelper struct {
 	filters          []*filteringSingleFunctionHelper
 	aggColsConverter *vecToDatumConverter
 	arena            stringarena.Arena
-	datumAlloc       *sqlbase.DatumAlloc
+	datumAlloc       *rowenc.DatumAlloc
 	scratch          struct {
-		ed      sqlbase.EncDatum
+		ed      rowenc.EncDatum
 		encoded []byte
 		// converted is a scratch space for converting a single element.
 		converted []tree.Datum
@@ -266,7 +266,7 @@ func newFilteringDistinctHashAggregatorHelper(
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
 	filters []*filteringSingleFunctionHelper,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 ) hashAggregatorHelper {
 	h := &filteringDistinctHashAggregatorHelper{
 		hashAggregatorHelperBase: newAggregatorHelperBase(spec),

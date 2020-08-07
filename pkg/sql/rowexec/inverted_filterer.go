@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,9 +57,9 @@ type invertedFilterer struct {
 	resultIdx int
 
 	// Scratch space for constructing the PK row to feed to rc.
-	keyRow sqlbase.EncDatumRow
+	keyRow rowenc.EncDatumRow
 	// Scratch space for constructing the output row.
-	outputRow sqlbase.EncDatumRow
+	outputRow rowenc.EncDatumRow
 }
 
 var _ execinfra.Processor = &invertedFilterer{}
@@ -99,8 +99,8 @@ func newInvertedFilterer(
 	rcColTypes := make([]*types.T, len(outputColTypes)-1)
 	copy(rcColTypes, outputColTypes[:ifr.invertedColIdx])
 	copy(rcColTypes[ifr.invertedColIdx:], outputColTypes[ifr.invertedColIdx+1:])
-	ifr.keyRow = make(sqlbase.EncDatumRow, len(rcColTypes))
-	ifr.outputRow = make(sqlbase.EncDatumRow, len(outputColTypes))
+	ifr.keyRow = make(rowenc.EncDatumRow, len(rcColTypes))
+	ifr.outputRow = make(rowenc.EncDatumRow, len(outputColTypes))
 	ifr.outputRow[ifr.invertedColIdx].Datum = tree.DNull
 
 	// Initialize ProcessorBase.
@@ -139,13 +139,13 @@ func newInvertedFilterer(
 }
 
 // Next is part of the RowSource interface.
-func (ifr *invertedFilterer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ifr *invertedFilterer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// - Read all the input and add to the row container (with de-duping), and feed it
 	//   to the invertedEval.
 	// - Evaluate the inverted expression
 	// - Retrieve the results and for each row evaluate the ON expression and output.
 	for ifr.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ifr.runningState {
 		case ifrReadingInput:
@@ -211,12 +211,12 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 
 func (ifr *invertedFilterer) emitRow() (
 	invertedFiltererState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	drainFunc := func(err error) (
 		invertedFiltererState,
-		sqlbase.EncDatumRow,
+		rowenc.EncDatumRow,
 		*execinfrapb.ProducerMetadata,
 	) {
 		ifr.MoveToDraining(err)

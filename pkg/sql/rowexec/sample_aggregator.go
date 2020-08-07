@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -232,7 +232,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	var rowsProcessed uint64
 	progressUpdates := util.Every(SampleAggregatorProgressInterval)
-	var da sqlbase.DatumAlloc
+	var da rowenc.DatumAlloc
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -330,7 +330,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 }
 
 func (s *sampleAggregator) processSketchRow(
-	sketch *sketchInfo, row sqlbase.EncDatumRow, da *sqlbase.DatumAlloc,
+	sketch *sketchInfo, row rowenc.EncDatumRow, da *rowenc.DatumAlloc,
 ) error {
 	var tmpSketch hyperloglog.Sketch
 
@@ -364,7 +364,7 @@ func (s *sampleAggregator) processSketchRow(
 }
 
 func (s *sampleAggregator) sampleRow(
-	ctx context.Context, sr *stats.SampleReservoir, sampleRow sqlbase.EncDatumRow, rank uint64,
+	ctx context.Context, sr *stats.SampleReservoir, sampleRow rowenc.EncDatumRow, rank uint64,
 ) error {
 	if err := sr.SampleRow(ctx, s.EvalCtx, sampleRow, rank); err != nil {
 		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
@@ -515,7 +515,7 @@ func (s *sampleAggregator) generateHistogram(
 	}
 	values := make(tree.Datums, 0, len(samples))
 
-	var da sqlbase.DatumAlloc
+	var da rowenc.DatumAlloc
 	for _, sample := range samples {
 		ed := &sample.Row[colIdx]
 		// Ignore NULLs (they are counted separately).

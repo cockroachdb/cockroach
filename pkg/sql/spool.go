@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // spoolNode ensures that a child planNode is executed to completion
@@ -43,7 +43,7 @@ func (s *spoolNode) startExec(params runParams) error {
 
 	s.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(planColumns(s.source)),
+		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 
 	// Accumulate all the rows up to the hardLimit, if any.

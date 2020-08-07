@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -145,9 +145,9 @@ func getResultColumnsForSimpleProject(
 	cols []exec.NodeColumnOrdinal,
 	colNames []string,
 	resultTypes []*types.T,
-	inputCols sqlbase.ResultColumns,
-) sqlbase.ResultColumns {
-	resultCols := make(sqlbase.ResultColumns, len(cols))
+	inputCols colinfo.ResultColumns,
+) colinfo.ResultColumns {
+	resultCols := make(colinfo.ResultColumns, len(cols))
 	for i, col := range cols {
 		if colNames == nil {
 			resultCols[i] = inputCols[col]
@@ -155,7 +155,7 @@ func getResultColumnsForSimpleProject(
 			// column since it indicates it's been explicitly selected.
 			resultCols[i].Hidden = false
 		} else {
-			resultCols[i] = sqlbase.ResultColumn{
+			resultCols[i] = colinfo.ResultColumn{
 				Name: colNames[i],
 				Typ:  resultTypes[i],
 			}
@@ -165,10 +165,10 @@ func getResultColumnsForSimpleProject(
 }
 
 func getEqualityIndicesAndMergeJoinOrdering(
-	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 ) (
 	leftEqualityIndices, rightEqualityIndices []exec.NodeColumnOrdinal,
-	mergeJoinOrdering sqlbase.ColumnOrdering,
+	mergeJoinOrdering colinfo.ColumnOrdering,
 	err error,
 ) {
 	n := len(leftOrdering)
@@ -185,7 +185,7 @@ func getEqualityIndicesAndMergeJoinOrdering(
 		rightEqualityIndices[i] = exec.NodeColumnOrdinal(rightColIdx)
 	}
 
-	mergeJoinOrdering = make(sqlbase.ColumnOrdering, n)
+	mergeJoinOrdering = make(colinfo.ColumnOrdering, n)
 	for i := 0; i < n; i++ {
 		// The mergeJoinOrdering "columns" are equality column indices.  Because of
 		// the way we constructed the equality indices, the ordering will always be
@@ -197,14 +197,14 @@ func getEqualityIndicesAndMergeJoinOrdering(
 }
 
 func getResultColumnsForGroupBy(
-	inputCols sqlbase.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
-) sqlbase.ResultColumns {
-	columns := make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations))
+	inputCols colinfo.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
+) colinfo.ResultColumns {
+	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	for _, col := range groupCols {
 		columns = append(columns, inputCols[col])
 	}
 	for _, agg := range aggregations {
-		columns = append(columns, sqlbase.ResultColumn{
+		columns = append(columns, colinfo.ResultColumn{
 			Name: agg.FuncName,
 			Typ:  agg.ResultType,
 		})
@@ -297,7 +297,7 @@ func collectSystemColumnsFromCfg(
 	colCfg *scanColumnsConfig,
 ) (systemColumns []descpb.SystemColumnKind, systemColumnOrdinals []int) {
 	for i, id := range colCfg.wantedColumns {
-		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(descpb.ColumnID(id))
+		sysColKind := colinfo.GetSystemColumnKindFromColumnID(descpb.ColumnID(id))
 		if sysColKind != descpb.SystemColumnKind_NONE {
 			// The scan is requested to produce a system column.
 			systemColumns = append(systemColumns, sysColKind)

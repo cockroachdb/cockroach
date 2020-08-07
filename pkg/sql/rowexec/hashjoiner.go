@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -104,7 +105,7 @@ type hashJoiner struct {
 	// probingRowState is state used when hjProbingRow.
 	probingRowState struct {
 		// row is the row being probed with.
-		row sqlbase.EncDatumRow
+		row rowenc.EncDatumRow
 		// iter is an iterator over the bucket that matches row on the equality
 		// columns.
 		iter rowcontainer.RowMarkerIterator
@@ -226,9 +227,9 @@ func (h *hashJoiner) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (h *hashJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for h.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch h.runningState {
 		case hjBuilding:
@@ -263,13 +264,13 @@ func (h *hashJoiner) ConsumerClosed() {
 	h.close()
 }
 
-func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (h *hashJoiner) build() (hashJoinerState, rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// setStoredSideTransition is a helper function that sets storedSide on the
 	// hashJoiner and performs initialization before a transition to
 	// hjConsumingStoredSide.
 	setStoredSideTransition := func(
 		side joinSide,
-	) (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	) (hashJoinerState, rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		h.storedSide = side
 		if err := h.initStoredRows(); err != nil {
 			h.MoveToDraining(err)
@@ -360,7 +361,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 // h.initStoredRows().
 func (h *hashJoiner) consumeStoredSide() (
 	hashJoinerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	side := h.storedSide
@@ -411,12 +412,12 @@ func (h *hashJoiner) consumeStoredSide() (
 
 func (h *hashJoiner) readProbeSide() (
 	hashJoinerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	side := otherSide(h.storedSide)
 
-	var row sqlbase.EncDatumRow
+	var row rowenc.EncDatumRow
 	// First process the rows that were already buffered.
 	if h.rows[side].Len() > 0 {
 		row = h.rows[side].EncRow(0)
@@ -477,7 +478,7 @@ func (h *hashJoiner) readProbeSide() (
 
 func (h *hashJoiner) probeRow() (
 	hashJoinerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	i := h.probingRowState.iter
@@ -513,7 +514,7 @@ func (h *hashJoiner) probeRow() (
 	}
 	defer i.Next()
 
-	var renderedRow sqlbase.EncDatumRow
+	var renderedRow rowenc.EncDatumRow
 	if h.storedSide == rightSide {
 		renderedRow, err = h.render(row, otherRow)
 	} else {
@@ -577,7 +578,7 @@ func (h *hashJoiner) probeRow() (
 
 func (h *hashJoiner) emitUnmatched() (
 	hashJoinerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	i := h.emittingUnmatchedState.iter
@@ -642,7 +643,7 @@ func (h *hashJoiner) close() {
 // returned row may be emitted directly.
 func (h *hashJoiner) receiveNext(
 	side joinSide,
-) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata, bool, error) {
+) (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata, bool, error) {
 	source := h.leftSource
 	if side == rightSide {
 		source = h.rightSource
@@ -726,8 +727,8 @@ func (h *hashJoiner) receiveNext(
 // match. If this is the case, a rendered row ready for emitting is returned as
 // well.
 func (h *hashJoiner) shouldEmitUnmatched(
-	row sqlbase.EncDatumRow, side joinSide,
-) (sqlbase.EncDatumRow, bool) {
+	row rowenc.EncDatumRow, side joinSide,
+) (rowenc.EncDatumRow, bool) {
 	if !shouldEmitUnmatchedRow(side, h.joinType) {
 		return nil, false
 	}
