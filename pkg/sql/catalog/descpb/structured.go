@@ -221,6 +221,12 @@ func (desc *TableDescriptor) IsView() bool {
 	return desc.ViewQuery != ""
 }
 
+// MaterializedView returns whether or not this TableDescriptor is a
+// MaterializedView.
+func (desc *TableDescriptor) MaterializedView() bool {
+	return desc.IsMaterializedView
+}
+
 // IsAs returns true if the TableDescriptor actually describes
 // a Table resource with an As source.
 func (desc *TableDescriptor) IsAs() bool {

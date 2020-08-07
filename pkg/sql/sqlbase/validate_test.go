@@ -89,6 +89,7 @@ var validationMap = []struct {
 			"ViewQuery": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
+			"IsMaterializedView": {status: thisFieldReferencesNoObjects},
 			"DependsOn": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

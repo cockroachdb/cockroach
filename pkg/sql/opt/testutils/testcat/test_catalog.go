@@ -602,6 +602,11 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
+// IsMaterializedView is part of the cat.Table interface.
+func (tt *Table) IsMaterializedView() bool {
+	return false
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
 	return len(tt.Columns) + len(tt.SystemColumns)

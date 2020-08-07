@@ -1522,12 +1522,13 @@ func (node *AlterRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        TableName
-	ColumnNames NameList
-	AsSource    *Select
-	IfNotExists bool
-	Temporary   bool
-	Replace     bool
+	Name         TableName
+	ColumnNames  NameList
+	AsSource     *Select
+	IfNotExists  bool
+	Temporary    bool
+	Replace      bool
+	Materialized bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1540,6 +1541,10 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 
 	if node.Temporary {
 		ctx.WriteString("TEMPORARY ")
+	}
+
+	if node.Materialized {
+		ctx.WriteString("MATERIALIZED ")
 	}
 
 	ctx.WriteString("VIEW ")
@@ -1558,6 +1563,19 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 
 	ctx.WriteString(" AS ")
 	ctx.FormatNode(node.AsSource)
+}
+
+// RefreshMaterializedView represents a REFRESH MATERIALIZED VIEW statement.
+type RefreshMaterializedView struct {
+	Name *UnresolvedObjectName
+}
+
+var _ Statement = &RefreshMaterializedView{}
+
+// Format implements the NodeFormatter interface.
+func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
+	ctx.WriteString("REFRESH MATERIALIZED VIEW ")
+	ctx.FormatNode(node.Name)
 }
 
 // CreateStats represents a CREATE STATISTICS statement.

@@ -529,6 +529,7 @@ define CreateView {
     ViewName *cat.DataSourceName
     IfNotExists bool
     Replace bool
+    Materialized bool
     Temporary bool
     ViewQuery string
     Columns sqlbase.ResultColumns

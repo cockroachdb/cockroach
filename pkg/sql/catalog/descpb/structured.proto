@@ -538,6 +538,16 @@ message ComputedColumnSwap {
   optional string inverse_expr = 3 [(gogoproto.nullable) = false];
 }
 
+// MaterializedViewRefresh is a mutation corresponding to a request to
+// refresh a materialized view. The mutation operates by backfilling the
+// result of the view query into the indexes specified by the mutation.
+message MaterializedViewRefresh {
+  option (gogoproto.equal) = true;
+  optional IndexDescriptor new_primary_index = 1 [(gogoproto.nullable) = false];
+  repeated IndexDescriptor new_indexes = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp as_of = 3 [(gogoproto.nullable) = false];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -553,7 +563,8 @@ message DescriptorMutation {
     IndexDescriptor index = 2;
     ConstraintToUpdate constraint = 8;
     PrimaryKeySwap primaryKeySwap = 9;
-    ComputedColumnSwap  computedColumnSwap = 10;
+    ComputedColumnSwap computedColumnSwap = 10;
+    MaterializedViewRefresh materializedViewRefresh = 11;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -856,6 +867,7 @@ message TableDescriptor {
   // Note: The presence of this field is used to determine whether or not
   // a TableDescriptor represents a view.
   optional string view_query = 24 [(gogoproto.nullable) = false];
+  optional bool is_materialized_view = 41 [(gogoproto.nullable) = false];
 
   // The IDs of all relations that this depends on.
   // Only ever populated if this descriptor is for a view.

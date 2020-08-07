@@ -74,6 +74,8 @@ const (
 	VersionRangeStatsRespHasDesc
 	VersionMinPasswordLength
 	VersionAbortSpanBytes
+	VersionMaterializedViews
+
 	// Add new versions here (step one of two).
 )
 
@@ -558,6 +560,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionAbortSpanBytes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
 	},
+	{
+		// VersionMaterializedViews enables the use of materialized views.
+		Key:     VersionMaterializedViews,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 15},
+	},
+
 	// Add new versions here (step two of two).
 
 })
