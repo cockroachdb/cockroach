@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
 // CancelChecker is an Operator that checks whether query cancellation has
@@ -72,7 +72,7 @@ func (c *CancelChecker) check(ctx context.Context) {
 func (c *CancelChecker) checkEveryCall(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		colexecerror.ExpectedError(sqlbase.QueryCanceledError)
+		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
 	}
 }
