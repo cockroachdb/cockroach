@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // LookupNamespaceID implements tree.PrivilegedAccessor.
@@ -48,7 +48,7 @@ func (p *planner) LookupNamespaceID(
 			ctx,
 			"crdb-internal-get-descriptor-id",
 			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			query,
 			parentID,
 			name,
@@ -83,7 +83,7 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 		ctx,
 		"crdb-internal-get-zone",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		query,
 		id,
 	)
