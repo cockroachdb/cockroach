@@ -315,6 +315,8 @@ func TestParse(t *testing.T) {
 		{`CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')`},
 		{`CREATE VIEW a AS TABLE b`},
 		{`CREATE TEMPORARY VIEW a AS SELECT b`},
+		{`CREATE MATERIALIZED VIEW a AS SELECT * FROM b`},
+		{`REFRESH MATERIALIZED VIEW a.b`},
 
 		{`CREATE SEQUENCE a`},
 		{`EXPLAIN CREATE SEQUENCE a`},
@@ -2849,7 +2851,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
-		{`CREATE MATERIALIZED VIEW a`, 41649, ``, ``},
 		{`CREATE OPERATOR a`, 0, `create operator`, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
 		{`CREATE RULE a`, 0, `create rule`, ``},

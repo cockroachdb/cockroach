@@ -865,6 +865,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	ifNotExists bool,
 	replace bool,
 	persistence tree.Persistence,
+	materialized bool,
 	viewQuery string,
 	columns sqlbase.ResultColumns,
 	deps opt.ViewDeps,
