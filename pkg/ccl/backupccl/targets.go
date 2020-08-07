@@ -518,7 +518,7 @@ func getRelevantDescChanges(
 		if _, ok := interestingIDs[change.ID]; ok {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			if table := sqlbase.TableFromDescriptor(change.Desc, hlc.Timestamp{}); table != nil {
+			if table := descpb.TableFromDescriptor(change.Desc, hlc.Timestamp{}); table != nil {
 				if _, ok := interestingParents[table.ParentID]; ok {
 					interestingIDs[table.ID] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
@@ -566,7 +566,7 @@ func getAllDescChanges(
 					return nil, err
 				}
 				r.Desc = &desc
-				t := sqlbase.TableFromDescriptor(&desc, rev.Timestamp)
+				t := descpb.TableFromDescriptor(&desc, rev.Timestamp)
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}

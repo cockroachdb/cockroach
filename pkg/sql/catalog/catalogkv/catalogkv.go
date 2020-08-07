@@ -283,8 +283,8 @@ var _ catalog.DescGetter = (*txnDescGetter)(nil)
 func unwrapDescriptor(
 	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.Descriptor, error) {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
@@ -317,9 +317,9 @@ func unwrapDescriptor(
 func unwrapDescriptorMutable(
 	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.MutableDescriptor, error) {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
 	table, database, typ, schema :=
-		sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
@@ -588,7 +588,7 @@ func GetDatabaseDescriptorsFromIDs(
 				desc.String(),
 			)
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
 		results = append(results, dbdesc.NewImmutableDatabaseDescriptor(*db))
 	}
 	return results, nil
@@ -615,7 +615,7 @@ func ConditionalGetTableDescFromTxn(
 				"decoding current table descriptor value for id: %d", expectation.GetID())
 		}
 	}
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, existing, existingKV.Value.Timestamp)
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, existing, existingKV.Value.Timestamp)
 	if !expectation.DescriptorProto().Equal(existing) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}
@@ -632,8 +632,8 @@ func ConditionalGetTableDescFromTxn(
 //
 // TODO(ajwerner): unify this with the other unwrapping logic.
 func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.MutableDescriptor {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
-	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:

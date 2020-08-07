@@ -8,13 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package descpb
 
 import (
 	"context"
 	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -22,22 +21,22 @@ import (
 
 // GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor.
 func GetDescriptorMetadata(
-	desc *descpb.Descriptor,
-) (id descpb.ID, version descpb.DescriptorVersion, name string, offline, dropped bool) {
+	desc *Descriptor,
+) (id ID, version DescriptorVersion, name string, offline, dropped bool) {
 	return GetDescriptorID(desc), GetDescriptorVersion(desc), GetDescriptorName(desc),
 		GetDescriptorDropped(desc), GetDescriptorOffline(desc)
 }
 
 // GetDescriptorID returns the ID of the descriptor.
-func GetDescriptorID(desc *descpb.Descriptor) descpb.ID {
+func GetDescriptorID(desc *Descriptor) ID {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.ID
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		return t.Database.ID
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		return t.Type.ID
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		return t.Schema.ID
 	default:
 		panic(errors.AssertionFailedf("GetID: unknown Descriptor type %T", t))
@@ -45,15 +44,15 @@ func GetDescriptorID(desc *descpb.Descriptor) descpb.ID {
 }
 
 // GetDescriptorName returns the Name of the descriptor.
-func GetDescriptorName(desc *descpb.Descriptor) string {
+func GetDescriptorName(desc *Descriptor) string {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.Name
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		return t.Database.Name
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		return t.Type.Name
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		return t.Schema.Name
 	default:
 		panic(errors.AssertionFailedf("GetDescriptorName: unknown Descriptor type %T", t))
@@ -61,15 +60,15 @@ func GetDescriptorName(desc *descpb.Descriptor) string {
 }
 
 // GetDescriptorVersion returns the Version of the descriptor.
-func GetDescriptorVersion(desc *descpb.Descriptor) descpb.DescriptorVersion {
+func GetDescriptorVersion(desc *Descriptor) DescriptorVersion {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.Version
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		return t.Database.Version
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		return t.Type.Version
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		return t.Schema.Version
 	default:
 		panic(errors.AssertionFailedf("GetVersion: unknown Descriptor type %T", t))
@@ -77,15 +76,15 @@ func GetDescriptorVersion(desc *descpb.Descriptor) descpb.DescriptorVersion {
 }
 
 // GetDescriptorModificationTime returns the ModificationTime of the descriptor.
-func GetDescriptorModificationTime(desc *descpb.Descriptor) hlc.Timestamp {
+func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.ModificationTime
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		return t.Database.ModificationTime
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		return t.Type.ModificationTime
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		return t.Schema.ModificationTime
 	default:
 		debug.PrintStack()
@@ -97,15 +96,15 @@ func GetDescriptorModificationTime(desc *descpb.Descriptor) hlc.Timestamp {
 // TODO (lucy): Does this method belong on Descriptor? This state does matter
 // for descriptor leasing, but arguably we should be upwrapping the descriptor
 // to get it.
-func GetDescriptorDropped(desc *descpb.Descriptor) bool {
+func GetDescriptorDropped(desc *Descriptor) bool {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.Dropped()
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		return t.Type.Dropped()
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		return t.Schema.Dropped()
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		return t.Database.Dropped()
 	default:
 		debug.PrintStack()
@@ -117,11 +116,11 @@ func GetDescriptorDropped(desc *descpb.Descriptor) bool {
 // TODO (lucy): Does this method belong on Descriptor? This state does matter
 // for descriptor leasing, but arguably we should be upwrapping the descriptor
 // to get it.
-func GetDescriptorOffline(desc *descpb.Descriptor) bool {
+func GetDescriptorOffline(desc *Descriptor) bool {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		return t.Table.Offline()
-	case *descpb.Descriptor_Database, *descpb.Descriptor_Type, *descpb.Descriptor_Schema:
+	case *Descriptor_Database, *Descriptor_Type, *Descriptor_Schema:
 		return false
 	default:
 		debug.PrintStack()
@@ -130,15 +129,15 @@ func GetDescriptorOffline(desc *descpb.Descriptor) bool {
 }
 
 // setDescriptorModificationTime sets the ModificationTime of the descriptor.
-func setDescriptorModificationTime(desc *descpb.Descriptor, ts hlc.Timestamp) {
+func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 	switch t := desc.Union.(type) {
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		t.Table.ModificationTime = ts
-	case *descpb.Descriptor_Database:
+	case *Descriptor_Database:
 		t.Database.ModificationTime = ts
-	case *descpb.Descriptor_Type:
+	case *Descriptor_Type:
 		t.Type.ModificationTime = ts
-	case *descpb.Descriptor_Schema:
+	case *Descriptor_Schema:
 		t.Schema.ModificationTime = ts
 	default:
 		panic(errors.AssertionFailedf("setModificationTime: unknown Descriptor type %T", t))
@@ -163,13 +162,13 @@ func setDescriptorModificationTime(desc *descpb.Descriptor, ts hlc.Timestamp) {
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
 func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
-	ctx context.Context, desc *descpb.Descriptor, ts hlc.Timestamp,
+	ctx context.Context, desc *Descriptor, ts hlc.Timestamp,
 ) {
 	switch t := desc.Union.(type) {
 	case nil:
 		// Empty descriptors shouldn't be touched.
 		return
-	case *descpb.Descriptor_Table:
+	case *Descriptor_Table:
 		// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
 		// v19.1. In general it is not critical to set except for tables in the ADD
 		// state which were created from CTAS so we should not assert on its not
@@ -226,7 +225,7 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 // TODO(ajwerner): Now that all descriptors have their modification time set
 // this way, this function should be retired and similar or better safeguards
 // for all descriptors should be pursued.
-func TableFromDescriptor(desc *descpb.Descriptor, ts hlc.Timestamp) *descpb.TableDescriptor {
+func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
 	t := desc.GetTable()
 	if t != nil {
 		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
