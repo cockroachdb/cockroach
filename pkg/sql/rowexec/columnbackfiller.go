@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -29,7 +29,7 @@ type columnBackfiller struct {
 
 	backfill.ColumnBackfiller
 
-	desc *sqlbase.ImmutableTableDescriptor
+	desc *tabledesc.ImmutableTableDescriptor
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
@@ -44,7 +44,7 @@ func newColumnBackfiller(
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
 	cb := &columnBackfiller{
-		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),
+		desc: tabledesc.NewImmutableTableDescriptor(spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,

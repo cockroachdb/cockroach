@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -82,21 +82,21 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			myTableID := descpb.ID(keys.MinUserDescID + 3)
 			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
 
-			var myTableDesc *sqlbase.MutableTableDescriptor
-			var myOtherTableDesc *sqlbase.MutableTableDescriptor
+			var myTableDesc *tabledesc.MutableTableDescriptor
+			var myOtherTableDesc *tabledesc.MutableTableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*sqlbase.MutableTableDescriptor)
+				myTableDesc = myDesc.(*tabledesc.MutableTableDescriptor)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc = myOtherDesc.(*sqlbase.MutableTableDescriptor)
+				myOtherTableDesc = myOtherDesc.(*tabledesc.MutableTableDescriptor)
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -216,7 +216,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*sqlbase.MutableTableDescriptor)
+				myTableDesc = myDesc.(*tabledesc.MutableTableDescriptor)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if ttlTime != FUTURE && dropItem == DATABASE {
@@ -227,7 +227,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc = myOtherDesc.(*sqlbase.MutableTableDescriptor)
+				myOtherTableDesc = myOtherDesc.(*tabledesc.MutableTableDescriptor)
 				return nil
 			}); err != nil {
 				t.Fatal(err)

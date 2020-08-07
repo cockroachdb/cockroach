@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -109,7 +109,7 @@ func (r schemaChangeGCResumer) Resume(
 		if err := sql.TruncateInterleavedIndexes(
 			ctx,
 			execCfg,
-			sqlbase.NewImmutableTableDescriptor(*details.InterleavedTable),
+			tabledesc.NewImmutableTableDescriptor(*details.InterleavedTable),
 			details.InterleavedIndexes,
 		); err != nil {
 			return err

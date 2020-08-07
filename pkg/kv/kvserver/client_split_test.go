@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1323,7 +1323,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			// We don't care about the value, just the key.
 			id := descpb.ID(i)
 			key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-			desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
+			desc := tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
 			if err := txn.Put(ctx, key, desc.DescriptorProto()); err != nil {
 				return err
 			}
@@ -1392,7 +1392,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// the descriptor we add. We don't care about the value, just the key.
 		id := descpb.ID(userTableMax)
 		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-		desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
+		desc := tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
 		return txn.Put(ctx, k, desc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
