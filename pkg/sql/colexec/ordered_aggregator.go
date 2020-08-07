@@ -163,7 +163,12 @@ func (a *orderedAggregator) Init() {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
-	a.unsafeBatch = a.allocator.NewMemBatchWithMaxCapacity(a.outputTypes)
+	// Note that we use a batch with fixed capacity because aggregate functions
+	// hold onto the vectors passed in into their Init method, so we cannot
+	// simply reallocate the output batch.
+	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
+	// updating the output vector.
+	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
