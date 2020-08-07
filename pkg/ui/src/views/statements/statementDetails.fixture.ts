@@ -43,6 +43,14 @@ const statementStats: any = {
     "mean": 0.00009856131284160407,
     "squared_diffs": 0.0017520019405651047,
   },
+  "bytes_read": {
+    "mean": 4160407,
+    "squared_diffs": 47880000000000,
+  },
+  "rows_read": {
+    "mean": 7,
+    "squared_diffs": 1000000,
+  },
   "sensitive_info": {
     "last_err": "",
     "most_recent_plan_description": {
