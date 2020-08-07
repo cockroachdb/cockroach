@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
@@ -134,7 +134,7 @@ func lookupScheduleAndExecutor(
 	txn *kv.Txn,
 ) (*ScheduledJob, ScheduledJobExecutor, error) {
 	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf(
 			"SELECT schedule_id, schedule_details, executor_type FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), scheduleID))

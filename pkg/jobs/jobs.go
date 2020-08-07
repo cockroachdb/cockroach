@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -698,7 +697,7 @@ func (j *Job) load(ctx context.Context) error {
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const stmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
 			stmt, *j.ID())
 		if err != nil {
 			return err

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 type commentOnColumnNode struct {
@@ -55,7 +55,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.ctx,
 			"set-column-comment",
 			params.p.Txn(),
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
 			n.tableDesc.ID,
@@ -69,7 +69,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.ctx,
 			"delete-column-comment",
 			params.p.Txn(),
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
 			n.tableDesc.ID,

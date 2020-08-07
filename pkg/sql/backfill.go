@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1142,7 +1143,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					)
 				}
 				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
-					sqlbase.InternalExecutorSessionDataOverride{}, stmt)
+					sessiondata.InternalExecutorOverride{}, stmt)
 				if err != nil {
 					return err
 				}
@@ -1218,7 +1219,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				}()
 
 				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
-					sqlbase.InternalExecutorSessionDataOverride{},
+					sessiondata.InternalExecutorOverride{},
 					fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
 				if err != nil {
 					return err
@@ -1261,7 +1262,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 			ie := evalCtx.InternalExecutor.(*InternalExecutor)
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
-				sqlbase.InternalExecutorSessionDataOverride{},
+				sessiondata.InternalExecutorOverride{},
 				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
 			if err != nil {
 				return err

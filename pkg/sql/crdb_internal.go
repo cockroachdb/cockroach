@@ -486,7 +486,7 @@ CREATE TABLE crdb_internal.jobs (
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			query)
 		if err != nil {
 			return nil, nil, err
