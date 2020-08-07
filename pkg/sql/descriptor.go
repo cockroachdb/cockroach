@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -178,7 +179,7 @@ func (p *planner) createDescriptorWithID(
 				return err
 			}
 		}
-	case *sqlbase.MutableSchemaDescriptor:
+	case *schemadesc.MutableSchemaDescriptor:
 		// TODO (lucy): Call AddUncommittedDescriptor when we're ready.
 	default:
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)

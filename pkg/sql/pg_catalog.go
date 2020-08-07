@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1028,13 +1029,13 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(
 	id descpb.ID,
-) (*sqlbase.ImmutableSchemaDescriptor, error) {
+) (*schemadesc.ImmutableSchemaDescriptor, error) {
 	// TODO (rohany): This should use the descs.Collection.
 	desc, err := catalogkv.GetAnyDescriptorByID(r.ctx, r.p.txn, r.p.ExecCfg().Codec, id, catalogkv.Immutable)
 	if err != nil {
 		return nil, err
 	}
-	sc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	sc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
