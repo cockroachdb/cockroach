@@ -303,9 +303,7 @@ func EncodeColumns(
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(
-	desc *ImmutableTableDescriptor, columnIDs []descpb.ColumnID,
-) ([]*types.T, error) {
+func GetColumnTypes(desc TableDescriptor, columnIDs []descpb.ColumnID) ([]*types.T, error) {
 	types := make([]*types.T, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)

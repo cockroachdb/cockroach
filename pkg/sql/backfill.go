@@ -359,7 +359,7 @@ func (sc *SchemaChanger) dropConstraints(
 							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 						}
 						backrefTable := backrefDesc.(*MutableTableDescriptor)
-						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable.TableDesc()); err != nil {
+						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable); err != nil {
 							return err
 						}
 						scTable.OutboundFKs = append(scTable.OutboundFKs[:j], scTable.OutboundFKs[j+1:]...)

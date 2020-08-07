@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -48,7 +49,7 @@ import (
 
 type createTableNode struct {
 	n          *tree.CreateTable
-	dbDesc     *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc     catalog.DatabaseDescriptor
 	sourcePlan planNode
 
 	run createTableRun
@@ -169,9 +170,9 @@ func (p *planner) getSchemaIDForCreate(
 		)
 	}
 	switch res.Kind {
-	case sqlbase.SchemaPublic, sqlbase.SchemaUserDefined:
+	case catalog.SchemaPublic, catalog.SchemaUserDefined:
 		return res.ID, nil
-	case sqlbase.SchemaVirtual:
+	case catalog.SchemaVirtual:
 		return 0, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
 		return 0, errors.AssertionFailedf("invalid schema kind for getSchemaIDForCreate: %d", res.Kind)
@@ -431,7 +432,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ctx,
 				params.p.txn,
 				params.ExecCfg().Codec,
-				sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
+				desc.Immutable().(*sqlbase.ImmutableTableDescriptor),
 				desc.Columns,
 				params.p.alloc)
 			if err != nil {
@@ -1693,7 +1694,7 @@ func NewTableDesc(
 	// table.
 	fkResolver := &fkSelfResolver{
 		SchemaResolver: vt,
-		newTableDesc:   desc.TableDesc(),
+		newTableDesc:   &desc,
 		newTableName:   &n.Table,
 	}
 
@@ -2160,7 +2161,7 @@ func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
 }
 
 func createInheritedPrivilegesFromDBDesc(
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor, user string,
+	dbDesc sqlbase.DatabaseDescriptor, user string,
 ) *descpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.

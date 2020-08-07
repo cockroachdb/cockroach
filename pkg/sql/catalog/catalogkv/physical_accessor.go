@@ -77,42 +77,42 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 // GetSchema implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if scName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, catalog.ResolvedSchema{ID: keys.PublicSchemaID, Kind: catalog.SchemaPublic}, nil
 	}
 
 	// Lookup the schema ID.
 	exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, scName)
 	if err != nil || !exists {
-		return exists, sqlbase.ResolvedSchema{}, err
+		return exists, catalog.ResolvedSchema{}, err
 	}
 
 	// The temporary schema doesn't have a descriptor, only a namespace entry.
 	// Note that just performing this string check on the schema name is safe
 	// because no user defined schemas can have the prefix "pg_".
 	if strings.HasPrefix(scName, sessiondata.PgTempSchemaName) {
-		return true, sqlbase.ResolvedSchema{ID: schemaID, Kind: sqlbase.SchemaTemporary}, nil
+		return true, catalog.ResolvedSchema{ID: schemaID, Kind: catalog.SchemaTemporary}, nil
 	}
 
 	// Get the descriptor from disk.
 	desc, err := GetAnyDescriptorByID(ctx, txn, codec, schemaID, Immutable)
 	if err != nil {
-		return false, sqlbase.ResolvedSchema{}, err
+		return false, catalog.ResolvedSchema{}, err
 	}
 
 	if desc == nil {
-		return false, sqlbase.ResolvedSchema{}, nil
+		return false, catalog.ResolvedSchema{}, nil
 	}
 
 	sc, ok := desc.(sqlbase.SchemaDescriptor)
 	if !ok {
-		return false, sqlbase.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
+		return false, catalog.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
 	}
-	return true, sqlbase.ResolvedSchema{
+	return true, catalog.ResolvedSchema{
 		ID:   sc.GetID(),
-		Kind: sqlbase.SchemaUserDefined,
+		Kind: catalog.SchemaUserDefined,
 		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc.SchemaDesc()),
 	}, nil
 }

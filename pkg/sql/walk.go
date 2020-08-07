@@ -557,7 +557,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(run.ti.tableDesc().Name)
+			buf.WriteString(run.ti.tableDesc().GetName())
 			buf.WriteByte('(')
 			for i := range run.insertCols {
 				if i > 0 {
@@ -599,7 +599,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *upsertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.run.tw.tableDesc().Name)
+			buf.WriteString(n.run.tw.tableDesc().GetName())
 			buf.WriteByte('(')
 			for i := range n.run.insertCols {
 				if i > 0 {
@@ -619,7 +619,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *updateNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "table", n.run.tu.tableDesc().Name)
+			v.observer.attr(name, "table", n.run.tu.tableDesc().GetName())
 			if len(n.run.tu.ru.UpdateCols) > 0 {
 				var buf bytes.Buffer
 				for i := range n.run.tu.ru.UpdateCols {
@@ -645,7 +645,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *deleteNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
+			v.observer.attr(name, "from", n.run.td.tableDesc().GetName())
 			v.observer.attr(name, "strategy", n.run.td.desc())
 			if n.run.td.autoCommit == autoCommitEnabled {
 				v.observer.attr(name, "auto commit", "")

@@ -43,9 +43,7 @@ func (f *singleKVFetcher) nextBatch(
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
-) error {
+func ConvertBatchError(ctx context.Context, tableDesc sqlbase.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
@@ -65,10 +63,7 @@ func ConvertBatchError(
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	key roachpb.Key,
-	value *roachpb.Value,
+	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
 	// Strip the tenant prefix and pretend use the system tenant's SQL codec for
 	// the rest of this function. This is safe because the key is just used to
@@ -106,7 +101,7 @@ func NewUniquenessConstraintViolationError(
 		Desc:             tableDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}

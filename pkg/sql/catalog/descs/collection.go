@@ -303,10 +303,10 @@ func (tc *Collection) getMutableObjectDescriptor(
 // otherwise falling back to a database lookup.
 func (tc *Collection) ResolveSchema(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, catalog.ResolvedSchema{ID: keys.PublicSchemaID, Kind: catalog.SchemaPublic}, nil
 	}
 
 	type schemaCacheKey struct {
@@ -318,13 +318,13 @@ func (tc *Collection) ResolveSchema(
 	// First lookup the cache.
 	// TODO (SQLSchema): This should look into the lease manager.
 	if val, ok := tc.schemaCache.Load(key); ok {
-		return true, val.(sqlbase.ResolvedSchema), nil
+		return true, val.(catalog.ResolvedSchema), nil
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
 	exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
-		return exists, sqlbase.ResolvedSchema{}, err
+		return exists, catalog.ResolvedSchema{}, err
 	}
 
 	tc.schemaCache.Store(key, resolved)

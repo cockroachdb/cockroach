@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -52,7 +53,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 
 func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
-) (*tree.TypeName, *sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
 	// Resolve the target schema and database.
 	db, prefix, err := params.p.ResolveUncachedDatabase(params.ctx, name)
 	if err != nil {
@@ -77,7 +78,7 @@ func resolveNewTypeName(
 // TypeName and returns the key for the new type descriptor, and the ID of
 // the parent schema.
 func getCreateTypeParams(
-	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
+	params runParams, name *tree.TypeName, db catalog.DatabaseDescriptor,
 ) (typeKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
@@ -88,7 +89,7 @@ func getCreateTypeParams(
 		}
 	}
 	// Get the ID of the schema the type is being created in.
-	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.ID, name.Schema())
+	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.GetID(), name.Schema())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -151,21 +152,21 @@ func (p *planner) createArrayType(
 	n *tree.CreateType,
 	typ *tree.TypeName,
 	typDesc *sqlbase.MutableTypeDescriptor,
-	db *sqlbase.ImmutableDatabaseDescriptor,
+	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 ) (descpb.ID, error) {
 	arrayTypeName, err := findFreeArrayTypeName(
 		params.ctx,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		db.ID,
+		db.GetID(),
 		schemaID,
 		typ.Type(),
 	)
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.ID, schemaID, arrayTypeName)
+	arrayTypeKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)

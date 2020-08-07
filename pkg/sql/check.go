@@ -342,7 +342,7 @@ type checkSet = util.FastIntSet
 func checkMutationInput(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	tabDesc *sqlbase.ImmutableTableDescriptor,
+	tabDesc sqlbase.TableDescriptor,
 	checkOrds checkSet,
 	checkVals tree.Datums,
 ) error {

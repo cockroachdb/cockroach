@@ -104,8 +104,9 @@ func prepareInsertOrUpdateBatch(
 	putFn func(ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
 	overwrite, traceKV bool,
 ) ([]byte, error) {
-	for i := range helper.TableDesc.Families {
-		family := &helper.TableDesc.Families[i]
+	families := helper.TableDesc.GetFamilies()
+	for i := range families {
+		family := &families[i]
 		update := false
 		for _, colID := range family.ColumnIDs {
 			if _, ok := marshaledColIDMapping[colID]; ok {

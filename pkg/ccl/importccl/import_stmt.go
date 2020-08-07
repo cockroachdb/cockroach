@@ -314,10 +314,10 @@ func importPlanHook(
 			}
 			parentID = dbDesc.GetID()
 			switch schema.Kind {
-			case sqlbase.SchemaVirtual:
+			case catalog.SchemaVirtual:
 				return pgerror.Newf(pgcode.InvalidSchemaName,
 					"cannot import into schema %q", table.SchemaName)
-			case sqlbase.SchemaUserDefined, sqlbase.SchemaPublic, sqlbase.SchemaTemporary:
+			case catalog.SchemaUserDefined, catalog.SchemaPublic, catalog.SchemaTemporary:
 				parentSchemaID = schema.ID
 			}
 		} else {
@@ -940,7 +940,7 @@ func prepareNewTableDescsForIngestion(
 	var seqValKVs []roachpb.KeyValue
 	for _, desc := range newMutableTableDescriptors {
 		if v, ok := seqVals[desc.GetID()]; ok && v != 0 {
-			key, val, err := sql.MakeSequenceKeyVal(p.ExecCfg().Codec, desc.TableDesc(), v, false)
+			key, val, err := sql.MakeSequenceKeyVal(p.ExecCfg().Codec, desc, v, false)
 			if err != nil {
 				return nil, err
 			}

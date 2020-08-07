@@ -1262,7 +1262,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
 					backrefTable := backrefDesc.(*MutableTableDescriptor)
-					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable.TableDesc()); err != nil {
+					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable); err != nil {
 						return err
 					}
 				}
