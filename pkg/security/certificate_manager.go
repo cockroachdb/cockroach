@@ -724,11 +724,6 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 		return cm.tenantServerConfig, nil
 	}
 
-	serverCA, err := cm.getTenantServerCACertLocked()
-	if err != nil {
-		return nil, err
-	}
-
 	serverCert, err := cm.getTenantServerCertLocked()
 	if err != nil {
 		return nil, err
@@ -742,7 +737,7 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 	cfg, err := newServerTLSConfig(
 		serverCert.FileContents,
 		serverCert.KeyFileContents,
-		serverCA.FileContents,
+		nil, // caPEM
 		tenantCA.FileContents)
 	if err != nil {
 		return nil, err

@@ -41,18 +41,10 @@ The following certificates are required:
   authentication and authorization with the KV layer (as tenant X).
 - ca-server-tenant.crt: to authenticate KV layer.
 
-                 ca.crt        ca-client-tenant.crt        ca-server-tenant.crt
-user ---------------> sql server ----------------------------> kv
- client.Y.crt    node.crt      client-tenant.X.crt         server-tenant.crt
- client.Y.key    node.key      client-tenant.X.key         server-tenant.key
-
-Note that CA certificates need to be present on the "other" end of the arrow as
-well unless it can be verified using a trusted root certificate store. That is,
-
-- ca.crt needs to be passed in the Postgres connection string (sslrootcert) if
-  sslmode=verify-ca.
-- ca-server-tenant.crt needs to be present on the SQL server.
-- ca-client-tenant.crt needs to be present on the KV server.
+ ca.crt            ca-client.crt      ca-server-tenant.crt        ca-client-tenant.crt
+user -----------------> [   sql server    ]-------------------------> [ kv server ]
+ client.Y.crt      node.crt           client-tenant.X.crt         server-tenant.crt
+ client.Y.key      node.key           client-tenant.X.key         server-tenant.key
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runStartSQL),
