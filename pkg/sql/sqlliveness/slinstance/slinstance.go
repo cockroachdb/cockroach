@@ -68,6 +68,7 @@ type SQLInstance struct {
 	ttl     func() time.Duration
 	hb      func() time.Duration
 	mu      struct {
+		started bool
 		syncutil.Mutex
 		blockCh chan struct{}
 		s       *session
@@ -121,7 +122,7 @@ func (l *SQLInstance) createSession(ctx context.Context) (*session, error) {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Errorf(ctx, "Failed to create a session at %d-th attempt: %v", err.Error())
+				log.Errorf(ctx, "Failed to create a session at %d-th attempt: %v", i, err.Error())
 			}
 			continue
 		}
@@ -169,6 +170,9 @@ func (l *SQLInstance) extendSession(ctx context.Context, s sqlliveness.Session) 
 }
 
 func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
+	defer func() {
+		log.Warning(ctx, "exiting heartbeat loop")
+	}()
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
@@ -183,10 +187,6 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 			if s == nil {
 				newSession, err := l.createSession(ctx)
 				if err != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					log.Errorf(ctx, "Exiting from heartbeat loop: %v", err)
 					return
 				}
 				l.setSession(newSession)
@@ -195,7 +195,6 @@ func (l *SQLInstance) heartbeatLoop(ctx context.Context) {
 			}
 			found, err := l.extendSession(ctx, s)
 			if err != nil {
-				log.Errorf(ctx, "Exiting from heartbeat loop: %v", err)
 				l.clearSession()
 				return
 			}
@@ -233,6 +232,11 @@ func NewSQLInstance(
 
 // Start runs the hearbeat loop.
 func (l *SQLInstance) Start(ctx context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.mu.started {
+		return
+	}
 	log.Infof(ctx, "starting SQL liveness instance")
 	if err := l.stopper.RunAsyncTask(ctx, "SQL-livenes-storage", func(ctx context.Context) {
 		l.storage.Start(ctx)
@@ -240,12 +244,20 @@ func (l *SQLInstance) Start(ctx context.Context) {
 		log.Fatal(ctx, err.Error())
 	}
 	l.stopper.RunWorker(ctx, l.heartbeatLoop)
+	l.mu.started = true
 }
 
 // Session returns a live session id. For each Sqlliveness instance the
 // invariant is that there exists at most one live session at any point in time.
 // If the current one has expired then a new one is created.
 func (l *SQLInstance) Session(ctx context.Context) (sqlliveness.Session, error) {
+	l.mu.Lock()
+	if !l.mu.started {
+		l.mu.Unlock()
+		return nil, errors.New("the SQLInstance has not been started yet")
+	}
+	l.mu.Unlock()
+
 	for {
 		s, ch := l.getSessionOrBlockCh()
 		if s != nil {

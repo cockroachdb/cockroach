@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -41,12 +42,10 @@ type Storage struct {
 	db         *kv.DB
 	ex         tree.InternalExecutor
 	gcInterval func() time.Duration
-	settings   *cluster.Settings
-}
-
-// Options are used to configure a new Storage.
-type Options struct {
-	gcInterval time.Duration
+	mu         struct {
+		syncutil.Mutex
+		started bool
+	}
 }
 
 // NewStorage creates a new storage struct.
@@ -68,8 +67,14 @@ func NewStorage(
 
 // Start runs the delete sessions loop.
 func (s *Storage) Start(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.started {
+		return
+	}
 	log.Infof(ctx, "starting SQL liveness storage")
 	s.stopper.RunWorker(ctx, s.deleteSessions)
+	s.mu.started = true
 }
 
 // IsAlive returns whether the query session is currently alive. It may return
@@ -89,6 +94,9 @@ SELECT session_id FROM system.sqlliveness WHERE session_id = $1`, sid,
 }
 
 func (s *Storage) deleteSessions(ctx context.Context) {
+	defer func() {
+		log.Warning(ctx, "exiting delete sessions loop")
+	}()
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
