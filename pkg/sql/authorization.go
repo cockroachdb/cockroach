@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -495,13 +496,13 @@ func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, use
 	}
 
 	switch resolvedSchema.Kind {
-	case sqlbase.SchemaPublic:
+	case catalog.SchemaPublic:
 		// Anyone can CREATE on a public schema.
 		return nil
-	case sqlbase.SchemaTemporary, sqlbase.SchemaVirtual:
+	case catalog.SchemaTemporary, catalog.SchemaVirtual:
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot CREATE on schema %s", resolvedSchema.Name)
-	case sqlbase.SchemaUserDefined:
+	case catalog.SchemaUserDefined:
 		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.CREATE, user)
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
