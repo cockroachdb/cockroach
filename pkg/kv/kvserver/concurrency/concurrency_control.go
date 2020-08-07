@@ -326,6 +326,11 @@ type Request struct {
 	// The consistency level of the request. Only set if Txn is nil.
 	ReadConsistency roachpb.ReadConsistencyType
 
+	// The wait policy of the request. Signifies how the request should
+	// behave if it encounters conflicting locks held by other active
+	// transactions.
+	WaitPolicy lock.WaitPolicy
+
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 

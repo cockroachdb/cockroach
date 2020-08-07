@@ -161,3 +161,21 @@ enum Durability {
   // and should not be relied upon for correctness.
   Unreplicated = 1;
 }
+
+// WaitPolicy specifies the behavior of a request when it encounters conflicting
+// locks held by other active transactions. The default behavior is to block
+// until the conflicting lock is released, but other policies can make sense in
+// special situations.
+enum WaitPolicy {
+  // Block indicates that if a request encounters a conflicting locks held by
+  // another active transaction, it should wait for the conflicting lock to be
+  // released before proceeding.
+  Block = 0;
+
+  // Error indicates that if a request encounters a conflicting locks held by
+  // another active transaction, it should raise an error instead of blocking.
+  // If the request encounters a conflicting lock that was abandoned by an
+  // inactive transaction, which is likely due to a transaction coordinator
+  // crash, the lock is removed and no error is raised.
+  Error = 1;
+}
