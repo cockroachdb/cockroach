@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
@@ -863,7 +863,7 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 		var err error
 		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
 			nil, uuid.UUID{} /* clusterID */, keys.SystemSQLCodec,
-			sqlbase.NewImmutableTableDescriptor(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
+			tabledesc.NewImmutableTableDescriptor(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")
 		}

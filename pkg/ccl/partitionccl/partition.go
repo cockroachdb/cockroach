@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -150,7 +150,7 @@ func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr
 func createPartitioningImpl(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	colOffset int,
@@ -250,7 +250,7 @@ func createPartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {

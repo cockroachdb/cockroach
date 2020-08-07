@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // explainPlanNode implements EXPLAIN (PLAN); it produces the output of
@@ -71,7 +71,7 @@ func emitExplain(
 	ob.AddField("distribution", distribution.String())
 	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
-		var tabDesc *sqlbase.ImmutableTableDescriptor
+		var tabDesc *tabledesc.ImmutableTableDescriptor
 		var idxDesc *descpb.IndexDescriptor
 		if table.IsVirtualTable() {
 			tabDesc = table.(*optVirtualTable).desc

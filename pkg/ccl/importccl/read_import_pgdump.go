@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -224,7 +224,7 @@ func readPostgresCreateTable(
 	walltime int64,
 	fks fkHandler,
 	max int,
-) ([]*sqlbase.MutableTableDescriptor, error) {
+) ([]*tabledesc.MutableTableDescriptor, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
 	// later because MakeSimpleTableDescriptor calls the sql package which calls
@@ -239,7 +239,7 @@ func readPostgresCreateTable(
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
-			ret := make([]*sqlbase.MutableTableDescriptor, 0, len(createTbl))
+			ret := make([]*tabledesc.MutableTableDescriptor, 0, len(createTbl))
 			owner := security.AdminRole
 			if params.SessionData() != nil {
 				owner = params.SessionData().User
@@ -263,7 +263,7 @@ func readPostgresCreateTable(
 				fks.resolver[desc.Name] = desc
 				ret = append(ret, desc)
 			}
-			backrefs := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+			backrefs := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 			for _, create := range createTbl {
 				if create == nil {
 					continue
@@ -549,7 +549,7 @@ func newPgDumpReader(
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			tableDesc := sqlbase.NewImmutableTableDescriptor(*table.Desc)
+			tableDesc := tabledesc.NewImmutableTableDescriptor(*table.Desc)
 			colSubMap := make(map[string]int, len(table.TargetCols))
 			targetCols := make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
@@ -566,7 +566,7 @@ func newPgDumpReader(
 			colMap[conv] = colSubMap
 			tableDescs[name] = tableDesc
 		} else if table.Desc.IsSequence() {
-			seqDesc := sqlbase.NewImmutableTableDescriptor(*table.Desc)
+			seqDesc := tabledesc.NewImmutableTableDescriptor(*table.Desc)
 			tableDescs[name] = seqDesc
 		}
 	}

@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -192,7 +192,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
-		tableDesc := objDesc.(*sqlbase.ImmutableTableDescriptor)
+		tableDesc := objDesc.(*tabledesc.ImmutableTableDescriptor)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue
@@ -207,7 +207,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 func (n *scrubNode) startScrubTable(
 	ctx context.Context,
 	p *planner,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
@@ -286,7 +286,7 @@ func (n *scrubNode) startScrubTable(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*descpb.ColumnDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -345,7 +345,7 @@ func pairwiseOp(left []string, right []string, op string) []string {
 // createPhysicalCheckOperations will return the physicalCheckOperation
 // for all indexes on a table.
 func createPhysicalCheckOperations(
-	tableDesc *sqlbase.ImmutableTableDescriptor, tableName *tree.TableName,
+	tableDesc *tabledesc.ImmutableTableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
 	for i := range tableDesc.Indexes {
@@ -362,7 +362,7 @@ func createPhysicalCheckOperations(
 // first invalid index.
 func createIndexCheckOperations(
 	indexNames tree.NameList,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -420,7 +420,7 @@ func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
 	constraintNames tree.NameList,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {

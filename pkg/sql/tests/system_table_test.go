@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -162,7 +162,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	type testcase struct {
 		id     descpb.ID
 		schema string
-		pkg    *sqlbase.ImmutableTableDescriptor
+		pkg    *tabledesc.ImmutableTableDescriptor
 	}
 
 	for _, test := range []testcase{

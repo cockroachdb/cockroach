@@ -32,12 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -182,7 +182,7 @@ func spansForAllTableIndexes(
 		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
-			tbl := sqlbase.NewImmutableTableDescriptor(*rawTbl)
+			tbl := tabledesc.NewImmutableTableDescriptor(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {

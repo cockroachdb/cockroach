@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -198,7 +198,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				}
 			}
 
-		case *sqlbase.MutableTableDescriptor:
+		case *tabledesc.MutableTableDescriptor:
 			// TODO (lucy): This should probably have a single consolidated job like
 			// DROP DATABASE.
 			if err := p.createOrUpdateSchemaChangeJob(

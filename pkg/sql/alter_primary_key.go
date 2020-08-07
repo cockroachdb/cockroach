@@ -17,11 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -30,7 +30,7 @@ import (
 
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	alterPKNode *tree.AlterTableAlterPrimaryKey,
 ) error {
 	// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
@@ -126,7 +126,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	// Make a new index that is suitable to be a primary index.
-	name := sqlbase.GenerateUniqueConstraintName(
+	name := tabledesc.GenerateUniqueConstraintName(
 		"new_primary_key",
 		nameExists,
 	)
@@ -282,7 +282,7 @@ func (p *planner) AlterPrimaryKey(
 		// Clone the index that we want to rewrite.
 		newIndex := protoutil.Clone(idx).(*descpb.IndexDescriptor)
 		basename := newIndex.Name + "_rewrite_for_primary_key_change"
-		newIndex.Name = sqlbase.GenerateUniqueConstraintName(basename, nameExists)
+		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
 		if err := addIndexMutationWithSpecificPrimaryKey(tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
 			return err
 		}

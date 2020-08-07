@@ -29,13 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -916,7 +916,7 @@ func populateTableConstraints(
 			if err != nil {
 				return err
 			}
-			if idx, err := sqlbase.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
+			if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
 				// We couldn't find an index that matched. This shouldn't happen.
 				log.Warningf(ctx, "broken fk reference: %v", err)
 			} else {
@@ -1361,7 +1361,7 @@ CREATE TABLE pg_catalog.pg_depend (
 					return err
 				}
 				refObjID := oidZero
-				if idx, err := sqlbase.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
+				if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
 					// We couldn't find an index that matched. This shouldn't happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
 				} else {

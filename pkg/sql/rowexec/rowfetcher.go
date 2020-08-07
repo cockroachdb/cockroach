@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -58,7 +58,7 @@ type rowFetcher interface {
 func initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 	indexIdx int,
 	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,

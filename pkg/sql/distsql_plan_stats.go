@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -55,7 +55,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 
 func (dsp *DistSQLPlanner) createStatsPlan(
 	planCtx *PlanningCtx,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 	reqStats []requestedStat,
 	job *jobs.Job,
 ) (*PhysicalPlan, error) {
@@ -254,7 +254,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		}
 	}
 
-	tableDesc := sqlbase.NewImmutableTableDescriptor(details.Table)
+	tableDesc := tabledesc.NewImmutableTableDescriptor(details.Table)
 	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
 }
 

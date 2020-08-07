@@ -20,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -156,7 +156,7 @@ func presplitTableBoundaries(
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := sqlbase.MakeImmutableTableDescriptor(*tbl.Desc)
+		tblDesc := tabledesc.MakeImmutableTableDescriptor(*tbl.Desc)
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err

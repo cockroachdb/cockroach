@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -216,7 +216,7 @@ func ensureRequiredPrivileges(
 	ctx context.Context,
 	requiredPrivileges []privilege.Kind,
 	p sql.PlanHookState,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 ) error {
 	for _, priv := range requiredPrivileges {
 		err := p.CheckPrivilege(ctx, desc, priv)
@@ -599,7 +599,7 @@ func importPlanHook(
 		}
 
 		var tableDetails []jobspb.ImportDetails_Table
-		var tableDescs []*sqlbase.MutableTableDescriptor // parallel with tableDetails
+		var tableDescs []*tabledesc.MutableTableDescriptor // parallel with tableDetails
 		jobDesc, err := importJobDescription(p, importStmt, nil, filenamePatterns, opts)
 		if err != nil {
 			return err
@@ -673,7 +673,7 @@ func importPlanHook(
 					}
 				}
 			}
-			tableDescs = []*sqlbase.MutableTableDescriptor{found}
+			tableDescs = []*tabledesc.MutableTableDescriptor{found}
 			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
 		} else {
 			seqVals := make(map[descpb.ID]int64)
@@ -751,7 +751,7 @@ func importPlanHook(
 				if err != nil {
 					return err
 				}
-				tableDescs = []*sqlbase.MutableTableDescriptor{tbl}
+				tableDescs = []*tabledesc.MutableTableDescriptor{tbl}
 				descStr, err := importJobDescription(p, importStmt, create.Defs, filenamePatterns, opts)
 				if err != nil {
 					return err
@@ -953,9 +953,9 @@ func prepareNewTableDescsForIngestion(
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
 ) ([]*descpb.TableDescriptor, error) {
-	newMutableTableDescriptors := make([]*sqlbase.MutableTableDescriptor, len(importTables))
+	newMutableTableDescriptors := make([]*tabledesc.MutableTableDescriptor, len(importTables))
 	for i := range importTables {
-		newMutableTableDescriptors[i] = sqlbase.NewMutableExistingTableDescriptor(*importTables[i].Desc)
+		newMutableTableDescriptors[i] = tabledesc.NewMutableExistingTableDescriptor(*importTables[i].Desc)
 	}
 
 	// Verification steps have passed, generate a new table ID if we're
@@ -997,7 +997,7 @@ func prepareNewTableDescsForIngestion(
 	}
 
 	// tableDescs contains the same slice as newMutableTableDescriptors but
-	// as sqlbase.TableDescriptor.
+	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
 		newMutableTableDescriptors[i].State = descpb.TableDescriptor_OFFLINE
@@ -1044,8 +1044,8 @@ func prepareExistingTableDescForIngestion(
 	}
 
 	// TODO(dt): Ensure no other schema changes can start during ingest.
-	importing := sqlbase.NewMutableExistingTableDescriptor(*desc)
-	existing := importing.Immutable().(*sqlbase.ImmutableTableDescriptor)
+	importing := tabledesc.NewMutableExistingTableDescriptor(*desc)
+	existing := importing.Immutable().(*tabledesc.ImmutableTableDescriptor)
 	importing.Version++
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
@@ -1225,7 +1225,7 @@ func (r *importResumer) Resume(
 		// case we can cheaply clear-range instead of revert-range to cleanup.
 		for i := range details.Tables {
 			if !details.Tables[i].IsNew {
-				tblSpan := sqlbase.NewImmutableTableDescriptor(*details.Tables[i].Desc).TableSpan(keys.TODOSQLCodec)
+				tblSpan := tabledesc.NewImmutableTableDescriptor(*details.Tables[i].Desc).TableSpan(keys.TODOSQLCodec)
 				res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
 				if err != nil {
 					return errors.Wrap(err, "checking if existing table is empty")
@@ -1325,8 +1325,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.Desc)
-			prevTableDesc := newTableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor)
+			newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.Desc)
+			prevTableDesc := newTableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor)
 			newTableDesc.Version++
 			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1453,14 +1453,14 @@ func (r *importResumer) dropTables(
 		return nil
 	}
 
-	var revert []*sqlbase.ImmutableTableDescriptor
-	var empty []*sqlbase.ImmutableTableDescriptor
+	var revert []*tabledesc.ImmutableTableDescriptor
+	var empty []*tabledesc.ImmutableTableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
 			if tbl.WasEmpty {
-				empty = append(empty, sqlbase.NewImmutableTableDescriptor(*tbl.Desc))
+				empty = append(empty, tabledesc.NewImmutableTableDescriptor(*tbl.Desc))
 			} else {
-				revert = append(revert, sqlbase.NewImmutableTableDescriptor(*tbl.Desc))
+				revert = append(revert, tabledesc.NewImmutableTableDescriptor(*tbl.Desc))
 			}
 		}
 	}
@@ -1494,8 +1494,8 @@ func (r *importResumer) dropTables(
 	dropTime := int64(1)
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.Desc)
-		prevTableDesc := newTableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor)
+		newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.Desc)
+		prevTableDesc := newTableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor)
 		newTableDesc.Version++
 		if tbl.IsNew {
 			newTableDesc.State = descpb.TableDescriptor_DROP

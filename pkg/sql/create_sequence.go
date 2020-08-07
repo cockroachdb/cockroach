@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -177,8 +177,8 @@ func NewSequenceTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,
-) (*sqlbase.MutableTableDescriptor, error) {
-	desc := sqlbase.InitTableDescriptor(
+) (*tabledesc.MutableTableDescriptor, error) {
+	desc := tabledesc.InitTableDescriptor(
 		id,
 		parentID,
 		schemaID,
@@ -191,25 +191,25 @@ func NewSequenceTableDesc(
 	// Mimic a table with one column, "value".
 	desc.Columns = []descpb.ColumnDescriptor{
 		{
-			ID:   sqlbase.SequenceColumnID,
-			Name: sqlbase.SequenceColumnName,
+			ID:   tabledesc.SequenceColumnID,
+			Name: tabledesc.SequenceColumnName,
 			Type: types.Int,
 		},
 	}
 	desc.PrimaryIndex = descpb.IndexDescriptor{
 		ID:               keys.SequenceIndexID,
-		Name:             sqlbase.PrimaryKeyIndexName,
-		ColumnIDs:        []descpb.ColumnID{sqlbase.SequenceColumnID},
-		ColumnNames:      []string{sqlbase.SequenceColumnName},
+		Name:             tabledesc.PrimaryKeyIndexName,
+		ColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+		ColumnNames:      []string{tabledesc.SequenceColumnName},
 		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 	}
 	desc.Families = []descpb.ColumnFamilyDescriptor{
 		{
 			ID:              keys.SequenceColumnFamilyID,
-			ColumnIDs:       []descpb.ColumnID{sqlbase.SequenceColumnID},
-			ColumnNames:     []string{sqlbase.SequenceColumnName},
+			ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+			ColumnNames:     []string{tabledesc.SequenceColumnName},
 			Name:            "primary",
-			DefaultColumnID: sqlbase.SequenceColumnID,
+			DefaultColumnID: tabledesc.SequenceColumnID,
 		},
 	}
 

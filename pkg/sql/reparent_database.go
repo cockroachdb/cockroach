@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -159,7 +159,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		}
 		if found {
 			// Remap the ID's on the table.
-			tbl, ok := desc.(*sqlbase.MutableTableDescriptor)
+			tbl, ok := desc.(*tabledesc.MutableTableDescriptor)
 			if !ok {
 				return errors.AssertionFailedf("%q was not a MutableTableDescriptor", objName.Object())
 			}

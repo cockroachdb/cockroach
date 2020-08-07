@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
@@ -629,7 +629,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 					// For foreign key constraint, constraint_column_usage
 					// identifies the table/columns that the foreign key
 					// references.
-					conTable = sqlbase.NewImmutableTableDescriptor(*con.ReferencedTable)
+					conTable = tabledesc.NewImmutableTableDescriptor(*con.ReferencedTable)
 					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
 					if err != nil {
 						return err
@@ -841,7 +841,7 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				referencedIdx, err := tabledesc.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
 				if err != nil {
 					return err
 				}

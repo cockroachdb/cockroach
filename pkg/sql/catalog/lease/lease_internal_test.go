@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -82,7 +82,7 @@ func TestTableSet(t *testing.T) {
 		switch op := d.op.(type) {
 		case insert:
 			s := &descriptorVersionState{
-				Descriptor: sqlbase.NewImmutableTableDescriptor(
+				Descriptor: tabledesc.NewImmutableTableDescriptor(
 					descpb.TableDescriptor{Version: op.version},
 				),
 			}
@@ -91,7 +91,7 @@ func TestTableSet(t *testing.T) {
 
 		case remove:
 			s := &descriptorVersionState{
-				Descriptor: sqlbase.NewImmutableTableDescriptor(
+				Descriptor: tabledesc.NewImmutableTableDescriptor(
 					descpb.TableDescriptor{Version: op.version},
 				),
 			}
@@ -160,7 +160,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	var tables []sqlbase.ImmutableTableDescriptor
+	var tables []tabledesc.ImmutableTableDescriptor
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
@@ -171,7 +171,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, *table.(*sqlbase.ImmutableTableDescriptor))
+			tables = append(tables, *table.(*tabledesc.ImmutableTableDescriptor))
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -333,7 +333,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -360,7 +360,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.ID)
 	}
-	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -393,7 +393,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
+		if err := leaseManager.Release(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -444,7 +444,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	}
 
-	tracker := removalTracker.TrackRemoval(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor))
+	tracker := removalTracker.TrackRemoval(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor))
 
 	// Acquire another lease.
 	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.ID); err != nil {
@@ -460,7 +460,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("same lease %s", newLease.expiration.GoTime())
 	}
 
-	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -469,7 +469,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*tabledesc.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -551,7 +551,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Release.
 	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
-	tableChan := make(chan *sqlbase.ImmutableTableDescriptor)
+	tableChan := make(chan *tabledesc.ImmutableTableDescriptor)
 	errChan := make(chan error)
 	go func() {
 		for table := range tableChan {
@@ -573,7 +573,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := desc.(*sqlbase.ImmutableTableDescriptor)
+		table := desc.(*tabledesc.ImmutableTableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -742,7 +742,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
-		table *sqlbase.ImmutableTableDescriptor
+		table *tabledesc.ImmutableTableDescriptor
 		exp   hlc.Timestamp
 		err   error
 	}
@@ -756,7 +756,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		acquireChan chan Result,
 	) {
 		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
+		acquireChan <- Result{err: err, exp: e, table: table.(*tabledesc.ImmutableTableDescriptor)}
 	}
 
 	testCases := []struct {
@@ -859,7 +859,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 						return
 					}
 					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
+					acquireChan <- Result{err: err, exp: e, table: table.(*tabledesc.ImmutableTableDescriptor)}
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {

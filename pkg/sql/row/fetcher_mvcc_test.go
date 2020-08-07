@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -89,7 +89,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	parentDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
 	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
-	for _, desc := range []*sqlbase.ImmutableTableDescriptor{parentDesc, childDesc} {
+	for _, desc := range []*tabledesc.ImmutableTableDescriptor{parentDesc, childDesc} {
 		colIdxMap := make(map[descpb.ColumnID]int)
 		var valNeededForCol util.FastIntSet
 		for colIdx := range desc.Columns {

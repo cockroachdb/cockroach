@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/linkedin/goavro/v2"
@@ -142,7 +142,7 @@ func (g *intArrGen) Gen() interface{} {
 // A testHelper to generate avro data.
 type testHelper struct {
 	schemaJSON  string
-	schemaTable *sqlbase.ImmutableTableDescriptor
+	schemaTable *tabledesc.ImmutableTableDescriptor
 	codec       *goavro.Codec
 	gens        []avroGen
 	settings    *cluster.Settings
@@ -200,7 +200,7 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 	return &testHelper{
 		schemaJSON: string(schemaJSON),
 		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs).
-			Immutable().(*sqlbase.ImmutableTableDescriptor),
+			Immutable().(*tabledesc.ImmutableTableDescriptor),
 		codec:    codec,
 		gens:     gens,
 		settings: st,
@@ -591,7 +591,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(b, err)
 
 	avro, err := newAvroInputReader(kvCh,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor),
 		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 

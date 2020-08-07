@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -280,9 +280,9 @@ func newZigzagJoiner(
 	z := &zigzagJoiner{}
 
 	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := make([]sqlbase.ImmutableTableDescriptor, len(spec.Tables))
+	tables := make([]tabledesc.ImmutableTableDescriptor, len(spec.Tables))
 	for i := range spec.Tables {
-		tables[i] = sqlbase.MakeImmutableTableDescriptor(spec.Tables[i])
+		tables[i] = tabledesc.MakeImmutableTableDescriptor(spec.Tables[i])
 	}
 	leftColumnTypes := tables[0].ColumnTypes()
 	rightColumnTypes := tables[1].ColumnTypes()
@@ -368,7 +368,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
 	alloc      *rowenc.DatumAlloc
-	table      *sqlbase.ImmutableTableDescriptor
+	table      *tabledesc.ImmutableTableDescriptor
 	index      *descpb.IndexDescriptor
 	indexTypes []*types.T
 	indexDirs  []descpb.IndexDescriptor_Direction
@@ -405,7 +405,7 @@ func (z *zigzagJoiner) setupInfo(
 	spec *execinfrapb.ZigzagJoinerSpec,
 	side int,
 	colOffset int,
-	tables []sqlbase.ImmutableTableDescriptor,
+	tables []tabledesc.ImmutableTableDescriptor,
 ) error {
 	z.side = side
 	info := z.infos[side]

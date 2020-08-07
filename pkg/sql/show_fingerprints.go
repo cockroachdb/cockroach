@@ -17,10 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -28,7 +28,7 @@ import (
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.ImmutableTableDescriptor
+	tableDesc *tabledesc.ImmutableTableDescriptor
 	indexes   []*descpb.IndexDescriptor
 
 	run showFingerprintsRun

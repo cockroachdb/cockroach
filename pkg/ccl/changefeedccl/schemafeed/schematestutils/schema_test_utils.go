@@ -14,7 +14,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/gogo/protobuf/proto"
@@ -23,7 +23,7 @@ import (
 // MakeTableDesc makes a generic table descriptor with the provided properties.
 func MakeTableDesc(
 	tableID descpb.ID, version descpb.DescriptorVersion, modTime hlc.Timestamp, cols int,
-) *sqlbase.ImmutableTableDescriptor {
+) *tabledesc.ImmutableTableDescriptor {
 	td := descpb.TableDescriptor{
 		Name:             "foo",
 		ID:               tableID,
@@ -35,7 +35,7 @@ func MakeTableDesc(
 		td.Columns = append(td.Columns, *MakeColumnDesc(td.NextColumnID))
 		td.NextColumnID++
 	}
-	return sqlbase.NewImmutableTableDescriptor(td)
+	return tabledesc.NewImmutableTableDescriptor(td)
 }
 
 // MakeColumnDesc makes a generic column descriptor with the provided id.
@@ -51,8 +51,8 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 // AddColumnDropBackfillMutation adds a mutation to desc to drop a column.
 // Yes, this does modify an ImmutableTableDescriptor.
 func AddColumnDropBackfillMutation(
-	desc *sqlbase.ImmutableTableDescriptor,
-) *sqlbase.ImmutableTableDescriptor {
+	desc *tabledesc.ImmutableTableDescriptor,
+) *tabledesc.ImmutableTableDescriptor {
 	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
 		State:     descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		Direction: descpb.DescriptorMutation_DROP,
@@ -63,8 +63,8 @@ func AddColumnDropBackfillMutation(
 // AddNewColumnBackfillMutation adds a mutation to desc to add a column.
 // Yes, this does modify an ImmutableTableDescriptor.
 func AddNewColumnBackfillMutation(
-	desc *sqlbase.ImmutableTableDescriptor,
-) *sqlbase.ImmutableTableDescriptor {
+	desc *tabledesc.ImmutableTableDescriptor,
+) *tabledesc.ImmutableTableDescriptor {
 	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID)},
 		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
