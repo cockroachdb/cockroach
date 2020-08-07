@@ -1278,21 +1278,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				// passed recursively to further divideAndSendBatchToRanges() calls.
 				if ba.MaxSpanRequestKeys > 0 {
 					if replyResults > ba.MaxSpanRequestKeys {
-						// NOTE: v19.2 and below have a bug where MaxSpanRequestKeys
-						// is not respected by ResolveIntentRangeRequest once the
-						// limit has already been exhausted by the batch. This is
-						// mostly harmless (or at least, the damage has already been
-						// done by this point and resulted in a large Raft entry)
-						// and has been fixed in v20.1+, so don't bother hitting the
-						// assertion.
-						//
-						// TODO(nvanbenschoten): remove this hack in v20.2.
-						if _, ok := ba.GetArg(roachpb.ResolveIntentRange); ok {
-							replyResults = ba.MaxSpanRequestKeys
-						} else {
-							log.Fatalf(ctx, "received %d results, limit was %d",
-								replyResults, ba.MaxSpanRequestKeys)
-						}
+						log.Fatalf(ctx, "received %d results, limit was %d",
+							replyResults, ba.MaxSpanRequestKeys)
 					}
 					ba.MaxSpanRequestKeys -= replyResults
 					// Exiting; any missing responses will be filled in via defer().
