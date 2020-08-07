@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -798,7 +799,7 @@ func createImportingDescriptors(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var schemas []*sqlbase.MutableSchemaDescriptor
+	var schemas []*schemadesc.MutableSchemaDescriptor
 	var types []*typedesc.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
@@ -820,7 +821,7 @@ func createImportingDescriptors(
 				databases = append(databases, rewriteDesc)
 			}
 		case catalog.SchemaDescriptor:
-			schemas = append(schemas, sqlbase.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
+			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
 			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
@@ -874,7 +875,7 @@ func createImportingDescriptors(
 	}
 
 	// Collect all schemas that are going to be restored.
-	var schemasToWrite []*sqlbase.MutableSchemaDescriptor
+	var schemasToWrite []*schemadesc.MutableSchemaDescriptor
 	var writtenSchemas []catalog.SchemaDescriptor
 	for i := range schemas {
 		sc := schemas[i]
