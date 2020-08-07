@@ -34,7 +34,7 @@ func makeAny(t *testing.T, msg protoutil.Message) *pbtypes.Any {
 func TestMessageToJSONBRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		pbname  string
 		message protoutil.Message
 	}{
@@ -58,7 +58,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 			pbname: "cockroach.sql.sqlbase.IndexDescriptor",
 			message: &descpb.IndexDescriptor{
 				Name:             "myidx",
-				ID:               42,
+				ID:               500,
 				Unique:           true,
 				ColumnNames:      []string{"foo", "bar", "buz"},
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
@@ -87,29 +87,54 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 			pbname:  "cockroach.sql.sqlbase.TableDescriptor.SequenceOpts.SequenceOwner",
 			message: &descpb.TableDescriptor_SequenceOpts_SequenceOwner{OwnerColumnID: 123},
 		},
-	} {
-		t.Run(tc.pbname, func(t *testing.T) {
-			protoData, err := protoutil.Marshal(tc.message)
-			require.NoError(t, err)
-
-			// Decode proto bytes to message and compare.
-			decoded, err := DecodeMessage(tc.pbname, protoData)
-			require.NoError(t, err)
-			require.Equal(t, tc.message, decoded)
-
-			// Encode message as json
-			jsonb, err := MessageToJSON(decoded)
-			require.NoError(t, err)
-
-			// Recreate message from json
-			fromJSON := reflect.New(reflect.TypeOf(tc.message).Elem()).Interface().(protoutil.Message)
-
-			json := &jsonpb.Unmarshaler{}
-			require.NoError(t, json.Unmarshal(strings.NewReader(jsonb.String()), fromJSON))
-
-			require.Equal(t, tc.message, fromJSON)
-		})
 	}
+
+	t.Run("pb-to-json-round-trip", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.pbname, func(t *testing.T) {
+				protoData, err := protoutil.Marshal(tc.message)
+				require.NoError(t, err)
+
+				// Decode proto bytes to message and compare.
+				decoded, err := DecodeMessage(tc.pbname, protoData)
+				require.NoError(t, err)
+				require.Equal(t, tc.message, decoded)
+
+				// Encode message as json
+				jsonb, err := MessageToJSON(decoded)
+				require.NoError(t, err)
+
+				// Recreate message from json
+				fromJSON := reflect.New(reflect.TypeOf(tc.message).Elem()).Interface().(protoutil.Message)
+
+				json := &jsonpb.Unmarshaler{}
+				require.NoError(t, json.Unmarshal(strings.NewReader(jsonb.String()), fromJSON))
+
+				require.Equal(t, tc.message, fromJSON)
+			})
+		}
+	})
+
+	t.Run("identity-round-trip", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.pbname, func(t *testing.T) {
+				jsonb, err := MessageToJSON(tc.message)
+				require.NoError(t, err)
+
+				fromJSON, err := NewMessage(tc.pbname)
+				require.NoError(t, err)
+
+				fromJSONBytes, err := JSONBMarshalToMessage(jsonb, fromJSON)
+				require.NoError(t, err)
+
+				expectedBytes, err := protoutil.Marshal(tc.message)
+				require.NoError(t, err)
+
+				require.Equal(t, expectedBytes, fromJSONBytes)
+			})
+		}
+	})
+
 }
 
 // Ensure we don't blow up when asking to convert invalid

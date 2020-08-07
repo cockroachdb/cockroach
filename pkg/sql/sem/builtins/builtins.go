@@ -2922,6 +2922,29 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"crdb_internal.json_to_pb": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pbname", types.String},
+				{"json", types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg, err := protoreflect.NewMessage(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				data, err := protoreflect.JSONBMarshalToMessage(tree.MustBeDJSON(args[1]).JSON, msg)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(data)), nil
+			},
+			Info:       "Convert JSONB data to protocol message bytes",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
 	// Enum functions.
 	"enum_first": makeBuiltin(
 		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
