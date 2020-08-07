@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -167,7 +168,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		expectedVersion++
 		if err := kvDB.Put(
 			ctx,
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 			tableDesc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
@@ -786,7 +787,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 	// Check that the table descriptor exists so we know the data will
 	// eventually be deleted.
-	tbDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
+	tbDescKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 	if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
@@ -3657,7 +3658,7 @@ CREATE TABLE d.t (
 	}
 	if err := kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
 		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)

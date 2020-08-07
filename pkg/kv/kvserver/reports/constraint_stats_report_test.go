@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -760,7 +762,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			&sqlbase.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name, security.AdminRole).ImmutableDatabaseDescriptor)
+			&dbdesc.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name, security.AdminRole).ImmutableDatabaseDescriptor)
 
 		for _, table := range db.tables {
 			tableID := objectCounter
@@ -1076,7 +1078,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 		panic(fmt.Sprintf("parent not set for table %q", tableDesc.Name))
 	}
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
+	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
 	desc := &descpb.Descriptor{
 		Union: &descpb.Descriptor_Table{
 			Table: &tableDesc,
@@ -1093,9 +1095,9 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 }
 
 // addTableDesc adds a database descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *sqlbase.ImmutableDatabaseDescriptor) {
+func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *dbdesc.ImmutableDatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
-	k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
+	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value
 	if err := v.SetProto(dbDesc.DescriptorProto()); err != nil {
 		panic(err)
