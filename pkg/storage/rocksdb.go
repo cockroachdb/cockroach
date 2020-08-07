@@ -2343,6 +2343,7 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 	ms.GCBytesAge = int64(stats.gc_bytes_age)
 	ms.SysBytes = int64(stats.sys_bytes)
 	ms.SysCount = int64(stats.sys_count)
+	ms.AbortSpanBytes = int64(stats.abort_span_bytes)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }

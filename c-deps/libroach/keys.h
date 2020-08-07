@@ -9,6 +9,7 @@ const rocksdb::Slice kLocalMax("\x02", 1);
 const rocksdb::Slice kLocalRangeIDPrefix("\x01\x69", 2);
 const rocksdb::Slice kLocalRangeIDReplicatedInfix("\x72", 1);
 const rocksdb::Slice kLocalRangeAppliedStateSuffix("\x72\x61\x73\x6b", 4);
+const rocksdb::Slice kLocalAbortSpanSuffix("\x61\x62\x63\x2d", 4);
 const rocksdb::Slice kMeta2KeyMax("\x03\xff\xff", 3);
 const rocksdb::Slice kTenantPrefix("\xfe", 1);
 const rocksdb::Slice kMinKey("", 0);
