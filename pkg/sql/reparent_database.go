@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,8 +29,8 @@ import (
 
 type reparentDatabaseNode struct {
 	n         *tree.ReparentDatabase
-	db        *sqlbase.MutableDatabaseDescriptor
-	newParent *sqlbase.MutableDatabaseDescriptor
+	db        *dbdesc.MutableDatabaseDescriptor
+	newParent *dbdesc.MutableDatabaseDescriptor
 }
 
 func (p *planner) ReparentDatabase(

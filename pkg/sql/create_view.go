@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -40,7 +41,7 @@ type createViewNode struct {
 	replace      bool
 	persistence  tree.Persistence
 	materialized bool
-	dbDesc       *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc       *dbdesc.ImmutableDatabaseDescriptor
 	columns      sqlbase.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
@@ -230,7 +231,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := newDesc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := newDesc.Validate(params.ctx, catalogkv.NewDescGetter(params.p.txn, params.ExecCfg().Codec)); err != nil {
 		return err
 	}
 

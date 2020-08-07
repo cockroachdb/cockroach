@@ -15,12 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -34,7 +35,7 @@ import (
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor, newName string, stmt string,
+	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, newName string, stmt string,
 ) error {
 	oldName := desc.GetName()
 	desc.SetName(newName)
@@ -55,7 +56,7 @@ func (p *planner) renameDatabase(
 	b.CPut(newKey, descID, nil)
 
 	if p.Descriptors().DatabaseLeasingUnsupported() {
-		descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
+		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
 		descDesc := desc.DescriptorProto()
 
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
@@ -89,7 +90,7 @@ func (p *planner) renameDatabase(
 // only be called when database descriptor leasing is enabled. See
 // writeDatabaseChangeToBatch. Also queues a job to complete the schema change.
 func (p *planner) writeNonDropDatabaseChange(
-	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor, jobDesc string,
+	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, jobDesc string,
 ) error {
 	if err := p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc); err != nil {
 		return err
@@ -105,7 +106,7 @@ func (p *planner) writeNonDropDatabaseChange(
 // can only be called when database descriptor leasing is enabled. Does not
 // queue a job to complete the schema change.
 func (p *planner) writeDatabaseChangeToBatch(
-	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor, b *kv.Batch,
+	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, b *kv.Batch,
 ) error {
 	if p.Descriptors().DatabaseLeasingUnsupported() {
 		log.Fatal(ctx, "invalid attempted write of database descriptor")

@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -41,10 +42,10 @@ type (
 	DatabaseDescriptor = descpb.DatabaseDescriptor
 	// MutableDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableDatabaseDescriptor = sqlbase.MutableDatabaseDescriptor
+	MutableDatabaseDescriptor = dbdesc.MutableDatabaseDescriptor
 	// ImmutableDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ImmutableDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
+	ImmutableDatabaseDescriptor = dbdesc.ImmutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor

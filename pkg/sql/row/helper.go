@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,11 +49,11 @@ func newRowHelper(
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
+	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
-		rh.secIndexValDirs[i] = sqlbase.IndexKeyValDirs(&rh.Indexes[i])
+		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(&rh.Indexes[i])
 	}
 
 	return rh

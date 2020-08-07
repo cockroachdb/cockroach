@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,7 +46,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tableKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
+	tableKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
 	tableDesc.PrimaryIndex.Partitioning = descpb.PartitioningDescriptor{

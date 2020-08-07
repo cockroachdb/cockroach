@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,8 +51,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			desc.ModificationTime = ts1
 			return desc
 		}
-		mkDB := func(id descpb.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
-			return &sqlbase.NewInitialDatabaseDescriptor(id, name, security.AdminRole).ImmutableDatabaseDescriptor
+		mkDB := func(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
+			return &dbdesc.NewInitialDatabaseDescriptor(id, name, security.AdminRole).ImmutableDatabaseDescriptor
 		}
 		mkTyp := func(desc typDesc) *sqlbase.ImmutableTypeDescriptor {
 			// Set a default parent schema for the type descriptors.
