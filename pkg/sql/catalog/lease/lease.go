@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -1931,7 +1932,7 @@ func (m *Manager) watchForGossipUpdates(
 	}
 
 	s.RunWorker(ctx, func(ctx context.Context) {
-		descKeyPrefix := m.storage.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon
 		// return. NB: this call is allowed to bypass OptionalGossip because
 		// we'll never get here after VersionRangefeedLeases.
@@ -1973,7 +1974,7 @@ func (m *Manager) watchForRangefeedUpdates(
 			Closer:         s.ShouldQuiesce(),
 		}); r.Next(); i++ {
 			ts := m.getResolvedTimestamp()
-			descKeyPrefix := m.storage.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+			descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
 			span := roachpb.Span{
 				Key:    descKeyPrefix,
 				EndKey: descKeyPrefix.PrefixEnd(),
