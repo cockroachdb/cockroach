@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -447,7 +447,7 @@ func TestCorruptData(t *testing.T) {
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUser},
 			"UPDATE system.protected_ts_records SET spans = $1 WHERE id = $2",
 			[]byte("junk"), rec.ID.String())
 		require.NoError(t, err)
@@ -497,7 +497,7 @@ func TestCorruptData(t *testing.T) {
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUser},
 			"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
 			d.String(), rec.ID.String())
 		require.NoError(t, err)
@@ -604,7 +604,7 @@ func (ie *wrappedInternalExecutor) ExecEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	o sqlbase.InternalExecutorSessionDataOverride,
+	o sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
@@ -615,7 +615,7 @@ func (ie *wrappedInternalExecutor) QueryEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
+	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, error) {
@@ -631,7 +631,7 @@ func (ie *wrappedInternalExecutor) QueryWithCols(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	o sqlbase.InternalExecutorSessionDataOverride,
+	o sessiondata.InternalExecutorOverride,
 	statement string,
 	qargs ...interface{},
 ) ([]tree.Datums, colinfo.ResultColumns, error) {
@@ -642,7 +642,7 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	session sqlbase.InternalExecutorSessionDataOverride,
+	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {

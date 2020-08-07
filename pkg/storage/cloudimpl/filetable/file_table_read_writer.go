@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 )
@@ -76,7 +76,7 @@ func (i *InternalFileToTableExecutor) Query(
 	result := FileToTableExecutorRows{}
 	var err error
 	result.internalExecResults, err = i.ie.QueryEx(ctx, opName, nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: username}, query, qargs...)
+		sessiondata.InternalExecutorOverride{User: username}, query, qargs...)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (i *InternalFileToTableExecutor) Exec(
 	ctx context.Context, opName, query, username string, qargs ...interface{},
 ) error {
 	_, err := i.ie.ExecEx(ctx, opName, nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: username}, query, qargs...)
+		sessiondata.InternalExecutorOverride{User: username}, query, qargs...)
 	return err
 }
 
@@ -293,7 +293,7 @@ func (f *FileToTableSystem) FileSize(ctx context.Context, filename string) (int6
 	getFileSizeQuery := fmt.Sprintf(`SELECT file_size FROM %s WHERE filename=$1`,
 		f.GetFQFileTableName())
 	rows, err := e.ie.QueryRowEx(ctx, "payload-table-storage-size", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+		sessiondata.InternalExecutorOverride{User: f.username},
 		getFileSizeQuery, filename)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get size of file from the payload table")
@@ -361,7 +361,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
 			_, err := e.ie.QueryEx(ctx, "drop-payload-table", txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
 				return errors.Wrap(err, "failed to drop payload table")
@@ -369,7 +369,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
 			_, err = e.ie.QueryEx(ctx, "drop-file-table", txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {
 				return errors.Wrap(err, "failed to drop file table")
@@ -422,7 +422,7 @@ type payloadWriter struct {
 	ctx                     context.Context
 	txn                     *kv.Txn
 	byteOffset              int
-	execSessionDataOverride sqlbase.InternalExecutorSessionDataOverride
+	execSessionDataOverride sessiondata.InternalExecutorOverride
 	fileTableName           string
 	payloadTableName        string
 }
@@ -452,7 +452,7 @@ func (p *payloadWriter) Write(buf []byte) (int, error) {
 type chunkWriter struct {
 	buf                     *bytes.Buffer
 	pw                      *payloadWriter
-	execSessionDataOverride sqlbase.InternalExecutorSessionDataOverride
+	execSessionDataOverride sessiondata.InternalExecutorOverride
 	fileTableName           string
 	payloadTableName        string
 	chunkSize               int
@@ -467,7 +467,7 @@ func newChunkWriter(
 	ie *sql.InternalExecutor,
 	txn *kv.Txn,
 ) *chunkWriter {
-	execSessionDataOverride := sqlbase.InternalExecutorSessionDataOverride{User: username}
+	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: username}
 	pw := &payloadWriter{
 		filename, ie, ctx, txn, 0,
 		execSessionDataOverride, fileTableName,
@@ -579,7 +579,7 @@ func newFileTableReader(
 	query := fmt.Sprintf(`SELECT payload FROM %s WHERE filename=$1`, payloadTableName)
 	rows, err := ie.QueryEx(
 		ctx, "get-filename-payload", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: username}, query, filename,
+		sessiondata.InternalExecutorOverride{User: username}, query, filename,
 	)
 	if err != nil {
 		return nil, err
@@ -591,7 +591,7 @@ func newFileTableReader(
 		query := fmt.Sprintf(`SELECT filename FROM %s WHERE filename=$1`, fileTableName)
 		metadataRows, err := ie.QueryEx(
 			ctx, "get-filename-metadata", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: username}, query, filename,
+			sessiondata.InternalExecutorOverride{User: username}, query, filename,
 		)
 		if err != nil {
 			return nil, err
@@ -646,7 +646,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
 		databaseSchema)
 	rows, err := ie.QueryEx(ctx, "tables-exist", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
 		return false, err
@@ -665,7 +665,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
 	_, err := ie.QueryEx(ctx, "create-file-table", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+		sessiondata.InternalExecutorOverride{User: f.username},
 		fileTableCreateQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to create file table to store uploaded file names")
@@ -674,7 +674,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	payloadTableCreateQuery := fmt.Sprintf(payloadTableSchema, f.GetFQPayloadTableName(),
 		f.GetFQFileTableName())
 	_, err = ie.QueryEx(ctx, "create-payload-table", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+		sessiondata.InternalExecutorOverride{User: f.username},
 		payloadTableCreateQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to create interleaved table to store chunks of uploaded files")
@@ -691,7 +691,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username)
 	_, err := ie.QueryEx(ctx, "grant-user-file-payload-table-access", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		grantQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to grant access privileges to file and payload tables")
@@ -709,7 +709,7 @@ func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`)
 	rows, err := ie.QueryEx(
 		ctx, "get-users", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		getUsersQuery, f.username,
 	)
 	if err != nil {
@@ -725,7 +725,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user)
 		_, err = ie.QueryEx(ctx, "revoke-user-privileges", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			revokeQuery)
 		if err != nil {
 			return errors.Wrap(err, "failed to revoke privileges")

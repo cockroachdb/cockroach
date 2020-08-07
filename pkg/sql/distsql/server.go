@@ -645,7 +645,7 @@ func (ie *lazyInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
-	opts sqlbase.InternalExecutorSessionDataOverride,
+	opts sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {

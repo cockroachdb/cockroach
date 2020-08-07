@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -230,7 +229,7 @@ func cleanupSchemaObjects(
 	a := catalogkv.UncachedPhysicalAccessor{}
 
 	searchPath := catconstants.DefaultSearchPath.WithTemporarySchemaName(schemaName)
-	override := sqlbase.InternalExecutorSessionDataOverride{
+	override := sessiondata.InternalExecutorOverride{
 		SearchPath: &searchPath,
 		User:       security.RootUser,
 	}
