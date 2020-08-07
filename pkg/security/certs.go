@@ -86,18 +86,6 @@ func CreateCAPair(
 	return createCACertAndKey(certsDir, caKeyPath, CAPem, keySize, lifetime, allowKeyReuse, overwrite)
 }
 
-// CreateTenantServerCAPair creates a tenant server CA pair. The private key is
-// written to caKeyPath and the public key is created in certsDir.
-func CreateTenantServerCAPair(
-	certsDir, caKeyPath string,
-	keySize int,
-	lifetime time.Duration,
-	allowKeyReuse bool,
-	overwrite bool,
-) error {
-	return createCACertAndKey(certsDir, caKeyPath, TenantServerCAPem, keySize, lifetime, allowKeyReuse, overwrite)
-}
-
 // CreateTenantClientCAPair creates a tenant client CA pair. The private key is
 // written to caKeyPath and the public key is created in certsDir.
 func CreateTenantClientCAPair(
@@ -157,7 +145,6 @@ func createCACertAndKey(
 		return errors.New("the path to the certs directory is required")
 	}
 	if caType != CAPem &&
-		caType != TenantServerCAPem &&
 		caType != TenantClientCAPem &&
 		caType != ClientCAPem &&
 		caType != UICAPem {
@@ -223,8 +210,6 @@ func createCACertAndKey(
 	switch caType {
 	case CAPem:
 		certPath = cm.CACertPath()
-	case TenantServerCAPem:
-		certPath = cm.TenantServerCACertPath()
 	case TenantClientCAPem:
 		certPath = cm.TenantClientCACertPath()
 	case ClientCAPem:
@@ -272,19 +257,6 @@ func createCACertAndKey(
 func CreateNodePair(
 	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
 ) error {
-	return createServerPair(
-		certsDir, caKeyPath, keySize, lifetime, overwrite, hosts, NodePem,
-	)
-}
-
-func createServerPair(
-	certsDir, caKeyPath string,
-	keySize int,
-	lifetime time.Duration,
-	overwrite bool,
-	hosts []string,
-	typ PemUsage,
-) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
 	}
@@ -303,67 +275,39 @@ func createServerPair(
 	}
 
 	// Load the CA pair.
-	var caCertPath, certPath, keyPath, nodeUser string
-	var usage []x509.ExtKeyUsage
-	switch typ {
-	case NodePem:
-		caCertPath = cm.CACertPath()
-		certPath = cm.NodeCertPath()
-		keyPath = cm.NodeKeyPath()
-		// Allow control of the principal to place in the cert via an env var. This
-		// is intended for testing purposes only.
-		nodeUser = envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
-		// Both server and client authentication are allowed (for inter-node RPC).
-		usage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
-	case TenantServerPem:
-		caCertPath = cm.TenantServerCACertPath()
-		certPath = cm.TenantServerCertPath()
-		keyPath = cm.TenantServerKeyPath()
-		// NB: nodeUser is unused since these will never be used as client certs.
-		usage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
-	default:
-		return errors.Newf("invalid type %v", typ)
-	}
-
-	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
+	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
 	if err != nil {
 		return err
 	}
 
 	// Generate certificates and keys.
-	serverKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	nodeKey, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
 		return errors.Errorf("could not generate new node key: %v", err)
 	}
 
-	serverCert, err := GenerateServerCert(caCert, caPrivateKey,
-		serverKey.Public(), lifetime, nodeUser, hosts, usage...)
+	// Allow control of the principal to place in the cert via an env var. This
+	// is intended for testing purposes only.
+	nodeUser := envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
+	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
+		nodeKey.Public(), lifetime, nodeUser, hosts)
 	if err != nil {
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}
 
-	if err := writeCertificateToFile(certPath, serverCert, overwrite); err != nil {
-		return errors.Errorf("error writing server certificate to %s: %v", certPath, err)
+	certPath := cm.NodeCertPath()
+	if err := writeCertificateToFile(certPath, nodeCert, overwrite); err != nil {
+		return errors.Errorf("error writing node server certificate to %s: %v", certPath, err)
 	}
-	log.Infof(context.Background(), "Generated server certificate: %s", certPath)
+	log.Infof(context.Background(), "Generated node certificate: %s", certPath)
 
-	if err := writeKeyToFile(keyPath, serverKey, overwrite); err != nil {
-		return errors.Errorf("error writing server key to %s: %v", keyPath, err)
+	keyPath := cm.NodeKeyPath()
+	if err := writeKeyToFile(keyPath, nodeKey, overwrite); err != nil {
+		return errors.Errorf("error writing node server key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated server key: %s", keyPath)
+	log.Infof(context.Background(), "Generated node key: %s", keyPath)
 
 	return nil
-}
-
-// CreateTenantServerPair creates a tenant server key and certificate.
-// The tenant CA cert and key must load properly. If multiple certificates
-// exist in the CA cert, the first one is used.
-func CreateTenantServerPair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
-) error {
-	return createServerPair(
-		certsDir, caKeyPath, keySize, lifetime, overwrite, hosts, TenantServerPem,
-	)
 }
 
 // CreateUIPair creates a UI certificate and key using the UI CA.

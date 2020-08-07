@@ -126,27 +126,6 @@ func TestGenerateTenantCerts(t *testing.T) {
 	certsDir, cleanup := tempDir(t)
 	defer cleanup()
 
-	{
-		caKeyFile := filepath.Join(certsDir, "irrelevant.key")
-		require.NoError(t, security.CreateTenantServerCAPair(
-			certsDir,
-			caKeyFile,
-			testKeySize,
-			48*time.Hour,
-			false, // allowKeyReuse
-			false, // overwrite
-		))
-
-		require.NoError(t, security.CreateTenantServerPair(
-			certsDir,
-			caKeyFile,
-			testKeySize,
-			time.Hour,
-			false, // overwrite
-			[]string{"127.0.0.1"},
-		))
-	}
-
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
 	require.NoError(t, security.CreateTenantClientCAPair(
 		certsDir,
@@ -188,17 +167,9 @@ func TestGenerateTenantCerts(t *testing.T) {
 			Filename:  "ca-client-tenant.crt",
 		},
 		{
-			FileUsage: security.TenantServerCAPem,
-			Filename:  "ca-server-tenant.crt",
-		},
-		{
 			FileUsage: security.TenantClientPem,
 			Filename:  "client-tenant.999.crt",
 			Name:      "999",
-		},
-		{
-			FileUsage: security.TenantServerPem,
-			Filename:  "server-tenant.crt",
 		},
 	}, infos)
 }
@@ -267,22 +238,6 @@ func generateBaseCerts(certsDir string) error {
 		if err := security.CreateClientPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*48, true, security.RootUser, false,
-		); err != nil {
-			return err
-		}
-	}
-
-	{
-		caKey := filepath.Join(certsDir, security.EmbeddedTenantServerCAKey)
-		if err := security.CreateTenantServerCAPair(
-			certsDir, caKey,
-			testKeySize, time.Hour*96, true, true,
-		); err != nil {
-			return err
-		}
-
-		if err := security.CreateTenantServerPair(certsDir, caKey,
-			testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
 		); err != nil {
 			return err
 		}

@@ -121,9 +121,8 @@ type serverOpts struct {
 type ServerOption func(*serverOpts)
 
 // ForTenant is an option to NewServer that results in the server being set
-// up to validate incoming tenants. Without this option, the created server will
-// use the KV-internal node certificates. With it, it uses tenant server
-// certificates.
+// up to validate incoming tenants. With this option the server still uses
+// KV-internal node certificates but listens on a dedicated port.
 func ForTenant(opts *serverOpts) {
 	opts.tenant = true
 }

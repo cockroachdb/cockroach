@@ -50,12 +50,12 @@ func makeTenantCerts(t *testing.T, tenant string) (certsDir string, cleanup func
 	require.NoError(t, security.WriteTenantClientPair(certsDir, tenantCerts, false /* overwrite */))
 
 	// The server also needs to show certs trusted by the client. These are the
-	// TenantServer certs.
+	// node certs.
 	serverCAKeyPath := filepath.Join(certsDir, "name-does-not-matter-too.key")
-	require.NoError(t, security.CreateTenantServerCAPair(
+	require.NoError(t, security.CreateCAPair(
 		certsDir, serverCAKeyPath, testKeySize, 1000*time.Hour, false, false,
 	))
-	require.NoError(t, security.CreateTenantServerPair(
+	require.NoError(t, security.CreateNodePair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
 	return certsDir, cleanup
 }
@@ -118,7 +118,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	// Set up a HTTPS server using server TLS config, set up a http client using the
 	// client TLS config, make a request.
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	httpServer := http.Server{
