@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -222,7 +223,7 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 // Sort is part of the SortableRowContainer interface.
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
-	cancelChecker := sqlbase.NewCancelChecker(ctx)
+	cancelChecker := cancelchecker.NewCancelChecker(ctx)
 	sqlbase.Sort(mc, cancelChecker)
 }
 

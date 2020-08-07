@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -37,5 +37,5 @@ func TestCancelChecker(t *testing.T) {
 	err := colexecerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
-	require.True(t, errors.Is(err, sqlbase.QueryCanceledError))
+	require.True(t, errors.Is(err, cancelchecker.QueryCanceledError))
 }

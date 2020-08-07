@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -651,7 +651,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	// flow canceled error.
 
 	_, meta := right.Next()
-	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
+	if !errors.Is(meta.Err, cancelchecker.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 
@@ -660,7 +660,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	_, _ = left.Next()
 	_, meta = left.Next()
-	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
+	if !errors.Is(meta.Err, cancelchecker.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 }

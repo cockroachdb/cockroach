@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/errors"
@@ -225,7 +225,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 			sendErr := func(err error) {
 				ctxCanceled := errors.Is(err, context.Canceled)
 				grpcCtxCanceled := grpcutil.IsContextCanceled(err)
-				queryCanceled := errors.Is(err, sqlbase.QueryCanceledError)
+				queryCanceled := errors.Is(err, cancelchecker.QueryCanceledError)
 				// TODO(yuzefovich): should we be swallowing flow and stream
 				// context cancellation errors regardless whether the
 				// cancellation is internal? The reasoning is that if another

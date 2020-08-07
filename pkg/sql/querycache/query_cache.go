@@ -14,7 +14,6 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -56,7 +55,7 @@ type CachedData struct {
 	Memo *memo.Memo
 	// PrepareMetadata is set for prepare queries. In this case the memo contains
 	// unassigned placeholders. For non-prepared queries, it is nil.
-	PrepareMetadata *sqlbase.PrepareMetadata
+	PrepareMetadata *PrepareMetadata
 	// IsCorrelated memoizes whether the query contained correlated
 	// subqueries during planning (prior to de-correlation).
 	IsCorrelated bool

@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -86,7 +87,7 @@ func MakeDefaultExprs(
 func ProcessDefaultColumns(
 	ctx context.Context,
 	cols []descpb.ColumnDescriptor,
-	tableDesc *ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
@@ -100,7 +101,7 @@ func ProcessDefaultColumns(
 
 func processColumnSet(
 	cols []descpb.ColumnDescriptor,
-	tableDesc *ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	inSet func(*descpb.ColumnDescriptor) bool,
 ) []descpb.ColumnDescriptor {
 	colIDSet := make(map[descpb.ColumnID]struct{}, len(cols))
