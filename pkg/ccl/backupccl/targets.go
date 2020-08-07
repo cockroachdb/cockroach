@@ -30,13 +30,13 @@ import (
 
 type descriptorsMatched struct {
 	// All descriptors that match targets plus their parent databases.
-	descs []sqlbase.Descriptor
+	descs []catalog.Descriptor
 
 	// The databases from which all tables were matched (eg a.* or DATABASE a).
 	expandedDB []descpb.ID
 
 	// Explicitly requested DBs (e.g. DATABASE a).
-	requestedDBs []sqlbase.DatabaseDescriptor
+	requestedDBs []catalog.DatabaseDescriptor
 }
 
 func (d descriptorsMatched) checkExpansions(coveredDBs []descpb.ID) error {
@@ -60,7 +60,7 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []descpb.ID) error {
 // descriptorResolver is the helper struct that enables reuse of the
 // standard name resolution algorithm.
 type descriptorResolver struct {
-	descByID map[descpb.ID]sqlbase.Descriptor
+	descByID map[descpb.ID]catalog.Descriptor
 	// Map: db name -> dbID
 	dbsByName map[string]descpb.ID
 	// Map: dbID -> schema name -> obj name -> obj ID
@@ -79,7 +79,7 @@ func (r *descriptorResolver) LookupSchema(
 	if _, ok := schemas[scName]; ok {
 		// TODO (rohany): Not sure if we want to change this to also
 		//  use the resolved schema struct.
-		if dbDesc, ok := r.descByID[dbID].(sqlbase.DatabaseDescriptor); ok {
+		if dbDesc, ok := r.descByID[dbID].(catalog.DatabaseDescriptor); ok {
 			return true, dbDesc, nil
 		}
 	}
@@ -109,9 +109,9 @@ func (r *descriptorResolver) LookupObject(
 
 // newDescriptorResolver prepares a descriptorResolver for the given
 // known set of descriptors.
-func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, error) {
+func newDescriptorResolver(descs []catalog.Descriptor) (*descriptorResolver, error) {
 	r := &descriptorResolver{
-		descByID:   make(map[descpb.ID]sqlbase.Descriptor),
+		descByID:   make(map[descpb.ID]catalog.Descriptor),
 		dbsByName:  make(map[string]descpb.ID),
 		objsByName: make(map[descpb.ID]map[string]map[string]descpb.ID),
 	}
@@ -120,7 +120,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 	// check the ParentID for tables, and all the valid parents must be
 	// known before we start to check that.
 	for _, desc := range descs {
-		if _, isDB := desc.(sqlbase.DatabaseDescriptor); isDB {
+		if _, isDB := desc.(catalog.DatabaseDescriptor); isDB {
 			if _, ok := r.dbsByName[desc.GetName()]; ok {
 				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
 					desc.GetName(), r.dbsByName[desc.GetName()], desc.GetID())
@@ -141,7 +141,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 
 	// Add all schemas to the resolver.
 	for _, desc := range descs {
-		if sc, ok := desc.(sqlbase.SchemaDescriptor); ok {
+		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
 			schemaMap := r.objsByName[sc.GetParentID()]
 			if schemaMap == nil {
 				schemaMap = make(map[string]map[string]descpb.ID)
@@ -153,7 +153,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 
 	// registerDesc is a closure that registers a Descriptor into the resolver's
 	// object registry.
-	registerDesc := func(parentID descpb.ID, desc sqlbase.Descriptor, kind string) error {
+	registerDesc := func(parentID descpb.ID, desc catalog.Descriptor, kind string) error {
 		parentDesc, ok := r.descByID[parentID]
 		if !ok {
 			return errors.Errorf("%s %q has unknown ParentID %d", kind, desc.GetName(), parentID)
@@ -174,7 +174,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 			if !ok {
 				return errors.Errorf("schema %d not found for desc %d", scID, desc.GetID())
 			}
-			scDesc, ok := scDescI.(sqlbase.SchemaDescriptor)
+			scDesc, ok := scDescI.(catalog.SchemaDescriptor)
 			if !ok {
 				return errors.Errorf("descriptor %d is not a schema", scDescI.GetID())
 			}
@@ -202,9 +202,9 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 		}
 		var typeToRegister string
 		switch desc.(type) {
-		case sqlbase.TableDescriptor:
+		case catalog.TableDescriptor:
 			typeToRegister = "table"
-		case sqlbase.TypeDescriptor:
+		case catalog.TypeDescriptor:
 			typeToRegister = "type"
 		}
 		if typeToRegister != "" {
@@ -229,7 +229,7 @@ func descriptorsMatchingTargets(
 	ctx context.Context,
 	currentDatabase string,
 	searchPath sessiondata.SearchPath,
-	descriptors []sqlbase.Descriptor,
+	descriptors []catalog.Descriptor,
 	targets tree.TargetList,
 ) (descriptorsMatched, error) {
 	// TODO(dan): once CockroachDB supports schemas in addition to
@@ -254,7 +254,7 @@ func descriptorsMatchingTargets(
 			desc := resolver.descByID[dbID]
 			ret.descs = append(ret.descs, desc)
 			ret.requestedDBs = append(ret.requestedDBs,
-				desc.(sqlbase.DatabaseDescriptor))
+				desc.(catalog.DatabaseDescriptor))
 			ret.expandedDB = append(ret.expandedDB, dbID)
 			alreadyRequestedDBs[dbID] = struct{}{}
 			alreadyExpandedDBs[dbID] = struct{}{}
@@ -279,12 +279,12 @@ func descriptorsMatchingTargets(
 			ret.descs = append(ret.descs, resolver.descByID[id])
 		}
 	}
-	getTypeByID := func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+	getTypeByID := func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		desc, ok := resolver.descByID[id]
 		if !ok {
 			return nil, errors.Newf("type with ID %d not found", id)
 		}
-		typeDesc, ok := desc.(sqlbase.TypeDescriptor)
+		typeDesc, ok := desc.(catalog.TypeDescriptor)
 		if !ok {
 			return nil, errors.Newf("descriptor %d is not a type, but a %T", id, desc)
 		}
@@ -315,7 +315,7 @@ func descriptorsMatchingTargets(
 			if !found {
 				return ret, doesNotExistErr
 			}
-			tableDesc := descI.(sqlbase.TableDescriptor)
+			tableDesc := descI.(catalog.TableDescriptor)
 			// If tableDesc is nil, then we resolved a type instead, so error out.
 			if tableDesc == nil {
 				return ret, doesNotExistErr
@@ -361,7 +361,7 @@ func descriptorsMatchingTargets(
 			if !found {
 				return ret, sqlbase.NewInvalidWildcardError(tree.ErrString(p))
 			}
-			desc := descI.(sqlbase.DatabaseDescriptor)
+			desc := descI.(catalog.DatabaseDescriptor)
 
 			// If the database is not requested already, request it now.
 			dbID := desc.GetID()
@@ -387,7 +387,7 @@ func descriptorsMatchingTargets(
 			for _, id := range schemas {
 				desc := resolver.descByID[id]
 				switch desc := desc.(type) {
-				case sqlbase.TableDescriptor:
+				case catalog.TableDescriptor:
 					if err := catalog.FilterDescriptorState(desc); err != nil {
 						// Don't include this table in the expansion since it's not in a valid
 						// state. Silently fail since this table was not directly requested,
@@ -410,7 +410,7 @@ func descriptorsMatchingTargets(
 					for _, id := range typeIDs {
 						maybeAddTypeDesc(id)
 					}
-				case sqlbase.TypeDescriptor:
+				case catalog.TypeDescriptor:
 					maybeAddTypeDesc(desc.GetID())
 				}
 			}
@@ -430,7 +430,7 @@ func getRelevantDescChanges(
 	ctx context.Context,
 	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
-	descs []sqlbase.Descriptor,
+	descs []catalog.Descriptor,
 	expanded []descpb.ID,
 	priorIDs map[descpb.ID]descpb.ID,
 ) ([]BackupManifest_DescriptorRevision, error) {
@@ -459,7 +459,7 @@ func getRelevantDescChanges(
 	// obviously interesting to our backup.
 	for _, i := range descs {
 		interestingIDs[i.GetID()] = struct{}{}
-		if table, isTable := i.(sqlbase.TableDescriptor); isTable {
+		if table, isTable := i.(catalog.TableDescriptor); isTable {
 
 			for j := table.GetReplacementOf().ID; j != descpb.InvalidID; j = priorIDs[j] {
 				interestingIDs[j] = struct{}{}
@@ -484,7 +484,7 @@ func getRelevantDescChanges(
 		for _, i := range starting {
 			// TODO(ajwerner): Determine whether types and schemas need any special
 			// treatment here.
-			if table, isTable := i.(sqlbase.TableDescriptor); isTable {
+			if table, isTable := i.(catalog.TableDescriptor); isTable {
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
@@ -574,14 +574,14 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func ensureInterleavesIncluded(tables []sqlbase.TableDescriptor) error {
+func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	inBackup := make(map[descpb.ID]bool, len(tables))
 	for _, t := range tables {
 		inBackup[t.GetID()] = true
 	}
 
 	for _, table := range tables {
-		if err := table.ForeachIndex(sqlbase.IndexOpts{
+		if err := table.ForeachIndex(catalog.IndexOpts{
 			AddMutations: true,
 		}, func(index *descpb.IndexDescriptor, _ bool) error {
 			for _, a := range index.Interleave.Ancestors {
@@ -608,8 +608,8 @@ func ensureInterleavesIncluded(tables []sqlbase.TableDescriptor) error {
 
 func loadAllDescs(
 	ctx context.Context, db *kv.DB, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, error) {
-	var allDescs []sqlbase.Descriptor
+) ([]catalog.Descriptor, error) {
+	var allDescs []catalog.Descriptor
 	if err := db.Txn(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -626,7 +626,7 @@ func loadAllDescs(
 // returns the resulting descriptors.
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
-) ([]sqlbase.Descriptor, []descpb.ID, error) {
+) ([]catalog.Descriptor, []descpb.ID, error) {
 	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
 	if err != nil {
 		return nil, nil, err
@@ -652,8 +652,8 @@ func ResolveTargetsToDescriptors(
 // fullClusterTargets, but rather than returning the entire database
 // descriptor as the second argument, it only returns their IDs.
 func fullClusterTargetsBackup(
-	allDescs []sqlbase.Descriptor,
-) ([]sqlbase.Descriptor, []descpb.ID, error) {
+	allDescs []catalog.Descriptor,
+) ([]catalog.Descriptor, []descpb.ID, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, err
@@ -669,9 +669,9 @@ func fullClusterTargetsBackup(
 // fullClusterTargets returns all of the tableDescriptors to be included in a
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
-	allDescs []sqlbase.Descriptor,
-) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
-	fullClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
+	allDescs []catalog.Descriptor,
+) ([]catalog.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
+	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
 	fullClusterDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0)
 
 	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
@@ -681,14 +681,14 @@ func fullClusterTargets(
 
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {
-		case sqlbase.DatabaseDescriptor:
+		case catalog.DatabaseDescriptor:
 			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*desc.DatabaseDesc())
 			fullClusterDescs = append(fullClusterDescs, desc)
 			if dbDesc.GetID() != sqlbase.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.
 				fullClusterDBs = append(fullClusterDBs, dbDesc)
 			}
-		case sqlbase.TableDescriptor:
+		case catalog.TableDescriptor:
 			if desc.GetParentID() == keys.SystemDatabaseID {
 				// Add only the system tables that we plan to include in a full cluster
 				// backup.
@@ -701,9 +701,9 @@ func fullClusterTargets(
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			}
-		case sqlbase.SchemaDescriptor:
+		case catalog.SchemaDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
-		case sqlbase.TypeDescriptor:
+		case catalog.TypeDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
 		}
 	}
@@ -749,19 +749,19 @@ func CheckObjectExists(
 }
 
 func fullClusterTargetsRestore(
-	allDescs []sqlbase.Descriptor, lastBackupManifest BackupManifest,
-) ([]sqlbase.Descriptor, []sqlbase.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
+	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
+	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
 	for _, desc := range fullClusterDescs {
 		if _, isDefaultDB := sqlbase.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
 	}
-	filteredDBs := make([]sqlbase.DatabaseDescriptor, 0, len(fullClusterDBs))
+	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
 	for _, db := range fullClusterDBs {
 		if _, isDefaultDB := sqlbase.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
 			filteredDBs = append(filteredDBs, db)
@@ -784,7 +784,7 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, []sqlbase.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {

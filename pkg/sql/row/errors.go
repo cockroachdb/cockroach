@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -44,7 +45,7 @@ func (f *singleKVFetcher) nextBatch(
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(ctx context.Context, tableDesc sqlbase.TableDescriptor, b *kv.Batch) error {
+func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
@@ -68,7 +69,7 @@ type KeyToDescTranslator interface {
 	// descriptor. An implementation can return (nil, false) if the translation
 	// failed because the key is not part of a table it was scanning, but is
 	// instead part of an interleaved relative (parent/sibling/child) table.
-	KeyToDesc(roachpb.Key) (sqlbase.TableDescriptor, bool)
+	KeyToDesc(roachpb.Key) (catalog.TableDescriptor, bool)
 }
 
 // ConvertFetchError attempts to a map key-value error generated during a
@@ -86,7 +87,7 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
 	index, datums, err := decodeRowInfo(ctx, tableDesc, key, value)
 	if err != nil {
@@ -110,7 +111,7 @@ func NewUniquenessConstraintViolationError(
 // table descriptor corresponding to the key is unknown due to a table
 // interleaving.
 func NewLockNotAvailableError(
-	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key,
 ) error {
 	if tableDesc == nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
@@ -139,7 +140,7 @@ func NewLockNotAvailableError(
 // returns information about the corresponding SQL row. If successful, the index
 // and datums corresponding to the provided key are returned.
 func decodeRowInfo(
-	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) (*descpb.IndexDescriptor, tree.Datums, error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -71,7 +72,7 @@ type MetadataSchema struct {
 
 type metadataDescriptor struct {
 	parentID descpb.ID
-	desc     Descriptor
+	desc     catalog.Descriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -89,7 +90,7 @@ func MakeMetadataSchema(
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID descpb.ID, desc Descriptor) {
+func (ms *MetadataSchema) AddDescriptor(parentID descpb.ID, desc catalog.Descriptor) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
@@ -136,7 +137,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID descpb.ID, desc Descriptor) {
+	addDescriptor := func(parentID descpb.ID, desc catalog.Descriptor) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -244,7 +245,7 @@ var systemTableIDCache = func() [2]map[string]descpb.ID {
 		ms := MetadataSchema{codec: codec}
 		addSystemDescriptorsToSchema(&ms)
 		for _, d := range ms.descs {
-			t, ok := d.desc.(TableDescriptor)
+			t, ok := d.desc.(catalog.TableDescriptor)
 			if !ok || t.GetParentID() != keys.SystemDatabaseID || t.GetID() > keys.MaxReservedDescID {
 				// We only cache table descriptors under 'system' with a
 				// reserved table ID.
