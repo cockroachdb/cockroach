@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -857,12 +858,12 @@ func (tc *Collection) getMutableDescriptorByID(
 // GetMutableSchemaDescriptorByID gets a MutableSchemaDescriptor by ID.
 func (tc *Collection) GetMutableSchemaDescriptorByID(
 	ctx context.Context, scID descpb.ID, txn *kv.Txn,
-) (*sqlbase.MutableSchemaDescriptor, error) {
+) (*schemadesc.MutableSchemaDescriptor, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, scID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.MutableSchemaDescriptor), nil
+	return desc.(*schemadesc.MutableSchemaDescriptor), nil
 }
 
 // ResolveSchemaByID looks up a schema by ID.
@@ -904,7 +905,7 @@ func (tc *Collection) ResolveSchemaByID(
 		return catalog.ResolvedSchema{}, err
 	}
 
-	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	schemaDesc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
 	if !ok {
 		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
 	}
@@ -1341,14 +1342,14 @@ func (tc *Collection) GetAllDescriptors(
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
-		schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
+		schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
 			case *typedesc.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
-			case *sqlbase.ImmutableSchemaDescriptor:
+			case *schemadesc.ImmutableSchemaDescriptor:
 				schemaDescs[desc.GetID()] = desc
 			}
 		}

@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -30,7 +30,7 @@ import (
 type alterSchemaNode struct {
 	n    *tree.AlterSchema
 	db   *dbdesc.MutableDatabaseDescriptor
-	desc *sqlbase.MutableSchemaDescriptor
+	desc *schemadesc.MutableSchemaDescriptor
 }
 
 // Use to satisfy the linter.
@@ -77,7 +77,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	db *dbdesc.MutableDatabaseDescriptor,
-	scDesc *sqlbase.MutableSchemaDescriptor,
+	scDesc *schemadesc.MutableSchemaDescriptor,
 	newOwner string,
 	jobDesc string,
 ) error {
@@ -111,7 +111,7 @@ func (p *planner) alterSchemaOwner(
 func (p *planner) renameSchema(
 	ctx context.Context,
 	db *dbdesc.MutableDatabaseDescriptor,
-	desc *sqlbase.MutableSchemaDescriptor,
+	desc *schemadesc.MutableSchemaDescriptor,
 	newName string,
 	jobDesc string,
 ) error {
@@ -125,7 +125,7 @@ func (p *planner) renameSchema(
 	}
 
 	// Ensure that the new name is a valid schema name.
-	if err := sqlbase.IsSchemaNameValid(newName); err != nil {
+	if err := schemadesc.IsSchemaNameValid(newName); err != nil {
 		return err
 	}
 

@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -217,7 +217,7 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "db",
 		ID:   100,
 	})
-	descs[101] = sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
+	descs[101] = schemadesc.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
 		ID:   101,
 		Name: "schema",
 	})

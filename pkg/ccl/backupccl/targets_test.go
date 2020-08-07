@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -62,8 +63,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			return typedesc.NewImmutableTypeDescriptor(desc)
 		}
-		mkSchema := func(desc scDesc) *sqlbase.ImmutableSchemaDescriptor {
-			return sqlbase.NewImmutableSchemaDescriptor(desc)
+		mkSchema := func(desc scDesc) *schemadesc.ImmutableSchemaDescriptor {
+			return schemadesc.NewImmutableSchemaDescriptor(desc)
 		}
 		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"

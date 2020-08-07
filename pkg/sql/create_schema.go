@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type createSchemaNode struct {
@@ -64,7 +64,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Check validity of the schema name.
-	if err := sqlbase.IsSchemaNameValid(n.Schema); err != nil {
+	if err := schemadesc.IsSchemaNameValid(n.Schema); err != nil {
 		return err
 	}
 
@@ -92,7 +92,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	privs.SetOwner(params.SessionData().User)
 
 	// Create the SchemaDescriptor.
-	desc := sqlbase.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
+	desc := schemadesc.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
 		ParentID:   db.ID,
 		Name:       n.Schema,
 		ID:         id,
