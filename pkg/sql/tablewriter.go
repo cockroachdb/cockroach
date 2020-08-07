@@ -73,7 +73,7 @@ type tableWriter interface {
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
-	tableDesc() *sqlbase.ImmutableTableDescriptor
+	tableDesc() sqlbase.TableDescriptor
 
 	// close frees all resources held by the tableWriter.
 	close(context.Context)
@@ -99,7 +99,7 @@ type tableWriterBase struct {
 	// txn is the current KV transaction.
 	txn *kv.Txn
 	// desc is the descriptor of the table that we're writing.
-	desc *sqlbase.ImmutableTableDescriptor
+	desc sqlbase.TableDescriptor
 	// is autoCommit turned on.
 	autoCommit autoCommitOpt
 	// b is the current batch.
@@ -115,7 +115,7 @@ type tableWriterBase struct {
 	rows *rowcontainer.RowContainer
 }
 
-func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor) {
+func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc sqlbase.TableDescriptor) {
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.b = txn.NewBatch()

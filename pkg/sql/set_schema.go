@@ -57,13 +57,13 @@ func (p *planner) prepareSetSchema(
 	}
 
 	switch res.Kind {
-	case sqlbase.SchemaTemporary:
+	case catalog.SchemaTemporary:
 		return 0, pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of temporary schemas")
-	case sqlbase.SchemaVirtual:
+	case catalog.SchemaVirtual:
 		return 0, pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of virtual schemas")
-	case sqlbase.SchemaPublic:
+	case catalog.SchemaPublic:
 		// We do not need to check for privileges on the public schema.
 	default:
 		// The user needs CREATE privilege on the target schema to move an object
