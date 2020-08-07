@@ -118,6 +118,12 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	return p.batch
 }
 
+// newAppendOnlyBufferedBatch returns a new appendOnlyBufferedBatch that has
+// initial zero capacity and could grow arbitrarily large with append() method.
+// It is intended to be used by the operators that need to buffer unknown
+// number of tuples.
+// TODO(yuzefovich): consider whether it is beneficial to start out with
+// non-zero capacity.
 func newAppendOnlyBufferedBatch(
 	allocator *colmem.Allocator, typs []*types.T,
 ) *appendOnlyBufferedBatch {
