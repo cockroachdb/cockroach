@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -51,7 +52,7 @@ type encodeRow struct {
 	deleted bool
 	// tableDesc is a TableDescriptor for the table containing `datums`.
 	// It's valid for interpreting the row at `updated`.
-	tableDesc sqlbase.TableDescriptor
+	tableDesc catalog.TableDescriptor
 	// prevDatums is the old value of a changed table row. The field is set
 	// to nil if the before value for changes was not requested (OptDiff).
 	prevDatums sqlbase.EncDatumRow
@@ -59,7 +60,7 @@ type encodeRow struct {
 	prevDeleted bool
 	// prevTableDesc is a TableDescriptor for the table containing `prevDatums`.
 	// It's valid for interpreting the row at `updated.Prev()`.
-	prevTableDesc sqlbase.TableDescriptor
+	prevTableDesc catalog.TableDescriptor
 }
 
 // Encoder turns a row into a serialized changefeed key, value, or resolved

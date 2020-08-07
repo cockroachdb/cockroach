@@ -767,11 +767,11 @@ func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.Muta
 
 func loadSQLDescsFromBackupsAtTime(
 	backupManifests []BackupManifest, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, BackupManifest) {
+) ([]catalog.Descriptor, BackupManifest) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
-	unwrapDescriptors := func(raw []descpb.Descriptor) []sqlbase.Descriptor {
-		ret := make([]sqlbase.Descriptor, 0, len(raw))
+	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
+		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
 			ret = append(ret, unwrapDescriptor(context.TODO(), &raw[i]))
 		}
@@ -803,14 +803,14 @@ func loadSQLDescsFromBackupsAtTime(
 		}
 	}
 
-	allDescs := make([]sqlbase.Descriptor, 0, len(byID))
+	allDescs := make([]catalog.Descriptor, 0, len(byID))
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
 		desc := unwrapDescriptor(context.TODO(), raw)
 		var isObject bool
 		switch desc.(type) {
-		case sqlbase.TableDescriptor, sqlbase.TypeDescriptor:
+		case catalog.TableDescriptor, catalog.TypeDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -51,7 +52,7 @@ type cTableInfo struct {
 	// Used to determine whether a key retrieved belongs to the span we
 	// want to scan.
 	spans            roachpb.Spans
-	desc             sqlbase.TableDescriptor
+	desc             catalog.TableDescriptor
 	index            *descpb.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []descpb.IndexDescriptor_Direction
@@ -1346,7 +1347,7 @@ func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
 // used by convertFetchError.
-func (rf *cFetcher) KeyToDesc(key roachpb.Key) (sqlbase.TableDescriptor, bool) {
+func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}

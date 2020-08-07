@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -69,7 +68,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc sqlbase.DatabaseDescriptor, err error) {
+) (desc catalog.DatabaseDescriptor, err error) {
 	if flags.RequireMutable {
 		db, err := a.tc.GetMutableDatabaseDescriptor(ctx, txn, name, flags)
 		if db == nil {

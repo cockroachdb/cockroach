@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,7 +26,7 @@ import (
 type rowHelper struct {
 	Codec keys.SQLCodec
 
-	TableDesc sqlbase.TableDescriptor
+	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
 	Indexes      []descpb.IndexDescriptor
 	indexEntries []sqlbase.IndexEntry
@@ -41,7 +42,7 @@ type rowHelper struct {
 }
 
 func newRowHelper(
-	codec keys.SQLCodec, desc sqlbase.TableDescriptor, indexes []descpb.IndexDescriptor,
+	codec keys.SQLCodec, desc catalog.TableDescriptor, indexes []descpb.IndexDescriptor,
 ) rowHelper {
 	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
 

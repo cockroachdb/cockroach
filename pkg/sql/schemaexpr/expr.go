@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +32,7 @@ import (
 // the expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
-	desc sqlbase.TableDescriptor,
+	desc catalog.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
 	op string,
@@ -76,7 +77,7 @@ func DequalifyAndValidateExpr(
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
 func ExtractColumnIDs(
-	desc sqlbase.TableDescriptor, rootExpr tree.Expr,
+	desc catalog.TableDescriptor, rootExpr tree.Expr,
 ) (sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 
@@ -111,7 +112,7 @@ func ExtractColumnIDs(
 // FormatExprForDisplay formats a schema expression string for display by adding
 // type annotations and resolving user defined types.
 func FormatExprForDisplay(
-	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
 ) (string, error) {
 	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
 	if err != nil {
@@ -124,7 +125,7 @@ func FormatExprForDisplay(
 // for display, similar to FormatExprForDisplay, but does not add type
 // annotations.
 func FormatExprForDisplayWithoutTypeAnnotations(
-	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
 ) (string, error) {
 	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
 	if err != nil {
@@ -134,7 +135,7 @@ func FormatExprForDisplayWithoutTypeAnnotations(
 }
 
 func deserializeExprForFormatting(
-	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
