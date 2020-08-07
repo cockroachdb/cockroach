@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -33,10 +33,10 @@ type Columnarizer struct {
 
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
-	da         sqlbase.DatumAlloc
+	da         rowenc.DatumAlloc
 	initStatus OperatorInitStatus
 
-	buffered        sqlbase.EncDatumRows
+	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
@@ -82,9 +82,9 @@ func (c *Columnarizer) Init() {
 	// we have this check in place.
 	if c.initStatus == OperatorNotInitialized {
 		c.batch = c.allocator.NewMemBatch(c.typs)
-		c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
+		c.buffered = make(rowenc.EncDatumRows, coldata.BatchSize())
 		for i := range c.buffered {
-			c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
+			c.buffered[i] = make(rowenc.EncDatumRow, len(c.typs))
 		}
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 		c.input.Start(c.ctx)

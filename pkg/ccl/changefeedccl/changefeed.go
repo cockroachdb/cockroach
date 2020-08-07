@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,7 +109,7 @@ func kvsToRows(
 			if r.row.datums == nil {
 				return nil, errors.AssertionFailedf("unexpected empty datums")
 			}
-			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
+			r.row.datums = append(rowenc.EncDatumRow(nil), r.row.datums...)
 			r.row.deleted = rf.RowIsDeleted()
 			r.row.updated = schemaTimestamp
 
@@ -158,7 +158,7 @@ func kvsToRows(
 			if r.row.prevDatums == nil {
 				return nil, errors.AssertionFailedf("unexpected empty datums")
 			}
-			r.row.prevDatums = append(sqlbase.EncDatumRow(nil), r.row.prevDatums...)
+			r.row.prevDatums = append(rowenc.EncDatumRow(nil), r.row.prevDatums...)
 			r.row.prevDeleted = prevRF.RowIsDeleted()
 
 			// Assert that we don't get a second row from the row.Fetcher. We

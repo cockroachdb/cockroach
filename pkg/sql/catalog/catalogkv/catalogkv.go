@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -213,7 +214,7 @@ func requiredError(kind DescriptorKind, id descpb.ID) error {
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
 	}
-	return errors.CombineErrors(sqlbase.ErrDescriptorNotFound, err)
+	return errors.CombineErrors(catalog.ErrDescriptorNotFound, err)
 }
 
 func NewDescGetter(txn *kv.Txn, codec keys.SQLCodec) catalog.DescGetter {
@@ -251,17 +252,20 @@ func (t txnDescGetter) GetDescs(
 	if err := t.txn.Run(ctx, ba); err != nil {
 		return nil, err
 	}
-	var ret []catalog.Descriptor
-	for _, res := range ba.Results {
+	ret := make([]catalog.Descriptor, len(reqs))
+	for i, res := range ba.Results {
 		var desc descpb.Descriptor
 		if err := res.Rows[0].ValueProto(&desc); err != nil {
 			return nil, err
 		}
-		unwrapped, err := unwrapDescriptorMutable(ctx, nil, res.Rows[0].Value.Timestamp, &desc)
-		if err != nil {
-			return nil, err
+		if desc != (descpb.Descriptor{}) {
+			unwrapped, err := unwrapDescriptorMutable(ctx, nil, res.Rows[0].Value.Timestamp, &desc)
+			if err != nil {
+				return nil, err
+			}
+			ret[i] = unwrapped
 		}
-		ret = append(ret, unwrapped)
+
 	}
 	return ret, nil
 
@@ -295,7 +299,7 @@ func unwrapDescriptor(
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return sqlbase.NewImmutableTypeDescriptor(*typ), nil
+		return typedesc.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
 		return sqlbase.NewImmutableSchemaDescriptor(*schema), nil
 	default:
@@ -330,7 +334,7 @@ func unwrapDescriptorMutable(
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return sqlbase.NewMutableExistingTypeDescriptor(*typ), nil
+		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
 	case schema != nil:
 		return sqlbase.NewMutableExistingSchemaDescriptor(*schema), nil
 	default:
@@ -555,7 +559,7 @@ func GetDatabaseDescriptorsFromIDs(
 			return nil, err
 		}
 		if desc.GetUnion() == nil {
-			return nil, sqlbase.ErrDescriptorNotFound
+			return nil, catalog.ErrDescriptorNotFound
 		}
 		db := desc.GetDatabase()
 		if db == nil {

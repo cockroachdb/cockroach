@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -231,7 +232,7 @@ func Load(
 			}
 
 			ri, err = row.MakeInserter(
-				ctx, nil /* txn */, evalCtx.Codec, tableDesc, tableDesc.Columns, &sqlbase.DatumAlloc{},
+				ctx, nil /* txn */, evalCtx.Codec, tableDesc, tableDesc.Columns, &rowenc.DatumAlloc{},
 			)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")

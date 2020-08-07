@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemmeta"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -204,7 +204,7 @@ func TestGetLargestID(t *testing.T) {
 
 		// Real SQL layout.
 		func() testCase {
-			ms := systemmeta.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+			ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
 			maxDescID := config.SystemTenantObjectID(descIDs[len(descIDs)-1])
 			kvs, _ /* splits */ := ms.GetInitialValues()
@@ -327,7 +327,7 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 	}
 
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
-	kvs, _ /* splits */ := systemmeta.MakeMetadataSchema(
+	kvs, _ /* splits */ := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
 	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
@@ -359,7 +359,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	// separately above.
 	minKey := roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd())
 
-	schema := systemmeta.MakeMetadataSchema(
+	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
 	// Real system tables only.
@@ -465,7 +465,7 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	minKey := tkey(keys.MinUserDescID)
 	minTenID, maxTenID := roachpb.MinTenantID.ToUint64(), roachpb.MaxTenantID.ToUint64()
 
-	schema := systemmeta.MakeMetadataSchema(
+	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
 	// Real system tenant only.
@@ -599,7 +599,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	}()
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 
-	kvs, _ /* splits */ := systemmeta.MakeMetadataSchema(
+	kvs, _ /* splits */ := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
 	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{

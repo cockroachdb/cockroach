@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -312,7 +312,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	}
 	// Split the table at key 2.
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := sqlbase.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode key: %+v", err)
 	}
@@ -812,7 +812,7 @@ func initClusterWithSplitRanges(
 	}
 
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := sqlbase.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}

@@ -23,15 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -109,7 +110,7 @@ type cTableInfo struct {
 	keyValTypes []*types.T
 	extraTypes  []*types.T
 
-	da sqlbase.DatumAlloc
+	da rowenc.DatumAlloc
 }
 
 // colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
@@ -320,7 +321,7 @@ func (rf *cFetcher) Init(
 			neededCols.Add(int(col))
 			table.neededColsList = append(table.neededColsList, int(col))
 			// If this column is the timestamp column, set up the output index.
-			sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
+			sysColKind := colinfo.GetSystemColumnKindFromColumnID(col)
 			if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
@@ -337,7 +338,7 @@ func (rf *cFetcher) Init(
 		rf.machine.timestampCol = rf.machine.colvecs[table.timestampOutputIdx].Decimal()
 	}
 
-	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
+	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -423,7 +424,7 @@ func (rf *cFetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc, indexColumnIDs)
+	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -433,7 +434,7 @@ func (rf *cFetcher) Init(
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = sqlbase.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
 		nExtraColumns := len(table.index.ExtraColumnIDs)
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
@@ -763,7 +764,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				for range rf.table.index.ExtraColumnIDs {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
-					remainingBytes, err = sqlbase.SkipTableKey(remainingBytes)
+					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
 					if err != nil {
 						return nil, err
 					}

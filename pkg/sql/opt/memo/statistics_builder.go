@@ -15,11 +15,11 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2549,7 +2549,7 @@ func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational, cols
 	hasInv := false
 	cols.ForEach(func(col opt.ColumnID) {
 		colTyp := sb.md.ColumnMeta(col).Type
-		if sqlbase.ColumnTypeIsInvertedIndexable(colTyp) {
+		if colinfo.ColumnTypeIsInvertedIndexable(colTyp) {
 			hasInv = true
 		}
 	})

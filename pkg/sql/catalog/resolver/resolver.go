@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -130,7 +131,7 @@ func ResolveMutableExistingTableObject(
 // object name.
 func ResolveMutableType(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
-) (*tree.TypeName, *sqlbase.MutableTypeDescriptor, error) {
+) (*tree.TypeName, *typedesc.MutableTypeDescriptor, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
 		RequireMutable:    true,
@@ -141,7 +142,7 @@ func ResolveMutableType(
 		return nil, nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), un.Object())
-	return &tn, desc.(*sqlbase.MutableTypeDescriptor), nil
+	return &tn, desc.(*typedesc.MutableTypeDescriptor), nil
 }
 
 // ResolveExistingObject resolves an object with the given flags.
@@ -172,9 +173,9 @@ func ResolveExistingObject(
 			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
-			return obj.(*sqlbase.MutableTypeDescriptor), prefix, nil
+			return obj.(*typedesc.MutableTypeDescriptor), prefix, nil
 		}
-		return obj.(*sqlbase.ImmutableTypeDescriptor), prefix, nil
+		return obj.(*typedesc.ImmutableTypeDescriptor), prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
@@ -300,7 +301,7 @@ func ResolveTypeDescByID(
 	// name for the type.
 	// TODO (SQLSchema): As we add leasing for all descriptors, these calls
 	//  should look into those leased copies, rather than do raw reads.
-	typDesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+	typDesc := desc.(*typedesc.ImmutableTypeDescriptor)
 	db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, typDesc.ParentID)
 	if err != nil {
 		return tree.TypeName{}, nil, err
@@ -317,7 +318,7 @@ func ResolveTypeDescByID(
 		// should be taking a SchemaResolver and resolving through it which should
 		// be able to hit a descs.Collection and determine whether this is a new
 		// type or not.
-		desc = sqlbase.NewMutableExistingTypeDescriptor(*typDesc.TypeDesc())
+		desc = typedesc.NewMutableExistingTypeDescriptor(*typDesc.TypeDesc())
 	} else {
 		ret = typDesc
 	}

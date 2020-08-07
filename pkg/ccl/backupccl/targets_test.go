@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -52,8 +53,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkDB := func(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
 			return dbdesc.NewInitialDatabaseDescriptor(id, name, security.AdminRole)
 		}
-		mkTyp := func(desc typDesc) *sqlbase.ImmutableTypeDescriptor {
-			return sqlbase.NewImmutableTypeDescriptor(desc)
+		mkTyp := func(desc typDesc) *typedesc.ImmutableTypeDescriptor {
+			return typedesc.NewImmutableTypeDescriptor(desc)
 		}
 		typeExpr := "'hello'::@15 = 'hello'::@15"
 		typeArrExpr := "'hello'::@16 = 'hello'::@16"

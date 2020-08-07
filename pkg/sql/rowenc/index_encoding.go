@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package rowenc
 
 import (
 	"context"
@@ -1626,4 +1626,33 @@ func AdjustEndKeyForInterleave(
 	}
 
 	return end[:firstNTokenLen+1], nil
+}
+
+// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
+// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
+// appends directly to keyPrefix.
+func EncodeColumns(
+	columnIDs []descpb.ColumnID,
+	directions directions,
+	colMap map[descpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	key = keyPrefix
+	for colIdx, id := range columnIDs {
+		val := findColumnValue(id, colMap, values)
+		if val == tree.DNull {
+			containsNull = true
+		}
+
+		dir, err := directions.get(colIdx)
+		if err != nil {
+			return nil, containsNull, err
+		}
+
+		if key, err = EncodeTableKey(key, val, dir); err != nil {
+			return nil, containsNull, err
+		}
+	}
+	return key, containsNull, nil
 }

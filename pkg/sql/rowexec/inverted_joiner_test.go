@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -65,7 +65,7 @@ type arrayIntersectionExpr struct{}
 var _ invertedexpr.DatumsToInvertedExpr = &arrayIntersectionExpr{}
 
 func (arrayIntersectionExpr) Convert(
-	ctx context.Context, datums sqlbase.EncDatumRow,
+	ctx context.Context, datums rowenc.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d / 10))
@@ -85,7 +85,7 @@ type jsonIntersectionExpr struct{}
 var _ invertedexpr.DatumsToInvertedExpr = &jsonIntersectionExpr{}
 
 func (jsonIntersectionExpr) Convert(
-	ctx context.Context, datums sqlbase.EncDatumRow,
+	ctx context.Context, datums rowenc.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
@@ -118,7 +118,7 @@ type jsonUnionExpr struct{}
 var _ invertedexpr.DatumsToInvertedExpr = &jsonUnionExpr{}
 
 func (jsonUnionExpr) Convert(
-	ctx context.Context, datums sqlbase.EncDatumRow,
+	ctx context.Context, datums rowenc.EncDatumRow,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datums[0].Datum.(*tree.DInt)))
 	d1 := d / 10
@@ -187,7 +187,7 @@ func TestInvertedJoiner(t *testing.T) {
 	// so can share initialization of some fields.
 	initCommonFields := func(c testCase) testCase {
 		c.post.Projection = true
-		c.inputTypes = sqlbase.OneIntCol
+		c.inputTypes = rowenc.OneIntCol
 		return c
 	}
 	testCases := []testCase{
@@ -206,7 +206,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: arrayIntersectionExpr{},
 			joinType:     descpb.InnerJoin,
-			outputTypes:  sqlbase.TwoIntCols,
+			outputTypes:  rowenc.TwoIntCols,
 			expected:     "[[5 5] [5 50] [20 2] [20 20] [42 24] [42 42]]",
 		},
 		{
@@ -226,7 +226,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: arrayIntersectionExpr{},
 			joinType:     descpb.InnerJoin,
-			outputTypes:  sqlbase.TwoIntCols,
+			outputTypes:  rowenc.TwoIntCols,
 			expected:     "[[5 50] [42 24] [42 42]]",
 		},
 		{
@@ -244,7 +244,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: arrayIntersectionExpr{},
 			joinType:     descpb.LeftOuterJoin,
-			outputTypes:  sqlbase.TwoIntCols,
+			outputTypes:  rowenc.TwoIntCols,
 			// Similar to previous, but the left side input failing the onExpr is emitted.
 			expected: "[[5 50] [20 NULL] [42 24] [42 42]]",
 		},
@@ -262,7 +262,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: arrayIntersectionExpr{},
 			joinType:     descpb.LeftSemiJoin,
-			outputTypes:  sqlbase.OneIntCol,
+			outputTypes:  rowenc.OneIntCol,
 			expected:     "[[5] [42]]",
 		},
 		{
@@ -279,7 +279,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: arrayIntersectionExpr{},
 			joinType:     descpb.LeftAntiJoin,
-			outputTypes:  sqlbase.OneIntCol,
+			outputTypes:  rowenc.OneIntCol,
 			expected:     "[[20]]",
 		},
 		{
@@ -299,7 +299,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: jsonIntersectionExpr{},
 			joinType:     descpb.InnerJoin,
-			outputTypes:  sqlbase.TwoIntCols,
+			outputTypes:  rowenc.TwoIntCols,
 			expected:     "[[5 5] [42 42] [20 20]]",
 		},
 		{
@@ -320,7 +320,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: jsonUnionExpr{},
 			joinType:     descpb.InnerJoin,
-			outputTypes:  sqlbase.TwoIntCols,
+			outputTypes:  rowenc.TwoIntCols,
 			// The ordering looks odd because of how the JSON values were ordered in the
 			// inverted index. The spans we are reading for the first batch of two inputs
 			// 5, 42 are (c1, 0), (c1, 4), (c2, 2), (c2, 5). (c1, 0) causes
@@ -352,7 +352,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: jsonUnionExpr{},
 			joinType:     descpb.LeftSemiJoin,
-			outputTypes:  sqlbase.OneIntCol,
+			outputTypes:  rowenc.OneIntCol,
 			expected:     "[[5] [42] [101] [20]]",
 		},
 		{
@@ -370,7 +370,7 @@ func TestInvertedJoiner(t *testing.T) {
 			},
 			datumsToExpr: jsonUnionExpr{},
 			joinType:     descpb.LeftAntiJoin,
-			outputTypes:  sqlbase.OneIntCol,
+			outputTypes:  rowenc.OneIntCol,
 			expected:     "[]",
 		},
 	}
@@ -398,11 +398,11 @@ func TestInvertedJoiner(t *testing.T) {
 		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 	for _, c := range testCases {
-		encRows := make(sqlbase.EncDatumRows, len(c.input))
+		encRows := make(rowenc.EncDatumRows, len(c.input))
 		for rowIdx, row := range c.input {
-			encRow := make(sqlbase.EncDatumRow, len(row))
+			encRow := make(rowenc.EncDatumRow, len(row))
 			for i, d := range row {
-				encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
+				encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
 			}
 			encRows[rowIdx] = encRow
 		}
@@ -432,7 +432,7 @@ func TestInvertedJoiner(t *testing.T) {
 		require.True(t, in.Done)
 		require.True(t, out.ProducerClosed())
 
-		var result sqlbase.EncDatumRows
+		var result rowenc.EncDatumRows
 		for {
 			row := out.NextNoMeta(t)
 			if row == nil {

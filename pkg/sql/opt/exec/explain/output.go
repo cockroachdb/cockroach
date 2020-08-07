@@ -16,8 +16,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -58,7 +58,7 @@ func (e *entry) isNode() bool {
 
 // EnterNode creates a new node as a child of the current node.
 func (ob *OutputBuilder) EnterNode(
-	name string, columns sqlbase.ResultColumns, ordering sqlbase.ColumnOrdering,
+	name string, columns colinfo.ResultColumns, ordering colinfo.ColumnOrdering,
 ) {
 	var colStr, ordStr string
 	if ob.flags.Verbose {

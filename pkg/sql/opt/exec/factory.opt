@@ -9,7 +9,7 @@ define Scan {
 
 define Values {
     Rows [][]tree.TypedExpr
-    Columns sqlbase.ResultColumns
+    Columns colinfo.ResultColumns
 }
 
 # Filter applies a filter on the results of the given input node.
@@ -58,7 +58,7 @@ define SerializingProject {
 # modified.
 define Render {
     Input exec.Node
-    Columns sqlbase.ResultColumns
+    Columns colinfo.ResultColumns
     Exprs tree.TypedExprs
     ReqOrdering exec.OutputOrdering
 }
@@ -77,7 +77,7 @@ define Render {
 define ApplyJoin {
     JoinType descpb.JoinType
     Left exec.Node
-    RightColumns sqlbase.ResultColumns
+    RightColumns colinfo.ResultColumns
     OnCond tree.TypedExpr
     PlanRightSideFn exec.ApplyJoinPlanRightSideFn
 }
@@ -111,8 +111,8 @@ define MergeJoin {
     Left exec.Node
     Right exec.Node
     OnCond tree.TypedExpr
-    LeftOrdering sqlbase.ColumnOrdering
-    RightOrdering sqlbase.ColumnOrdering
+    LeftOrdering colinfo.ColumnOrdering
+    RightOrdering colinfo.ColumnOrdering
     ReqOrdering exec.OutputOrdering
     LeftEqColsAreKey bool
     RightEqColsAreKey bool
@@ -155,7 +155,7 @@ define InterleavedJoin {
 define GroupBy {
     Input exec.Node
     GroupCols []exec.NodeColumnOrdinal
-    GroupColOrdering sqlbase.ColumnOrdering
+    GroupColOrdering colinfo.ColumnOrdering
     Aggregations []exec.AggInfo
     ReqOrdering exec.OutputOrdering
 }
@@ -199,7 +199,7 @@ define SetOp {
 # ordering[:alreadyOrderedPrefix].
 define Sort {
     Input exec.Node
-    Ordering sqlbase.ColumnOrdering
+    Ordering colinfo.ColumnOrdering
     AlreadyOrderedPrefix int
 }
 
@@ -325,7 +325,7 @@ define Max1Row {
 define ProjectSet {
     Input exec.Node
     Exprs tree.TypedExprs
-    ZipCols sqlbase.ResultColumns
+    ZipCols colinfo.ResultColumns
     NumColsPerGen []int
 }
 
@@ -426,7 +426,7 @@ define Update {
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
-    Passthrough sqlbase.ResultColumns
+    Passthrough colinfo.ResultColumns
     AllowAutoCommit bool
 }
 
@@ -531,7 +531,7 @@ define CreateView {
     Replace bool
     Temporary bool
     ViewQuery string
-    Columns sqlbase.ResultColumns
+    Columns colinfo.ResultColumns
     deps opt.ViewDeps
 }
 

@@ -16,17 +16,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-	p := planner{alloc: &sqlbase.DatumAlloc{}}
+	p := planner{alloc: &rowenc.DatumAlloc{}}
 	scan := p.Scan()
 	scan.desc = desc
 	var colCfg scanColumnsConfig
@@ -39,7 +40,7 @@ func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 	}
 	// Initialize the required ordering.
 	columnIDs, dirs := scan.index.FullColumnIDs()
-	ordering := make(sqlbase.ColumnOrdering, len(columnIDs))
+	ordering := make(colinfo.ColumnOrdering, len(columnIDs))
 	for i, colID := range columnIDs {
 		idx, ok := scan.colIdxMap[colID]
 		if !ok {

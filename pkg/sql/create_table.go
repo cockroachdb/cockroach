@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -304,7 +305,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
-	var asCols sqlbase.ResultColumns
+	var asCols colinfo.ResultColumns
 	var desc *sqlbase.MutableTableDescriptor
 	var affected map[descpb.ID]*sqlbase.MutableTableDescriptor
 	// creationTime is initialized to a zero value and populated at read time.
@@ -1165,7 +1166,7 @@ func newTableDescIfAs(
 	p *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
 	creationTime hlc.Timestamp,
-	resultColumns []sqlbase.ResultColumn,
+	resultColumns []colinfo.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
 	temporary bool,
@@ -1380,8 +1381,8 @@ func NewTableDesc(
 
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		n.Table, sqlbase.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		n.Table, colinfo.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
 	)
 
 	for i := range desc.Columns {

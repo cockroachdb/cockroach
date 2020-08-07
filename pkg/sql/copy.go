@@ -20,13 +20,14 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -53,7 +54,7 @@ type copyMachineInterface interface {
 type copyMachine struct {
 	table         tree.TableExpr
 	columns       tree.NameList
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 	// buf is used to parse input data into rows. It also accumulates a partial
 	// row between protocol messages.
 	buf bytes.Buffer
@@ -106,7 +107,7 @@ func newCopyMachine(
 		columns: n.Columns,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}},
+		p:              planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}},
 		execInsertPlan: execInsertPlan,
 	}
 
@@ -126,14 +127,14 @@ func newCopyMachine(
 	if err := c.p.CheckPrivilege(ctx, tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
-	cols, err := sqlbase.ProcessTargetColumns(tableDesc, n.Columns,
+	cols, err := colinfo.ProcessTargetColumns(tableDesc, n.Columns,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
 	}
-	c.resultColumns = make(sqlbase.ResultColumns, len(cols))
+	c.resultColumns = make(colinfo.ResultColumns, len(cols))
 	for i := range cols {
-		c.resultColumns[i] = sqlbase.ResultColumn{
+		c.resultColumns[i] = colinfo.ResultColumn{
 			Name:           cols[i].Name,
 			Typ:            cols[i].Type,
 			TableID:        tableDesc.GetID(),
@@ -408,7 +409,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			types.UuidFamily:
 			s = decodeCopy(s)
 		}
-		d, err := sqlbase.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, err := rowenc.ParseDatumStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}

@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +49,7 @@ func IndexMutationFilter(m descpb.DescriptorMutation) bool {
 // backfiller is common to a ColumnBackfiller or an IndexBackfiller.
 type backfiller struct {
 	fetcher row.Fetcher
-	alloc   sqlbase.DatumAlloc
+	alloc   rowenc.DatumAlloc
 }
 
 // ColumnBackfiller is capable of running a column backfill for all
@@ -177,7 +179,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
@@ -446,11 +448,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
-) ([]sqlbase.IndexEntry, roachpb.Key, error) {
+) ([]rowenc.IndexEntry, roachpb.Key, error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
-	entries := make([]sqlbase.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
+	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	// Get the next set of rows.
 	//
@@ -467,7 +469,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil, nil, err
 	}
 
-	buffer := make([]sqlbase.IndexEntry, len(ib.added))
+	buffer := make([]rowenc.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
 		if err != nil {
@@ -479,7 +481,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		if len(ib.rowVals) == 0 {
 			ib.rowVals = make(tree.Datums, len(encRow))
 		}
-		if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
+		if err := rowenc.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
 			return nil, nil, err
 		}
 
@@ -489,7 +491,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// subsequent rows and we would then have duplicates in entries on output. Additionally, we do
 		// not want to include empty k/v pairs while backfilling.
 		buffer = buffer[:0]
-		if buffer, err = sqlbase.EncodeSecondaryIndexes(
+		if buffer, err = rowenc.EncodeSecondaryIndexes(
 			ib.evalCtx.Codec,
 			tableDesc,
 			ib.added,

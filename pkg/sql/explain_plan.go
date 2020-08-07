@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,12 +53,12 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 ) (planNode, error) {
 	flags := explain.MakeFlags(opts)
 
-	columns := sqlbase.ExplainPlanColumns
+	columns := colinfo.ExplainPlanColumns
 	if flags.Verbose {
-		columns = sqlbase.ExplainPlanVerboseColumns
+		columns = colinfo.ExplainPlanVerboseColumns
 	}
 	// Make a copy (to allow changes through planMutableColumns).
-	columns = append(sqlbase.ResultColumns(nil), columns...)
+	columns = append(colinfo.ResultColumns(nil), columns...)
 
 	node := &explainPlanNode{
 		plan: plan,

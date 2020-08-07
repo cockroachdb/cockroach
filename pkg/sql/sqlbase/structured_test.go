@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package sqlbase_test
 
 import (
 	"context"
@@ -19,13 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	. "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -675,7 +677,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `invalid foreign key: missing table=52: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -691,8 +697,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `missing fk back reference "fk" to "foo" from "baz"`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -704,14 +713,21 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
 		{
 			err: `invalid foreign key backreference: missing table=52: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				InboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -726,8 +742,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `missing fk forward reference "fk" to "foo" from "baz"`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   1,
 					Name: "bar",
@@ -743,8 +762,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
 
@@ -752,7 +774,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `invalid interleave: missing table=52 index=2: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID: 1,
 					Interleave: descpb.InterleaveDescriptor{Ancestors: []descpb.InterleaveDescriptor_Ancestor{
@@ -765,7 +791,11 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `invalid interleave: missing table=baz index=2: index-id "2" does not exist`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID: 1,
 					Interleave: descpb.InterleaveDescriptor{Ancestors: []descpb.InterleaveDescriptor_Ancestor{
@@ -774,15 +804,19 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 			}},
 		},
 		{
 			err: `missing interleave back reference to "foo"@"bar" from "baz"@"qux"`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   1,
 					Name: "bar",
@@ -792,8 +826,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   2,
 					Name: "qux",
@@ -803,7 +839,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `invalid interleave backreference table=52 index=2: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:            1,
 					InterleavedBy: []descpb.ForeignKeyReference{{Table: 52, Index: 2}},
@@ -813,22 +852,29 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `invalid interleave backreference table=baz index=2: index-id "2" does not exist`,
 			desc: descpb.TableDescriptor{
-				ID: 51,
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:            1,
 					InterleavedBy: []descpb.ForeignKeyReference{{Table: 52, Index: 2}},
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 			}},
 		},
 		{
 			err: `broken interleave backward reference from "foo"@"bar" to "baz"@"qux"`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:            1,
 					Name:          "bar",
@@ -836,8 +882,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 			otherDescs: []descpb.TableDescriptor{{
-				ID:   52,
-				Name: "baz",
+				Name:                    "baz",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   2,
 					Name: "qux",
@@ -847,8 +895,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `type ID 500 in descriptor not found: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:          1,
 					Name:        "bar",
@@ -868,8 +918,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `type ID 500 in descriptor not found: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:          1,
 					Name:        "bar",
@@ -889,8 +941,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `type ID 500 in descriptor not found: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:          1,
 					Name:        "bar",
@@ -910,8 +964,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		{
 			err: `type ID 500 in descriptor not found: descriptor not found`,
 			desc: descpb.TableDescriptor{
-				ID:   51,
-				Name: "foo",
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
 				Checks: []*descpb.TableDescriptor_CheckConstraint{
 					{
 						Expr: "a::@500",
@@ -933,28 +989,18 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		m := MapDescGetter{
+			1: dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{ID: 1}),
+		}
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
-			var v roachpb.Value
-			desc := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &otherDesc}}
-			if err := v.SetProto(desc); err != nil {
-				t.Fatal(err)
-			}
-			if err := kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID), &v); err != nil {
-				t.Fatal(err)
-			}
+			m[otherDesc.ID] = NewImmutableTableDescriptor(otherDesc)
 		}
-		txn := kv.NewTxn(ctx, kvDB, s.NodeID())
 		desc := NewImmutableTableDescriptor(test.desc)
-		if err := desc.validateCrossReferences(ctx, txn, keys.SystemSQLCodec); err == nil {
+		if err := desc.ValidateCrossReferences(ctx, m); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
-		}
-		for _, otherDesc := range test.otherDescs {
-			if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID)); err != nil {
-				t.Fatal(err)
-			}
 		}
 	}
 }
@@ -1158,11 +1204,13 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		desc := NewImmutableTableDescriptor(test.desc)
-		err := desc.validatePartitioning()
-		if !testutils.IsError(err, test.err) {
-			t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
-		}
+		t.Run(test.err, func(t *testing.T) {
+			desc := NewImmutableTableDescriptor(test.desc)
+			err := desc.ValidatePartitioning()
+			if !testutils.IsError(err, test.err) {
+				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
+			}
+		})
 	}
 }
 
@@ -1198,88 +1246,6 @@ func TestColumnTypeSQLString(t *testing.T) {
 	}
 }
 
-func TestFitColumnToFamily(t *testing.T) {
-	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
-
-	makeTestTableDescriptor := func(familyTypes [][]*types.T) *MutableTableDescriptor {
-		nextColumnID := descpb.ColumnID(8)
-		var desc descpb.TableDescriptor
-		for _, fTypes := range familyTypes {
-			var family descpb.ColumnFamilyDescriptor
-			for _, t := range fTypes {
-				desc.Columns = append(desc.Columns, descpb.ColumnDescriptor{
-					ID:   nextColumnID,
-					Type: t,
-				})
-				family.ColumnIDs = append(family.ColumnIDs, nextColumnID)
-				nextColumnID++
-			}
-			desc.Families = append(desc.Families, family)
-		}
-		return NewMutableCreatedTableDescriptor(desc)
-	}
-
-	emptyFamily := []*types.T{}
-	partiallyFullFamily := []*types.T{
-		types.Int,
-		types.Bytes,
-	}
-	fullFamily := []*types.T{
-		types.Bytes,
-	}
-	maxIntsInOneFamily := make([]*types.T, FamilyHeuristicTargetBytes/intEncodedSize)
-	for i := range maxIntsInOneFamily {
-		maxIntsInOneFamily[i] = types.Int
-	}
-
-	tests := []struct {
-		newCol           *types.T
-		existingFamilies [][]*types.T
-		colFits          bool
-		idx              int // not applicable if colFits is false
-	}{
-		// Bounded size column.
-		{colFits: true, idx: 0, newCol: types.Bool,
-			existingFamilies: nil,
-		},
-		{colFits: true, idx: 0, newCol: types.Bool,
-			existingFamilies: [][]*types.T{emptyFamily},
-		},
-		{colFits: true, idx: 0, newCol: types.Bool,
-			existingFamilies: [][]*types.T{partiallyFullFamily},
-		},
-		{colFits: true, idx: 0, newCol: types.Bool,
-			existingFamilies: [][]*types.T{fullFamily},
-		},
-		{colFits: true, idx: 0, newCol: types.Bool,
-			existingFamilies: [][]*types.T{fullFamily, emptyFamily},
-		},
-
-		// Unbounded size column.
-		{colFits: true, idx: 0, newCol: types.Decimal,
-			existingFamilies: [][]*types.T{emptyFamily},
-		},
-		{colFits: true, idx: 0, newCol: types.Decimal,
-			existingFamilies: [][]*types.T{partiallyFullFamily},
-		},
-	}
-	for i, test := range tests {
-		desc := makeTestTableDescriptor(test.existingFamilies)
-		idx, colFits := fitColumnToFamily(desc, descpb.ColumnDescriptor{Type: test.newCol})
-		if colFits != test.colFits {
-			if colFits {
-				t.Errorf("%d: expected no fit for the column but got one", i)
-			} else {
-				t.Errorf("%d: expected fit for the column but didn't get one", i)
-			}
-			continue
-		}
-		if colFits && idx != test.idx {
-			t.Errorf("%d: got a fit in family offset %d but expected offset %d", i, idx, test.idx)
-		}
-	}
-}
-
 func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	tests := []struct {
 		desc       descpb.TableDescriptor
@@ -1292,6 +1258,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
+				Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
 			},
 			expUpgrade: true,
 			verify: func(i int, desc *ImmutableTableDescriptor) {
@@ -1307,14 +1274,16 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
+				Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
 			},
 			expUpgrade: false,
 			verify:     nil,
 		},
 	}
 	for i, test := range tests {
-		desc := NewImmutableTableDescriptor(test.desc)
-		upgraded := maybeUpgradeFormatVersion(&desc.TableDescriptor)
+		desc, err := NewFilledInImmutableTableDescriptor(context.TODO(), nil, &test.desc)
+		require.NoError(t, err)
+		upgraded := desc.GetPostDeserializationChanges().UpgradedFormatVersion
 		if upgraded != test.expUpgrade {
 			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
 		}
@@ -1398,7 +1367,7 @@ func TestKeysPerRow(t *testing.T) {
 			tableName := fmt.Sprintf("t%d", i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
-			desc := TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			desc := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
 			require.NotNil(t, desc)
 			keys, err := desc.KeysPerRow(test.indexID)
 			if err != nil {

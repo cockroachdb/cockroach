@@ -15,13 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -337,7 +337,7 @@ func (p *planMaybePhysical) isPhysicalPlan() bool {
 	return p.physPlan != nil
 }
 
-func (p *planMaybePhysical) planColumns() sqlbase.ResultColumns {
+func (p *planMaybePhysical) planColumns() colinfo.ResultColumns {
 	if p.isPhysicalPlan() {
 		return p.physPlan.ResultColumns
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -239,7 +240,7 @@ func validateIndexColumnsExist(
 			return err
 		}
 		if dropping {
-			return sqlbase.NewUndefinedColumnError(string(column.Column))
+			return colinfo.NewUndefinedColumnError(string(column.Column))
 		}
 	}
 	return nil

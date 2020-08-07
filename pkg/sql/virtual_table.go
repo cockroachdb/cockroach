@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -147,14 +148,14 @@ func setupGenerator(
 // virtualTableNode is a planNode that constructs its rows by repeatedly
 // invoking a virtualTableGenerator function.
 type virtualTableNode struct {
-	columns    sqlbase.ResultColumns
+	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
 	cleanup    func()
 	currentRow tree.Datums
 }
 
 func (p *planner) newVirtualTableNode(
-	columns sqlbase.ResultColumns, next virtualTableGenerator, cleanup func(),
+	columns colinfo.ResultColumns, next virtualTableGenerator, cleanup func(),
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,
@@ -204,14 +205,14 @@ type vTableLookupJoinNode struct {
 	joinType descpb.JoinType
 
 	// columns is the join's output schema.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	// pred contains the join's on condition, if any.
 	pred *joinPredicate
 	// inputCols is the schema of the input to this lookup join.
-	inputCols sqlbase.ResultColumns
+	inputCols colinfo.ResultColumns
 	// vtableCols is the schema of the virtual table we're looking up rows from,
 	// before any projection.
-	vtableCols sqlbase.ResultColumns
+	vtableCols colinfo.ResultColumns
 	// lookupCols is the projection on vtableCols to apply.
 	lookupCols exec.TableColumnOrdinalSet
 
@@ -240,7 +241,7 @@ var _ rowPusher = &vTableLookupJoinNode{}
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
 	v.run.rows = rowcontainer.NewRowContainer(params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
+		colinfo.ColTypeInfoFromResCols(v.columns), 0)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
 	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(

@@ -15,10 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -213,7 +213,7 @@ func (r *commandResult) AppendNotice(noticeErr error) {
 }
 
 // SetColumns is part of the CommandResult interface.
-func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColumns) {
+func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.descOpt == sql.NeedRowDesc {
@@ -240,7 +240,7 @@ func (r *commandResult) SetNoDataRowDescription() {
 }
 
 // SetPrepStmtOutput is part of the DescribeResult interface.
-func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.ResultColumns) {
+func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, nil /* formatCodes */, &r.conn.writerState.buf)
@@ -248,7 +248,7 @@ func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.Resu
 
 // SetPortalOutput is part of the DescribeResult interface.
 func (r *commandResult) SetPortalOutput(
-	ctx context.Context, cols sqlbase.ResultColumns, formatCodes []pgwirebase.FormatCode,
+	ctx context.Context, cols colinfo.ResultColumns, formatCodes []pgwirebase.FormatCode,
 ) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)

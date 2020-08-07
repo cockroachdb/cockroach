@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -121,8 +121,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Add the MVCC timestamp system column.
 	tab.SystemColumns = append(tab.SystemColumns, &Column{
 		Ordinal:  len(tab.Columns),
-		Name:     sqlbase.MVCCTimestampColumnName,
-		Type:     sqlbase.MVCCTimestampColumnType,
+		Name:     colinfo.MVCCTimestampColumnName,
+		Type:     colinfo.MVCCTimestampColumnType,
 		Nullable: true,
 		Hidden:   true,
 	})

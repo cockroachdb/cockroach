@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1551,7 +1552,7 @@ func forEachDatabaseDesc(
 		// with privileges from kv.
 		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()})
 		if err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return pgerror.Newf(pgcode.UndefinedDatabase, "database %s does not exist", dbContext.GetName())
 			}
 			return err
@@ -1578,7 +1579,7 @@ func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext *dbdesc.ImmutableDatabaseDescriptor,
-	fn func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typ *sqlbase.ImmutableTypeDescriptor) error,
+	fn func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typ *typedesc.ImmutableTypeDescriptor) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {

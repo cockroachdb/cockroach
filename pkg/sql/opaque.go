@@ -14,12 +14,12 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,7 +35,7 @@ func (o *opaqueMetadata) String() string            { return o.info }
 
 func buildOpaque(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, stmt tree.Statement,
-) (opt.OpaqueMetadata, sqlbase.ResultColumns, error) {
+) (opt.OpaqueMetadata, colinfo.ResultColumns, error) {
 	p := evalCtx.Planner.(*planner)
 
 	// Opaque statements handle their own scalar arguments, with no help from the

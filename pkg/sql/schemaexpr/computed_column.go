@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -68,7 +69,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		)
 	}
 
-	var depColIDs sqlbase.TableColSet
+	var depColIDs TableColSet
 	// First, check that no column in the expression is a computed column.
 	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *descpb.ColumnDescriptor) error {
 		if c.IsComputed() {
@@ -264,13 +265,13 @@ func MakeComputedExprs(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	source := sqlbase.NewSourceInfoForSingleTable(*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
+	source := colinfo.NewSourceInfoForSingleTable(*tn, colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col *descpb.ColumnDescriptor) {
 		ivarHelper.AppendSlot()
 		iv.cols = append(iv.cols, *col)
-		newCols := sqlbase.ResultColumnsFromColDescs(tableDesc.GetID(), []descpb.ColumnDescriptor{*col})
+		newCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), []descpb.ColumnDescriptor{*col})
 		source.SourceColumns = append(source.SourceColumns, newCols...)
 	}
 

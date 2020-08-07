@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -734,7 +735,7 @@ func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.Muta
 	case database != nil:
 		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
 	case typ != nil:
-		return sqlbase.NewMutableExistingTypeDescriptor(*typ)
+		return typedesc.NewMutableExistingTypeDescriptor(*typ)
 	case schema != nil:
 		return sqlbase.NewMutableExistingSchemaDescriptor(*schema)
 	default:

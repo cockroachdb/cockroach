@@ -21,9 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -423,16 +424,16 @@ func parseStats(
 				if err != nil {
 					return err
 				}
-				return typeDesc.HydrateTypeInfoWithName(ctx, typ, &name, sqlbase.TypeLookupFunc(typeLookup))
+				return typeDesc.HydrateTypeInfoWithName(ctx, typ, &name, typedesc.TypeLookupFunc(typeLookup))
 			})
 			if err != nil {
 				return nil, err
 			}
 		}
-		var a sqlbase.DatumAlloc
+		var a rowenc.DatumAlloc
 		for i := range res.Histogram {
 			bucket := &res.HistogramData.Buckets[i]
-			datum, _, err := sqlbase.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
+			datum, _, err := rowenc.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
 			if err != nil {
 				return nil, err
 			}

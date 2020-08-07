@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -336,7 +337,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 			if len(n.mergeJoinOrdering) > 0 {
 				// The ordering refers to equality columns
-				eqCols := make(sqlbase.ResultColumns, len(n.pred.leftEqualityIndices))
+				eqCols := make(colinfo.ResultColumns, len(n.pred.leftEqualityIndices))
 				for i := range eqCols {
 					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
 				}

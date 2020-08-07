@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1496,7 +1497,7 @@ CREATE TABLE pg_catalog.pg_enum (
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
-		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.ImmutableTypeDescriptor) error {
 			// We only want to iterate over ENUM types.
 			if typDesc.Kind != descpb.TypeDescriptor_ENUM {
 				return nil
@@ -2799,7 +2800,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
+				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.ImmutableTypeDescriptor) error {
 					typ, err := typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 					if err != nil {
 						return err
@@ -2832,7 +2833,7 @@ CREATE TABLE pg_catalog.pg_type (
 				id := descpb.ID(types.UserDefinedTypeOIDToID(ooid))
 				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
-					if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						return false, nil
 					}
 					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {

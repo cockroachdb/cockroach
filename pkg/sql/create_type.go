@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -152,7 +153,7 @@ func (p *planner) createArrayType(
 	params runParams,
 	n *tree.CreateType,
 	typ *tree.TypeName,
-	typDesc *sqlbase.MutableTypeDescriptor,
+	typDesc *typedesc.MutableTypeDescriptor,
 	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 ) (descpb.ID, error) {
@@ -188,7 +189,7 @@ func (p *planner) createArrayType(
 	// Construct the descriptor for the array type.
 	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
 	// meta, just hold on.
-	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
+	arrayTypDesc := typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
@@ -270,7 +271,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
+	typeDesc := typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
 		Name:           typeName.Type(),
 		ID:             id,
 		ParentID:       db.GetID(),

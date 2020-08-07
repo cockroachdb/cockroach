@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -41,7 +43,7 @@ type dropDatabaseNode struct {
 	td                      []toDelete
 	schemasToDelete         []string
 	allTableObjectsToDelete []*sqlbase.MutableTableDescriptor
-	typesToDelete           []*sqlbase.MutableTypeDescriptor
+	typesToDelete           []*typedesc.MutableTypeDescriptor
 }
 
 // DropDatabase drops a database.
@@ -111,7 +113,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	var typesToDelete []*sqlbase.MutableTypeDescriptor
+	var typesToDelete []*typedesc.MutableTypeDescriptor
 	td := make([]toDelete, 0, len(objNames))
 	for i, objName := range objNames {
 		// First try looking up objName as a table.
@@ -179,7 +181,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 			if !found {
 				continue
 			}
-			typDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+			typDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 			if !ok {
 				return nil, errors.AssertionFailedf(
 					"descriptor for %q is not MutableTypeDescriptor",
@@ -391,7 +393,7 @@ func (p *planner) accumulateOwnedSequences(
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
 				// exist.
-				if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
 					log.Infof(ctx,
 						"swallowing error for owned sequence that was not found %s", err.Error())
 					continue

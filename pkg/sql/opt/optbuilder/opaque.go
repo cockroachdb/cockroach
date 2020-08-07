@@ -14,17 +14,17 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
 // BuildOpaqueFn is a handler for building the metadata for an opaque statement.
 type BuildOpaqueFn func(
 	context.Context, *tree.SemaContext, *tree.EvalContext, tree.Statement,
-) (opt.OpaqueMetadata, sqlbase.ResultColumns, error)
+) (opt.OpaqueMetadata, colinfo.ResultColumns, error)
 
 // OpaqueType indicates whether an opaque statement can mutate data or change
 // schema.

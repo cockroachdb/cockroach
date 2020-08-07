@@ -13,10 +13,11 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -30,24 +31,24 @@ type streamGroupAccumulator struct {
 
 	// srcConsumed is set once src has been exhausted.
 	srcConsumed bool
-	ordering    sqlbase.ColumnOrdering
+	ordering    colinfo.ColumnOrdering
 
 	// curGroup maintains the rows accumulated in the current group.
-	curGroup   []sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
+	curGroup   []rowenc.EncDatumRow
+	datumAlloc rowenc.DatumAlloc
 
 	// leftoverRow is the first row of the next group. It's saved in the
 	// accumulator after the current group is returned, so the accumulator can
 	// resume later.
-	leftoverRow sqlbase.EncDatumRow
+	leftoverRow rowenc.EncDatumRow
 
-	rowAlloc sqlbase.EncDatumRowAlloc
+	rowAlloc rowenc.EncDatumRowAlloc
 
 	memAcc mon.BoundAccount
 }
 
 func makeStreamGroupAccumulator(
-	src execinfra.RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
+	src execinfra.RowSource, ordering colinfo.ColumnOrdering, memMonitor *mon.BytesMonitor,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,
@@ -65,7 +66,7 @@ func (s *streamGroupAccumulator) start(ctx context.Context) {
 // to use after the next call to nextGroup.
 func (s *streamGroupAccumulator) nextGroup(
 	ctx context.Context, evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+) ([]rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
@@ -94,7 +95,7 @@ func (s *streamGroupAccumulator) nextGroup(
 
 		if len(s.curGroup) == 0 {
 			if s.curGroup == nil {
-				s.curGroup = make([]sqlbase.EncDatumRow, 0, 64)
+				s.curGroup = make([]rowenc.EncDatumRow, 0, 64)
 			}
 			s.curGroup = append(s.curGroup, row)
 			continue

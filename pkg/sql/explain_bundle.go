@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +45,7 @@ func setExplainBundleResult(
 	execCfg *ExecutorConfig,
 ) error {
 	res.ResetStmtType(&tree.ExplainAnalyzeDebug{})
-	res.SetColumns(ctx, sqlbase.ExplainAnalyzeDebugColumns)
+	res.SetColumns(ctx, colinfo.ExplainAnalyzeDebugColumns)
 
 	var text []string
 	func() {

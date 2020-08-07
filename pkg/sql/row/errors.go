@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +74,7 @@ func NewUniquenessConstraintViolationError(
 	if err != nil {
 		return err
 	}
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func NewUniquenessConstraintViolationError(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
-		&sqlbase.DatumAlloc{},
+		&rowenc.DatumAlloc{},
 		tableArgs,
 	); err != nil {
 		return pgerror.Newf(pgcode.UniqueViolation,

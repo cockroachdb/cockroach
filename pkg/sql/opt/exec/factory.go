@@ -13,11 +13,11 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -73,7 +73,7 @@ type ScanParams struct {
 //
 // The node must be able to support this output ordering given its other
 // configuration parameters.
-type OutputOrdering sqlbase.ColumnOrdering
+type OutputOrdering colinfo.ColumnOrdering
 
 // Subquery encapsulates information about a subquery that is part of a plan.
 type Subquery struct {
@@ -145,7 +145,7 @@ type AggInfo struct {
 // passed through to the execution engine.
 type WindowInfo struct {
 	// Cols is the set of columns that are returned from the windowing operator.
-	Cols sqlbase.ResultColumns
+	Cols colinfo.ResultColumns
 
 	// TODO(justin): refactor this to be a single array of structs.
 
@@ -167,7 +167,7 @@ type WindowInfo struct {
 	Partition []NodeColumnOrdinal
 
 	// Ordering is the set of input columns to order on.
-	Ordering sqlbase.ColumnOrdering
+	Ordering colinfo.ColumnOrdering
 
 	// RangeOffsetColumn is the column ID of a single column from ORDER BY clause
 	// when window frame has RANGE mode of framing and at least one 'offset'

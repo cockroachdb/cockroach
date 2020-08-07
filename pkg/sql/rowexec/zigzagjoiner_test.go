@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,7 +36,7 @@ type zigzagJoinerTestCase struct {
 	desc          string
 	spec          execinfrapb.ZigzagJoinerSpec
 	outCols       []uint32
-	fixedValues   []sqlbase.EncDatumRow
+	fixedValues   []rowenc.EncDatumRow
 	expectedTypes []*types.T
 	expected      string
 }
@@ -49,8 +49,8 @@ func intCols(numCols int) []*types.T {
 	return cols
 }
 
-func encInt(i int) sqlbase.EncDatum {
-	return sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+func encInt(i int) rowenc.EncDatum {
+	return rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 }
 
 func TestZigzagJoiner(t *testing.T) {
@@ -207,7 +207,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[]",
@@ -220,7 +220,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[]",
@@ -233,7 +233,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[]",
@@ -246,7 +246,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[]",
@@ -259,7 +259,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7]]",
@@ -272,7 +272,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [3 3 3 7]]",
@@ -285,7 +285,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
 			expectedTypes: intCols(6),
 			expected: "[[0 3 3 0 2 7] [1 4 3 1 1 7] [1 1 3 1 1 7] [2 2 3 2 4 7] [2 2 3 2 0 7] [3 3 3 3 3 7] " +
@@ -299,7 +299,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7), encInt(1)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7), encInt(1)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7]]",
@@ -312,7 +312,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
 			expectedTypes: intCols(6),
 			expected: "[[9 3 3 9 1 7] [9 0 3 9 1 7] [10 4 3 10 4 7] [10 4 3 10 0 7] [10 1 3 10 4 7] " +
@@ -326,7 +326,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
 			expectedTypes: intCols(6),
 			expected:      "[[1 1 3 1 1 7]]",
@@ -339,7 +339,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
 			expectedTypes: intCols(6),
 			expected:      "[[1 1 3 1 1 7]]",
@@ -352,7 +352,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (a, c) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3) /*a*/, encInt(3) /*c*/}, {encInt(7) /*d*/, encInt(3) /*a*/}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3) /*a*/, encInt(3) /*c*/}, {encInt(7) /*d*/, encInt(3) /*a*/}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[3 3 3 7]]",
@@ -401,7 +401,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(1)}, {encInt(1)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(1)}, {encInt(1)}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[1 0] [1 1]]",
@@ -414,7 +414,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c, a, b) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [3 3 3 7]]",
@@ -427,7 +427,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [4 1 3 7]]",
@@ -441,7 +441,7 @@ func TestZigzagJoiner(t *testing.T) {
 				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
 				OnExpr:        execinfrapb.Expression{Expr: "@1 > 1"},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 3 7]]",
@@ -455,7 +455,7 @@ func TestZigzagJoiner(t *testing.T) {
 				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
 				OnExpr:        execinfrapb.Expression{Expr: "@8 < 2 * @1"},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 3 7]]",
@@ -468,7 +468,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{2 /* (c, b) */, 3 /* (d) */},
 			},
-			fixedValues:   []sqlbase.EncDatumRow{{encInt(21) /* c */}, {encInt(6), encInt(4) /* d, a */}},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(21) /* c */}, {encInt(6), encInt(4) /* d, a */}},
 			outCols:       []uint32{0, 1, 2, 7},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 21 6]]",
@@ -528,7 +528,7 @@ func TestZigzagJoiner(t *testing.T) {
 				t.Fatalf("output RowReceiver not closed")
 			}
 
-			var res sqlbase.EncDatumRows
+			var res rowenc.EncDatumRows
 			for {
 				row := out.NextNoMeta(t)
 				if row == nil {
@@ -557,8 +557,8 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))
 	}
-	encThree := sqlbase.DatumToEncDatum(types.Int, v[3])
-	encSeven := sqlbase.DatumToEncDatum(types.Int, v[7])
+	encThree := rowenc.DatumToEncDatum(types.Int, v[3])
+	encSeven := rowenc.DatumToEncDatum(types.Int, v[7])
 
 	sqlutils.CreateTable(
 		t,
@@ -578,8 +578,8 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 
-	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(1))
+	encRow := make(rowenc.EncDatumRow, 1)
+	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
@@ -595,7 +595,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 				Type:          descpb.InnerJoin,
 				IndexOrdinals: []uint32{0, 1},
 			},
-			[]sqlbase.EncDatumRow{{encThree}, {encSeven}},
+			[]rowenc.EncDatumRow{{encThree}, {encSeven}},
 			&execinfrapb.PostProcessSpec{Projection: true, OutputColumns: []uint32{0, 1}},
 			out,
 		)

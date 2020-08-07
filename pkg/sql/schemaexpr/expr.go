@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,10 +61,10 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (tree.TypedExpr, sqlbase.TableColSet, error) {
-	var colIDs sqlbase.TableColSet
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tn, sqlbase.ResultColumnsFromColDescs(
+) (tree.TypedExpr, TableColSet, error) {
+	var colIDs TableColSet
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColDescs(
 			desc.GetID(),
 			desc.AllNonDropColumns(),
 		),
@@ -97,10 +98,8 @@ func DequalifyAndValidateExpr(
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
-func ExtractColumnIDs(
-	desc catalog.TableDescriptor, rootExpr tree.Expr,
-) (sqlbase.TableColSet, error) {
-	var colIDs sqlbase.TableColSet
+func ExtractColumnIDs(desc catalog.TableDescriptor, rootExpr tree.Expr) (TableColSet, error) {
+	var colIDs TableColSet
 
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)

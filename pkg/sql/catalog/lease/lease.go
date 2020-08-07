@@ -1634,7 +1634,7 @@ func (m *Manager) AcquireByName(
 			if err := m.Release(desc); err != nil {
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
-			return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
+			return nil, hlc.Timestamp{}, catalog.ErrDescriptorNotFound
 		}
 	}
 	return desc, expiration, nil
@@ -1675,7 +1675,7 @@ func (m *Manager) resolveName(
 		return id, err
 	}
 	if id == descpb.InvalidID {
-		return id, sqlbase.ErrDescriptorNotFound
+		return id, catalog.ErrDescriptorNotFound
 	}
 	return id, nil
 }

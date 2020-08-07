@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,7 +66,7 @@ type windower struct {
 	inputDone    bool
 	inputTypes   []*types.T
 	outputTypes  []*types.T
-	datumAlloc   sqlbase.DatumAlloc
+	datumAlloc   rowenc.DatumAlloc
 	acc          mon.BoundAccount
 	diskMonitor  *mon.BytesMonitor
 
@@ -85,7 +86,7 @@ type windower struct {
 	partitionSizes      []int
 	windowValues        [][][]tree.Datum
 	allRowsIterator     rowcontainer.RowIterator
-	outputRow           sqlbase.EncDatumRow
+	outputRow           rowenc.EncDatumRow
 }
 
 var _ execinfra.Processor = &windower{}
@@ -140,7 +141,7 @@ func newWindower(
 
 		w.windowFns = append(w.windowFns, wf)
 	}
-	w.outputRow = make(sqlbase.EncDatumRow, len(w.outputTypes))
+	w.outputRow = make(rowenc.EncDatumRow, len(w.outputTypes))
 
 	st := flowCtx.Cfg.Settings
 	// Limit the memory use by creating a child monitor with a hard limit.
@@ -223,9 +224,9 @@ func (w *windower) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (w *windower) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (w *windower) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for w.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch w.runningState {
 		case windowerAccumulating:
@@ -273,7 +274,7 @@ func (w *windower) close() {
 // immediately. Subsequent calls of this function will resume row accumulation.
 func (w *windower) accumulateRows() (
 	windowerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	for {
@@ -313,7 +314,7 @@ func (w *windower) accumulateRows() (
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered the current row out.
-func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (w *windower) emitRow() (windowerState, rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if w.inputDone {
 		for !w.populated {
 			if err := w.cancelChecker.Check(); err != nil {
@@ -431,7 +432,7 @@ func (w *windower) processPartition(
 	peerGrouper := &partitionPeerGrouper{
 		ctx:     ctx,
 		evalCtx: evalCtx,
-		rowCopy: make(sqlbase.EncDatumRow, len(w.inputTypes)),
+		rowCopy: make(rowenc.EncDatumRow, len(w.inputTypes)),
 	}
 	usage := sizeOfSliceOfRows + rowSliceOverhead + sizeOfRow*int64(len(w.windowFns))
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
@@ -464,7 +465,7 @@ func (w *windower) processPartition(
 				case execinfrapb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case execinfrapb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
+					datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
 						return errors.NewAssertionErrorWithWrappedErrf(err,
 							"error decoding %d bytes", errors.Safe(len(startBound.TypedOffset)))
@@ -488,7 +489,7 @@ func (w *windower) processPartition(
 					case execinfrapb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case execinfrapb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
+						datum, rem, err := rowenc.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
 							return errors.NewAssertionErrorWithWrappedErrf(err,
 								"error decoding %d bytes", errors.Safe(len(endBound.TypedOffset)))
@@ -737,7 +738,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		copy(w.outputRow, inputRow[:len(w.inputTypes)])
 		for windowFnIdx, windowFn := range w.windowFns {
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes := sqlbase.DatumToEncDatum(w.outputTypes[windowFn.outputColIdx], windowFnRes)
+			encWindowFnRes := rowenc.DatumToEncDatum(w.outputTypes[windowFn.outputColIdx], windowFnRes)
 			w.outputRow[windowFn.outputColIdx] = encWindowFnRes
 		}
 		w.rowsInBucketEmitted++
@@ -766,7 +767,7 @@ type partitionPeerGrouper struct {
 	evalCtx   *tree.EvalContext
 	partition *rowcontainer.DiskBackedIndexedRowContainer
 	ordering  execinfrapb.Ordering
-	rowCopy   sqlbase.EncDatumRow
+	rowCopy   rowenc.EncDatumRow
 	err       error
 }
 

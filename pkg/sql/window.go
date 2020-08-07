@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -39,7 +39,7 @@ type windowNode struct {
 	// The source node.
 	plan planNode
 	// columns is the set of result columns.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// A sparse array holding renders specific to this windowNode. This will
 	// contain nil entries for renders that do not contain window functions,
@@ -84,7 +84,7 @@ type windowFuncHolder struct {
 	outputColIdx int      // index of the column that the output should be put into
 
 	partitionIdxs  []int
-	columnOrdering sqlbase.ColumnOrdering
+	columnOrdering colinfo.ColumnOrdering
 	frame          *tree.WindowFrame
 }
 
@@ -136,7 +136,7 @@ type windowNodeColAndAggContainer struct {
 	idxMap map[int]int
 	// sourceInfo contains information on the IndexedVars from the
 	// source plan where they were originally created.
-	sourceInfo *sqlbase.DataSourceInfo
+	sourceInfo *colinfo.DataSourceInfo
 	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
 	aggFuncs map[int]*tree.FuncExpr
 	// startAggIdx indicates the smallest index to be used by an IndexedVar replacing

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package typedesc_test
 
 import (
 	"context"
@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -193,7 +195,8 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		a, b := NewImmutableTypeDescriptor(test.a), NewImmutableTypeDescriptor(test.b)
+		a := typedesc.NewImmutableTypeDescriptor(test.a)
+		b := typedesc.NewImmutableTypeDescriptor(test.b)
 		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
@@ -222,9 +225,26 @@ func TestValidateTypeDesc(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Database{}}, 100)
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{}}, 101)
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Type{}}, 102)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+		Database: &descpb.DatabaseDescriptor{
+			Name:       "foo",
+			ID:         100,
+			Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
+		},
+	}}, 100)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{
+		Schema: &descpb.SchemaDescriptor{
+			Name:       "bar",
+			ID:         101,
+			Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
+		},
+	}}, 101)
+	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Type{
+		Type: &descpb.TypeDescriptor{
+			Name: "baz",
+			ID:   102,
+		},
+	}}, 102)
 
 	testData := []struct {
 		err  string
@@ -355,9 +375,9 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		desc := NewImmutableTypeDescriptor(test.desc)
+		desc := typedesc.NewImmutableTypeDescriptor(test.desc)
 		txn := kvDB.NewTxn(ctx, "test")
-		if err := desc.Validate(ctx, txn, keys.SystemSQLCodec); err == nil {
+		if err := desc.Validate(ctx, catalogkv.NewDescGetter(txn, keys.SystemSQLCodec)); err == nil {
 			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("expected err: %s but found: %s", test.err, err)

@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package dbdesc contains the concrete implementations of
+// catalog.DatabaseDescriptor.
 package dbdesc
 
 import (
@@ -16,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -153,7 +154,7 @@ func (desc *MutableDatabaseDescriptor) SetName(name string) {
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
 func (desc *ImmutableDatabaseDescriptor) Validate() error {
-	if err := sqlbase.ValidateName(desc.GetName(), "descriptor"); err != nil {
+	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
 	if desc.GetID() == 0 {

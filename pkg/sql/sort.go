@@ -13,15 +13,15 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
 	plan     planNode
-	ordering sqlbase.ColumnOrdering
+	ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
 	// the prefix ordering[:alreadyOrderedPrefix].
 	alreadyOrderedPrefix int

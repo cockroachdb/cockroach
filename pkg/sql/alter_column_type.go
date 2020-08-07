@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -87,7 +88,7 @@ func AlterColumnType(
 		}
 	}
 
-	err = sqlbase.ValidateColumnDefType(typ)
+	err = colinfo.ValidateColumnDefType(typ)
 	if err != nil {
 		return err
 	}

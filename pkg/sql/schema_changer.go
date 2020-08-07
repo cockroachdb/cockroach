@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -500,7 +501,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
 		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
@@ -537,7 +538,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	defer func() {
-		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
@@ -578,7 +579,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
 		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
@@ -595,7 +596,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	}
 
 	defer func() {
-		if err := waitToUpdateLeases(false /* refreshStats */); err != nil && !errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if err := waitToUpdateLeases(false /* refreshStats */); err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
@@ -1003,7 +1004,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// don't install any backreferences.
 		if !scTable.Dropped() {
 			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				return descs[id].(*sqlbase.MutableTypeDescriptor), nil
+				return descs[id].(*typedesc.MutableTypeDescriptor), nil
 			})
 			if err != nil {
 				return err
@@ -1011,10 +1012,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for _, id := range referencedTypeIDs {
-				descs[id].(*sqlbase.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
 			}
 			for _, id := range newReferencedTypeIDs {
-				descs[id].(*sqlbase.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
 			}
 		}
 
@@ -1751,7 +1752,7 @@ func (r schemaChangeResumer) Resume(
 			switch {
 			case scErr == nil:
 				return nil
-			case errors.Is(scErr, sqlbase.ErrDescriptorNotFound):
+			case errors.Is(scErr, catalog.ErrDescriptorNotFound):
 				// If the table descriptor for the ID can't be found, we assume that
 				// another job to drop the table got to it first, and consider this job
 				// finished.
@@ -1878,7 +1879,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 
 	if rollbackErr := sc.handlePermanentSchemaChangeError(ctx, scErr, p.ExtendedEvalContext()); rollbackErr != nil {
 		switch {
-		case errors.Is(rollbackErr, sqlbase.ErrDescriptorNotFound):
+		case errors.Is(rollbackErr, catalog.ErrDescriptorNotFound):
 			// If the table descriptor for the ID can't be found, we assume that
 			// another job to drop the table got to it first, and consider this job
 			// finished.

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -225,7 +227,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 
 	if err != nil {
 		isAdding := catalog.HasAddingTableError(err)
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) || isAdding {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) || isAdding {
 			return nil, isAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
 		return nil, false, err
@@ -608,8 +610,8 @@ func newOptTable(
 	// Note that the column does not exist when err != nil. This check is done
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
-	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
-		ot.systemColumnDescs = append(ot.systemColumnDescs, &sqlbase.MVCCTimestampColumnDesc)
+	if _, _, err := desc.FindColumnByName(colinfo.MVCCTimestampColumnName); err != nil {
+		ot.systemColumnDescs = append(ot.systemColumnDescs, &colinfo.MVCCTimestampColumnDesc)
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
@@ -1122,10 +1124,10 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 		return nil
 	}
 	res := make([]tree.Datums, 0, len(list))
-	var a sqlbase.DatumAlloc
+	var a rowenc.DatumAlloc
 	for i := range list {
 		for _, valueEncBuf := range list[i].Values {
-			t, _, err := sqlbase.DecodePartitionTuple(
+			t, _, err := rowenc.DecodePartitionTuple(
 				&a, oi.tab.codec, oi.tab.desc, oi.desc, &oi.desc.Partitioning,
 				valueEncBuf, nil, /* prefixDatums */
 			)

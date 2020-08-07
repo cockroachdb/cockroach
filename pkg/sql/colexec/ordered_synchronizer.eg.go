@@ -16,12 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -32,7 +32,7 @@ import (
 type OrderedSynchronizer struct {
 	allocator             *colmem.Allocator
 	inputs                []SynchronizerInput
-	ordering              sqlbase.ColumnOrdering
+	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
 
@@ -96,7 +96,7 @@ func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
 	inputs []SynchronizerInput,
 	typs []*types.T,
-	ordering sqlbase.ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {
 	return &OrderedSynchronizer{
 		allocator:             allocator,

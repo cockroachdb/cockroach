@@ -14,8 +14,8 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -94,7 +94,7 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func NewRowContainer(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCapacity int) *RowContainer {
+func NewRowContainer(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int) *RowContainer {
 	c := &RowContainer{}
 	c.Init(acc, ti, rowCapacity)
 	return c
@@ -102,7 +102,7 @@ func NewRowContainer(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCapacity i
 
 // Init can be used instead of NewRowContainer if we have a RowContainer that is
 // already part of an on-heap structure.
-func (c *RowContainer) Init(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCapacity int) {
+func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int) {
 	nCols := ti.NumColumns()
 
 	c.numCols = nCols

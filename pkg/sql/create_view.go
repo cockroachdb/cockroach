@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -40,7 +41,7 @@ type createViewNode struct {
 	replace     bool
 	temporary   bool
 	dbDesc      *dbdesc.ImmutableDatabaseDescriptor
-	columns     sqlbase.ResultColumns
+	columns     colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -251,7 +252,7 @@ func makeViewTableDesc(
 	parentID descpb.ID,
 	schemaID descpb.ID,
 	id descpb.ID,
-	resultColumns []sqlbase.ResultColumn,
+	resultColumns []colinfo.ResultColumn,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
@@ -357,7 +358,7 @@ func addResultColumns(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	desc *sqlbase.MutableTableDescriptor,
-	resultColumns sqlbase.ResultColumns,
+	resultColumns colinfo.ResultColumns,
 ) error {
 	for _, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
@@ -419,8 +420,8 @@ func verifyReplacingViewColumns(oldColumns, newColumns []descpb.ColumnDescriptor
 	return nil
 }
 
-func overrideColumnNames(cols sqlbase.ResultColumns, newNames tree.NameList) sqlbase.ResultColumns {
-	res := append(sqlbase.ResultColumns(nil), cols...)
+func overrideColumnNames(cols colinfo.ResultColumns, newNames tree.NameList) colinfo.ResultColumns {
+	res := append(colinfo.ResultColumns(nil), cols...)
 	for i := range res {
 		res[i].Name = string(newNames[i])
 	}

@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -60,7 +61,7 @@ type scanNode struct {
 	// the entire row.
 	cols []*descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 
 	// Map used to get the index for columns in cols.
 	colIdxMap map[descpb.ColumnID]int
@@ -266,10 +267,10 @@ func initColsForScan(
 	for _, wc := range colCfg.wantedColumns {
 		var c *descpb.ColumnDescriptor
 		var err error
-		if sqlbase.IsColIDSystemColumn(descpb.ColumnID(wc)) {
+		if colinfo.IsColIDSystemColumn(descpb.ColumnID(wc)) {
 			// If the requested column is a system column, then retrieve the
 			// corresponding descriptor.
-			c, err = sqlbase.GetSystemColumnDescriptorFromID(descpb.ColumnID(wc))
+			c, err = colinfo.GetSystemColumnDescriptorFromID(descpb.ColumnID(wc))
 			if err != nil {
 				return nil, err
 			}
@@ -324,7 +325,7 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = sqlbase.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
+	n.resultColumns = colinfo.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
 	n.colIdxMap = make(map[descpb.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i

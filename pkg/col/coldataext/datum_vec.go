@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -40,7 +40,7 @@ type datumVec struct {
 	evalCtx *tree.EvalContext
 
 	scratch []byte
-	da      sqlbase.DatumAlloc
+	da      rowenc.DatumAlloc
 }
 
 var _ coldata.DatumVec = &datumVec{}
@@ -79,8 +79,8 @@ func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
 }
 
 // Hash returns the hash of the datum as a byte slice.
-func (d *Datum) Hash(da *sqlbase.DatumAlloc) []byte {
-	ed := sqlbase.EncDatum{Datum: maybeUnwrapDatum(d)}
+func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
+	ed := rowenc.EncDatum{Datum: maybeUnwrapDatum(d)}
 	b, err := ed.Fingerprint(d.ResolvedType(), da, nil /* appendTo */)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -149,7 +149,7 @@ func (dv *datumVec) Cap() int {
 // MarshalAt implements coldata.DatumVec interface.
 func (dv *datumVec) MarshalAt(i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
-	return sqlbase.EncodeTableValue(
+	return rowenc.EncodeTableValue(
 		nil /* appendTo */, descpb.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
 	)
 }
@@ -158,7 +158,7 @@ func (dv *datumVec) MarshalAt(i int) ([]byte, error) {
 // index i.
 func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	var err error
-	dv.data[i], _, err = sqlbase.DecodeTableValue(&dv.da, dv.t, b)
+	dv.data[i], _, err = rowenc.DecodeTableValue(&dv.da, dv.t, b)
 	return err
 }
 

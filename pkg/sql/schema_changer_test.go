@@ -4069,7 +4069,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 			_, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
 			return err
 		}); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return nil
 			}
 			return err

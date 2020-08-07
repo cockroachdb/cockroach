@@ -14,11 +14,11 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -40,7 +40,7 @@ type insertNode struct {
 	// columns is set if this INSERT is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run insertRun
 }
@@ -84,14 +84,14 @@ type insertRun struct {
 }
 
 func (r *insertRun) initRowContainer(
-	params runParams, columns sqlbase.ResultColumns, rowCapacity int,
+	params runParams, columns colinfo.ResultColumns, rowCapacity int,
 ) {
 	if !r.rowsNeeded {
 		return
 	}
 	r.ti.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(columns),
+		colinfo.ColTypeInfoFromResCols(columns),
 		rowCapacity,
 	)
 

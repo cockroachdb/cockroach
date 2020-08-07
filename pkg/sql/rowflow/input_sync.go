@@ -17,10 +17,11 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -29,7 +30,7 @@ import (
 type srcInfo struct {
 	src execinfra.RowSource
 	// row is the last row received from src.
-	row sqlbase.EncDatumRow
+	row rowenc.EncDatumRow
 }
 
 // srcIdx refers to the index of a source inside a []srcInfo array.
@@ -63,7 +64,7 @@ type orderedSynchronizer struct {
 	// ordering dictates the way in which rows compare. If nil (i.e.
 	// sqlbase.NoOrdering), then rows are not compared and sources are consumed in
 	// index order.
-	ordering sqlbase.ColumnOrdering
+	ordering colinfo.ColumnOrdering
 	evalCtx  *tree.EvalContext
 
 	sources []srcInfo
@@ -88,8 +89,8 @@ type orderedSynchronizer struct {
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
-	alloc    sqlbase.DatumAlloc
-	rowAlloc sqlbase.EncDatumRowAlloc
+	alloc    rowenc.DatumAlloc
+	rowAlloc rowenc.EncDatumRowAlloc
 
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.
@@ -286,7 +287,7 @@ func (s *orderedSynchronizer) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (s *orderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
@@ -369,7 +370,7 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 // when you intend to fuse the synchronizer and its inputs later; see
 // FuseAggresively).
 func makeOrderedSync(
-	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
+	ordering colinfo.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
 ) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package rowenc
 
 import (
 	"context"
@@ -18,8 +18,10 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -111,7 +113,7 @@ func TestEncDatum(t *testing.T) {
 }
 
 func columnTypeCompatibleWithEncoding(typ *types.T, enc descpb.DatumEncoding) bool {
-	return enc == descpb.DatumEncoding_VALUE || ColumnTypeIsIndexable(typ)
+	return enc == descpb.DatumEncoding_VALUE || colinfo.ColumnTypeIsIndexable(typ)
 }
 
 func TestEncDatumNull(t *testing.T) {
@@ -249,7 +251,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 		// These cases require decoding. Data with a composite key encoding cannot
 		// be decoded from their key part alone.
-		if !HasCompositeKeyEncoding(typ) {
+		if !sqlbase.HasCompositeKeyEncoding(typ) {
 			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, noncmp, -1, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
@@ -278,7 +280,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]descpb.DatumEncoding, len(ed))
 		for i := range ed {
-			if HasCompositeKeyEncoding(typs[i]) {
+			if sqlbase.HasCompositeKeyEncoding(typs[i]) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = descpb.DatumEncoding_VALUE
@@ -331,85 +333,85 @@ func TestEncDatumRowCompare(t *testing.T) {
 
 	testCases := []struct {
 		row1, row2 EncDatumRow
-		ord        ColumnOrdering
+		ord        colinfo.ColumnOrdering
 		cmp        int
 	}{
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{},
+			ord:  colinfo.ColumnOrdering{},
 			cmp:  0,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{1, desc}},
+			ord:  colinfo.ColumnOrdering{{1, desc}},
 			cmp:  0,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{0, asc}, {1, desc}},
+			ord:  colinfo.ColumnOrdering{{0, asc}, {1, desc}},
 			cmp:  0,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{2, asc}},
+			ord:  colinfo.ColumnOrdering{{2, asc}},
 			cmp:  -1,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[3]},
 			row2: EncDatumRow{v[0], v[1], v[2]},
-			ord:  ColumnOrdering{{2, asc}},
+			ord:  colinfo.ColumnOrdering{{2, asc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{2, asc}, {0, asc}, {1, asc}},
+			ord:  colinfo.ColumnOrdering{{2, asc}, {0, asc}, {1, asc}},
 			cmp:  -1,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{0, asc}, {2, desc}},
+			ord:  colinfo.ColumnOrdering{{0, asc}, {2, desc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[0], v[1], v[2]},
 			row2: EncDatumRow{v[0], v[1], v[3]},
-			ord:  ColumnOrdering{{1, desc}, {0, asc}, {2, desc}},
+			ord:  colinfo.ColumnOrdering{{1, desc}, {0, asc}, {2, desc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[2], v[3], v[4]},
 			row2: EncDatumRow{v[1], v[3], v[0]},
-			ord:  ColumnOrdering{{0, asc}},
+			ord:  colinfo.ColumnOrdering{{0, asc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[2], v[3], v[4]},
 			row2: EncDatumRow{v[1], v[3], v[0]},
-			ord:  ColumnOrdering{{1, desc}, {0, asc}},
+			ord:  colinfo.ColumnOrdering{{1, desc}, {0, asc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[2], v[3], v[4]},
 			row2: EncDatumRow{v[1], v[3], v[0]},
-			ord:  ColumnOrdering{{1, asc}, {0, asc}},
+			ord:  colinfo.ColumnOrdering{{1, asc}, {0, asc}},
 			cmp:  1,
 		},
 		{
 			row1: EncDatumRow{v[2], v[3], v[4]},
 			row2: EncDatumRow{v[1], v[3], v[0]},
-			ord:  ColumnOrdering{{1, asc}, {0, desc}},
+			ord:  colinfo.ColumnOrdering{{1, asc}, {0, desc}},
 			cmp:  -1,
 		},
 		{
 			row1: EncDatumRow{v[2], v[3], v[4]},
 			row2: EncDatumRow{v[1], v[3], v[0]},
-			ord:  ColumnOrdering{{0, desc}, {1, asc}},
+			ord:  colinfo.ColumnOrdering{{0, desc}, {1, asc}},
 			cmp:  -1,
 		},
 	}

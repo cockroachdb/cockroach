@@ -16,10 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,21 +31,21 @@ import (
 func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [6]sqlbase.EncDatum{}
+	v := [6]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
 	desc := encoding.Descending
 
 	testCases := []struct {
-		sources  []sqlbase.EncDatumRows
-		ordering sqlbase.ColumnOrdering
-		expected sqlbase.EncDatumRows
+		sources  []rowenc.EncDatumRows
+		ordering colinfo.ColumnOrdering
+		expected rowenc.EncDatumRows
 	}{
 		{
-			sources: []sqlbase.EncDatumRows{
+			sources: []rowenc.EncDatumRows{
 				{
 					{v[0], v[1], v[4]},
 					{v[0], v[1], v[2]},
@@ -59,11 +60,11 @@ func TestOrderedSync(t *testing.T) {
 					{v[4], v[4], v[4]},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: asc},
 				{ColIdx: 1, Direction: asc},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0]},
 				{v[0], v[1], v[4]},
 				{v[0], v[1], v[2]},
@@ -74,7 +75,7 @@ func TestOrderedSync(t *testing.T) {
 			},
 		},
 		{
-			sources: []sqlbase.EncDatumRows{
+			sources: []rowenc.EncDatumRows{
 				{},
 				{
 					{v[1], v[0], v[4]},
@@ -90,12 +91,12 @@ func TestOrderedSync(t *testing.T) {
 					{v[0], v[0], v[0]},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: desc},
 				{ColIdx: 0, Direction: asc},
 				{ColIdx: 2, Direction: asc},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[4]},
 				{v[4], v[4], v[5]},
@@ -109,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []execinfra.RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := distsqlutils.NewRowBuffer(sqlbase.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
+			rowBuf := distsqlutils.NewRowBuffer(rowenc.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -119,7 +120,7 @@ func TestOrderedSync(t *testing.T) {
 			t.Fatal(err)
 		}
 		src.Start(context.Background())
-		var retRows sqlbase.EncDatumRows
+		var retRows rowenc.EncDatumRows
 		for {
 			row, meta := src.Next()
 			if meta != nil {
@@ -130,8 +131,8 @@ func TestOrderedSync(t *testing.T) {
 			}
 			retRows = append(retRows, row)
 		}
-		expStr := c.expected.String(sqlbase.ThreeIntCols)
-		retStr := retRows.String(sqlbase.ThreeIntCols)
+		expStr := c.expected.String(rowenc.ThreeIntCols)
+		retStr := retRows.String(rowenc.ThreeIntCols)
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
@@ -146,7 +147,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 
 	var sources []execinfra.RowSource
 	for i := 0; i < 4; i++ {
-		rowBuf := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+		rowBuf := distsqlutils.NewRowBuffer(rowenc.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 		sources = append(sources, rowBuf)
 		rowBuf.Push(nil, expectedMeta)
 	}
@@ -154,7 +155,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	o, err := makeOrderedSync(sqlbase.ColumnOrdering{}, evalCtx, sources)
+	o, err := makeOrderedSync(colinfo.ColumnOrdering{}, evalCtx, sources)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,9 +191,9 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
-				row := sqlbase.EncDatumRow{a, b}
+				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
@@ -200,7 +201,7 @@ func TestUnorderedSync(t *testing.T) {
 			mrc.ProducerDone()
 		}(i)
 	}
-	var retRows sqlbase.EncDatumRows
+	var retRows rowenc.EncDatumRows
 	for {
 		row, meta := mrc.Next()
 		if meta != nil {
@@ -217,7 +218,7 @@ func TestUnorderedSync(t *testing.T) {
 		for _, row := range retRows {
 			if int(tree.MustBeDInt(row[0].Datum)) == i {
 				if int(tree.MustBeDInt(row[1].Datum)) != j {
-					t.Errorf("Expected [%d %d], got %s", i, j, row.String(sqlbase.TwoIntCols))
+					t.Errorf("Expected [%d %d], got %s", i, j, row.String(rowenc.TwoIntCols))
 				}
 				j++
 			}
@@ -238,9 +239,9 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
-				row := sqlbase.EncDatumRow{a, b}
+				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}

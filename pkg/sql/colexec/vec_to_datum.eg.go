@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -43,7 +43,7 @@ import (
 type vecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
-	da               sqlbase.DatumAlloc
+	da               rowenc.DatumAlloc
 }
 
 // newVecToDatumConverter creates a new vecToDatumConverter.
@@ -97,7 +97,7 @@ func (c *vecToDatumConverter) getDatumColumn(colIdx int) tree.Datums {
 }
 
 func PhysicalTypeColVecToDatum(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()

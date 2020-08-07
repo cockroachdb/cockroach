@@ -14,10 +14,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -59,8 +59,8 @@ func TestDequalifyColumnRefs(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			source := sqlbase.NewSourceInfoForSingleTable(
-				tn, sqlbase.ResultColumnsFromColDescs(
+			source := colinfo.NewSourceInfoForSingleTable(
+				tn, colinfo.ResultColumnsFromColDescs(
 					descpb.ID(1),
 					cols,
 				),
