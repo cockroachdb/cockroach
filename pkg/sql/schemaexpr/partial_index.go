@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -30,7 +31,7 @@ import (
 type IndexPredicateValidator struct {
 	ctx       context.Context
 	tableName tree.TableName
-	desc      sqlbase.TableDescriptor
+	desc      catalog.TableDescriptor
 	semaCtx   *tree.SemaContext
 }
 
@@ -40,7 +41,7 @@ type IndexPredicateValidator struct {
 func MakeIndexPredicateValidator(
 	ctx context.Context,
 	tableName tree.TableName,
-	desc sqlbase.TableDescriptor,
+	desc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 ) IndexPredicateValidator {
 	return IndexPredicateValidator{
@@ -96,7 +97,7 @@ func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
 //
 func FormatIndexForDisplay(
 	ctx context.Context,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	tableName *tree.TableName,
 	index *descpb.IndexDescriptor,
 	semaCtx *tree.SemaContext,

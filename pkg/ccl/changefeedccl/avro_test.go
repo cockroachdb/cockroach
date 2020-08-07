@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseTableDesc(createTableStmt string) (sqlbase.TableDescriptor, error) {
+func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
 	if err != nil {
@@ -59,7 +60,7 @@ func parseTableDesc(createTableStmt string) (sqlbase.TableDescriptor, error) {
 	return mutDesc, mutDesc.ValidateTable()
 }
 
-func parseValues(tableDesc sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+func parseValues(tableDesc catalog.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := &tree.EvalContext{}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -31,19 +32,8 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// TypeDescriptor will eventually be called typedesc.Descriptor.
-// It is implemented by (Imm|M)utableTypeDescriptor.
-type TypeDescriptor interface {
-	Descriptor
-	TypeDesc() *descpb.TypeDescriptor
-	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
-	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
-	HasPendingSchemaChanges() bool
-	GetIDClosure() map[descpb.ID]struct{}
-}
-
-var _ TypeDescriptor = (*ImmutableTypeDescriptor)(nil)
-var _ TypeDescriptor = (*MutableTypeDescriptor)(nil)
+var _ catalog.TypeDescriptor = (*ImmutableTypeDescriptor)(nil)
+var _ catalog.TypeDescriptor = (*MutableTypeDescriptor)(nil)
 
 // MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
 // for the input type. It is intended to be used as an intermediate for name
@@ -143,7 +133,7 @@ func makeImmutableTypeDescriptor(desc descpb.TypeDescriptor) ImmutableTypeDescri
 // TODO(ajwerner): Remove this when we have a higher-level interface for
 // retrieving descriptors by ID during validation.
 func getTypeDescFromID(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id descpb.ID,
+	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
 ) (*ImmutableTypeDescriptor, error) {
 	descKey := MakeDescMetadataKey(codec, id)
 	desc := &descpb.Descriptor{}
@@ -260,7 +250,7 @@ func (desc *MutableTypeDescriptor) OriginalVersion() descpb.DescriptorVersion {
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) Immutable() Descriptor {
+func (desc *MutableTypeDescriptor) Immutable() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
@@ -502,29 +492,19 @@ func (desc *ImmutableTypeDescriptor) Validate(
 	return nil
 }
 
-// TypeDescriptorResolver is an interface used during hydration of type
-// metadata in types.T's. It is similar to tree.TypeReferenceResolver, except
-// that it has the power to return TypeDescriptor, rather than only a
-// types.T. Implementers of tree.TypeReferenceResolver should implement this
-// interface as well.
-type TypeDescriptorResolver interface {
-	// GetTypeDescriptor returns the type descriptor for the input ID.
-	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
-}
-
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.
-type TypeLookupFunc func(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
+type TypeLookupFunc func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error)
 
 // GetTypeDescriptor implements the TypeDescriptorResolver interface.
 func (t TypeLookupFunc) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
-) (tree.TypeName, TypeDescriptor, error) {
+) (tree.TypeName, catalog.TypeDescriptor, error) {
 	return t(ctx, id)
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
 func (desc *ImmutableTypeDescriptor) MakeTypesT(
-	ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver,
+	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
 	case descpb.TypeDescriptor_ENUM:
@@ -548,7 +528,7 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 // types present in a table descriptor. typeLookup retrieves the fully
 // qualified name and descriptor for a particular ID.
 func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *descpb.TableDescriptor, res TypeDescriptorResolver,
+	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
 ) error {
 	hydrateCol := func(col *descpb.ColumnDescriptor) error {
 		if col.Type.UserDefined() {
@@ -586,7 +566,7 @@ func HydrateTypesInTableDescriptor(
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
 func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
-	ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver,
+	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
 	typ.TypeMeta.Name = &types.UserDefinedTypeName{
 		Catalog:        name.Catalog(),

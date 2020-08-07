@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +39,7 @@ func DecodeIndexKeyToCols(
 	da *sqlbase.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
-	desc sqlbase.TableDescriptor,
+	desc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	indexColIdx []int,
 	types []*types.T,
