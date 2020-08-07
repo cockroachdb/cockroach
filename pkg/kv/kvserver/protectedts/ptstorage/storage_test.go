@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -633,7 +634,7 @@ func (ie *wrappedInternalExecutor) QueryWithCols(
 	o sqlbase.InternalExecutorSessionDataOverride,
 	statement string,
 	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
+) ([]tree.Datums, colinfo.ResultColumns, error) {
 	panic("unimplemented")
 }
 

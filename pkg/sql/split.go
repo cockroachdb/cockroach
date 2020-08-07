@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,8 +95,8 @@ func getRowKey(
 	for i := range values {
 		colMap[index.ColumnIDs[i]] = i
 	}
-	prefix := sqlbase.MakeIndexKeyPrefix(codec, tableDesc, index.ID)
-	key, _, err := sqlbase.EncodePartialIndexKey(
+	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.ID)
+	key, _, err := rowenc.EncodePartialIndexKey(
 		tableDesc, index, len(values), colMap, values, prefix,
 	)
 	if err != nil {

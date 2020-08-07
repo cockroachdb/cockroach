@@ -13,16 +13,16 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type invertedFilterNode struct {
 	input         planNode
 	expression    *invertedexpr.SpanExpression
 	invColumn     int
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 }
 
 func (n *invertedFilterNode) startExec(params runParams) error {

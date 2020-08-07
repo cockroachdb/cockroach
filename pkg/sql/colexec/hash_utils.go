@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 )
 
 // initHash, rehash, and finalizeHash work together to compute the hash value
@@ -109,7 +109,7 @@ type tupleHashDistributor struct {
 	// check for query cancellation.
 	cancelChecker  CancelChecker
 	overloadHelper overloadHelper
-	datumAlloc     sqlbase.DatumAlloc
+	datumAlloc     rowenc.DatumAlloc
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {

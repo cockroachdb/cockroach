@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -66,10 +67,10 @@ func TestingGetMutableExistingTableDescriptor(
 // This function should be moved wherever TestingGetTableDescriptor is moved.
 func TestingGetTypeDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) *sqlbase.ImmutableTypeDescriptor {
+) *typedesc.ImmutableTypeDescriptor {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TypeObject, false /* mutable */, database, object,
-	).(*sqlbase.ImmutableTypeDescriptor)
+	).(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		return nil
 	}

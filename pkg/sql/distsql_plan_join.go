@@ -16,12 +16,12 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -294,7 +294,7 @@ type joinPlanningHelper struct {
 }
 
 func (h *joinPlanningHelper) joinOutColumns(
-	joinType descpb.JoinType, columns sqlbase.ResultColumns,
+	joinType descpb.JoinType, columns colinfo.ResultColumns,
 ) (post execinfrapb.PostProcessSpec, joinToStreamColMap []int) {
 	joinToStreamColMap = makePlanToStreamColMap(len(columns))
 	post.Projection = true
@@ -370,7 +370,7 @@ func eqCols(eqIndices []exec.NodeColumnOrdinal, planToColMap []int) []uint32 {
 // distsqlOrdering converts the ordering specified by mergeJoinOrdering in
 // terms of the index of eqCols to the ordinal references provided by eqCols.
 func distsqlOrdering(
-	mergeJoinOrdering sqlbase.ColumnOrdering, eqCols []uint32,
+	mergeJoinOrdering colinfo.ColumnOrdering, eqCols []uint32,
 ) execinfrapb.Ordering {
 	var ord execinfrapb.Ordering
 	ord.Columns = make([]execinfrapb.Ordering_Column, len(mergeJoinOrdering))

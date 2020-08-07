@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -433,7 +434,7 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	backupStmt := getBackupStatement(stmt)
 	if backupStmt == nil {
 		return nil, nil, nil, false, nil

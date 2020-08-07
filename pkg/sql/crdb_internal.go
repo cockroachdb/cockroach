@@ -39,10 +39,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1474,7 +1477,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typeDesc *sqlbase.ImmutableTypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typeDesc *typedesc.ImmutableTypeDescriptor) error {
 			switch typeDesc.Kind {
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels []string
@@ -2220,7 +2223,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT AS range_size
 FROM crdb_internal.ranges_no_leases
 `,
-	resultColumns: sqlbase.ResultColumns{
+	resultColumns: colinfo.ResultColumns{
 		{Name: "range_id", Typ: types.Int},
 		{Name: "start_key", Typ: types.Bytes},
 		{Name: "start_pretty", Typ: types.String},
@@ -3034,7 +3037,7 @@ func addPartitioningRows(
 	}
 	colNames := tree.NewDString(buf.String())
 
-	var datumAlloc sqlbase.DatumAlloc
+	var datumAlloc rowenc.DatumAlloc
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
@@ -3050,7 +3053,7 @@ func addPartitioningRows(
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
-			tuple, _, err := sqlbase.DecodePartitionTuple(
+			tuple, _, err := rowenc.DecodePartitionTuple(
 				&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, values, fakePrefixDatums,
 			)
 			if err != nil {
@@ -3101,7 +3104,7 @@ func addPartitioningRows(
 	// This produces the range_value column.
 	for _, r := range partitioning.Range {
 		var buf bytes.Buffer
-		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
 		)
 		if err != nil {
@@ -3109,7 +3112,7 @@ func addPartitioningRows(
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
-		toTuple, _, err := sqlbase.DecodePartitionTuple(
+		toTuple, _, err := rowenc.DecodePartitionTuple(
 			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
 		)
 		if err != nil {

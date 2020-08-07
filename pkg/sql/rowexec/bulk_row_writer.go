@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -82,15 +83,15 @@ func (sp *bulkRowWriter) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (sp *bulkRowWriter) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (sp *bulkRowWriter) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// If there wasn't an error while processing, output the summary.
 	if sp.ProcessorBase.State == execinfra.StateRunning {
 		countsBytes, marshalErr := protoutil.Marshal(&sp.summary)
 		sp.MoveToDraining(marshalErr)
 		if marshalErr == nil {
 			// Output the summary.
-			return sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+			return rowenc.EncDatumRow{
+				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 			}, nil
 		}
 	}
@@ -177,7 +178,7 @@ func (sp *bulkRowWriter) convertLoop(
 	defer close(kvCh)
 
 	done := false
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	typs := sp.input.OutputTypes()
 
 	for {

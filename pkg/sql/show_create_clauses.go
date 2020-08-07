@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -305,7 +305,7 @@ func showCreateInterleave(
 // ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
 func ShowCreatePartitioning(
-	a *sqlbase.DatumAlloc,
+	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
@@ -358,7 +358,7 @@ func ShowCreatePartitioning(
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
-			tuple, _, err := sqlbase.DecodePartitionTuple(
+			tuple, _, err := rowenc.DecodePartitionTuple(
 				a, codec, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
 			if err != nil {
 				return err
@@ -382,14 +382,14 @@ func ShowCreatePartitioning(
 		buf.WriteString("\tPARTITION ")
 		buf.WriteString(part.Name)
 		buf.WriteString(" VALUES FROM ")
-		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idxDesc, partDesc, part.FromInclusive, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
-		toTuple, _, err := sqlbase.DecodePartitionTuple(
+		toTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idxDesc, partDesc, part.ToExclusive, fakePrefixDatums)
 		if err != nil {
 			return err

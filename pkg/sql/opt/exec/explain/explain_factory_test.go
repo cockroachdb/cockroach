@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -34,7 +34,7 @@ func TestFactory(t *testing.T) {
 			{tree.NewDInt(2), tree.NewDString("two")},
 			{tree.NewDInt(3), tree.NewDString("three")},
 		},
-		sqlbase.ResultColumns{
+		colinfo.ResultColumns{
 			{Name: "number", Typ: types.Int},
 			{Name: "word", Typ: types.String},
 		},

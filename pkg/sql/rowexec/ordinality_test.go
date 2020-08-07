@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,18 +28,18 @@ import (
 func TestOrdinality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [15]sqlbase.EncDatum{}
+	v := [15]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []struct {
 		spec     execinfrapb.OrdinalitySpec
-		input    sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
+		input    rowenc.EncDatumRows
+		expected rowenc.EncDatumRows
 	}{
 		{
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2]},
 				{v[5]},
 				{v[2]},
@@ -48,7 +48,7 @@ func TestOrdinality(t *testing.T) {
 				{v[3]},
 				{v[2]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[1]},
 				{v[5], v[2]},
 				{v[2], v[3]},
@@ -59,7 +59,7 @@ func TestOrdinality(t *testing.T) {
 			},
 		},
 		{
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{},
 				{},
 				{},
@@ -68,7 +68,7 @@ func TestOrdinality(t *testing.T) {
 				{},
 				{},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[1]},
 				{v[2]},
 				{v[3]},
@@ -79,7 +79,7 @@ func TestOrdinality(t *testing.T) {
 			},
 		},
 		{
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[1]},
 				{v[5], v[2]},
 				{v[2], v[3]},
@@ -88,7 +88,7 @@ func TestOrdinality(t *testing.T) {
 				{v[3], v[6]},
 				{v[2], v[7]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[1], v[1]},
 				{v[5], v[2], v[2]},
 				{v[2], v[3], v[3]},
@@ -104,7 +104,7 @@ func TestOrdinality(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			os := c.spec
 
-			in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(rowenc.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -124,7 +124,7 @@ func TestOrdinality(t *testing.T) {
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
-			var res sqlbase.EncDatumRows
+			var res rowenc.EncDatumRows
 			for {
 				row := out.NextNoMeta(t).Copy()
 				if row == nil {
@@ -136,14 +136,14 @@ func TestOrdinality(t *testing.T) {
 			var typs []*types.T
 			switch len(res[0]) {
 			case 1:
-				typs = sqlbase.OneIntCol
+				typs = rowenc.OneIntCol
 			case 2:
-				typs = sqlbase.TwoIntCols
+				typs = rowenc.TwoIntCols
 			case 3:
-				typs = sqlbase.ThreeIntCols
+				typs = rowenc.ThreeIntCols
 			}
 			if result := res.String(typs); result != c.expected.String(typs) {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(sqlbase.TwoIntCols))
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(rowenc.TwoIntCols))
 			}
 		})
 	}
@@ -165,7 +165,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeIntRows(numRows, numCols))
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {

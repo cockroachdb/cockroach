@@ -1634,7 +1634,7 @@ func (m *Manager) AcquireByName(
 			if err := m.Release(desc); err != nil {
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
-			return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
+			return nil, hlc.Timestamp{}, catalog.ErrDescriptorNotFound
 		}
 	}
 	return desc, expiration, nil
@@ -1642,7 +1642,7 @@ func (m *Manager) AcquireByName(
 
 // resolveName resolves a descriptor name to a descriptor ID at a particular
 // timestamp by looking in the database. If the mapping is not found,
-// sqlbase.ErrDescriptorNotFound is returned.
+// catalog.ErrDescriptorNotFound is returned.
 func (m *Manager) resolveName(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
@@ -1675,7 +1675,7 @@ func (m *Manager) resolveName(
 		return id, err
 	}
 	if id == descpb.InvalidID {
-		return id, sqlbase.ErrDescriptorNotFound
+		return id, catalog.ErrDescriptorNotFound
 	}
 	return id, nil
 }

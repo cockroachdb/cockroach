@@ -15,8 +15,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -25,7 +25,7 @@ func TestTypeAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	p := planner{alloc: &sqlbase.DatumAlloc{}}
+	p := planner{alloc: &rowenc.DatumAlloc{}}
 	testData := []struct {
 		expr        tree.Expr
 		expected    string

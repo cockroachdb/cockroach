@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -70,15 +71,15 @@ type invertedJoiner struct {
 	invertedColID descpb.ColumnID
 
 	onExprHelper execinfrapb.ExprHelper
-	combinedRow  sqlbase.EncDatumRow
+	combinedRow  rowenc.EncDatumRow
 
 	joinType descpb.JoinType
 
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
 	fetcher  rowFetcher
-	alloc    sqlbase.DatumAlloc
-	rowAlloc sqlbase.EncDatumRowAlloc
+	alloc    rowenc.DatumAlloc
+	rowAlloc rowenc.EncDatumRowAlloc
 
 	// The row retrieved from the index represents the columns of the table
 	// with the datums corresponding to the columns in the index populated.
@@ -92,12 +93,12 @@ type invertedJoiner struct {
 	// to the keyRow, and add to the row container, which de-duplicates the
 	// primary keys. The index assigned by the container is the keyIndex in the
 	// addIndexRow() call mentioned earlier.
-	keyRow              sqlbase.EncDatumRow
+	keyRow              rowenc.EncDatumRow
 	keyTypes            []*types.T
 	tableRowToKeyRowMap map[int]int
 	// The reverse transformation, from a key row to a table row, is done
 	// before evaluating the onExpr.
-	tableRow            sqlbase.EncDatumRow
+	tableRow            rowenc.EncDatumRow
 	keyRowToTableRowMap []int
 
 	// The input being joined using the index.
@@ -108,7 +109,7 @@ type invertedJoiner struct {
 	batchSize int
 
 	// State variables for each batch of input rows.
-	inputRows       sqlbase.EncDatumRows
+	inputRows       rowenc.EncDatumRows
 	batchedExprEval batchedInvertedExprEvaluator
 	// The row indexes that are the result of the inverted expression evaluation
 	// of the join. These will be further filtered using the onExpr.
@@ -137,7 +138,7 @@ type invertedJoiner struct {
 	spanBuilder *span.Builder
 	// A row with one element, corresponding to an encoded inverted column
 	// value. Used to construct the span of the index for that value.
-	invertedColRow sqlbase.EncDatumRow
+	invertedColRow rowenc.EncDatumRow
 }
 
 var _ execinfra.Processor = &invertedJoiner{}
@@ -179,9 +180,9 @@ func newInvertedJoiner(
 	indexColumnIDs, _ := ij.index.FullColumnIDs()
 	// Inverted joins are not used for mutations.
 	tableColumns := ij.desc.ColumnsWithMutations(false /* mutations */)
-	ij.keyRow = make(sqlbase.EncDatumRow, len(indexColumnIDs)-1)
+	ij.keyRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
 	ij.keyTypes = make([]*types.T, len(ij.keyRow))
-	ij.tableRow = make(sqlbase.EncDatumRow, len(tableColumns))
+	ij.tableRow = make(rowenc.EncDatumRow, len(tableColumns))
 	ij.tableRowToKeyRowMap = make(map[int]int)
 	ij.keyRowToTableRowMap = make([]int, len(indexColumnIDs)-1)
 	for i := 1; i < len(indexColumnIDs); i++ {
@@ -225,7 +226,7 @@ func newInvertedJoiner(
 	if err := ij.onExprHelper.Init(spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 		return nil, err
 	}
-	ij.combinedRow = make(sqlbase.EncDatumRow, 0, len(onExprColTypes))
+	ij.combinedRow = make(rowenc.EncDatumRow, 0, len(onExprColTypes))
 
 	if ij.datumsToInvertedExpr == nil {
 		var invertedExprHelper execinfrapb.ExprHelper
@@ -305,7 +306,7 @@ func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
 	// true, since JSON inverted columns use a custom encoding. But since we
 	// are providing an already encoded Datum, the following will eventually
 	// fall through to EncDatum.Encode() which will reuse the encoded bytes.
-	encDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+	encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
 	ij.invertedColRow = append(ij.invertedColRow[:0], encDatum)
 	span, _, err := ij.spanBuilder.SpanFromEncDatums(ij.invertedColRow, 1 /* prefixLen */)
 	return span, err
@@ -330,7 +331,7 @@ func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) ([]roachpb
 }
 
 // Next is part of the RowSource interface.
-func (ij *invertedJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The join is implemented as follows:
 	// - Read the input rows in batches.
 	// - For each batch, map the rows to SpanExpressionProtos and initialize
@@ -342,7 +343,7 @@ func (ij *invertedJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 	// - Retrieve the results from the batch evaluator and buffer in joinedRowIdx,
 	//   and use the emitCursor to emit rows.
 	for ij.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ij.runningState {
 		case ijReadingInput:
@@ -478,7 +479,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 // prepares for another input batch.
 func (ij *invertedJoiner) emitRow() (
 	invertedJoinerState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	// Finished processing the batch.
@@ -567,7 +568,7 @@ func (ij *invertedJoiner) emitRow() (
 
 // render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
-func (ij *invertedJoiner) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	ij.combinedRow = append(ij.combinedRow[:0], lrow...)
 	ij.combinedRow = append(ij.combinedRow, rrow...)
 	if ij.onExprHelper.Expr != nil {
@@ -580,7 +581,7 @@ func (ij *invertedJoiner) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDat
 }
 
 // renderUnmatchedRow creates a result row given an unmatched row.
-func (ij *invertedJoiner) renderUnmatchedRow(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
+func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) rowenc.EncDatumRow {
 	ij.combinedRow = append(ij.combinedRow[:0], row...)
 	ij.combinedRow = ij.combinedRow[:cap(ij.combinedRow)]
 	for i := len(row); i < len(ij.combinedRow); i++ {
@@ -589,13 +590,13 @@ func (ij *invertedJoiner) renderUnmatchedRow(row sqlbase.EncDatumRow) sqlbase.En
 	return ij.combinedRow
 }
 
-func (ij *invertedJoiner) transformToKeyRow(row sqlbase.EncDatumRow) {
+func (ij *invertedJoiner) transformToKeyRow(row rowenc.EncDatumRow) {
 	for i, rowIdx := range ij.keyRowToTableRowMap {
 		ij.keyRow[i] = row[rowIdx]
 	}
 }
 
-func (ij *invertedJoiner) transformToTableRow(keyRow sqlbase.EncDatumRow) {
+func (ij *invertedJoiner) transformToTableRow(keyRow rowenc.EncDatumRow) {
 	for r, k := range ij.tableRowToKeyRowMap {
 		ij.tableRow[r] = keyRow[k]
 	}

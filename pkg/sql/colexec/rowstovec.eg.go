@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -27,11 +27,11 @@ import (
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
 	allocator *colmem.Allocator,
-	rows sqlbase.EncDatumRows,
+	rows rowenc.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(

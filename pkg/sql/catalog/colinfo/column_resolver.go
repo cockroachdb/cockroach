@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package colinfo
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -28,7 +29,7 @@ import (
 // are returned. If allowMutations is set, even columns undergoing
 // mutations are added.
 func ProcessTargetColumns(
-	tableDesc *ImmutableTableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
+	tableDesc catalog.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
 ) ([]descpb.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
@@ -202,4 +203,9 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 		colIdx = idx
 	}
 	return colIdx, nil
+}
+
+// NewUndefinedColumnError creates an error that represents a missing database column.
+func NewUndefinedColumnError(name string) error {
+	return pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
 }

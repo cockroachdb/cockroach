@@ -11,8 +11,8 @@
 package explain
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Factory implements exec.ExplainFactory. It wraps another factory and forwards
@@ -33,8 +33,8 @@ type Node struct {
 	f        *Factory
 	op       execOperator
 	args     interface{}
-	columns  sqlbase.ResultColumns
-	ordering sqlbase.ColumnOrdering
+	columns  colinfo.ResultColumns
+	ordering colinfo.ColumnOrdering
 
 	children []*Node
 
@@ -56,13 +56,13 @@ func (n *Node) Child(idx int) *Node {
 }
 
 // Columns returns the ResultColumns for this node.
-func (n *Node) Columns() sqlbase.ResultColumns {
+func (n *Node) Columns() colinfo.ResultColumns {
 	return n.columns
 }
 
 // Ordering returns the required output ordering for this node; columns
 // correspond to Columns().
-func (n *Node) Ordering() sqlbase.ColumnOrdering {
+func (n *Node) Ordering() colinfo.ColumnOrdering {
 	return n.ordering
 }
 
@@ -75,7 +75,7 @@ func (n *Node) WrappedNode() exec.Node {
 func (f *Factory) newNode(
 	op execOperator, args interface{}, ordering exec.OutputOrdering, children ...*Node,
 ) (*Node, error) {
-	inputNodeCols := make([]sqlbase.ResultColumns, len(children))
+	inputNodeCols := make([]colinfo.ResultColumns, len(children))
 	for i := range children {
 		inputNodeCols[i] = children[i].Columns()
 	}
@@ -88,7 +88,7 @@ func (f *Factory) newNode(
 		op:       op,
 		args:     args,
 		columns:  columns,
-		ordering: sqlbase.ColumnOrdering(ordering),
+		ordering: colinfo.ColumnOrdering(ordering),
 		children: children,
 	}, nil
 }
