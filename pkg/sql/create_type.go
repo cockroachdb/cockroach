@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -80,7 +81,7 @@ func resolveNewTypeName(
 // the parent schema.
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db catalog.DatabaseDescriptor,
-) (typeKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+) (typeKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.

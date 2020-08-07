@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -155,10 +156,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
+				descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
 				descDesc := myTableDesc.DescriptorProto()
 				b.Put(descKey, descDesc)
-				descKey2 := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
+				descKey2 := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
 				descDesc2 := myOtherTableDesc.DescriptorProto()
 				b.Put(descKey2, descDesc2)
 				return txn.Run(ctx, b)
@@ -292,11 +293,11 @@ SELECT job_id, status
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		nameKey := sqlbase.MakeNameMetadataKey(keys.SystemSQLCodec, dbID, keys.PublicSchemaID, "foo")
+		nameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec, dbID, keys.PublicSchemaID, "foo")
 		if err := txn.Del(ctx, nameKey); err != nil {
 			return err
 		}
-		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
 		return txn.Del(ctx, descKey)
 	}))
 	// Update the GC TTL to tickle the job to refresh the status and discover that

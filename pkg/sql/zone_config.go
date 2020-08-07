@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -84,7 +85,7 @@ func getZoneConfig(
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
+	if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
 		return 0, nil, 0, nil, err
 	} else if descVal != nil {
 		var desc descpb.Descriptor
@@ -130,7 +131,7 @@ func completeZoneConfig(
 	}
 	// Check to see if its a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
+	if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
 		return err
 	} else if descVal != nil {
 		var desc descpb.Descriptor
