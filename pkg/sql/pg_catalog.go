@@ -641,10 +641,11 @@ CREATE TABLE pg_catalog.pg_available_extensions (
 }
 
 var (
-	relKindTable    = tree.NewDString("r")
-	relKindIndex    = tree.NewDString("i")
-	relKindView     = tree.NewDString("v")
-	relKindSequence = tree.NewDString("S")
+	relKindTable            = tree.NewDString("r")
+	relKindIndex            = tree.NewDString("i")
+	relKindView             = tree.NewDString("v")
+	relKindMaterializedView = tree.NewDString("m")
+	relKindSequence         = tree.NewDString("S")
 
 	relPersistencePermanent = tree.NewDString("p")
 )
@@ -692,6 +693,9 @@ CREATE TABLE pg_catalog.pg_class (
 		relAm := forwardIndexOid
 		if table.IsView() {
 			relKind = relKindView
+			if table.MaterializedView() {
+				relKind = relKindMaterializedView
+			}
 			relAm = oidZero
 		} else if table.IsSequence() {
 			relKind = relKindSequence
