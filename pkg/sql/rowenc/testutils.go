@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package rowenc
 
 import (
 	"bytes"
@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -802,7 +804,7 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 func RandColumnType(rng *rand.Rand) *types.T {
 	for {
 		typ := RandType(rng)
-		if err := ValidateColumnDefType(typ); err == nil {
+		if err := colinfo.ValidateColumnDefType(typ); err == nil {
 			return typ
 		}
 	}
@@ -813,7 +815,7 @@ func RandArrayType(rng *rand.Rand) *types.T {
 	for {
 		typ := RandColumnType(rng)
 		resTyp := types.MakeArray(typ)
-		if err := ValidateColumnDefType(resTyp); err == nil {
+		if err := colinfo.ValidateColumnDefType(resTyp); err == nil {
 			return resTyp
 		}
 	}
@@ -832,7 +834,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for MustBeValueEncoded(typ) {
+	for colinfo.MustBeValueEncoded(typ) {
 		typ = RandType(rng)
 	}
 	return typ
@@ -900,7 +902,7 @@ func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 	for i := range types {
 		for {
 			types[i] = RandEncodableType(rng)
-			if err := ValidateColumnDefType(types[i]); err == nil {
+			if err := colinfo.ValidateColumnDefType(types[i]); err == nil {
 				break
 			}
 		}
@@ -978,9 +980,9 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) EncD
 //  - int (converts to DInt)
 //  - string (converts to DString)
 func TestingMakePrimaryIndexKey(
-	desc *ImmutableTableDescriptor, vals ...interface{},
+	desc catalog.TableDescriptor, vals ...interface{},
 ) (roachpb.Key, error) {
-	index := &desc.PrimaryIndex
+	index := desc.GetPrimaryIndex()
 	if len(vals) > len(index.ColumnIDs) {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
 	}
@@ -1000,15 +1002,18 @@ func TestingMakePrimaryIndexKey(
 		}
 		// Check that the value type matches.
 		colID := index.ColumnIDs[i]
-		for i := range desc.Columns {
-			c := &desc.Columns[i]
-			if c.ID == colID {
+		var done bool
+		if err := desc.ForeachPublicColumn(func(c *descpb.ColumnDescriptor) error {
+			if !done && c.ID == colID {
 				colTyp := datums[i].ResolvedType()
 				if t := colTyp.Family(); t != c.Type.Family() {
-					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Family(), t)
+					return errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Family(), t)
 				}
-				break
+				done = true
 			}
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
 	// Create the ColumnID to index in datums slice map needed by
@@ -1114,7 +1119,7 @@ func RandCreateTableWithInterleave(
 			for {
 				extraCol = randColumnTableDef(rng, tableIdx, i+prefixLength)
 				extraColType := tree.MustBeStaticallyKnownType(extraCol.Type)
-				if ColumnTypeIsIndexable(extraColType) {
+				if colinfo.ColumnTypeIsIndexable(extraColType) {
 					break
 				}
 			}
@@ -1466,7 +1471,7 @@ func randIndexTableDefFromCols(
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
-		if !ColumnTypeIsIndexable(semType) {
+		if !colinfo.ColumnTypeIsIndexable(semType) {
 			continue
 		}
 		indexElemList = append(indexElemList, tree.IndexElem{

@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase_test
+package typedesc_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -191,7 +191,8 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		a, b := sqlbase.NewImmutableTypeDescriptor(test.a), sqlbase.NewImmutableTypeDescriptor(test.b)
+		a := typedesc.NewImmutableTypeDescriptor(test.a)
+		b := typedesc.NewImmutableTypeDescriptor(test.b)
 		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
@@ -207,19 +208,16 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	descs := sqlbase.MapDescGetter{
-		Descs: make(map[descpb.ID]catalog.Descriptor),
-	}
-
-	descs.Descs[100] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+	descs := sqlbase.MapDescGetter{}
+	descs[100] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
 	})
-	descs.Descs[101] = sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
+	descs[101] = sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
 		ID:   101,
 		Name: "schema",
 	})
-	descs.Descs[102] = sqlbase.NewImmutableTypeDescriptor(descpb.TypeDescriptor{
+	descs[102] = typedesc.NewImmutableTypeDescriptor(descpb.TypeDescriptor{
 		ID:   102,
 		Name: "type",
 	})
@@ -353,7 +351,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		desc := sqlbase.NewImmutableTypeDescriptor(test.desc)
+		desc := typedesc.NewImmutableTypeDescriptor(test.desc)
 		if err := desc.Validate(ctx, descs); err == nil {
 			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {

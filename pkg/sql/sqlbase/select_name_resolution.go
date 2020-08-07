@@ -16,6 +16,7 @@ package sqlbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -26,7 +27,7 @@ type NameResolutionVisitor struct {
 	err        error
 	iVarHelper tree.IndexedVarHelper
 	searchPath sessiondata.SearchPath
-	resolver   ColumnResolver
+	resolver   colinfo.ColumnResolver
 }
 
 var _ tree.Visitor = &NameResolutionVisitor{}
@@ -94,7 +95,7 @@ func (*NameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr 
 // ResolveNames is a wrapper around ResolveNamesUsingVisitor.
 func ResolveNames(
 	expr tree.Expr,
-	source *DataSourceInfo,
+	source *colinfo.DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
 ) (tree.Expr, error) {
@@ -106,14 +107,14 @@ func ResolveNames(
 func ResolveNamesUsingVisitor(
 	v *NameResolutionVisitor,
 	expr tree.Expr,
-	source *DataSourceInfo,
+	source *colinfo.DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
 ) (tree.Expr, error) {
 	*v = NameResolutionVisitor{
 		iVarHelper: ivarHelper,
 		searchPath: searchPath,
-		resolver: ColumnResolver{
+		resolver: colinfo.ColumnResolver{
 			Source: source,
 		},
 	}

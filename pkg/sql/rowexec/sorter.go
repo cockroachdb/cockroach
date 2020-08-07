@@ -15,10 +15,11 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -31,7 +32,7 @@ type sorterBase struct {
 	execinfra.ProcessorBase
 
 	input    execinfra.RowSource
-	ordering sqlbase.ColumnOrdering
+	ordering colinfo.ColumnOrdering
 	matchLen uint32
 
 	rows rowcontainer.SortableRowContainer
@@ -49,7 +50,7 @@ func (s *sorterBase) init(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
-	ordering sqlbase.ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	matchLen uint32,
 	opts execinfra.ProcStateOpts,
 ) error {
@@ -90,7 +91,7 @@ func (s *sorterBase) init(
 // Next is part of the RowSource interface. It is extracted into sorterBase
 // because this implementation of next is shared between the sortAllProcessor
 // and the sortTopKProcessor.
-func (s *sorterBase) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (s *sorterBase) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for s.State == execinfra.StateRunning {
 		if ok, err := s.i.Valid(); err != nil || !ok {
 			s.MoveToDraining(err)
@@ -446,11 +447,11 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 type sortChunksProcessor struct {
 	sorterBase
 
-	alloc sqlbase.DatumAlloc
+	alloc rowenc.DatumAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
-	nextChunkRow sqlbase.EncDatumRow
+	nextChunkRow rowenc.EncDatumRow
 }
 
 var _ execinfra.Processor = &sortChunksProcessor{}
@@ -488,7 +489,7 @@ func newSortChunksProcessor(
 // chunkCompleted is a helper function that determines if the given row shares the same
 // values for the first matchLen ordering columns with the given prefix.
 func (s *sortChunksProcessor) chunkCompleted(
-	nextChunkRow, prefix sqlbase.EncDatumRow,
+	nextChunkRow, prefix rowenc.EncDatumRow,
 ) (bool, error) {
 	types := s.input.OutputTypes()
 	for _, ord := range s.ordering[:s.matchLen] {
@@ -577,7 +578,7 @@ func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (s *sortChunksProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	ctx := s.Ctx
 	for s.State == execinfra.StateRunning {
 		ok, err := s.i.Valid()

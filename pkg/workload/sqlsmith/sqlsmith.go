@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -74,7 +74,7 @@ func (g *sqlSmith) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(g.seed))
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
-		schema := sqlbase.RandCreateTable(rng, "table", idx)
+		schema := rowenc.RandCreateTable(rng, "table", idx)
 		table := workload.Table{
 			Name:   schema.Table.String(),
 			Schema: tree.Serialize(schema),

@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package rowenc
 
 import (
 	"bytes"
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -466,7 +467,7 @@ func EncDatumRowToDatums(
 func (r EncDatumRow) Compare(
 	types []*types.T,
 	a *DatumAlloc,
-	ordering ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs EncDatumRow,
 ) (int, error) {
@@ -492,7 +493,7 @@ func (r EncDatumRow) Compare(
 func (r EncDatumRow) CompareToDatums(
 	types []*types.T,
 	a *DatumAlloc,
-	ordering ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs tree.Datums,
 ) (int, error) {

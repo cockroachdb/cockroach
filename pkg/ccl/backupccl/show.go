@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ import (
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil, false, nil
@@ -181,9 +182,7 @@ func showBackupPlanHook(
 		// FKs for which we can't resolve the cross-table references. We can't
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
-		if err := maybeUpgradeTableDescsInBackupManifests(
-			ctx, manifests, p.ExecCfg().Codec, true, /*skipFKsWithNoMatchingTable*/
-		); err != nil {
+		if err := maybeUpgradeTableDescsInBackupManifests(ctx, manifests, true); err != nil {
 			return err
 		}
 
@@ -205,12 +204,12 @@ func showBackupPlanHook(
 }
 
 type backupShower struct {
-	header sqlbase.ResultColumns
+	header colinfo.ResultColumns
 	fn     func([]BackupManifest) ([]tree.Datums, error)
 }
 
-func backupShowerHeaders(showSchemas bool, opts map[string]string) sqlbase.ResultColumns {
-	baseHeaders := sqlbase.ResultColumns{
+func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.ResultColumns {
+	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
 		{Name: "start_time", Typ: types.Timestamp},
@@ -220,10 +219,10 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) sqlbase.Resul
 		{Name: "is_full_cluster", Typ: types.Bool},
 	}
 	if showSchemas {
-		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "create_statement", Typ: types.String})
+		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "create_statement", Typ: types.String})
 	}
 	if _, shouldShowPrivleges := opts[backupOptWithPrivileges]; shouldShowPrivleges {
-		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "privileges", Typ: types.String})
+		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 	}
 	return baseHeaders
 }
@@ -364,7 +363,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 }
 
 var backupShowerRanges = backupShower{
-	header: sqlbase.ResultColumns{
+	header: colinfo.ResultColumns{
 		{Name: "start_pretty", Typ: types.String},
 		{Name: "end_pretty", Typ: types.String},
 		{Name: "start_key", Typ: types.Bytes},
@@ -387,7 +386,7 @@ var backupShowerRanges = backupShower{
 }
 
 var backupShowerFiles = backupShower{
-	header: sqlbase.ResultColumns{
+	header: colinfo.ResultColumns{
 		{Name: "path", Typ: types.String},
 		{Name: "start_pretty", Typ: types.String},
 		{Name: "end_pretty", Typ: types.String},
@@ -418,7 +417,7 @@ var backupShowerFiles = backupShower{
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
 	ctx context.Context, backup *tree.ShowBackup, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 
 	collectionFn, err := p.TypeAsString(ctx, backup.InCollection, "SHOW BACKUPS")
 	if err != nil {
@@ -448,7 +447,7 @@ func showBackupsInCollectionPlanHook(
 		}
 		return nil
 	}
-	return fn, sqlbase.ResultColumns{{Name: "path", Typ: types.String}}, nil, false, nil
+	return fn, colinfo.ResultColumns{{Name: "path", Typ: types.String}}, nil, false, nil
 }
 
 func init() {

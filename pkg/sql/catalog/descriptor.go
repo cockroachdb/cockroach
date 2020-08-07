@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -168,6 +166,7 @@ type TableDescriptor interface {
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
+	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
@@ -189,41 +188,6 @@ type TypeDescriptor interface {
 type TypeDescriptorResolver interface {
 	// GetTypeDescriptor returns the type descriptor for the input ID.
 	GetTypeDescriptor(ctx context.Context, id descpb.ID) (tree.TypeName, TypeDescriptor, error)
-}
-
-type inactiveDescriptorError struct {
-	cause error
-}
-
-// errTableAdding is returned when the descriptor is being added.
-//
-// Only tables can be in the adding state, and this will be true for the
-// foreseeable future, so the error message remains a table-specific version.
-var errTableAdding = errors.New("table is being added")
-
-// ErrDescriptorDropped is returned when the descriptor is being dropped.
-// TODO (lucy): Make the error message specific to each descriptor type (e.g.,
-// "table is being dropped") and add the pgcodes (UndefinedTable, etc.).
-var ErrDescriptorDropped = errors.New("descriptor is being dropped")
-
-func (i *inactiveDescriptorError) Error() string { return i.cause.Error() }
-
-func (i *inactiveDescriptorError) Unwrap() error { return i.cause }
-
-// HasAddingTableError returns true if the error contains errTableAdding.
-func HasAddingTableError(err error) bool {
-	return errors.Is(err, errTableAdding)
-}
-
-// HasInactiveDescriptorError returns true if the error contains an
-// inactiveDescriptorError.
-func HasInactiveDescriptorError(err error) bool {
-	return errors.HasType(err, (*inactiveDescriptorError)(nil))
-}
-
-// NewInactiveDescriptorError wraps an error in a new inactiveDescriptorError.
-func NewInactiveDescriptorError(err error) error {
-	return &inactiveDescriptorError{err}
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an
@@ -250,11 +214,9 @@ func FilterDescriptorState(desc Descriptor) error {
 // getting constraint info.
 type TableLookupFn func(descpb.ID) (TableDescriptor, error)
 
-// ValidateName validates the name for a descriptor.
-func ValidateName(name, typ string) error {
-	if len(name) == 0 {
-		return pgerror.Newf(pgcode.Syntax, "empty %s name", typ)
-	}
-	// TODO(pmattis): Do we want to be more restrictive than this?
-	return nil
-}
+// Descriptors is a sortable list of Descriptors.
+type Descriptors []Descriptor
+
+func (d Descriptors) Len() int           { return len(d) }
+func (d Descriptors) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
+func (d Descriptors) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }

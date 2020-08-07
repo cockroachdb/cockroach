@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -32,8 +32,8 @@ func ExampleOutputBuilder() {
 		{
 			ob.EnterNode(
 				"render",
-				sqlbase.ResultColumns{{Name: "a", Typ: types.Int}, {Name: "b", Typ: types.String}},
-				sqlbase.ColumnOrdering{
+				colinfo.ResultColumns{{Name: "a", Typ: types.Int}, {Name: "b", Typ: types.String}},
+				colinfo.ColumnOrdering{
 					{ColIdx: 0, Direction: encoding.Ascending},
 					{ColIdx: 1, Direction: encoding.Descending},
 				},
@@ -41,11 +41,11 @@ func ExampleOutputBuilder() {
 			ob.AddField("render 0", "foo")
 			ob.AddField("render 1", "bar")
 			{
-				ob.EnterNode("join", sqlbase.ResultColumns{{Name: "x", Typ: types.Int}}, nil)
+				ob.EnterNode("join", colinfo.ResultColumns{{Name: "x", Typ: types.Int}}, nil)
 				ob.AddField("type", "outer")
 				{
 					{
-						ob.EnterNode("scan", sqlbase.ResultColumns{{Name: "x", Typ: types.Int}}, nil)
+						ob.EnterNode("scan", colinfo.ResultColumns{{Name: "x", Typ: types.Int}}, nil)
 						ob.AddField("table", "foo")
 						ob.LeaveNode()
 					}

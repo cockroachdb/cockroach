@@ -14,10 +14,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -33,7 +33,7 @@ type deleteNode struct {
 	// columns is set if this DELETE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run deleteRun
 }
@@ -76,8 +76,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	if d.run.rowsNeeded {
 		d.run.td.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(d.columns),
-		)
+			colinfo.ColTypeInfoFromResCols(d.columns))
 	}
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }

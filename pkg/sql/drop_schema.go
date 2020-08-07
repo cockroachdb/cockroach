@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -162,7 +162,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 func (p *planner) createDropSchemaJob(
 	schemas []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
-	typesToDrop []*sqlbase.MutableTypeDescriptor,
+	typesToDrop []*typedesc.MutableTypeDescriptor,
 	jobDesc string,
 ) error {
 	typeIDs := make([]descpb.ID, 0, len(typesToDrop))

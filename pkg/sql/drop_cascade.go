@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +33,7 @@ type dropCascadeState struct {
 
 	td                      []toDelete
 	allTableObjectsToDelete []*sqlbase.MutableTableDescriptor
-	typesToDelete           []*sqlbase.MutableTypeDescriptor
+	typesToDelete           []*typedesc.MutableTypeDescriptor
 
 	droppedNames []string
 }
@@ -135,7 +136,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			if !found {
 				continue
 			}
-			typDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+			typDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 			if !ok {
 				return errors.AssertionFailedf(
 					"descriptor for %q is not MutableTypeDescriptor",

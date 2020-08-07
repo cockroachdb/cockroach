@@ -15,11 +15,13 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -53,7 +55,7 @@ type insertFastPathNode struct {
 	// columns is set if this INSERT is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run insertFastPathRun
 }
@@ -106,7 +108,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idxDesc = idx.desc
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, c.tabDesc, c.idxDesc.ID)
+	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc, c.idxDesc.ID)
 	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc, c.idxDesc)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {

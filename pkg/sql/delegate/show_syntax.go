@@ -15,10 +15,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // delegateShowSyntax implements SHOW SYNTAX. This statement is usually handled
@@ -38,7 +38,7 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 	var query bytes.Buffer
 	fmt.Fprintf(
 		&query, "SELECT @1 AS %s, @2 AS %s FROM (VALUES ",
-		sqlbase.ShowSyntaxColumns[0].Name, sqlbase.ShowSyntaxColumns[1].Name,
+		colinfo.ShowSyntaxColumns[0].Name, colinfo.ShowSyntaxColumns[1].Name,
 	)
 
 	comma := ""
