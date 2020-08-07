@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 )
@@ -165,14 +166,14 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.AcquiredLocks = nil
 	}
 
-	if lResult.MaybeWatchForMerge {
-		// A merge is (likely) about to be carried out, and this replica needs
-		// to block all traffic until the merge either commits or aborts. See
+	if !lResult.FreezeStart.IsEmpty() {
+		// A merge is (likely) about to be carried out, and this replica needs to
+		// block all non-read traffic until the merge either commits or aborts. See
 		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
+		if err := r.maybeWatchForMerge(ctx, lResult.FreezeStart); err != nil {
 			return roachpb.NewError(err)
 		}
-		lResult.MaybeWatchForMerge = false
+		lResult.FreezeStart = hlc.Timestamp{}
 	}
 
 	if !lResult.IsZero() {
