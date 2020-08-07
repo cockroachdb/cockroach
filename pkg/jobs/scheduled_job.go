@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -85,7 +85,7 @@ func LoadScheduledJob(
 	txn *kv.Txn,
 ) (*ScheduledJob, error) {
 	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
@@ -355,7 +355,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	rows, retCols, err := ex.QueryWithCols(ctx, "sched-create", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
@@ -393,7 +393,7 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	n, err := ex.ExecEx(ctx, "sched-update", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
 			generatePlaceholders(len(qargs)), j.ScheduleID()),

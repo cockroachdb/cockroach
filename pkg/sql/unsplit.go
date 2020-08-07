@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
@@ -108,7 +109,7 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		indexName = n.index.Name
 	}
 	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryEx(
-		params.ctx, "split points query", params.p.txn, sqlbase.InternalExecutorSessionDataOverride{},
+		params.ctx, "split points query", params.p.txn, sessiondata.InternalExecutorOverride{},
 		statement,
 		dbDesc.GetName(),
 		n.tableDesc.GetName(),

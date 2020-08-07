@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1207,7 +1208,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					)
 				}
 				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
-					sqlbase.InternalExecutorSessionDataOverride{}, stmt)
+					sessiondata.InternalExecutorOverride{}, stmt)
 				if err != nil {
 					return err
 				}
@@ -1287,7 +1288,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 					query = fmt.Sprintf(`%s WHERE %s`, query, idx.Predicate)
 				}
 
-				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sqlbase.InternalExecutorSessionDataOverride{}, query)
+				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
 				if err != nil {
 					return err
 				}
@@ -1367,7 +1368,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// query plan that uses the indexes being backfilled.
 			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.ID, desc.PrimaryIndex.ID)
 
-			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sqlbase.InternalExecutorSessionDataOverride{}, query)
+			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
 			if err != nil {
 				return err
 			}

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -48,7 +48,7 @@ WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
 	rows, err := r.ex.QueryEx(
 		ctx, "select-running/reverting-jobs", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
 SELECT id FROM system.jobs
 WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
 		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
@@ -95,7 +95,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Ses
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
+		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
 SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
 FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 		jobID, s.ID().UnsafeBytes(),
@@ -219,7 +219,7 @@ func (r *Registry) runJob(
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := r.ex.QueryEx(
-			ctx, "cancel/pause-requested", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
 UPDATE system.jobs
 SET status =
 		CASE

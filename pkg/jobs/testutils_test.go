@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -118,7 +118,7 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	rows, cols, err := h.cfg.InternalExecutor.QueryWithCols(
 		context.Background(), "sched-load", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf(
 			"SELECT * FROM %s WHERE schedule_id = %d",
 			h.env.ScheduledJobsTableName(), id),
@@ -148,7 +148,7 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 func addFakeJob(t *testing.T, h *testHelper, scheduleID int64, status Status, txn *kv.Txn) int64 {
 	payload := []byte("fake payload")
 	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf(`
 INSERT INTO %s (created_by_type, created_by_id, status, payload)
 VALUES ($1, $2, $3, $4)

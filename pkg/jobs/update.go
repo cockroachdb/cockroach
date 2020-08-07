@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -107,7 +107,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
 			selectStmt, *j.id)
 		if err != nil {
 			return err

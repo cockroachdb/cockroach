@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -441,7 +442,7 @@ type runner struct {
 
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
 	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{
+		sessiondata.InternalExecutorOverride{
 			User: security.RootUser,
 		},
 		stmt, qargs...)
@@ -853,7 +854,7 @@ func (m *Manager) migrateSystemNamespace(
 				systemschema.DeprecatedNamespaceTable.ID, systemschema.NamespaceTable.ID, batchSize+1)
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "read-deprecated-namespace-table", txn,
-				sqlbase.InternalExecutorSessionDataOverride{
+				sessiondata.InternalExecutorOverride{
 					User: security.RootUser,
 				},
 				q)
@@ -1179,7 +1180,7 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		row, err := r.sqlExecutor.QueryRowEx(
 			ctx, "disallowPublicUserOrRole", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{
+			sessiondata.InternalExecutorOverride{
 				User: security.RootUser,
 			},
 			selectPublicStmt, security.PublicRole,
@@ -1273,7 +1274,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	// If so, we don't want to do anything.
 	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err
@@ -1324,7 +1325,7 @@ CREATE INDEX IF NOT EXISTS jobs_created_by_type_created_by_id_idx
 ON system.jobs (created_by_type, created_by_id) 
 STORING (status)
 `
-	asNode := sqlbase.InternalExecutorSessionDataOverride{
+	asNode := sessiondata.InternalExecutorOverride{
 		User: security.NodeUser,
 	}
 
@@ -1349,7 +1350,7 @@ ALTER TABLE system.jobs
 ADD COLUMN IF NOT EXISTS claim_session_id BYTES CREATE FAMILY claim,
 ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 `
-	asNode := sqlbase.InternalExecutorSessionDataOverride{
+	asNode := sessiondata.InternalExecutorOverride{
 		User: security.NodeUser,
 	}
 	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -593,7 +594,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			ctx,
 			"lookup-schedule-info",
 			txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			sessiondata.InternalExecutorOverride{User: security.NodeUser},
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),

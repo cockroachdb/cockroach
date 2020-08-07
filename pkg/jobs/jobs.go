@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -711,7 +710,7 @@ func (j *Job) load(ctx context.Context) error {
 			stmt = newStmt
 		}
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "load-job-query", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
 			stmt, *j.ID())
 		if err != nil {
 			return err

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -215,7 +215,7 @@ func newLoopStats(
 		readyToRunStmt, numRunningJobsStmt)
 
 	datums, err := ex.QueryRowEx(ctx, "scheduler-stats", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		statsStmt)
 	if err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func (s *jobScheduler) executeSchedules(
 	rows, cols, err := s.InternalExecutor.QueryWithCols(
 		ctx, "find-scheduled-jobs",
 		txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		findSchedulesStmt)
 
 	if err != nil {
