@@ -177,6 +177,8 @@ type RequestBatcher struct {
 
 	requestChan  chan *request
 	sendDoneChan chan struct{}
+	Br           *roachpb.BatchResponse
+	Err          *roachpb.Error
 }
 
 // Response is exported for use with the channel-oriented SendWithChan method.
@@ -272,7 +274,10 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {
 			var pErr *roachpb.Error
-			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
+			br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg))
+			b.Br = br
+			b.Err = pErr
+			if pErr != nil {
 				return pErr.GoError()
 			}
 			return nil
