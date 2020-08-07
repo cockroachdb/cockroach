@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +29,7 @@ import (
 // column. See Validate for more details.
 type ComputedColumnValidator struct {
 	ctx       context.Context
-	desc      *sqlbase.MutableTableDescriptor
+	desc      catalog.TableDescriptor
 	semaCtx   *tree.SemaContext
 	tableName *tree.TableName
 }
@@ -37,10 +37,7 @@ type ComputedColumnValidator struct {
 // NewComputedColumnValidator returns an ComputedColumnValidator struct that can
 // be used to validate computed columns. See Validate for more details.
 func NewComputedColumnValidator(
-	ctx context.Context,
-	desc *sqlbase.MutableTableDescriptor,
-	semaCtx *tree.SemaContext,
-	tn *tree.TableName,
+	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, tn *tree.TableName,
 ) ComputedColumnValidator {
 	return ComputedColumnValidator{
 		ctx:       ctx,
@@ -87,12 +84,11 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	for i := range v.desc.OutboundFKs {
-		fk := &v.desc.OutboundFKs[i]
+	if err := v.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		for _, id := range fk.OriginColumnIDs {
 			if !depColIDs.Contains(id) {
 				// We don't depend on this column.
-				continue
+				return nil
 			}
 			for _, action := range []descpb.ForeignKeyReference_Action{
 				fk.OnDelete,
@@ -107,6 +103,9 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 				}
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Resolve the type of the computed column expression.
@@ -174,23 +173,9 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 		})
 	}
 
-	for i := range v.desc.Columns {
-		if err := checkComputed(&v.desc.Columns[i]); err != nil {
-			return err
-		}
-	}
-
-	for i := range v.desc.Mutations {
-		mut := &v.desc.Mutations[i]
-		mutCol := mut.GetColumn()
-		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
-			if err := checkComputed(mutCol); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return v.desc.ForeachNonDropColumn(func(col *descpb.ColumnDescriptor) error {
+		return checkComputed(col)
+	})
 }
 
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
@@ -223,7 +208,7 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func MakeComputedExprs(
 	ctx context.Context,
 	cols []descpb.ColumnDescriptor,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
@@ -262,10 +247,10 @@ func MakeComputedExprs(
 	// columns can reference other columns and thus need to be able to resolve
 	// column names (at this stage they only need to resolve the types so that
 	// the expressions can be typechecked - we have no need to evaluate them).
-	iv := &descContainer{tableDesc.Columns}
-	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
+	iv := &descContainer{tableDesc.GetPublicColumns()}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(iv.cols))
 
-	source := colinfo.NewSourceInfoForSingleTable(*tn, colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), tableDesc.Columns))
+	source := colinfo.NewSourceInfoForSingleTable(*tn, colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), iv.cols))
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col *descpb.ColumnDescriptor) {

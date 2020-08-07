@@ -13,8 +13,8 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -23,7 +23,7 @@ import (
 type IndexPredicateValidator struct {
 	ctx       context.Context
 	tableName tree.TableName
-	desc      *sqlbase.MutableTableDescriptor
+	desc      catalog.TableDescriptor
 	semaCtx   *tree.SemaContext
 }
 
@@ -32,7 +32,7 @@ type IndexPredicateValidator struct {
 func NewIndexPredicateValidator(
 	ctx context.Context,
 	tableName tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 ) IndexPredicateValidator {
 	return IndexPredicateValidator{
