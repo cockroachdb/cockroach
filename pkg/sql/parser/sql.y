@@ -630,7 +630,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES
+%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
@@ -809,6 +809,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
 %type <[]tree.StringOrPlaceholderOptList> list_of_string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
+%type <tree.Statement> refresh_stmt
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
 %type <tree.Statement> rollback_stmt
@@ -1222,6 +1223,7 @@ stmt:
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
 | release_stmt      // EXTEND WITH HELP: RELEASE
+| refresh_stmt      // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
 | close_cursor_stmt
@@ -2044,6 +2046,17 @@ alter_attribute_action:
 | ALTER ATTRIBUTE column_name TYPE type_name opt_collate opt_drop_behavior
 | ALTER ATTRIBUTE column_name SET DATA TYPE type_name opt_collate opt_drop_behavior
 
+// %Help: REFRESH - recalculate a materialized view
+// %Category: Misc
+// %Text:
+// REFRESH MATERIALIZED VIEW view_name
+refresh_stmt:
+  REFRESH MATERIALIZED VIEW view_name
+  {
+    $$.val = &tree.RefreshMaterializedView{Name: $4.unresolvedObjectName()}
+  }
+| REFRESH error // SHOW HELP: REFRESH
+
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
 // %Text:
@@ -2851,7 +2864,6 @@ create_unsupported:
 | CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
-| CREATE MATERIALIZED VIEW error { return unimplementedWithIssue(sqllex, 41649) }
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
@@ -6200,6 +6212,16 @@ create_view_stmt:
       Persistence: $2.persistence(),
       IfNotExists: true,
       Replace: false,
+    }
+  }
+| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt
+  {
+    name := $4.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateView{
+      Name: name,
+      ColumnNames: $5.nameList(),
+      AsSource: $7.slct(),
+      Materialized: true,
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
@@ -11165,6 +11187,7 @@ unreserved_keyword:
 | RECURRING
 | RECURSIVE
 | REF
+| REFRESH
 | REINDEX
 | RELEASE
 | RENAME

@@ -41,6 +41,11 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
+	// IsMaterializedView returns true if this table is actually a materialized
+	// view. Materialized views are the same as tables in all aspects, other than
+	// that they cannot be mutated.
+	IsMaterializedView() bool
+
 	// ColumnCount returns the number of columns in the table. This includes
 	// public columns, write-only columns, etc.
 	ColumnCount() int

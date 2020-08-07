@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,12 +35,13 @@ type createViewNode struct {
 	viewName *tree.TableName
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
-	viewQuery   string
-	ifNotExists bool
-	replace     bool
-	persistence tree.Persistence
-	dbDesc      *sqlbase.ImmutableDatabaseDescriptor
-	columns     sqlbase.ResultColumns
+	viewQuery    string
+	ifNotExists  bool
+	replace      bool
+	persistence  tree.Persistence
+	materialized bool
+	dbDesc       *sqlbase.ImmutableDatabaseDescriptor
+	columns      sqlbase.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -154,6 +156,26 @@ func (n *createViewNode) startExec(params runParams) error {
 		)
 		if err != nil {
 			return err
+		}
+
+		if n.materialized {
+			// Ensure all nodes are the correct version.
+			if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionMaterializedViews) {
+				return pgerror.New(pgcode.FeatureNotSupported,
+					"all nodes are not the correct version to use materialized views")
+			}
+			// If the view is materialized, set up some more state on the view descriptor.
+			// In particular,
+			// * mark the descriptor as a materialized view
+			// * mark the state as adding and remember the AsOf time to perform
+			//   the view query
+			// * use AllocateIDs to give the view descriptor a primary key
+			desc.IsMaterializedView = true
+			desc.State = descpb.TableDescriptor_ADD
+			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
+			if err := desc.AllocateIDs(); err != nil {
+				return err
+			}
 		}
 
 		// Collect all the tables/views this view depends on.
