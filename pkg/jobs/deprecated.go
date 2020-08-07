@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -56,7 +56,7 @@ func (r *Registry) lenientNow() time.Time {
 }
 
 func (r *Registry) deprecatedMaybeAdoptJob(
-	ctx context.Context, nlw sqlbase.OptionalNodeLiveness, randomizeJobOrder bool,
+	ctx context.Context, nlw optionalnodeliveness.Container, randomizeJobOrder bool,
 ) error {
 	const stmt = `
 SELECT id, payload, progress IS NULL, status
