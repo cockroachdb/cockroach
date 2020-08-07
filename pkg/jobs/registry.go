@@ -213,6 +213,17 @@ func MakeRegistry(
 	return r
 }
 
+func (r *Registry) startUsingSQLLivenessAdoption(ctx context.Context) bool {
+	if r.settings.Version.IsActive(
+		ctx,
+		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+	) {
+		r.sqlInstance.Start(ctx)
+		return true
+	}
+	return false
+}
+
 // SetSessionBoundInternalExecutorFactory sets the
 // SessionBoundInternalExecutorFactory that will be used by the job registry
 // executor. We expose this separately from the constructor to avoid a circular
@@ -382,8 +393,7 @@ func (r *Registry) NewJob(record Record) *Job {
 // lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
-	if !r.settings.Version.IsActive(
-		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+	if !r.startUsingSQLLivenessAdoption(ctx) {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
 		if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.deprecatedNewLease()); err != nil {
@@ -478,8 +488,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		resumerCtx = opentracing.ContextWithSpan(resumerCtx, span)
 	}
 
-	if r.settings.Version.IsActive(
-		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+	if r.startUsingSQLLivenessAdoption(ctx) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
@@ -552,8 +561,7 @@ const gcInterval = 1 * time.Hour
 func (r *Registry) Start(
 	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
-	if r.settings.Version.IsActive(
-		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+	if r.startUsingSQLLivenessAdoption(ctx) {
 		r.sqlInstance.Start(ctx)
 	}
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
@@ -638,8 +646,7 @@ WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 				return
 			case <-r.adoptionCh:
 				// Try to adopt the most recently created job.
-				if r.settings.Version.IsActive(
-					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+				if r.startUsingSQLLivenessAdoption(ctx) {
 					claimAndProcessJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
@@ -647,8 +654,7 @@ WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 					maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
 				}
 			case <-time.After(adoptInterval):
-				if r.settings.Version.IsActive(
-					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+				if r.startUsingSQLLivenessAdoption(ctx) {
 					claimAndProcessJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
@@ -673,8 +679,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNode
 	default:
 	}
 
-	if r.settings.Version.IsActive(
-		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+	if r.startUsingSQLLivenessAdoption(ctx) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		// If the cluster is finalized, kill any remaining legacy jobs. They will be
