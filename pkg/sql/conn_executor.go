@@ -1747,13 +1747,20 @@ func (ex *connExecutor) execCopyIn(
 	}
 
 	// If we're in an explicit txn, then the copying will be done within that
-	// txn. Otherwise, we tell the copyMachine to manage its own transactions.
+	// txn. Otherwise, we tell the copyMachine to manage its own transactions
+	// and give it a closure to reset the accumulated extraTxnState.
 	var txnOpt copyTxnOpt
 	if isOpen {
 		txnOpt = copyTxnOpt{
 			txn:           ex.state.mu.txn,
 			txnTimestamp:  ex.state.sqlTimestamp,
 			stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
+		}
+	} else {
+		txnOpt = copyTxnOpt{
+			resetExtraTxnState: func(ctx context.Context) error {
+				return ex.resetExtraTxnState(ctx, ex.server.dbCache, noEvent)
+			},
 		}
 	}
 
