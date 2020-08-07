@@ -33,8 +33,8 @@ type DescriptorTableRow struct {
 }
 
 // NewDescGetter creates a sqlbase.MapProtoGetter from a descriptor table.
-func NewDescGetter(rows []DescriptorTableRow) (sqlbase.MapDescGetter, error) {
-	pg := sqlbase.MapDescGetter{}
+func NewDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
+	pg := catalog.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {

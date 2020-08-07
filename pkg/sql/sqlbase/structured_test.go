@@ -974,7 +974,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	descs := MapDescGetter{}
 	descs[0] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{})
 	for i, test := range tests {
-		m := MapDescGetter{
+		m := catalog.MapDescGetter{
 			1: dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{ID: 1}),
 		}
 		for _, otherDesc := range test.otherDescs {
