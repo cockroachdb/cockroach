@@ -22,8 +22,6 @@ func init() {
 	mtCmd.AddCommand(mtStartSQLCmd)
 
 	mtCertsCmd.AddCommand(
-		mtCreateTenantServerCACertCmd,
-		mtCreateTenantServerCertCmd,
 		mtCreateTenantClientCACertCmd,
 		mtCreateTenantClientCertCmd,
 	)
