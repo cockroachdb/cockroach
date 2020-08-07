@@ -55,8 +55,11 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
-	// lockStr represents the locking mode to use when fetching KVs.
-	lockStr descpb.ScanLockingStrength
+	// lockStrength represents the locking mode to use when fetching KVs.
+	lockStrength descpb.ScanLockingStrength
+	// lockWaitPolicy represents the policy to be used for handling conflicting
+	// locks held by other active transactions.
+	lockWaitPolicy descpb.ScanLockingWaitPolicy
 
 	fetchEnd bool
 	batchIdx int
@@ -123,7 +126,7 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 // getKeyLockingStrength returns the configured per-key locking strength to use
 // for key-value scans.
 func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
-	switch f.lockStr {
+	switch f.lockStrength {
 	case descpb.ScanLockingStrength_FOR_NONE:
 		return lock.None
 
@@ -144,7 +147,26 @@ func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
 		return lock.Exclusive
 
 	default:
-		panic(errors.AssertionFailedf("unknown locking strength %s", f.lockStr))
+		panic(errors.AssertionFailedf("unknown locking strength %s", f.lockStrength))
+	}
+}
+
+// getWaitPolicy returns the configured lock wait policy to use for key-value
+// scans.
+func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
+	switch f.lockWaitPolicy {
+	case descpb.ScanLockingWaitPolicy_BLOCK:
+		return lock.WaitPolicy_Block
+
+	case descpb.ScanLockingWaitPolicy_SKIP:
+		// Should not get here. Query should be rejected during planning.
+		panic(errors.AssertionFailedf("unsupported wait policy %s", f.lockWaitPolicy))
+
+	case descpb.ScanLockingWaitPolicy_ERROR:
+		return lock.WaitPolicy_Error
+
+	default:
+		panic(errors.AssertionFailedf("unknown wait policy %s", f.lockWaitPolicy))
 	}
 }
 
@@ -161,7 +183,8 @@ func makeKVBatchFetcher(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -171,7 +194,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy,
 	)
 }
 
@@ -183,7 +206,8 @@ func makeKVBatchFetcherWithSendFunc(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -234,13 +258,15 @@ func makeKVBatchFetcherWithSendFunc(
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
-		lockStr:         lockStr,
+		lockStrength:    lockStrength,
+		lockWaitPolicy:  lockWaitPolicy,
 	}, nil
 }
 
 // fetch retrieves spans from the kv
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
+	ba.Header.WaitPolicy = f.getWaitPolicy()
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	if ba.Header.MaxSpanRequestKeys > 0 {
 		// If this kvfetcher limits the number of rows returned, also use

@@ -79,6 +79,7 @@ func initFetcher(
 		fetcherCodec,
 		reverseScan,
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		alloc,
 		fetcherArgs...,

@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -114,6 +115,7 @@ func NewUniquenessConstraintViolationError(
 		codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		tableArgs,
@@ -148,4 +150,30 @@ func NewUniquenessConstraintViolationError(
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
 		index.Name)
+}
+
+// KeyToDescTranslator is capable of translating a key found in an error to a
+// table descriptor for error reporting.
+type KeyToDescTranslator interface {
+	// KeyToDesc attempts to translate the key found in an error to a table
+	// descriptor. An implementation can return (nil, false) if the translation
+	// failed because the key is not part of a table it was scanning, but is
+	// instead part of an interleaved relative (parent/sibling/child) table.
+	KeyToDesc(roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool)
+}
+
+// ConvertFetchError attempts to a map key-value error generated during a
+// key-value fetch to a user friendly SQL error.
+func ConvertFetchError(descForKey KeyToDescTranslator, err error) error {
+	var wiErr *roachpb.WriteIntentError
+	if errors.As(err, &wiErr) {
+		var relation string
+		if desc, ok := descForKey.KeyToDesc(wiErr.Intents[0].Key); ok {
+			relation = fmt.Sprintf("relation %q", desc.Name)
+		} else {
+			relation = "interleaved relation"
+		}
+		return pgerror.New(pgcode.LockNotAvailable, "could not obtain lock on row in "+relation)
+	}
+	return err
 }
