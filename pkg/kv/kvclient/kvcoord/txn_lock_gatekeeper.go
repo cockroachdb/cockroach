@@ -14,8 +14,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,5 +85,17 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// lock again.
 	gs.mu.Unlock()
 	defer gs.mu.Lock()
+
+	if len(ba.Requests) == 1 && ba.Methods()[0] == roachpb.HeartbeatTxn {
+		rb := requestbatcher.New(requestbatcher.Config{
+			Name:            "test_r_batcher",
+			MaxMsgsPerBatch: 1,
+			Stopper:         stop.NewStopper(),
+			Sender:          gs.wrapped,
+		})
+		rb.Send(ctx, 1, ba.Requests[0].GetHeartbeatTxn())
+		return rb.Br, rb.Err
+	}
+
 	return gs.wrapped.Send(ctx, ba)
 }
