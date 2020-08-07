@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Accessor provides access to sql object descriptors.
@@ -27,11 +26,11 @@ type Accessor interface {
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
-	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (sqlbase.DatabaseDescriptor, error)
+	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (DatabaseDescriptor, error)
 
 	// GetSchema returns true and a ResolvedSchema object if the target schema
 	// exists under the target database.
-	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string) (bool, sqlbase.ResolvedSchema, error)
+	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string) (bool, ResolvedSchema, error)
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.
@@ -43,7 +42,7 @@ type Accessor interface {
 	// tables and types). Furthermore, the fact that this buffers everything
 	// in ram in unfortunate.
 	GetObjectNames(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-		db sqlbase.DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
+		db DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
 	) (tree.TableNames, error)
 
 	// GetObjectDesc looks up an object by name and returns both its
