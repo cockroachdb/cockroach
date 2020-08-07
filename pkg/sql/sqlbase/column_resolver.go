@@ -203,14 +203,3 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 	}
 	return colIdx, nil
 }
-
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*ImmutableTableDescriptor) NameResolutionResult() {}
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-// TODO (rohany): I don't want to keep this here, but it seems to be used
-//  by backup only for the fake resolution that occurs in backup. Is it possible
-//  to have this implementation only visible there? Maybe by creating a type
-//  alias for database descriptor in the backupccl package, and then defining
-//  SchemaMeta on it?
-func (*ImmutableDatabaseDescriptor) SchemaMeta() {}

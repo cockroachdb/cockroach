@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -125,7 +126,7 @@ CREATE TABLE crdb_internal.node_build_info (
   field   STRING NOT NULL,
   value   STRING NOT NULL
 )`,
-	populate: func(_ context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
 		nodeID, _ := execCfg.NodeID.OptionalNodeID() // zero if not available
 
@@ -159,7 +160,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
   field     STRING NOT NULL,
   value     STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "access the node runtime information"); err != nil {
 			return err
 		}
@@ -216,9 +217,9 @@ CREATE TABLE crdb_internal.databases (
 	id INT NOT NULL,
 	name STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
-			func(db *sqlbase.ImmutableDatabaseDescriptor) error {
+			func(db *dbdesc.ImmutableDatabaseDescriptor) error {
 				return addRow(
 					tree.NewDInt(tree.DInt(db.GetID())), // id
 					tree.NewDString(db.GetName()),       // name
@@ -247,7 +248,7 @@ CREATE TABLE crdb_internal.tables (
   audit_mode               STRING NOT NULL,
   schema_name              STRING NOT NULL
 )`,
-	generator: func(ctx context.Context, p *planner, dbDesc *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
 			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
@@ -257,7 +258,7 @@ CREATE TABLE crdb_internal.tables (
 			dbNames := make(map[descpb.ID]string)
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
-				if dbDesc, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor); ok {
+				if dbDesc, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor); ok {
 					dbNames[dbDesc.GetID()] = dbDesc.GetName()
 				}
 			}
@@ -350,7 +351,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
   table_name                 STRING      NOT NULL,
   estimated_row_count        INT
 )`,
-	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Collect the latests statistics for all tables.
 		query := `
            SELECT s."tableID", max(s."rowCount")
@@ -378,7 +379,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 		// Walk over all available tables and show row count for each of them
 		// using collected statistics.
 		return forEachTableDescAll(ctx, p, db, virtualMany,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.DInt(table.GetID())
 				rowCount := tree.DNull
 				// For Virtual Tables report NULL row count.
@@ -412,7 +413,7 @@ CREATE TABLE crdb_internal.schema_changes (
   state         STRING NOT NULL,
   direction     STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
@@ -475,7 +476,7 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 )`,
 	populate: func(
-		ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error,
+		ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error,
 	) (err error) {
 		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
 		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
@@ -528,7 +529,7 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     		INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
-	generator: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		currentUser := p.SessionData().User
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -743,7 +744,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   rows_read_var       FLOAT NOT NULL,
   implicit_txn        BOOL NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
 			return err
 		}
@@ -853,7 +854,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
   committed_count    INT NOT NULL,
   implicit_count     INT NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
 			return err
 		}
@@ -917,7 +918,7 @@ CREATE TABLE crdb_internal.session_trace (
   message     STRING NOT NULL,     -- The logged message.
   age         INTERVAL NOT NULL    -- The age of this message relative to the beginning of the trace.
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		rows, err := p.ExtendedEvalContext().Tracing.getSessionTrace()
 		if err != nil {
 			return err
@@ -945,7 +946,7 @@ CREATE TABLE crdb_internal.cluster_settings (
   public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
   description   STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_settings"); err != nil {
 			return err
 		}
@@ -977,7 +978,7 @@ CREATE TABLE crdb_internal.session_variables (
   value    STRING NOT NULL,
   hidden   BOOL   NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
 			value := gen.Get(&p.extendedEvalCtx)
@@ -1006,7 +1007,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalTxnsTable = virtualSchemaTable{
 	comment: "running user transactions visible by the current user (RAM; local node only)",
 	schema:  fmt.Sprintf(txnsSchemaPattern, "node_transactions"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_transactions"); err != nil {
 			return err
 		}
@@ -1026,7 +1027,7 @@ var crdbInternalLocalTxnsTable = virtualSchemaTable{
 var crdbInternalClusterTxnsTable = virtualSchemaTable{
 	comment: "running user transactions visible by the current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(txnsSchemaPattern, "cluster_transactions"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_transactions"); err != nil {
 			return err
 		}
@@ -1139,7 +1140,7 @@ func getSessionID(session serverpb.Session) tree.Datum {
 var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	comment: "running queries visible by current user (RAM; local node only)",
 	schema:  fmt.Sprintf(queriesSchemaPattern, "node_queries"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
@@ -1158,7 +1159,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	comment: "running queries visible by current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
@@ -1270,7 +1271,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	comment: "running sessions visible by current user (RAM; local node only)",
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
@@ -1289,7 +1290,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	comment: "running sessions visible to current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
@@ -1397,7 +1398,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
   name               STRING NOT NULL,  -- name of the metric
   value							 FLOAT NOT NULL    -- value of the metric
 )`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_metrics"); err != nil {
 			return err
 		}
@@ -1439,7 +1440,7 @@ CREATE TABLE crdb_internal.builtin_functions (
   category  STRING NOT NULL,
   details   STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, _ *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, _ *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames {
 			props, overloads := builtins.GetBuiltinProperties(name)
 			for _, f := range overloads {
@@ -1471,8 +1472,8 @@ CREATE TABLE crdb_internal.create_type_statements (
 	INDEX (descriptor_id)
 )
 `,
-	populate: func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db *sqlbase.ImmutableDatabaseDescriptor, sc string, typeDesc *sqlbase.ImmutableTypeDescriptor) error {
+	populate: func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typeDesc *sqlbase.ImmutableTypeDescriptor) error {
 			switch typeDesc.Kind {
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels []string
@@ -1543,7 +1544,7 @@ CREATE TABLE crdb_internal.create_statements (
   INDEX(descriptor_id)
 )
 `, virtualOnce, false, /* includesIndexEntries */
-	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
+	func(ctx context.Context, p *planner, h oidHasher, db *dbdesc.ImmutableDatabaseDescriptor, scName string,
 		table catalog.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""
 		parentNameStr := tree.DNull
@@ -1755,11 +1756,11 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	generator: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 8)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+				func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					columns := table.GetPublicColumns()
@@ -1813,13 +1814,13 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted      BOOL NOT NULL
 )
 `,
-	generator: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
 		row := make(tree.Datums, 7)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+				func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
@@ -1868,7 +1869,7 @@ CREATE TABLE crdb_internal.index_columns (
   column_direction STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		key := tree.NewDString("key")
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
@@ -1879,7 +1880,7 @@ CREATE TABLE crdb_internal.index_columns (
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+			func(parent *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
@@ -1980,14 +1981,14 @@ CREATE TABLE crdb_internal.backward_dependencies (
   dependson_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
 			/* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
+			func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
@@ -2087,7 +2088,7 @@ CREATE TABLE crdb_internal.feature_usage (
   usage_count           INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for feature, count := range telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly) {
 			if count == 0 {
 				// Skip over empty counters to avoid polluting the output.
@@ -2122,13 +2123,13 @@ CREATE TABLE crdb_internal.forward_dependencies (
   dependedonby_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
@@ -2258,7 +2259,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	split_enforced_until TIMESTAMP
 )
 `,
-	generator: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
@@ -2281,7 +2282,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				for _, idx := range desc.Indexes {
 					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
-			case *sqlbase.ImmutableDatabaseDescriptor:
+			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbNames[id] = desc.GetName()
 			}
 		}
@@ -2480,7 +2481,7 @@ CREATE TABLE crdb_internal.zones (
 	full_config_sql STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			// Don't try to populate crdb_internal.zones if running in a multitenant
 			// configuration.
@@ -2703,7 +2704,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
   leases                INT NOT NULL
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_nodes"); err != nil {
 			return err
 		}
@@ -2824,7 +2825,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
   updated_at       TIMESTAMP
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// ATTENTION: The contents of this table should only access gossip data
 		// which is highly available. DO NOT CALL functions which require the
 		// cluster to be healthy, such as StatusServer.Nodes().
@@ -2904,7 +2905,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
   value           FLOAT NOT NULL   -- value of the alert (depends on subsystem, can be NaN)
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_alerts"); err != nil {
 			return err
 		}
@@ -2973,7 +2974,7 @@ CREATE TABLE crdb_internal.gossip_network (
   target_id       INT NOT NULL     -- target node of a gossip connection
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_network"); err != nil {
 			return err
 		}
@@ -3170,14 +3171,14 @@ CREATE TABLE crdb_internal.partitions (
 	subzone_id INT -- references a subzone id in the crdb_internal.zones table
 )
 	`,
-	generator: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		dbName := ""
 		if dbContext != nil {
 			dbName = dbContext.GetName()
 		}
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+				func(db *dbdesc.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					return table.ForeachIndex(catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index *descpb.IndexDescriptor, _ bool) error {
@@ -3221,7 +3222,7 @@ CREATE TABLE crdb_internal.kv_node_status (
   activity       JSON NOT NULL
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
 			return err
 		}
@@ -3335,7 +3336,7 @@ CREATE TABLE crdb_internal.kv_store_status (
   metrics            JSON NOT NULL
 )
 	`,
-	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
 			return err
 		}
@@ -3447,7 +3448,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 	COMMENT   STRING
 )`,
 	populate: func(
-		ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error,
+		ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
 		tableCommentKey := tree.NewDInt(keys.TableCommentType)
 		vt := p.getVirtualTabler()

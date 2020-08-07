@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -169,7 +170,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.MutableDatabaseDescriptor:
+		case *dbdesc.MutableDatabaseDescriptor:
 			if p.Descriptors().DatabaseLeasingUnsupported() {
 				if err := d.Validate(); err != nil {
 					return err
