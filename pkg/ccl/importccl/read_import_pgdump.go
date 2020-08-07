@@ -522,12 +522,13 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tables   map[string]*row.DatumRowConverter
-	descs    map[string]*execinfrapb.ReadImportDataSpec_ImportTable
-	kvCh     chan row.KVBatch
-	opts     roachpb.PgDumpOptions
-	walltime int64
-	colMap   map[*row.DatumRowConverter](map[string]int)
+	tableDescs map[string]sqlbase.TableDescriptor
+	tables     map[string]*row.DatumRowConverter
+	descs      map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	kvCh       chan row.KVBatch
+	opts       roachpb.PgDumpOptions
+	walltime   int64
+	colMap     map[*row.DatumRowConverter](map[string]int)
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -541,6 +542,7 @@ func newPgDumpReader(
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
+	tableDescs := make(map[string]sqlbase.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
@@ -560,15 +562,20 @@ func newPgDumpReader(
 			}
 			converters[name] = conv
 			colMap[conv] = colSubMap
+			tableDescs[name] = tableDesc
+		} else if table.Desc.IsSequence() {
+			seqDesc := sqlbase.NewImmutableTableDescriptor(*table.Desc)
+			tableDescs[name] = seqDesc
 		}
 	}
 	return &pgDumpReader{
-		kvCh:     kvCh,
-		tables:   converters,
-		descs:    descs,
-		opts:     opts,
-		walltime: walltime,
-		colMap:   colMap,
+		kvCh:       kvCh,
+		tableDescs: tableDescs,
+		tables:     converters,
+		descs:      descs,
+		opts:       opts,
+		walltime:   walltime,
+		colMap:     colMap,
 	}, nil
 }
 
@@ -811,11 +818,11 @@ func (m *pgDumpReader) readFile(
 				if err != nil {
 					break
 				}
-				seq := m.descs[name.Parts[0]]
+				seq := m.tableDescs[name.Parts[0]]
 				if seq == nil {
 					break
 				}
-				key, val, err := sql.MakeSequenceKeyVal(keys.TODOSQLCodec, seq.Desc, val, isCalled)
+				key, val, err := sql.MakeSequenceKeyVal(keys.TODOSQLCodec, seq, val, isCalled)
 				if err != nil {
 					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
 				}

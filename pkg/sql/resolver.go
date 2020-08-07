@@ -115,7 +115,7 @@ func (p *planner) ResolveUncachedTableDescriptor(
 
 func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
-) (res *ImmutableDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
+) (res catalog.DatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
 	var prefix *catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
@@ -133,13 +133,13 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	var resolvedSchema sqlbase.ResolvedSchema
+	var resolvedSchema catalog.ResolvedSchema
 	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return false, nil, err
 	}
 	return found, &catalog.ResolvedObjectPrefix{
-		Database: dbDesc.(*sqlbase.ImmutableDatabaseDescriptor),
+		Database: dbDesc,
 		Schema:   resolvedSchema,
 	}, nil
 }
@@ -513,7 +513,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *descpb.TableDescriptor
+	newTableDesc *sqlbase.MutableTableDescriptor
 }
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
@@ -527,9 +527,9 @@ func (r *fkSelfResolver) LookupObject(
 		tbName == r.newTableName.Table() {
 		table := r.newTableDesc
 		if lookupFlags.RequireMutable {
-			return true, sqlbase.NewMutableExistingTableDescriptor(*table), nil
+			return true, table, nil
 		}
-		return true, sqlbase.NewImmutableTableDescriptor(*table), nil
+		return true, &table.ImmutableTableDescriptor, nil
 	}
 	lookupFlags.IncludeOffline = false
 	return r.SchemaResolver.LookupObject(ctx, lookupFlags, dbName, scName, tbName)
