@@ -4518,40 +4518,62 @@ func TestImportPgDumpGeo(t *testing.T) {
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "pgdump")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
-	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	// Import geo.sql.
-	sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
-	sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo.sql'")
+	t.Run("geo_shp2pgsql.sql", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(ctx)
+		conn := tc.Conns[0]
+		sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	// Execute geo.sql.
-	sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
-	geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.Exec(t, string(geoSQL))
+		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql'")
 
-	// Verify both created tables are identical.
-	importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
-	// Families are slightly different due to rowid showing up in exec but
-	// not import (possibly due to the ALTER TABLE statement that makes
-	// gid a primary key), so add that into import to match exec.
-	importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
-	sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
+		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
+		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.Exec(t, string(geoSQL))
 
-	importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
-	importSelect := sqlDB.QueryStr(t, fmt.Sprintf(
-		"SELECT (%s) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks",
-		importCols,
-	))
-	sqlDB.CheckQueryResults(t, fmt.Sprintf(
-		"SELECT (%s) FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks",
-		importCols,
-	), importSelect)
+		// Verify both created tables are identical.
+		importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
+		// Families are slightly different due to rowid showing up in exec but
+		// not import (possibly due to the ALTER TABLE statement that makes
+		// gid a primary key), so add that into import to match exec.
+		importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
+		sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
+
+		importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
+		importSelect := sqlDB.QueryStr(t, fmt.Sprintf(
+			"SELECT (%s) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks",
+			importCols,
+		))
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(
+			"SELECT (%s) FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks",
+			importCols,
+		), importSelect)
+	})
+
+	t.Run("geo_ogr2ogr.sql", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(ctx)
+		conn := tc.Conns[0]
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+
+		sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
+		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql'")
+
+		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
+		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.Exec(t, string(geoSQL))
+
+		// Verify both created tables are identical.
+		importCreate := sqlDB.QueryStr(t, `SELECT create_statement FROM [SHOW CREATE importdb."HydroNode"]`)
+		sqlDB.CheckQueryResults(t, `SELECT create_statement FROM [SHOW CREATE execdb."HydroNode"]`, importCreate)
+	})
 }
 
 func TestImportCockroachDump(t *testing.T) {
