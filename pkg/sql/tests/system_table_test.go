@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemmeta"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -52,7 +52,7 @@ func TestInitialKeys(t *testing.T) {
 			nonDescKeys = 2
 		}
 
-		ms := systemmeta.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 		kv, _ /* splits */ := ms.GetInitialValues()
 		expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -124,7 +124,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 				codec = keys.MakeSQLCodec(roachpb.MakeTenantID(id))
 			}
 
-			ms := systemmeta.MakeMetadataSchema(
+			ms := bootstrap.MakeMetadataSchema(
 				codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 			)
 			kvs, splits := ms.GetInitialValues()

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -766,7 +767,7 @@ func (s *scope) FindSourceProvidingColumn(
 	if reportBackfillError {
 		return nil, nil, -1, makeBackfillError(tmpName)
 	}
-	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&tmpName))
+	return nil, nil, -1, colinfo.NewUndefinedColumnError(tree.ErrString(&tmpName))
 }
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
@@ -854,7 +855,7 @@ func (s *scope) Resolve(
 		}
 	}
 
-	return nil, sqlbase.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
+	return nil, colinfo.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
 func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {

@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // ordinalityNode represents a node that adds an "ordinality" column
@@ -34,7 +34,7 @@ import (
 // situations where the corresponding performance cost is affordable.
 type ordinalityNode struct {
 	source      planNode
-	columns     sqlbase.ResultColumns
+	columns     colinfo.ResultColumns
 	reqOrdering ReqOrdering
 }
 

@@ -15,11 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -110,7 +110,7 @@ func (tu *optTableUpserter) init(
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
 		tu.rowsUpserted = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
+			colinfo.ColTypeInfoFromColDescs(tu.returnCols),
 		)
 
 		// Create the map from colIds to the expected columns.

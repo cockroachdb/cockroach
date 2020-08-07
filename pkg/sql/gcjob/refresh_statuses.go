@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -126,7 +127,7 @@ func updateStatusForGCElements(
 
 		return nil
 	}); err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
 			markTableGCed(ctx, tableID, progress)
 			return false, true, maxDeadline

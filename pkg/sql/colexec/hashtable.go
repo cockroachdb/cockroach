@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -179,7 +179,7 @@ type hashTable struct {
 	allowNullEquality bool
 
 	overloadHelper overloadHelper
-	datumAlloc     sqlbase.DatumAlloc
+	datumAlloc     rowenc.DatumAlloc
 	cancelChecker  CancelChecker
 
 	buildMode hashTableBuildMode

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -68,7 +69,7 @@ func valueEncodePartitionTuple(
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
-			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionDefaultVal))
+			value = encoding.EncodeNonsortingUvarint(value, uint64(rowenc.PartitionDefaultVal))
 			continue
 		case tree.PartitionMinVal:
 			if typ != tree.PartitionByRange {
@@ -76,7 +77,7 @@ func valueEncodePartitionTuple(
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
-			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMinVal))
+			value = encoding.EncodeNonsortingUvarint(value, uint64(rowenc.PartitionMinVal))
 			continue
 		case tree.PartitionMaxVal:
 			if typ != tree.PartitionByRange {
@@ -84,7 +85,7 @@ func valueEncodePartitionTuple(
 			}
 			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
-			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
+			value = encoding.EncodeNonsortingUvarint(value, uint64(rowenc.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
 			return nil, unimplemented.NewWithIssuef(
@@ -112,7 +113,7 @@ func valueEncodePartitionTuple(
 		if err := sqlbase.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
 		}
-		value, err = sqlbase.EncodeTableValue(
+		value, err = rowenc.EncodeTableValue(
 			value, descpb.ColumnID(encoding.NoColumnID), datum, scratch,
 		)
 		if err != nil {
@@ -270,7 +271,7 @@ func selectPartitionExprs(
 		exprsByPartName[string(partName)] = nil
 	}
 
-	a := &sqlbase.DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	var prefixDatums []tree.Datum
 	if err := tableDesc.ForeachIndex(catalog.IndexOpts{
 		AddMutations: true,
@@ -327,7 +328,7 @@ func selectPartitionExprs(
 // register itself in the map with a placeholder entry (so we can still verify
 // that the requested partitions are all valid).
 func selectPartitionExprsByName(
-	a *sqlbase.DatumAlloc,
+	a *rowenc.DatumAlloc,
 	evalCtx *tree.EvalContext,
 	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
@@ -386,7 +387,7 @@ func selectPartitionExprsByName(
 
 		for _, l := range partDesc.List {
 			for _, valueEncBuf := range l.Values {
-				t, _, err := sqlbase.DecodePartitionTuple(
+				t, _, err := rowenc.DecodePartitionTuple(
 					a, evalCtx.Codec, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err

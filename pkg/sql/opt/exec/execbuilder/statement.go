@@ -14,12 +14,12 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -50,7 +50,7 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	schema := md.Schema(cv.Schema)
-	cols := make(sqlbase.ResultColumns, len(cv.Columns))
+	cols := make(colinfo.ResultColumns, len(cv.Columns))
 	for i := range cols {
 		cols[i].Name = cv.Columns[i].Alias
 		cols[i].Typ = md.ColumnMeta(cv.Columns[i].ID).Type

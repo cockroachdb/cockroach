@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -246,7 +247,7 @@ func (d *delimitedConsumer) FillDatums(
 			// function expects, and the difference between ParseStringAs and
 			// ParseDatumStringAs is whether or not it attempts to parse bytes.
 			var err error
-			datum, err = sqlbase.ParseDatumStringAsWithRawBytes(conv.VisibleColTypes[datumIdx], field, conv.EvalCtx)
+			datum, err = rowenc.ParseDatumStringAsWithRawBytes(conv.VisibleColTypes[datumIdx], field, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[datumIdx]
 				return newImportRowError(

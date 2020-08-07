@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+// Package typedesc contains the concrete implementations of
+// catalog.TypeDescriptor.
+package typedesc
 
 import (
 	"bytes"
@@ -123,26 +125,6 @@ func makeImmutableTypeDescriptor(desc descpb.TypeDescriptor) ImmutableTypeDescri
 	}
 
 	return immutDesc
-}
-
-// getTypeDescFromID retrieves the type descriptor for the type ID passed
-// in using an existing proto getter. It returns an error if the descriptor
-// doesn't exist or if it exists and is not a type descriptor.
-//
-// TODO(ajwerner): Remove this when we have a higher-level interface for
-// retrieving descriptors by ID during validation.
-func getTypeDescFromID(
-	ctx context.Context, dg catalog.DescGetter, id descpb.ID,
-) (catalog.TypeDescriptor, error) {
-	desc, err := dg.GetDesc(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	typ, ok := desc.(catalog.TypeDescriptor)
-	if !ok {
-		return nil, ErrDescriptorNotFound
-	}
-	return typ, nil
 }
 
 // TypeIDToOID converts a type descriptor ID into a type OID.

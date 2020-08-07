@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -104,8 +105,8 @@ type ExprHelper struct {
 	evalCtx *tree.EvalContext
 
 	Types      []*types.T
-	Row        sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
+	Row        rowenc.EncDatumRow
+	datumAlloc rowenc.DatumAlloc
 }
 
 func (eh *ExprHelper) String() string {
@@ -182,7 +183,7 @@ func (eh *ExprHelper) Init(
 
 // EvalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *ExprHelper) EvalFilter(row sqlbase.EncDatumRow) (bool, error) {
+func (eh *ExprHelper) EvalFilter(row rowenc.EncDatumRow) (bool, error) {
 	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
 	pass, err := sqlbase.RunFilter(eh.Expr, eh.evalCtx)
@@ -196,7 +197,7 @@ func (eh *ExprHelper) EvalFilter(row sqlbase.EncDatumRow) (bool, error) {
 //  '@2 + @5' would return '7'
 //  '@1' would return '1'
 //  '@2 + 10' would return '12'
-func (eh *ExprHelper) Eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
+func (eh *ExprHelper) Eval(row rowenc.EncDatumRow) (tree.Datum, error) {
 	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)

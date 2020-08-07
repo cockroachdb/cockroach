@@ -11,8 +11,8 @@
 package sqlsmith
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -158,9 +158,9 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	if s.vectorizable {
 		nullChance = 0
 	}
-	datum = sqlbase.RandDatumWithNullChance(s.rnd, typ, nullChance)
+	datum = rowenc.RandDatumWithNullChance(s.rnd, typ, nullChance)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
-		datum = sqlbase.RandDatumSimple(s.rnd, typ)
+		datum = rowenc.RandDatumSimple(s.rnd, typ)
 	}
 	s.lock.Unlock()
 

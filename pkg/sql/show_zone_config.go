@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -29,7 +29,7 @@ import (
 )
 
 // These must match crdb_internal.zones.
-var showZoneConfigColumns = sqlbase.ResultColumns{
+var showZoneConfigColumns = colinfo.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
 	{Name: "subzone_id", Typ: types.Int, Hidden: true},
 	{Name: "target", Typ: types.String},

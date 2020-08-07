@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -662,9 +663,7 @@ func loadBackupSQLDescs(
 	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupManifests(
-		ctx, backupManifests, p.ExecCfg().Codec, true, /* skipFKsWithNoMatchingTable */
-	); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true); err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
 
@@ -806,7 +805,7 @@ func createImportingDescriptors(
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	var schemas []*sqlbase.MutableSchemaDescriptor
-	var types []*sqlbase.MutableTypeDescriptor
+	var types []*typedesc.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
@@ -829,7 +828,7 @@ func createImportingDescriptors(
 		case catalog.SchemaDescriptor:
 			schemas = append(schemas, sqlbase.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
-			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
+			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -862,7 +861,7 @@ func createImportingDescriptors(
 	// For each type, we might be writing the type in the backup, or we could be
 	// remapping to an existing type descriptor. Split up the descriptors into
 	// these two groups.
-	var typesToWrite []*sqlbase.MutableTypeDescriptor
+	var typesToWrite []*typedesc.MutableTypeDescriptor
 	existingTypeIDs := make(map[descpb.ID]struct{})
 	for i := range types {
 		typ := types[i]
@@ -948,7 +947,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc := desc.(*sqlbase.MutableTypeDescriptor)
+					typDesc := desc.(*typedesc.MutableTypeDescriptor)
 					typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := catalogkv.WriteDescToBatch(
 						ctx,

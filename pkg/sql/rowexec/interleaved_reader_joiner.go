@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -44,7 +46,7 @@ type tableInfo struct {
 	tableID  descpb.ID
 	indexID  descpb.IndexID
 	post     execinfra.ProcOutputHelper
-	ordering sqlbase.ColumnOrdering
+	ordering colinfo.ColumnOrdering
 }
 
 // interleavedReaderJoiner is at the start of a computation flow: it performs KV
@@ -66,19 +68,19 @@ type interleavedReaderJoiner struct {
 	limitHint int64
 
 	fetcher row.Fetcher
-	alloc   sqlbase.DatumAlloc
+	alloc   rowenc.DatumAlloc
 
 	// TODO(richardwu): If we need to buffer more than 1 ancestor row for
 	// prefix joins, subset joins, and/or outer joins, we need to buffer an
 	// arbitrary number of ancestor and child rows.
 	// We can use streamMerger here for simplicity.
-	ancestorRow sqlbase.EncDatumRow
+	ancestorRow rowenc.EncDatumRow
 	// These are required for OUTER joins where the ancestor need to be
 	// emitted regardless.
 	ancestorJoined     bool
 	ancestorJoinSide   joinSide
 	descendantJoinSide joinSide
-	unmatchedChild     sqlbase.EncDatumRow
+	unmatchedChild     rowenc.EncDatumRow
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
 	ancestorTablePos int
@@ -96,7 +98,7 @@ func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (irj *interleavedReaderJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// Next is implemented as a state machine. The states are represented by the
 	// irjState enum at the top of this file.
 	// Roughly, the state machine is either in an initialization phase, a steady
@@ -104,7 +106,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.Pr
 	// unmatched child phase that outputs a child row that doesn't match the last
 	// seen ancestor if the join type calls for it.
 	for irj.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch irj.runningState {
 		case irjReading:
@@ -151,7 +153,7 @@ func (irj *interleavedReaderJoiner) findTable(
 // ancestor or child row, and conditionally merges and outputs a result.
 func (irj *interleavedReaderJoiner) nextRow() (
 	irjState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	row, desc, index, err := irj.fetcher.NextRow(irj.Ctx)
@@ -203,7 +205,7 @@ func (irj *interleavedReaderJoiner) nextRow() (
 
 	// TODO(richardwu): Generalize this to 2+ tables and sibling
 	// tables.
-	var lrow, rrow sqlbase.EncDatumRow
+	var lrow, rrow rowenc.EncDatumRow
 	if irj.ancestorTablePos == 0 {
 		lrow, rrow = irj.ancestorRow, tableRow
 	} else {
@@ -422,7 +424,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	reverseScan bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))
 
@@ -487,7 +489,7 @@ func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []execinfrapb
 
 const interleavedReaderJoinerProcName = "interleaved reader joiner"
 
-func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow {
+func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() rowenc.EncDatumRow {
 	// We first try to emit the previous ancestor row if it
 	// was never joined with a child row.
 	if irj.ancestorRow != nil && !irj.ancestorJoined {

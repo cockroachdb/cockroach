@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -493,7 +494,7 @@ func (tc *Collection) GetDatabaseVersion(
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
 		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return readFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
@@ -690,7 +691,7 @@ func (tc *Collection) getObjectVersion(
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
 		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return readObjectFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
@@ -724,7 +725,7 @@ func (tc *Collection) GetDatabaseVersionByID(
 
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 		}
 		return nil, err
@@ -742,7 +743,7 @@ func (tc *Collection) GetTableVersionByID(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedRelationError(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
@@ -945,7 +946,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			return name, desc, nil
 		}
 
-		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
+		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
 	case *sqlbase.ImmutableTableDescriptor:
 		// ImmutableTableDescriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
@@ -979,7 +980,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 
 		// Make a copy of the underlying descriptor before hydration.
 		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
-		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, descBase, sqlbase.TypeLookupFunc(getType)); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, typedesc.TypeLookupFunc(getType)); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*descBase), nil
@@ -1136,12 +1137,12 @@ func (tc *Collection) GetUncommittedTables() (tables []*sqlbase.ImmutableTableDe
 // for accessing types.
 func (tc *Collection) GetMutableTypeDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*sqlbase.MutableTypeDescriptor, error) {
+) (*typedesc.MutableTypeDescriptor, error) {
 	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	mutDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+	mutDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedTypeError(tn)
@@ -1155,23 +1156,23 @@ func (tc *Collection) GetMutableTypeDescriptor(
 // but for accessing types.
 func (tc *Collection) GetMutableTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
-) (*sqlbase.MutableTypeDescriptor, error) {
+) (*typedesc.MutableTypeDescriptor, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, typeID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.MutableTypeDescriptor), nil
+	return desc.(*typedesc.MutableTypeDescriptor), nil
 }
 
 // GetTypeVersion is the equivalent of GetTableVersion but for accessing types.
 func (tc *Collection) GetTypeVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTypeDescriptor, error) {
+) (*typedesc.ImmutableTypeDescriptor, error) {
 	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedTypeError(tn)
@@ -1185,16 +1186,16 @@ func (tc *Collection) GetTypeVersion(
 // types.
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTypeDescriptor, error) {
+) (*typedesc.ImmutableTypeDescriptor, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
 				pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
 		}
 		return nil, err
 	}
-	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		return nil, pgerror.Newf(
 			pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
@@ -1338,13 +1339,13 @@ func (tc *Collection) GetAllDescriptors(
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
-		typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
+		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
 		schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
-			case *sqlbase.ImmutableTypeDescriptor:
+			case *typedesc.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
 			case *sqlbase.ImmutableSchemaDescriptor:
 				schemaDescs[desc.GetID()] = desc
@@ -1377,10 +1378,10 @@ func (tc *Collection) GetAllDescriptors(
 			for i := range descs {
 				desc := descs[i]
 				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
-					if err := sqlbase.HydrateTypesInTableDescriptor(
+					if err := typedesc.HydrateTypesInTableDescriptor(
 						ctx,
 						tblDesc.TableDesc(),
-						sqlbase.TypeLookupFunc(typeLookup),
+						typedesc.TypeLookupFunc(typeLookup),
 					); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
@@ -1561,7 +1562,7 @@ func (dt *DistSQLTypeResolver) ResolveType(
 func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
+	name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
 	}
@@ -1583,14 +1584,14 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*sqlbase.ImmutableTypeDescriptor), nil
+	return name, desc.(*typedesc.ImmutableTypeDescriptor), nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
 func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.GetTypeDescID(t))
+			name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.GetTypeDescID(t))
 			if err != nil {
 				return err
 			}

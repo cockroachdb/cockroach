@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -647,7 +648,7 @@ func TruncateInterleavedIndexes(
 ) error {
 	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
 	chunkSize := int64(indexTruncateChunkSize)
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	codec, db := execCfg.Codec, execCfg.DB
 	for _, desc := range indexes {
 		var resume roachpb.Span
@@ -699,7 +700,7 @@ func (sc *SchemaChanger) truncateIndexes(
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
 	}
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
@@ -1870,7 +1871,7 @@ func indexTruncateInTxn(
 	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil)

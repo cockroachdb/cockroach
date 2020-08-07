@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq/oid"
@@ -66,9 +66,9 @@ type options struct {
 	}
 }
 
-var sqlMutators = []sqlbase.Mutator{mutations.ColumnFamilyMutator}
+var sqlMutators = []rowenc.Mutator{mutations.ColumnFamilyMutator}
 
-func enableMutations(shouldEnable bool, mutations []sqlbase.Mutator) []sqlbase.Mutator {
+func enableMutations(shouldEnable bool, mutations []rowenc.Mutator) []rowenc.Mutator {
 	if shouldEnable {
 		return mutations
 	}
@@ -186,7 +186,7 @@ func main() {
 				} else {
 					sb.WriteString(" (")
 				}
-				d := sqlbase.RandDatum(rng, typ, true)
+				d := rowenc.RandDatum(rng, typ, true)
 				fmt.Println(i, typ, d, tree.Serialize(d))
 				sb.WriteString(tree.Serialize(d))
 			}

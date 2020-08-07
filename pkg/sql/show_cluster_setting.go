@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -127,7 +128,7 @@ func (p *planner) ShowClusterSetting(
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
 
-	columns := sqlbase.ResultColumns{{Name: name, Typ: dType}}
+	columns := colinfo.ResultColumns{{Name: name, Typ: dType}}
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,

@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -130,9 +130,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	mvcc.InitNonVirtual(
 		ordinal,
 		cat.StableID(1+ordinal),
-		sqlbase.MVCCTimestampColumnName,
+		colinfo.MVCCTimestampColumnName,
 		cat.System,
-		sqlbase.MVCCTimestampColumnType,
+		colinfo.MVCCTimestampColumnType,
 		true, /* nullable */
 		true, /* hidden */
 		nil,  /* defaultExpr */

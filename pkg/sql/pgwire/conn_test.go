@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -354,7 +355,7 @@ func makeTestingConvCfg() sessiondata.DataConversionConfig {
 // TODO(andrei): Tests using this should probably switch to using the similar
 // routines in the connection once conn learns how to write rows.
 func sendResult(
-	ctx context.Context, c *conn, cols sqlbase.ResultColumns, rows []tree.Datums,
+	ctx context.Context, c *conn, cols colinfo.ResultColumns, rows []tree.Datums,
 ) error {
 	if err := c.writeRowDescription(ctx, cols, nil /* formatCodes */, c.conn); err != nil {
 		return err

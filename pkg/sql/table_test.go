@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -360,7 +361,7 @@ CREATE TABLE test.tt (x test.t);
 		}
 		return tree.TypeName{}, typeDesc, nil
 	}
-	if err := sqlbase.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), sqlbase.TypeLookupFunc(typLookup)); err != nil {
+	if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), typedesc.TypeLookupFunc(typLookup)); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that we can clone this table.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -996,8 +998,8 @@ func tableOrdinal(
 
 	// The column is an implicit system column, so give it an ordinal based
 	// on its ID that is larger than physical columns.
-	if sqlbase.IsColIDSystemColumn(colID) {
-		return len(desc.Columns) + len(desc.MutationColumns()) + int(colID-sqlbase.MVCCTimestampColumnID)
+	if colinfo.IsColIDSystemColumn(colID) {
+		return len(desc.Columns) + len(desc.MutationColumns()) + int(colID-colinfo.MVCCTimestampColumnID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
@@ -1255,7 +1257,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 	// Append all system column types to the output.
 	for _, kind := range info.systemColumns {
-		typs = append(typs, sqlbase.GetSystemColumnTypeForKind(kind))
+		typs = append(typs, colinfo.GetSystemColumnTypeForKind(kind))
 	}
 
 	p.AddNoInputStage(
@@ -1316,7 +1318,7 @@ func (dsp *DistSQLPlanner) selectRenders(
 // accordingly. When alreadyOrderedPrefix is non-zero, the input is already
 // ordered on the prefix ordering[:alreadyOrderedPrefix].
 func (dsp *DistSQLPlanner) addSorters(
-	p *PhysicalPlan, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
+	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int,
 ) {
 	// Sorting is needed; we add a stage of sorting processors.
 	outputOrdering := execinfrapb.ConvertToMappedSpecOrdering(ordering, p.PlanToStreamColMap)
@@ -1342,7 +1344,7 @@ type aggregatorPlanningInfo struct {
 	argumentsColumnTypes [][]*types.T
 	isScalar             bool
 	groupCols            []int
-	groupColOrdering     sqlbase.ColumnOrdering
+	groupColOrdering     colinfo.ColumnOrdering
 	inputMergeOrdering   execinfrapb.Ordering
 	reqOrdering          ReqOrdering
 }
@@ -2348,7 +2350,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	return plan, nil
 }
 
-func getTypesFromResultColumns(cols sqlbase.ResultColumns) []*types.T {
+func getTypesFromResultColumns(cols colinfo.ResultColumns) []*types.T {
 	typs := make([]*types.T, len(cols))
 	for i, col := range cols {
 		typs[i] = col.Typ
@@ -2823,9 +2825,9 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 // schema described by columns.
 // NOTE: all expressions in tuples are evaluated.
 func (dsp *DistSQLPlanner) createPhysPlanForTuples(
-	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, columns sqlbase.ResultColumns,
+	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, columns colinfo.ResultColumns,
 ) (*PhysicalPlan, error) {
-	var a sqlbase.DatumAlloc
+	var a rowenc.DatumAlloc
 	typs := getTypesFromResultColumns(columns)
 	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
 	numRows := len(tuples)
@@ -2837,7 +2839,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForTuples(
 			if err != nil {
 				return nil, err
 			}
-			encDatum := sqlbase.DatumToEncDatum(typs[colIdx], datum)
+			encDatum := rowenc.DatumToEncDatum(typs[colIdx], datum)
 			buf, err = encDatum.Encode(typs[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err
@@ -3458,16 +3460,16 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		CompressionCodec: n.fileCompression,
 	}}
 
-	resTypes := make([]*types.T, len(sqlbase.ExportColumns))
-	for i := range sqlbase.ExportColumns {
-		resTypes[i] = sqlbase.ExportColumns[i].Typ
+	resTypes := make([]*types.T, len(colinfo.ExportColumns))
+	for i := range colinfo.ExportColumns {
+		resTypes[i] = colinfo.ExportColumns[i].Typ
 	}
 	plan.AddNoGroupingStage(
 		core, execinfrapb.PostProcessSpec{}, resTypes, execinfrapb.Ordering{},
 	)
 
 	// The CSVWriter produces the same columns as the EXPORT statement.
-	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(sqlbase.ExportColumns))
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(colinfo.ExportColumns))
 	return plan, nil
 }
 

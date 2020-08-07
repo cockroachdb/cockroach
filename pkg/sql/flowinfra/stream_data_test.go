@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -29,9 +29,9 @@ import (
 func testGetDecodedRows(
 	tb testing.TB,
 	sd *StreamDecoder,
-	decodedRows sqlbase.EncDatumRows,
+	decodedRows rowenc.EncDatumRows,
 	metas []execinfrapb.ProducerMetadata,
-) (sqlbase.EncDatumRows, []execinfrapb.ProducerMetadata) {
+) (rowenc.EncDatumRows, []execinfrapb.ProducerMetadata) {
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
@@ -53,7 +53,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []ro
 	var se StreamEncoder
 	var sd StreamDecoder
 
-	var decodedRows sqlbase.EncDatumRows
+	var decodedRows rowenc.EncDatumRows
 	var metas []execinfrapb.ProducerMetadata
 	numRows := 0
 	numMeta := 0
@@ -94,7 +94,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []ro
 }
 
 type rowOrMeta struct {
-	row  sqlbase.EncDatumRow
+	row  rowenc.EncDatumRow
 	meta execinfrapb.ProducerMetadata
 }
 
@@ -105,20 +105,20 @@ func TestStreamEncodeDecode(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
-		types := sqlbase.RandEncodableColumnTypes(rng, rowLen)
+		types := rowenc.RandEncodableColumnTypes(rng, rowLen)
 		info := make([]execinfrapb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]
-			info[i].Encoding = sqlbase.RandDatumEncoding(rng)
+			info[i].Encoding = rowenc.RandDatumEncoding(rng)
 		}
 		numRows := rng.Intn(100)
 		rows := make([]rowOrMeta, numRows)
 		for i := range rows {
 			if rng.Intn(10) != 0 {
-				rows[i].row = make(sqlbase.EncDatumRow, rowLen)
+				rows[i].row = make(rowenc.EncDatumRow, rowLen)
 				for j := range rows[i].row {
-					rows[i].row[j] = sqlbase.DatumToEncDatum(info[j].Type,
-						sqlbase.RandDatum(rng, info[j].Type, true))
+					rows[i].row[j] = rowenc.DatumToEncDatum(info[j].Type,
+						rowenc.RandDatum(rng, info[j].Type, true))
 				}
 			} else {
 				rows[i].meta.Err = fmt.Errorf("test error %d", i)
@@ -152,8 +152,8 @@ func BenchmarkStreamEncoder(b *testing.B) {
 	for _, numCols := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
-			cols := sqlbase.MakeIntCols(numCols)
-			rows := sqlbase.MakeIntRows(numRows, numCols)
+			cols := rowenc.MakeIntCols(numCols)
+			rows := rowenc.MakeIntRows(numRows, numCols)
 			input := execinfra.NewRepeatableRowSource(cols, rows)
 
 			b.ResetTimer()
@@ -165,7 +165,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 				// Reset the EncDatums' encoded bytes cache.
 				for _, row := range rows {
 					for j := range row {
-						row[j] = sqlbase.EncDatum{
+						row[j] = rowenc.EncDatum{
 							Datum: row[j].Datum,
 						}
 					}
@@ -201,9 +201,9 @@ func BenchmarkStreamDecoder(b *testing.B) {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			b.SetBytes(int64(outboxBufRows * numCols * 8))
 			var se StreamEncoder
-			colTypes := sqlbase.MakeIntCols(numCols)
+			colTypes := rowenc.MakeIntCols(numCols)
 			se.Init(colTypes)
-			inRow := sqlbase.MakeIntRows(1, numCols)[0]
+			inRow := rowenc.MakeIntRows(1, numCols)[0]
 			for i := 0; i < outboxBufRows; i++ {
 				if err := se.AddRow(inRow); err != nil {
 					b.Fatal(err)

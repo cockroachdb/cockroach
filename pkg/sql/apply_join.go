@@ -13,11 +13,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -42,12 +42,12 @@ type applyJoinNode struct {
 	pred *joinPredicate
 
 	// columns contains the metadata for the results of this node.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// rightCols contains the metadata for the result of the right side of this
 	// apply join, as built in the optimization phase. Later on, every re-planning
 	// of the right side will emit these same columns.
-	rightCols sqlbase.ResultColumns
+	rightCols colinfo.ResultColumns
 
 	planRightSideFn exec.ApplyJoinPlanRightSideFn
 
@@ -77,7 +77,7 @@ type applyJoinNode struct {
 func newApplyJoinNode(
 	joinType descpb.JoinType,
 	left planDataSource,
-	rightCols sqlbase.ResultColumns,
+	rightCols colinfo.ResultColumns,
 	pred *joinPredicate,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (planNode, error) {
@@ -108,7 +108,7 @@ func (a *applyJoinNode) startExec(params runParams) error {
 		}
 	}
 	a.run.out = make(tree.Datums, len(a.columns))
-	ci := sqlbase.ColTypeInfoFromResCols(a.rightCols)
+	ci := colinfo.ColTypeInfoFromResCols(a.rightCols)
 	acc := params.EvalContext().Mon.MakeBoundAccount()
 	a.run.rightRows = rowcontainer.NewRowContainer(acc, ci)
 	return nil

@@ -21,9 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -72,13 +73,13 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
-	types := sqlbase.RandSortingTypes(rng, numCols)
-	ordering := sqlbase.ColumnOrdering{
-		sqlbase.ColumnOrderInfo{
+	types := rowenc.RandSortingTypes(rng, numCols)
+	ordering := colinfo.ColumnOrdering{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    0,
 			Direction: encoding.Ascending,
 		},
-		sqlbase.ColumnOrderInfo{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    1,
 			Direction: encoding.Descending,
 		},
@@ -160,13 +161,13 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	// Use random types and random rows.
 	rng, _ := randutil.NewPseudoRand()
 
-	types := sqlbase.RandSortingTypes(rng, numCols)
-	ordering := sqlbase.ColumnOrdering{
-		sqlbase.ColumnOrderInfo{
+	types := rowenc.RandSortingTypes(rng, numCols)
+	ordering := colinfo.ColumnOrdering{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    0,
 			Direction: encoding.Ascending,
 		},
-		sqlbase.ColumnOrderInfo{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    1,
 			Direction: encoding.Descending,
 		},
@@ -248,13 +249,13 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	}
 
 	// Use random types and random rows.
-	types := sqlbase.RandSortingTypes(rng, numCols)
-	ordering := sqlbase.ColumnOrdering{
-		sqlbase.ColumnOrderInfo{
+	types := rowenc.RandSortingTypes(rng, numCols)
+	ordering := colinfo.ColumnOrdering{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    0,
 			Direction: encoding.Ascending,
 		},
-		sqlbase.ColumnOrderInfo{
+		colinfo.ColumnOrderInfo{
 			ColIdx:    1,
 			Direction: encoding.Descending,
 		},
@@ -303,7 +304,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 		for _, access := range accesses {
 			for _, index := range access {
 				skip := rng.Intn(10) == 0
-				var rows [2]sqlbase.EncDatumRow
+				var rows [2]rowenc.EncDatumRow
 				for i, rc := range containers {
 					row, err := rc.getRow(ctx, index, skip)
 					require.NoError(t, err)
@@ -328,9 +329,9 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 // Adapter interface that can be implemented using both DiskBackedNumberedRowContainer
 // and DiskBackedIndexedRowContainer.
 type numberedContainer interface {
-	addRow(context.Context, sqlbase.EncDatumRow) error
+	addRow(context.Context, rowenc.EncDatumRow) error
 	setupForRead(ctx context.Context, accesses [][]int)
-	getRow(ctx context.Context, idx int, skip bool) (sqlbase.EncDatumRow, error)
+	getRow(ctx context.Context, idx int, skip bool) (rowenc.EncDatumRow, error)
 	spillToDisk(context.Context) error
 	unsafeReset(context.Context) error
 	close(context.Context)
@@ -341,7 +342,7 @@ type numberedContainerUsingNRC struct {
 	memoryMonitor *mon.BytesMonitor
 }
 
-func (d numberedContainerUsingNRC) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (d numberedContainerUsingNRC) addRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	_, err := d.rc.AddRow(ctx, row)
 	return err
 }
@@ -350,7 +351,7 @@ func (d numberedContainerUsingNRC) setupForRead(ctx context.Context, accesses []
 }
 func (d numberedContainerUsingNRC) getRow(
 	ctx context.Context, idx int, skip bool,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	return d.rc.GetRow(ctx, idx, false)
 }
 func (d numberedContainerUsingNRC) spillToDisk(ctx context.Context) error {
@@ -385,13 +386,13 @@ type numberedContainerUsingIRC struct {
 	memoryMonitor *mon.BytesMonitor
 }
 
-func (d numberedContainerUsingIRC) addRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (d numberedContainerUsingIRC) addRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	return d.rc.AddRow(ctx, row)
 }
 func (d numberedContainerUsingIRC) setupForRead(context.Context, [][]int) {}
 func (d numberedContainerUsingIRC) getRow(
 	ctx context.Context, idx int, skip bool,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	if skip {
 		return nil, nil
 	}
@@ -555,11 +556,11 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 		typs = append(typs, types.String)
 	}
 	rng, _ := randutil.NewPseudoRand()
-	rows := make([]sqlbase.EncDatumRow, numRows)
+	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := 0; i < numRows; i++ {
-		rows[i] = make([]sqlbase.EncDatum, len(typs))
+		rows[i] = make([]rowenc.EncDatum, len(typs))
 		for j := range typs {
-			rows[i][j] = sqlbase.DatumToEncDatum(typs[j], sqlbase.RandDatum(rng, typs[j], false))
+			rows[i][j] = rowenc.DatumToEncDatum(typs[j], rowenc.RandDatum(rng, typs[j], false))
 		}
 	}
 

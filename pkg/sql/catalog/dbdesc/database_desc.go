@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package dbdesc contains the concrete implementations of
+// catalog.DatabaseDescriptor.
 package dbdesc
 
 import (

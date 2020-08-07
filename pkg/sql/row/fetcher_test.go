@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -68,7 +69,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 }
 
 func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	entries []initFetcherArgs, reverseScan bool, alloc *rowenc.DatumAlloc,
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
@@ -145,7 +146,7 @@ func TestNextRowSingle(t *testing.T) {
 		)
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -265,7 +266,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		)
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -380,7 +381,7 @@ INDEX(c)
 		),
 	)
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
@@ -557,7 +558,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		table.nRows += nNulls
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
@@ -888,7 +889,7 @@ func TestNextRowInterleaved(t *testing.T) {
 		}
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	// Retrieve rows from every non-empty subset of the tables/indexes.
 	for _, idxs := range generateIdxSubsets(len(interleaveEntries)-1, nil) {
 		// Initialize our subset of tables/indexes.
@@ -1043,7 +1044,7 @@ func TestRowFetcherReset(t *testing.T) {
 			valNeededForCol: valNeededForCol,
 		},
 	}
-	da := sqlbase.DatumAlloc{}
+	da := rowenc.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da)
 	if err != nil {
 		t.Fatal(err)

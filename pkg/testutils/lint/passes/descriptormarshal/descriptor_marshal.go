@@ -80,8 +80,7 @@ var Analyzer = &analysis.Analyzer{
 
 var allowedFunctions = []string{
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TableFromDescriptor",
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestDefaultExprNil",
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestKeysPerRow",
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase_test.TestDefaultExprNil",
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl.readBackupManifest",
 }
 

@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -40,7 +40,7 @@ import (
 // min and max are inclusive bounds on the root table's ID.
 // If min and/or max is -1, then no bound is used for that endpoint.
 func makeSpanWithRootBound(desc catalog.TableDescriptor, min int, max int) roachpb.Span {
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 
 	startKey := roachpb.Key(append([]byte(nil), keyPrefix...))
 	if min != -1 {
@@ -423,7 +423,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				t.Fatalf("output RowReceiver not closed")
 			}
 
-			var res sqlbase.EncDatumRows
+			var res rowenc.EncDatumRows
 			for {
 				row, meta := out.Next()
 				if meta != nil {
@@ -636,7 +636,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	for {
 		row, meta := out.Next()
 		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
+			t.Fatalf("row was pushed unexpectedly: %s", row.String(rowenc.OneIntCol))
 		}
 		if meta == nil {
 			break

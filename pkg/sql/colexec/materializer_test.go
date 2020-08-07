@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,10 +36,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	nCols := 1 + rng.Intn(4)
 	var typs []*types.T
 	for len(typs) < nCols {
-		typs = append(typs, sqlbase.RandType(rng))
+		typs = append(typs, rowenc.RandType(rng))
 	}
 	nRows := 10000
-	rows := sqlbase.RandEncDatumRowsOfTypes(rng, nRows, typs)
+	rows := rowenc.RandEncDatumRowsOfTypes(rng, nRows, typs)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
@@ -181,7 +181,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
-	rows := sqlbase.MakeIntRows(nRows, nCols)
+	rows := rowenc.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()

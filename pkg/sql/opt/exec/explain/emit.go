@@ -16,12 +16,12 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -117,7 +117,7 @@ type SpanFormatFn func(table cat.Table, index cat.Index, scanParams exec.ScanPar
 // omitTrivialProjections returns the given node and its result columns and
 // ordering, unless the node is an identity projection (which just renames
 // columns) - in which case we return the child node and the renamed columns.
-func omitTrivialProjections(n *Node) (*Node, sqlbase.ResultColumns, sqlbase.ColumnOrdering) {
+func omitTrivialProjections(n *Node) (*Node, colinfo.ResultColumns, colinfo.ColumnOrdering) {
 	var projection []exec.NodeColumnOrdinal
 	switch n.op {
 	case serializingProjectOp:
@@ -149,7 +149,7 @@ func omitTrivialProjections(n *Node) (*Node, sqlbase.ResultColumns, sqlbase.Colu
 	}
 	// We will show the child node and its ordering, but with the columns
 	// reordered and renamed according to the parent.
-	ordering := make(sqlbase.ColumnOrdering, len(inputOrdering))
+	ordering := make(colinfo.ColumnOrdering, len(inputOrdering))
 	for i, o := range inputOrdering {
 		ordering[i].ColIdx = inverse[o.ColIdx]
 		ordering[i].Direction = o.Direction
@@ -395,9 +395,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case sortOp:
 		a := n.args.(*sortArgs)
-		ob.Attr("order", sqlbase.ColumnOrdering(a.Ordering).String(n.Columns()))
+		ob.Attr("order", colinfo.ColumnOrdering(a.Ordering).String(n.Columns()))
 		if p := a.AlreadyOrderedPrefix; p > 0 {
-			ob.Attr("already ordered", sqlbase.ColumnOrdering(a.Ordering[:p]).String(n.Columns()))
+			ob.Attr("already ordered", colinfo.ColumnOrdering(a.Ordering[:p]).String(n.Columns()))
 		}
 
 	case indexJoinOp:
@@ -463,8 +463,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			a.LeftEqColsAreKey, a.RightEqColsAreKey,
 			a.OnCond,
 		)
-		eqCols := make(sqlbase.ResultColumns, len(leftEqCols))
-		mergeOrd := make(sqlbase.ColumnOrdering, len(eqCols))
+		eqCols := make(colinfo.ResultColumns, len(leftEqCols))
+		mergeOrd := make(colinfo.ColumnOrdering, len(eqCols))
 		for i := range eqCols {
 			eqCols[i].Name = fmt.Sprintf(
 				"(%s=%s)", leftCols[leftEqCols[i]].Name, rightCols[rightEqCols[i]].Name,
@@ -760,10 +760,10 @@ func (e *emitter) emitTuples(rows [][]tree.TypedExpr, numColumns int) {
 }
 
 func (e *emitter) emitGroupByAttributes(
-	inputCols sqlbase.ResultColumns,
+	inputCols colinfo.ResultColumns,
 	aggs []exec.AggInfo,
 	groupCols []exec.NodeColumnOrdinal,
-	groupColOrdering sqlbase.ColumnOrdering,
+	groupColOrdering colinfo.ColumnOrdering,
 	isScalar bool,
 ) {
 	if e.ob.flags.Verbose {
@@ -790,7 +790,7 @@ func (e *emitter) emitGroupByAttributes(
 }
 
 func (e *emitter) emitJoinAttributes(
-	leftCols, rightCols sqlbase.ResultColumns,
+	leftCols, rightCols colinfo.ResultColumns,
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
@@ -807,7 +807,7 @@ func (e *emitter) emitJoinAttributes(
 	e.ob.Expr("pred", extraOnCond, appendColumns(leftCols, rightCols...))
 }
 
-func printColumns(inputCols sqlbase.ResultColumns) string {
+func printColumns(inputCols colinfo.ResultColumns) string {
 	var buf bytes.Buffer
 	for i, col := range inputCols {
 		if i > 0 {
@@ -818,7 +818,7 @@ func printColumns(inputCols sqlbase.ResultColumns) string {
 	return buf.String()
 }
 
-func printColumnList(inputCols sqlbase.ResultColumns, cols []exec.NodeColumnOrdinal) string {
+func printColumnList(inputCols colinfo.ResultColumns, cols []exec.NodeColumnOrdinal) string {
 	var buf bytes.Buffer
 	for i, col := range cols {
 		if i > 0 {
@@ -829,7 +829,7 @@ func printColumnList(inputCols sqlbase.ResultColumns, cols []exec.NodeColumnOrdi
 	return buf.String()
 }
 
-func printColumnSet(inputCols sqlbase.ResultColumns, cols exec.NodeColumnOrdinalSet) string {
+func printColumnSet(inputCols colinfo.ResultColumns, cols exec.NodeColumnOrdinalSet) string {
 	var buf bytes.Buffer
 	prefix := ""
 	cols.ForEach(func(col int) {

@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemmeta"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -243,7 +243,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// Note: we can only bypass name to ID resolution. The desc
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
-	descID := systemmeta.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
+	descID := bootstrap.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == descpb.InvalidID {
 		var found bool
 		found, descID, err = LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)

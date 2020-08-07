@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package colinfo
 
 import (
 	"math"
@@ -115,7 +115,7 @@ func IsSystemColumnName(name string) bool {
 // GetSystemColumnTypesAndDescriptors is a utility method to construct a set of
 // types and column descriptors from an input list of system column kinds.
 func GetSystemColumnTypesAndDescriptors(
-	desc *descpb.TableDescriptor, kinds []descpb.SystemColumnKind,
+	kinds []descpb.SystemColumnKind,
 ) ([]*types.T, []descpb.ColumnDescriptor, error) {
 	resTypes := make([]*types.T, len(kinds))
 	resDescs := make([]descpb.ColumnDescriptor, len(kinds))

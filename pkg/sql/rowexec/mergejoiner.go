@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -35,7 +36,7 @@ type mergeJoiner struct {
 	cancelChecker *sqlbase.CancelChecker
 
 	leftSource, rightSource execinfra.RowSource
-	leftRows, rightRows     []sqlbase.EncDatumRow
+	leftRows, rightRows     []rowenc.EncDatumRow
 	leftIdx, rightIdx       int
 	emitUnmatchedRight      bool
 	matchedRight            util.FastIntSet
@@ -121,7 +122,7 @@ func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the Processor interface.
-func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (m *mergeJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for m.State == execinfra.StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
@@ -142,7 +143,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 	return nil, m.DrainHelper()
 }
 
-func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The loops below form a restartable state machine that iterates over a
 	// batch of rows from the left and right side of the join. The state machine
 	// returns a result for every row that should be output.

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -54,17 +55,17 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkDB := func(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
 			return &dbdesc.NewInitialDatabaseDescriptor(id, name, security.AdminRole).ImmutableDatabaseDescriptor
 		}
-		mkTyp := func(desc typDesc) *sqlbase.ImmutableTypeDescriptor {
+		mkTyp := func(desc typDesc) *typedesc.ImmutableTypeDescriptor {
 			// Set a default parent schema for the type descriptors.
 			if desc.ParentSchemaID == descpb.InvalidID {
 				desc.ParentSchemaID = keys.PublicSchemaID
 			}
-			return sqlbase.NewImmutableTypeDescriptor(desc)
+			return typedesc.NewImmutableTypeDescriptor(desc)
 		}
 		mkSchema := func(desc scDesc) *sqlbase.ImmutableSchemaDescriptor {
 			return sqlbase.NewImmutableSchemaDescriptor(desc)
 		}
-		toOid := sqlbase.TypeIDToOID
+		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"
 		typeArrExpr := "'hello'::@100016 = 'hello'::@100016"
 		descriptors = []catalog.Descriptor{

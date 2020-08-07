@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -191,7 +192,7 @@ func (c *csvRowConsumer) FillDatums(
 			conv.Datums[datumIdx] = tree.DNull
 		} else {
 			var err error
-			conv.Datums[datumIdx], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
+			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(

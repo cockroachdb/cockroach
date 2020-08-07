@@ -19,11 +19,11 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -108,7 +108,7 @@ type PhysicalPlan struct {
 
 	// ResultColumns is the schema (result columns) of the rows produced by the
 	// ResultRouters.
-	ResultColumns sqlbase.ResultColumns
+	ResultColumns colinfo.ResultColumns
 
 	// MergeOrdering is the ordering guarantee for the result streams that must be
 	// maintained when the streams eventually merge. The column indexes refer to

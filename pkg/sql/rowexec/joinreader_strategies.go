@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -28,7 +28,7 @@ type defaultSpanGenerator struct {
 	numKeyCols  int
 	lookupCols  []uint32
 
-	indexKeyRow          sqlbase.EncDatumRow
+	indexKeyRow          rowenc.EncDatumRow
 	keyToInputRowIndices map[string][]int
 
 	scratchSpans roachpb.Spans
@@ -41,7 +41,7 @@ type defaultSpanGenerator struct {
 // decide whether or not to split the generated span into separate family
 // specific spans.
 func (g *defaultSpanGenerator) generateSpan(
-	row sqlbase.EncDatumRow,
+	row rowenc.EncDatumRow,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	numLookupCols := len(g.lookupCols)
 	if numLookupCols > g.numKeyCols {
@@ -56,7 +56,7 @@ func (g *defaultSpanGenerator) generateSpan(
 	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
 }
 
-func (g *defaultSpanGenerator) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
+func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
 	for _, colIdx := range g.lookupCols {
 		if row[colIdx].IsNull() {
 			return true
@@ -65,7 +65,7 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row sqlbase.EncDatumRow) bool
 	return false
 }
 
-func (g *defaultSpanGenerator) generateSpans(rows []sqlbase.EncDatumRow) (roachpb.Spans, error) {
+func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb.Spans, error) {
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -97,14 +97,14 @@ type joinReaderStrategy interface {
 	getLookupRowsBatchSizeHint() int64
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
-	processLookupRows(rows []sqlbase.EncDatumRow) (roachpb.Spans, error)
+	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is
 	// jrPerformingLookup, processLookedUpRow will be called again if the looked
 	// up rows have not been exhausted. A transition to jrStateUnknown is
 	// unsupported, but if an error is returned, the joinReader will transition
 	// to draining.
-	processLookedUpRow(ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key) (joinReaderState, error)
+	processLookedUpRow(ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key) (joinReaderState, error)
 	// prepareToEmit informs the strategy implementation that all looked up rows
 	// have been read, and that it should prepare for calls to nextRowToEmit.
 	prepareToEmit(ctx context.Context)
@@ -112,7 +112,7 @@ type joinReaderStrategy interface {
 	// joinReaderState is also returned, indicating a state to transition to after
 	// emitting this row. A transition to jrStateUnknown is unsupported, but if an
 	// error is returned, the joinReader will transition to draining.
-	nextRowToEmit(ctx context.Context) (sqlbase.EncDatumRow, joinReaderState, error)
+	nextRowToEmit(ctx context.Context) (rowenc.EncDatumRow, joinReaderState, error)
 	// spilled returns whether the strategy spilled to disk.
 	spilled() bool
 	// close releases any resources associated with the joinReaderStrategy.
@@ -125,7 +125,7 @@ type joinReaderNoOrderingStrategy struct {
 	*joinerBase
 	defaultSpanGenerator
 	isPartialJoin bool
-	inputRows     []sqlbase.EncDatumRow
+	inputRows     []rowenc.EncDatumRow
 	// matched[i] specifies whether inputRows[i] had a match.
 	matched []bool
 
@@ -146,7 +146,7 @@ type joinReaderNoOrderingStrategy struct {
 		unmatchedInputRowIndices      []int
 		matchingInputRowIndicesCursor int
 		matchingInputRowIndices       []int
-		lookedUpRow                   sqlbase.EncDatumRow
+		lookedUpRow                   rowenc.EncDatumRow
 	}
 }
 
@@ -160,7 +160,7 @@ func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
-	rows []sqlbase.EncDatumRow,
+	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	s.inputRows = rows
 	if cap(s.matched) < len(s.inputRows) {
@@ -175,7 +175,7 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
-	_ context.Context, row sqlbase.EncDatumRow, key roachpb.Key,
+	_ context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
 	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
 	if s.isPartialJoin {
@@ -201,7 +201,7 @@ func (s *joinReaderNoOrderingStrategy) prepareToEmit(ctx context.Context) {}
 
 func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 	_ context.Context,
-) (sqlbase.EncDatumRow, joinReaderState, error) {
+) (rowenc.EncDatumRow, joinReaderState, error) {
 	if !s.emitState.processingLookupRow {
 		// processLookedUpRow was not called before nextRowToEmit, which means that
 		// the next unmatched row needs to be processed.
@@ -277,7 +277,7 @@ func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
 type joinReaderIndexJoinStrategy struct {
 	*joinerBase
 	defaultSpanGenerator
-	inputRows []sqlbase.EncDatumRow
+	inputRows []rowenc.EncDatumRow
 
 	emitState struct {
 		// processingLookupRow is an explicit boolean that specifies whether the
@@ -287,7 +287,7 @@ type joinReaderIndexJoinStrategy struct {
 		// that no more looked up rows need processing, so unmatched input rows need
 		// to be emitted.
 		processingLookupRow bool
-		lookedUpRow         sqlbase.EncDatumRow
+		lookedUpRow         rowenc.EncDatumRow
 	}
 }
 
@@ -301,14 +301,14 @@ func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
-	rows []sqlbase.EncDatumRow,
+	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	s.inputRows = rows
 	return s.generateSpans(s.inputRows)
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
-	ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key,
+	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
 	s.emitState.processingLookupRow = true
 	s.emitState.lookedUpRow = row
@@ -319,7 +319,7 @@ func (s *joinReaderIndexJoinStrategy) prepareToEmit(ctx context.Context) {}
 
 func (s *joinReaderIndexJoinStrategy) nextRowToEmit(
 	ctx context.Context,
-) (sqlbase.EncDatumRow, joinReaderState, error) {
+) (rowenc.EncDatumRow, joinReaderState, error) {
 	if !s.emitState.processingLookupRow {
 		return nil, jrReadingInput, nil
 	}
@@ -345,7 +345,7 @@ type joinReaderOrderingStrategy struct {
 	defaultSpanGenerator
 	isPartialJoin bool
 
-	inputRows []sqlbase.EncDatumRow
+	inputRows []rowenc.EncDatumRow
 
 	// inputRowIdxToLookedUpRowIndices is a multimap from input row indices to
 	// corresponding looked up row indices. It's populated in the
@@ -382,7 +382,7 @@ func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 }
 
 func (s *joinReaderOrderingStrategy) processLookupRows(
-	rows []sqlbase.EncDatumRow,
+	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	// Maintain a map from input row index to the corresponding output rows. This
 	// will allow us to preserve the order of the input in the face of multiple
@@ -402,7 +402,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 }
 
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
-	ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key,
+	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
 	matchingInputRowIndices := s.keyToInputRowIndices[string(key)]
 	if !s.isPartialJoin {
@@ -454,7 +454,7 @@ func (s *joinReaderOrderingStrategy) prepareToEmit(ctx context.Context) {
 
 func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	ctx context.Context,
-) (sqlbase.EncDatumRow, joinReaderState, error) {
+) (rowenc.EncDatumRow, joinReaderState, error) {
 	if s.emitCursor.inputRowIdx >= len(s.inputRowIdxToLookedUpRowIndices) {
 		log.VEventf(ctx, 1, "done emitting rows")
 		// Ready for another input batch. Reset state.

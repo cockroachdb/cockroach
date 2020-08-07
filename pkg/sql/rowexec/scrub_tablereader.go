@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -144,8 +145,8 @@ func newScrubTableReader(
 // physical check error encountered when scanning table data. The schema
 // of the EncDatumRow is the ScrubTypes constant.
 func (tr *scrubTableReader) generateScrubErrorRow(
-	row sqlbase.EncDatumRow, scrubErr *scrub.Error,
-) (sqlbase.EncDatumRow, error) {
+	row rowenc.EncDatumRow, scrubErr *scrub.Error,
+) (rowenc.EncDatumRow, error) {
 	details := make(map[string]interface{})
 	var index *descpb.IndexDescriptor
 	if tr.indexIdx == 0 {
@@ -170,16 +171,16 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	}
 
 	primaryKeyValues := tr.prettyPrimaryKeyValues(row, tr.tableDesc.TableDesc())
-	return sqlbase.EncDatumRow{
-		sqlbase.DatumToEncDatum(
+	return rowenc.EncDatumRow{
+		rowenc.DatumToEncDatum(
 			ScrubTypes[0],
 			tree.NewDString(scrubErr.Code),
 		),
-		sqlbase.DatumToEncDatum(
+		rowenc.DatumToEncDatum(
 			ScrubTypes[1],
 			tree.NewDString(primaryKeyValues),
 		),
-		sqlbase.DatumToEncDatum(
+		rowenc.DatumToEncDatum(
 			ScrubTypes[2],
 			detailsJSON,
 		),
@@ -187,7 +188,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 }
 
 func (tr *scrubTableReader) prettyPrimaryKeyValues(
-	row sqlbase.EncDatumRow, table *descpb.TableDescriptor,
+	row rowenc.EncDatumRow, table *descpb.TableDescriptor,
 ) string {
 	colIdxMap := make(map[descpb.ColumnID]int, len(table.Columns))
 	for i := range table.Columns {
@@ -232,9 +233,9 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (tr *scrubTableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var err error
 		// If we are running a scrub physical check, we use a specialized
 		// procedure that runs additional checks while fetching the row

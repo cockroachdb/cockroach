@@ -120,11 +120,6 @@ func NewUndefinedRelationError(name tree.NodeFormatter) error {
 		"relation %q does not exist", tree.ErrString(name))
 }
 
-// NewUndefinedColumnError creates an error that represents a missing database column.
-func NewUndefinedColumnError(name string) error {
-	return pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
-}
-
 // NewColumnAlreadyExistsError creates an error for a preexisting column.
 func NewColumnAlreadyExistsError(name, relation string) error {
 	return pgerror.Newf(pgcode.DuplicateColumn, "column %q of relation %q already exists", name, relation)

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,7 +123,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 			if flags.RequireMutable {
 				return nil, errors.Newf("cannot use mutable descriptor of aliased type %s.%s", schema, object)
 			}
-			return sqlbase.MakeSimpleAliasTypeDescriptor(alias), nil
+			return typedesc.MakeSimpleAliasTypeDescriptor(alias), nil
 		}
 	}
 

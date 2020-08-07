@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -27,7 +27,7 @@ import (
 // vecToDatumConverter is a helper struct that converts vectors from batches to
 // their datum representations.
 // TODO(yuzefovich): the result of converting the vectors to datums is usually
-// put into sqlbase.EncDatumRow, so it might make sense to look into creating
+// put into rowenc.EncDatumRow, so it might make sense to look into creating
 // a converter that would store EncDatumRows directly. I prototyped such
 // converter, but it showed worse performance both in the microbenchmarks and
 // some of the TPCH queries. I think the main reason for the slowdown is that
@@ -43,7 +43,7 @@ import (
 type vecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
-	da               sqlbase.DatumAlloc
+	da               rowenc.DatumAlloc
 }
 
 // newVecToDatumConverter creates a new vecToDatumConverter.
@@ -150,7 +150,7 @@ func (c *vecToDatumConverter) getDatumColumn(colIdx int) tree.Datums {
 // length specifies the number of values to be converted and sel is an optional
 // selection vector.
 func ColVecToDatumAndDeselect(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
@@ -591,7 +591,7 @@ func ColVecToDatumAndDeselect(
 // ColVecToDatum converts a vector of coldata-represented values in col into
 // tree.Datum representation *without* performing a deselection step.
 func ColVecToDatum(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()

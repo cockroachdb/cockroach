@@ -13,8 +13,8 @@ package invertedexpr
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +29,7 @@ import (
 
 func geoKeyToEncInvertedVal(k geoindex.Key, end bool) EncInvertedVal {
 	dint := tree.DInt(k)
-	encoded, err := sqlbase.EncodeTableKey(nil, &dint, encoding.Ascending)
+	encoded, err := rowenc.EncodeTableKey(nil, &dint, encoding.Ascending)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected encoding error: %d", k))
 	}

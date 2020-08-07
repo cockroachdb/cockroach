@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type interleavedJoinNode struct {
@@ -32,7 +32,7 @@ type interleavedJoinNode struct {
 	// columns are the produced columns, namely the columns in the left scanNode
 	// and (unless the join type is semi or anti join) the columns in the right
 	// scanNode.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on eqCols.

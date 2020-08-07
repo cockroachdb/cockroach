@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase_test
+package rowenc_test
 
 import (
 	"bytes"
@@ -16,23 +16,22 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 type indexKeyTest struct {
@@ -112,13 +110,13 @@ func decodeIndex(
 	index *descpb.IndexDescriptor,
 	key []byte,
 ) ([]tree.Datum, error) {
-	types, err := sqlbase.GetColumnTypes(tableDesc, index.ColumnIDs)
+	types, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]sqlbase.EncDatum, len(index.ColumnIDs))
+	values := make([]EncDatum, len(index.ColumnIDs))
 	colDirs := index.ColumnDirections
-	_, ok, _, err := sqlbase.DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
+	_, ok, _, err := DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +125,7 @@ func decodeIndex(
 	}
 
 	decodedValues := make([]tree.Datum, len(values))
-	var da sqlbase.DatumAlloc
+	var da DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(types[i], &da)
 		if err != nil {
@@ -141,7 +139,7 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	var a sqlbase.DatumAlloc
+	var a DatumAlloc
 
 	tests := []indexKeyTest{
 		{50, nil, nil,
@@ -184,7 +182,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = sqlbase.RandDatum(rng, types.Int, true)
+			t.primaryValues[j] = RandDatum(rng, types.Int, true)
 		}
 
 		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
@@ -194,7 +192,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = sqlbase.RandDatum(rng, types.Int, true)
+			t.secondaryValues[j] = RandDatum(rng, types.Int, true)
 		}
 
 		tests = append(tests, t)
@@ -224,15 +222,15 @@ func TestIndexKey(t *testing.T) {
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		codec := keys.SystemSQLCodec
-		primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
-		primaryKey, _, err := sqlbase.EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
+		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
+		primaryKey, _, err := EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
 		}
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
-		secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
+		secondaryIndexEntry, err := EncodeSecondaryIndex(
 			codec, tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
@@ -258,7 +256,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -266,7 +264,7 @@ func TestIndexKey(t *testing.T) {
 				t.Errorf("%d", i)
 			}
 
-			extracted, err := sqlbase.ExtractIndexKey(&a, codec, tableDesc, entry)
+			extracted, err := ExtractIndexKey(&a, codec, tableDesc, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -277,49 +275,6 @@ func TestIndexKey(t *testing.T) {
 
 		checkEntry(&tableDesc.PrimaryIndex, primaryIndexKV)
 		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
-	}
-}
-
-func TestKeysPerRow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
-	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
-	// sqlbase. If/when that happens, use it here instead of this server.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	tests := []struct {
-		createTable string
-		indexID     descpb.IndexID
-		expected    int
-	}{
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
-	}
-
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(conn)
-			tableName := fmt.Sprintf("t%d", i)
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
-
-			desc := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
-			require.NotNil(t, desc)
-			keys, err := desc.KeysPerRow(test.indexID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if test.expected != keys {
-				t.Errorf("expected %d keys got %d", test.expected, keys)
-			}
-		})
 	}
 }
 
@@ -417,7 +372,7 @@ func TestArrayEncoding(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run("encode "+test.name, func(t *testing.T) {
-			enc, err := sqlbase.EncodeArray(&test.datum, nil)
+			enc, err := EncodeArray(&test.datum, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -430,7 +385,7 @@ func TestArrayEncoding(t *testing.T) {
 			enc := make([]byte, 0)
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
-			d, _, err := sqlbase.DecodeArray(&sqlbase.DatumAlloc{}, test.datum.ParamTyp, enc)
+			d, _, err := DecodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
 				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
@@ -454,7 +409,7 @@ func BenchmarkArrayEncoding(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = sqlbase.EncodeArray(&ary, nil)
+		_, _ = EncodeArray(&ary, nil)
 	}
 }
 
@@ -595,7 +550,7 @@ func TestMarshalColumnValue(t *testing.T) {
 		typ := testCase.typ
 		col := descpb.ColumnDescriptor{ID: descpb.ColumnID(typ.Family() + 1), Type: typ}
 
-		if actual, err := sqlbase.MarshalColumnValue(&col, testCase.datum); err != nil {
+		if actual, err := MarshalColumnValue(&col, testCase.datum); err != nil {
 			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
 		} else if !reflect.DeepEqual(actual, testCase.exp) {
 			t.Errorf("%d: MarshalColumnValue() got %v, expected %v", i, actual, testCase.exp)
@@ -718,14 +673,14 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
-			primaryKey, _, err := sqlbase.EncodeIndexKey(
+			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+			primaryKey, _, err := EncodeIndexKey(
 				desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			tableIdx, restKey, match, err := sqlbase.IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
+			tableIdx, restKey, match, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -741,7 +696,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := sqlbase.EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -776,7 +731,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := sqlbase.TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -859,15 +814,15 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
-				primaryKey, _, err := sqlbase.EncodeIndexKey(
+				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+				primaryKey, _, err := EncodeIndexKey(
 					desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := sqlbase.TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -880,7 +835,7 @@ func TestEquivSignature(t *testing.T) {
 				}
 				// Extract out the corresponding table index
 				// of the index key's signature.
-				tableIdx, _, _, err := sqlbase.IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
+				tableIdx, _, _, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -910,642 +865,8 @@ func TestEquivSignature(t *testing.T) {
 	}
 }
 
-func TestAdjustStartKeyForInterleave(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
-
-	// Secondary indexes with DESC direction in the last column.
-	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
-	// Index with implicit primary columns (pid1, cid2).
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-
-	// The interleaved hierarchy is as follows:
-	//    parent		(pid1)
-	//	child		(pid1, cid1, cid2)
-	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
-
-	parentDescIdx := parent.Indexes[0]
-	childDescIdx := child.Indexes[0]
-	childNonUniqueIdx := child.Indexes[1]
-	childUniqueIdx := child.Indexes[2]
-	grandchildDescIdx := grandchild.Indexes[0]
-
-	testCases := []struct {
-		index *descpb.IndexDescriptor
-		// See ShortToLongKeyFmt for how to represent a key.
-		input    string
-		expected string
-	}{
-		// NOTNULLASC can appear at the end of a start key for
-		// constraint IS NOT NULL on an ASC index (NULLs sorted first,
-		// span starts (start key) on the first non-NULL).
-		// See encodeStartConstraintAscending.
-
-		{
-			index:    &parent.PrimaryIndex,
-			input:    "/NOTNULLASC",
-			expected: "/NOTNULLASC",
-		},
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/NOTNULLASC",
-			expected: "/1/#/2/NOTNULLASC",
-		},
-		{
-			index:    &grandchild.PrimaryIndex,
-			input:    "/1/#/2/3/#/NOTNULLASC",
-			expected: "/1/#/2/3/#/NOTNULLASC",
-		},
-
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/NOTNULLASC",
-			expected: "/1/#/NOTNULLASC",
-		},
-
-		{
-			index:    &grandchild.PrimaryIndex,
-			input:    "/1/#/2/NOTNULLASC",
-			expected: "/1/#/2/NOTNULLASC",
-		},
-
-		// NULLDESC can appear at the end of a start key for constraint
-		// IS NULL on a DESC index (NULLs sorted last, span starts
-		// (start key) on the first NULLs).
-		// See encodeStartConstraintDescending.
-
-		{
-			index:    &parentDescIdx,
-			input:    "/NULLDESC",
-			expected: "/NULLDESC",
-		},
-		{
-			index:    &childDescIdx,
-			input:    "/1/#/2/NULLDESC",
-			expected: "/1/#/2/NULLDESC",
-		},
-		{
-			index:    &grandchildDescIdx,
-			input:    "/1/#/2/3/#/NULLDESC",
-			expected: "/1/#/2/3/#/NULLDESC",
-		},
-
-		{
-			index:    &childDescIdx,
-			input:    "/1/#/NULLDESC",
-			expected: "/1/#/NULLDESC",
-		},
-
-		// Keys that belong to the given index (neither parent nor
-		// children keys) do not need to be tightened.
-		{
-			index:    &parent.PrimaryIndex,
-			input:    "/1",
-			expected: "/1",
-		},
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/3",
-			expected: "/1/#/2/3",
-		},
-
-		// Parent keys wrt child index is not tightened.
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/1",
-			expected: "/1",
-		},
-
-		// Children keys wrt to parent index is tightened (pushed
-		// forwards) to the next parent key.
-		{
-			index:    &parent.PrimaryIndex,
-			input:    "/1/#/2/3",
-			expected: "/2",
-		},
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/3/#/4",
-			expected: "/1/#/2/4",
-		},
-
-		// Key with len > 1 tokens.
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/12345678901234/#/1234/1234567890/#/123/1234567",
-			expected: "/12345678901234/#/1234/1234567891",
-		},
-		{
-			index:    &child.PrimaryIndex,
-			input:    "/12345678901234/#/d1403.2594/shelloworld/#/123/1234567",
-			expected: "/12345678901234/#/d1403.2594/shelloworld/PrefixEnd",
-		},
-
-		// Index key with extra columns (implicit primary key columns).
-		// We should expect two extra columns (in addition to the
-		// two index columns).
-		{
-			index:    &childNonUniqueIdx,
-			input:    "/2/3",
-			expected: "/2/3",
-		},
-		{
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4",
-			expected: "/2/3/4",
-		},
-		{
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4/5",
-			expected: "/2/3/4/5",
-		},
-		{
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4/5/#/10",
-			expected: "/2/3/4/6",
-		},
-
-		// Unique indexes only include implicit columns if they have
-		// a NULL value.
-		{
-			index:    &childUniqueIdx,
-			input:    "/2/3",
-			expected: "/2/3",
-		},
-		{
-			index:    &childUniqueIdx,
-			input:    "/2/3/4",
-			expected: "/2/4",
-		},
-		{
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4",
-			expected: "/2/NULLASC/4",
-		},
-		{
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4/5",
-			expected: "/2/NULLASC/4/5",
-		},
-		{
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4/5/#/6",
-			expected: "/2/NULLASC/4/6",
-		},
-	}
-
-	for i, tc := range testCases {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			codec := keys.SystemSQLCodec
-			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			actual, err := sqlbase.AdjustStartKeyForInterleave(codec, tc.index, actual)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			expected := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.expected))
-			if !expected.Equal(actual) {
-				t.Errorf("expected tightened start key %s, got %s", expected, actual)
-			}
-		})
-	}
-}
-
-func TestAdjustEndKeyForInterleave(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
-
-	// Secondary indexes with DESC direction in the last column.
-	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
-	// Index with implicit primary columns (pid1, cid2).
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-
-	// The interleaved hierarchy is as follows:
-	//    parent		(pid1)
-	//	child		(pid1, cid1, cid2)
-	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
-
-	parentDescIdx := parent.Indexes[0]
-	childDescIdx := child.Indexes[0]
-	childNonUniqueIdx := child.Indexes[1]
-	childUniqueIdx := child.Indexes[2]
-	grandchildDescIdx := grandchild.Indexes[0]
-
-	testCases := []struct {
-		table *sqlbase.ImmutableTableDescriptor
-		index *descpb.IndexDescriptor
-		// See ShortToLongKeyFmt for how to represent a key.
-		input string
-		// If the end key is assumed to be inclusive when passed to
-		// to AdjustEndKeyForInterleave.
-		inclusive bool
-		expected  string
-	}{
-		// NOTNULLASC can appear at the end of an end key for
-		// constraint IS NULL on an ASC index (NULLs sorted first,
-		// span ends (end key) right before the first non-NULL).
-		// See encodeEndConstraintAscending.
-
-		{
-			table:    parent,
-			index:    &parent.PrimaryIndex,
-			input:    "/NOTNULLASC",
-			expected: "/NULLASC/#",
-		},
-
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/NOTNULLASC",
-			expected: "/1/#/2/NULLASC/#",
-		},
-
-		{
-			table:    grandchild,
-			index:    &grandchild.PrimaryIndex,
-			input:    "/1/#/2/3/#/NOTNULLASC",
-			expected: "/1/#/2/3/#/NULLASC/#",
-		},
-
-		// No change since interleaved rows cannot occur between
-		// partial primary key columns.
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/NOTNULLASC",
-			expected: "/1/#/NOTNULLASC",
-		},
-
-		// No change since key belongs to an ancestor.
-		{
-			table:    grandchild,
-			index:    &grandchild.PrimaryIndex,
-			input:    "/1/#/2/NOTNULLASC",
-			expected: "/1/#/2/NOTNULLASC",
-		},
-
-		// NOTNULLDESC can appear at the end of a start key for
-		// constraint IS NOT NULL on a DESC index (NULLs sorted last,
-		// span ends (end key) right after the last non-NULL).
-		// See encodeEndConstraintDescending.
-
-		// No change since descending indexes are always secondary and
-		// secondary indexes are never tightened since they cannot
-		// have interleaved rows.
-
-		{
-			table:    parent,
-			index:    &parentDescIdx,
-			input:    "/NOTNULLDESC",
-			expected: "/NOTNULLDESC",
-		},
-		{
-			table:    child,
-			index:    &childDescIdx,
-			input:    "/1/#/2/NOTNULLDESC",
-			expected: "/1/#/2/NOTNULLDESC",
-		},
-		{
-			table:    grandchild,
-			index:    &grandchildDescIdx,
-			input:    "/1/#/2/3/#/NOTNULLDESC",
-			expected: "/1/#/2/3/#/NOTNULLDESC",
-		},
-		{
-			table:    grandchild,
-			index:    &grandchildDescIdx,
-			input:    "/1/#/2/NOTNULLDESC",
-			expected: "/1/#/2/NOTNULLDESC",
-		},
-
-		// NULLASC with inclusive=true is possible with IS NULL for
-		// ascending indexes.
-		// See encodeEndConstraintAscending.
-
-		{
-			table:     parent,
-			index:     &parent.PrimaryIndex,
-			input:     "/NULLASC",
-			inclusive: true,
-			expected:  "/NULLASC/#",
-		},
-
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2/NULLASC",
-			inclusive: true,
-			expected:  "/1/#/2/NULLASC/#",
-		},
-
-		// Keys with all the column values of the primary key should be
-		// tightened wrt to primary indexes since they can have
-		// interleaved rows.
-
-		{
-			table:    parent,
-			index:    &parent.PrimaryIndex,
-			input:    "/1",
-			expected: "/0/#",
-		},
-		{
-			table:     parent,
-			index:     &parent.PrimaryIndex,
-			input:     "/1",
-			inclusive: true,
-			expected:  "/1/#",
-		},
-
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/3",
-			expected: "/1/#/2/2/#",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2/3",
-			inclusive: true,
-			expected:  "/1/#/2/3/#",
-		},
-
-		// Idempotency.
-
-		{
-			table:    parent,
-			index:    &parent.PrimaryIndex,
-			input:    "/1/#",
-			expected: "/1/#",
-		},
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#",
-			expected: "/1/#",
-		},
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/2/#",
-			expected: "/1/#/2/2/#",
-		},
-
-		// Children end keys wrt a "parent" index should be tightened
-		// to read up to the last parent key.
-
-		{
-			table:    parent,
-			index:    &parent.PrimaryIndex,
-			input:    "/1/#/2/3",
-			expected: "/1/#",
-		},
-		{
-			table:     parent,
-			index:     &parent.PrimaryIndex,
-			input:     "/1/#/2/3",
-			inclusive: true,
-			expected:  "/1/#",
-		},
-
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/3/#/4",
-			expected: "/1/#/2/3/#",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2/3/#/4",
-			inclusive: true,
-			expected:  "/1/#/2/3/#",
-		},
-
-		// Parent keys wrt child keys need not be tightened.
-
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1",
-			expected: "/1",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1",
-			inclusive: true,
-			expected:  "/2",
-		},
-
-		// Keys with a partial prefix of the primary key columns
-		// need not be tightened since no interleaving can occur after.
-
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2",
-			expected: "/1/#/2",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2",
-			inclusive: true,
-			expected:  "/1/#/3",
-		},
-
-		// Secondary indexes' end keys need not be tightened since
-		// they cannot have interleaves.
-
-		{
-			table:    child,
-			index:    &childDescIdx,
-			input:    "/1/#/2/3",
-			expected: "/1/#/2/3",
-		},
-		{
-			table:     child,
-			index:     &childDescIdx,
-			input:     "/1/#/2/3",
-			inclusive: true,
-			expected:  "/1/#/2/4",
-		},
-		{
-			table:    child,
-			index:    &childDescIdx,
-			input:    "/1/#/2",
-			expected: "/1/#/2",
-		},
-		{
-			table:     child,
-			index:     &childDescIdx,
-			input:     "/1/#/2",
-			inclusive: true,
-			expected:  "/1/#/3",
-		},
-
-		// Key with len > 1 tokens.
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/12345678901234/#/12345/12345678901234/#/123/1234567",
-			expected: "/12345678901234/#/12345/12345678901234/#",
-		},
-
-		// Index key with extra columns (implicit primary key columns).
-		// We should expect two extra columns (in addition to the
-		// two index columns).
-		{
-			table:    child,
-			index:    &childNonUniqueIdx,
-			input:    "/2/3",
-			expected: "/2/3",
-		},
-		{
-			table:    child,
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4",
-			expected: "/2/3/4",
-		},
-		{
-			table:    child,
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4/5",
-			expected: "/2/3/4/5",
-		},
-		// End key not adjusted since secondary indexes can't have
-		// interleaved rows.
-		{
-			table:    child,
-			index:    &childNonUniqueIdx,
-			input:    "/2/3/4/5/#/10",
-			expected: "/2/3/4/5/#/10",
-		},
-
-		{
-			table:    child,
-			index:    &childUniqueIdx,
-			input:    "/2/3",
-			expected: "/2/3",
-		},
-		// End key not adjusted since secondary indexes can't have
-		// interleaved rows.
-		{
-			table:    child,
-			index:    &childUniqueIdx,
-			input:    "/2/3/4",
-			expected: "/2/3/4",
-		},
-		{
-			table:    child,
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4",
-			expected: "/2/NULLASC/4",
-		},
-		{
-			table:    child,
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4/5",
-			expected: "/2/NULLASC/4/5",
-		},
-		// End key not adjusted since secondary indexes can't have
-		// interleaved rows.
-		{
-			table:    child,
-			index:    &childUniqueIdx,
-			input:    "/2/NULLASC/4/5/#/6",
-			expected: "/2/NULLASC/4/5/#/6",
-		},
-
-		// Keys with decimal values.
-		// Not tightened since it's difficult to "go back" one logical
-		// decimal value.
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/d3.4567",
-			expected: "/1/#/2/d3.4567",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2/d3.4567",
-			inclusive: true,
-			expected:  "/1/#/2/d3.4567/#",
-		},
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/d3.4567/#/8",
-			expected: "/1/#/2/d3.4567/#",
-		},
-
-		// Keys with bytes values.
-		// Not tightened since it's difficult to "go back" one logical
-		// bytes value.
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/shelloworld",
-			expected: "/1/#/2/shelloworld",
-		},
-		{
-			table:     child,
-			index:     &child.PrimaryIndex,
-			input:     "/1/#/2/shelloworld",
-			inclusive: true,
-			expected:  "/1/#/2/shelloworld/#",
-		},
-		{
-			table:    child,
-			index:    &child.PrimaryIndex,
-			input:    "/1/#/2/shelloworld/#/3",
-			expected: "/1/#/2/shelloworld/#",
-		},
-	}
-
-	for i, tc := range testCases {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			codec := keys.SystemSQLCodec
-			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			actual, err := sqlbase.AdjustEndKeyForInterleave(codec, tc.table, tc.index, actual, tc.inclusive)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			expected := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.expected))
-			if !expected.Equal(actual) {
-				t.Errorf("expected tightened end key %s, got %s", expected, actual)
-			}
-		})
-	}
-}
-
 func TestDecodeTableValue(t *testing.T) {
-	a := &sqlbase.DatumAlloc{}
+	a := &DatumAlloc{}
 	for _, tc := range []struct {
 		in  tree.Datum
 		typ *types.T
@@ -1562,11 +883,11 @@ func TestDecodeTableValue(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			var prefix, scratch []byte
-			buf, err := sqlbase.EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
+			buf, err := EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
 			if err != nil {
 				t.Fatal(err)
 			}
-			d, _, err := sqlbase.DecodeTableValue(a, tc.typ, buf)
+			d, _, err := DecodeTableValue(a, tc.typ, buf)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("expected error %q, but got %v", tc.err, err)
 			} else if err != nil {
@@ -1577,4 +898,163 @@ func TestDecodeTableValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+// See CreateTestInterleavedHierarchy for the longest chain used for the short
+// format.
+var shortFormTables = [3]string{"parent1", "child1", "grandchild1"}
+
+// ShortToLongKeyFmt converts the short key format preferred in test cases
+//    /1/#/3/4
+// to its long form required by parseTestkey
+//    parent1/1/1/#/child1/1/3/4
+// The short key format can end in an interleave sentinel '#' (i.e. after
+// TightenEndKey).
+// The short key format can also be "/" or end in "#/" which will append
+// the parent's table/index info. without a trailing index column value.
+func ShortToLongKeyFmt(short string) string {
+	tableOrder := shortFormTables
+	curTableIdx := 0
+
+	var long []byte
+	tokens := strings.Split(short, "/")
+	// Verify short format starts with '/'.
+	if tokens[0] != "" {
+		panic("missing '/' token at the beginning of short format")
+	}
+	// Skip the first element since short format has starting '/'.
+	tokens = tokens[1:]
+
+	// Always append parent1.
+	long = append(long, []byte(fmt.Sprintf("/%s/1/", tableOrder[curTableIdx]))...)
+	curTableIdx++
+
+	for i, tok := range tokens {
+		// Permits ".../#/" to append table name without a value
+		if tok == "" {
+			continue
+		}
+
+		if tok == "#" {
+			long = append(long, []byte("#/")...)
+			// It's possible for the short-format to end with a #.
+			if i == len(tokens)-1 {
+				break
+			}
+
+			// New interleaved table and primary keys follow.
+			if curTableIdx >= len(tableOrder) {
+				panic("too many '#' tokens specified in short format (max 2 for child1 and 3 for grandchild1)")
+			}
+
+			long = append(long, []byte(fmt.Sprintf("%s/1/", tableOrder[curTableIdx]))...)
+			curTableIdx++
+
+			continue
+		}
+
+		long = append(long, []byte(fmt.Sprintf("%s/", tok))...)
+	}
+
+	// Remove the last '/'.
+	return string(long[:len(long)-1])
+}
+
+// ExtractIndexKey constructs the index (primary) key for a row from any index
+// key/value entry, including secondary indexes.
+//
+// Don't use this function in the scan "hot path".
+func ExtractIndexKey(
+	a *DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
+) (roachpb.Key, error) {
+	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+	if err != nil {
+		return nil, err
+	}
+	if indexID == tableDesc.GetPrimaryIndexID() {
+		return entry.Key, nil
+	}
+
+	index, err := tableDesc.FindIndexByID(indexID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract the values for index.ColumnIDs.
+	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]EncDatum, len(index.ColumnIDs))
+	dirs := index.ColumnDirections
+	if len(index.Interleave.Ancestors) > 0 {
+		// TODO(dan): In the interleaved index case, we parse the key twice; once to
+		// find the index id so we can look up the descriptor, and once to extract
+		// the values. Only parse once.
+		var ok bool
+		_, ok, _, err = DecodeIndexKey(codec, tableDesc, index, indexTypes, values, dirs, entry.Key)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errors.Errorf("descriptor did not match key")
+		}
+	} else {
+		key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Extract the values for index.ExtraColumnIDs
+	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.ExtraColumnIDs)
+	if err != nil {
+		return nil, err
+	}
+	extraValues := make([]EncDatum, len(index.ExtraColumnIDs))
+	dirs = make([]descpb.IndexDescriptor_Direction, len(index.ExtraColumnIDs))
+	for i := range index.ExtraColumnIDs {
+		// Implicit columns are always encoded Ascending.
+		dirs[i] = descpb.IndexDescriptor_ASC
+	}
+	extraKey := key
+	if index.Unique {
+		extraKey, err = entry.Value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, _, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encode the index key from its components.
+	colMap := make(map[descpb.ColumnID]int)
+	for i, columnID := range index.ColumnIDs {
+		colMap[columnID] = i
+	}
+	for i, columnID := range index.ExtraColumnIDs {
+		colMap[columnID] = i + len(index.ColumnIDs)
+	}
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
+
+	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
+	for i, value := range values {
+		err := value.EnsureDecoded(indexTypes[i], a)
+		if err != nil {
+			return nil, err
+		}
+		decodedValues[i] = value.Datum
+	}
+	for i, value := range extraValues {
+		err := value.EnsureDecoded(extraTypes[i], a)
+		if err != nil {
+			return nil, err
+		}
+		decodedValues[len(values)+i] = value.Datum
+	}
+	indexKey, _, err := EncodeIndexKey(
+		tableDesc, tableDesc.GetPrimaryIndex(), colMap, decodedValues, indexKeyPrefix)
+	return indexKey, err
 }

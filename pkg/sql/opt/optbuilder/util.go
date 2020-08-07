@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -256,7 +257,7 @@ func (b *Builder) addColumn(scope *scope, alias string, expr tree.TypedExpr) *sc
 	return &scope.cols[len(scope.cols)-1]
 }
 
-func (b *Builder) synthesizeResultColumns(scope *scope, cols sqlbase.ResultColumns) {
+func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColumns) {
 	for i := range cols {
 		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {

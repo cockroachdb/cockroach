@@ -10,13 +10,13 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 
 // planDataSource contains the data source information for data
 // produced by a planNode.
 type planDataSource struct {
 	// columns gives the result columns (always anonymous source).
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// plan which can be used to retrieve the data.
 	plan planNode

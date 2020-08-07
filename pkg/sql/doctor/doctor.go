@@ -34,19 +34,17 @@ type DescriptorTableRow struct {
 }
 
 // NewDescGetter creates a sqlbase.MapProtoGetter from a descriptor table.
-func NewDescGetter(rows []DescriptorTableRow) (*sqlbase.MapDescGetter, error) {
-	pg := sqlbase.MapDescGetter{
-		Descs: make(map[descpb.ID]catalog.Descriptor),
-	}
+func NewDescGetter(rows []DescriptorTableRow) (sqlbase.MapDescGetter, error) {
+	pg := sqlbase.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
 			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
 		}
 		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
-		pg.Descs[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(context.TODO(), &d)
+		pg[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(context.TODO(), &d)
 	}
-	return &pg, nil
+	return pg, nil
 }
 
 // Examine runs a suite of consistency checks over the descriptor table.
@@ -58,7 +56,7 @@ func Examine(descTable []DescriptorTableRow, verbose bool, stdout io.Writer) (ok
 	}
 	var problemsFound bool
 	for _, row := range descTable {
-		table, isTable := descGetter.Descs[descpb.ID(row.ID)].(catalog.TableDescriptor)
+		table, isTable := descGetter[descpb.ID(row.ID)].(catalog.TableDescriptor)
 		if !isTable {
 			// So far we only examine table descriptors. We may add checks for other
 			// descriptors in later versions.

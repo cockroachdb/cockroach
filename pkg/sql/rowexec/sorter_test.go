@@ -19,11 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,9 +37,9 @@ import (
 func TestSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [6]sqlbase.EncDatum{}
+	v := [6]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.IntEncDatum(i)
+		v[i] = rowenc.IntEncDatum(i)
 	}
 
 	asc := encoding.Ascending
@@ -49,22 +50,22 @@ func TestSorter(t *testing.T) {
 		spec     execinfrapb.SorterSpec
 		post     execinfrapb.PostProcessSpec
 		types    []*types.T
-		input    sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
+		input    rowenc.EncDatumRows
+		expected rowenc.EncDatumRows
 	}{
 		{
 			name: "SortAll",
 			// No specified input ordering and unspecified limit.
 			spec: execinfrapb.SorterSpec{
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: desc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: sqlbase.ThreeIntCols,
-			input: sqlbase.EncDatumRows{
+			types: rowenc.ThreeIntCols,
+			input: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[4]},
@@ -73,7 +74,7 @@ func TestSorter(t *testing.T) {
 				{v[3], v[3], v[0]},
 				{v[0], v[0], v[0]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0]},
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -87,15 +88,15 @@ func TestSorter(t *testing.T) {
 			// No specified input ordering but specified limit.
 			spec: execinfrapb.SorterSpec{
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
 			post:  execinfrapb.PostProcessSpec{Limit: 4},
-			types: sqlbase.ThreeIntCols,
-			input: sqlbase.EncDatumRows{
+			types: rowenc.ThreeIntCols,
+			input: rowenc.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
 				{v[1], v[0], v[4]},
@@ -104,7 +105,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 				{v[3], v[2], v[0]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0]},
 				{v[1], v[0], v[4]},
 				{v[3], v[2], v[0]},
@@ -115,15 +116,15 @@ func TestSorter(t *testing.T) {
 			// No specified input ordering but specified offset and limit.
 			spec: execinfrapb.SorterSpec{
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
 			post:  execinfrapb.PostProcessSpec{Offset: 2, Limit: 2},
-			types: sqlbase.ThreeIntCols,
-			input: sqlbase.EncDatumRows{
+			types: rowenc.ThreeIntCols,
+			input: rowenc.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
 				{v[1], v[0], v[4]},
@@ -132,7 +133,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 				{v[3], v[2], v[0]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[3], v[2], v[0]},
 				{v[3], v[3], v[0]},
 			},
@@ -141,15 +142,15 @@ func TestSorter(t *testing.T) {
 			// No specified input ordering but specified postprocess filter expression.
 			spec: execinfrapb.SorterSpec{
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
 			post:  execinfrapb.PostProcessSpec{Filter: execinfrapb.Expression{Expr: "@1 + @2 < 7"}},
-			types: sqlbase.ThreeIntCols,
-			input: sqlbase.EncDatumRows{
+			types: rowenc.ThreeIntCols,
+			input: rowenc.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
 				{v[1], v[0], v[4]},
@@ -158,7 +159,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 				{v[3], v[2], v[0]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0]},
 				{v[1], v[0], v[4]},
 				{v[3], v[2], v[0]},
@@ -170,14 +171,14 @@ func TestSorter(t *testing.T) {
 			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: sqlbase.ThreeIntCols,
-			input: sqlbase.EncDatumRows{
+			types: rowenc.ThreeIntCols,
+			input: rowenc.EncDatumRows{
 				{v[0], v[1], v[2]},
 				{v[0], v[1], v[0]},
 				{v[1], v[0], v[5]},
@@ -189,7 +190,7 @@ func TestSorter(t *testing.T) {
 				{v[4], v[4], v[5]},
 				{v[4], v[4], v[4]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[0], v[1], v[0]},
 				{v[0], v[1], v[2]},
 				{v[1], v[0], v[5]},
@@ -207,14 +208,14 @@ func TestSorter(t *testing.T) {
 			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
 			types: []*types.T{types.Int, types.Int, types.Int, types.Int},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[1], v[1], v[2], v[5]},
 				{v[0], v[1], v[2], v[4]},
 				{v[0], v[1], v[2], v[3]},
@@ -224,7 +225,7 @@ func TestSorter(t *testing.T) {
 				{v[0], v[2], v[2], v[3]},
 				{v[1], v[2], v[2], v[2]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},
 				{v[0], v[1], v[2], v[4]},
@@ -239,14 +240,14 @@ func TestSorter(t *testing.T) {
 			spec: execinfrapb.SorterSpec{
 				OrderingMatchLen: 2,
 				OutputOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 1, Direction: asc},
 						{ColIdx: 2, Direction: asc},
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
 			types: []*types.T{types.Int, types.Int, types.Int, types.Int},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},
 				{v[0], v[1], v[2], v[4]},
@@ -256,7 +257,7 @@ func TestSorter(t *testing.T) {
 				{v[0], v[2], v[2], v[4]},
 				{v[1], v[2], v[2], v[5]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},
 				{v[0], v[1], v[2], v[4]},
@@ -338,7 +339,7 @@ func TestSorter(t *testing.T) {
 							t.Fatalf("output RowReceiver not closed")
 						}
 
-						var retRows sqlbase.EncDatumRows
+						var retRows rowenc.EncDatumRows
 						for {
 							row := out.NextNoMeta(t)
 							if row == nil {
@@ -403,7 +404,7 @@ func TestSortInvalidLimit(t *testing.T) {
 	})
 }
 
-var twoColOrdering = execinfrapb.ConvertToSpecOrdering(sqlbase.ColumnOrdering{
+var twoColOrdering = execinfrapb.ConvertToSpecOrdering(colinfo.ColumnOrdering{
 	{ColIdx: 0, Direction: encoding.Ascending},
 	{ColIdx: 1, Direction: encoding.Ascending},
 })
@@ -432,7 +433,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeRandIntRows(rng, numRows, numCols))
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -473,7 +474,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-		input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			post := execinfrapb.PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
@@ -524,11 +525,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for chunkSize := 1; chunkSize <= numRows; chunkSize *= 4 {
 			b.Run(fmt.Sprintf("rows=%d,ChunkSize=%d", numRows, chunkSize), func(b *testing.B) {
-				rows := sqlbase.MakeRandIntRows(rng, numRows, numCols)
+				rows := rowenc.MakeRandIntRows(rng, numRows, numCols)
 				for i, row := range rows {
-					row[0] = sqlbase.IntEncDatum(i / chunkSize)
+					row[0] = rowenc.IntEncDatum(i / chunkSize)
 				}
-				input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, rows)
+				input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rows)
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

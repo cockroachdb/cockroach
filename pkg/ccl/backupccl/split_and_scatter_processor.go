@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -169,7 +169,7 @@ func (ssp *splitAndScatterProcessor) Run(ctx context.Context) {
 	doneScatterCh := make(chan entryNode, numEntries)
 
 	// A cache for routing datums, so only 1 is allocated per node.
-	routingDatumCache := make(map[roachpb.NodeID]sqlbase.EncDatum)
+	routingDatumCache := make(map[roachpb.NodeID]rowenc.EncDatum)
 
 	var err error
 	splitAndScatterCtx, cancelSplitAndScatter := context.WithCancel(ctx)
@@ -200,9 +200,9 @@ func (ssp *splitAndScatterProcessor) Run(ctx context.Context) {
 			routingDatumCache[scatteredEntry.node] = routingDatum
 		}
 
-		row := sqlbase.EncDatumRow{
+		row := rowenc.EncDatumRow{
 			routingDatum,
-			sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes))),
+			rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes))),
 		}
 		ssp.output.Push(row, nil)
 	}
@@ -278,17 +278,17 @@ func runSplitAndScatter(
 	return g.Wait()
 }
 
-func routingDatumsForNode(nodeID roachpb.NodeID) (sqlbase.EncDatum, sqlbase.EncDatum) {
+func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum) {
 	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
-	startDatum := sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
+	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
+	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
 }
 
 // routingSpanForNode provides the mapping to be used during distsql planning
 // when setting up the output router.
 func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
-	var alloc sqlbase.DatumAlloc
+	var alloc rowenc.DatumAlloc
 	startDatum, endDatum := routingDatumsForNode(nodeID)
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -61,7 +61,7 @@ func (isc *inputStatCollector) Child(nth int, verbose bool) execinfra.OpNode {
 
 // Next implements the RowSource interface. It calls Next on the embedded
 // RowSource and collects stats.
-func (isc *inputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	start := timeutil.Now()
 	row, meta := isc.RowSource.Next()
 	if row != nil {
@@ -138,7 +138,7 @@ func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
 // NextRow is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) NextRow(
 	ctx context.Context,
-) (sqlbase.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error) {
+) (rowenc.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error) {
 	start := timeutil.Now()
 	row, t, i, err := c.Fetcher.NextRow(ctx)
 	if row != nil {

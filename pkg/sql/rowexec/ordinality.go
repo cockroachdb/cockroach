@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -83,7 +83,7 @@ func (o *ordinalityProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (o *ordinalityProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (o *ordinalityProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for o.State == execinfra.StateRunning {
 		row, meta := o.input.Next()
 
@@ -99,7 +99,7 @@ func (o *ordinalityProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 		}
 
 		// The ordinality should increment even if the row gets filtered out.
-		row = append(row, sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(o.curCnt))))
+		row = append(row, rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(o.curCnt))))
 		o.curCnt++
 		if outRow := o.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil

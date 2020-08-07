@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -45,7 +45,7 @@ import (
 func emitHelper(
 	ctx context.Context,
 	output *execinfra.ProcOutputHelper,
-	row sqlbase.EncDatumRow,
+	row rowenc.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
 	pushTrailingMeta func(context.Context),
 	inputs ...execinfra.RowSource,

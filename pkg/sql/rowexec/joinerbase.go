@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -26,9 +26,9 @@ type joinerBase struct {
 
 	joinType    descpb.JoinType
 	onCond      execinfrapb.ExprHelper
-	emptyLeft   sqlbase.EncDatumRow
-	emptyRight  sqlbase.EncDatumRow
-	combinedRow sqlbase.EncDatumRow
+	emptyLeft   rowenc.EncDatumRow
+	emptyRight  rowenc.EncDatumRow
+	combinedRow rowenc.EncDatumRow
 
 	// EqCols contains the indices of the columns that are constrained to be
 	// equal. Specifically column EqCols[0][i] on the left side must match the
@@ -68,13 +68,13 @@ func (jb *joinerBase) init(
 		}
 	}
 
-	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
+	jb.emptyLeft = make(rowenc.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
+		jb.emptyLeft[i] = rowenc.DatumToEncDatum(leftTypes[i], tree.DNull)
 	}
-	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
+	jb.emptyRight = make(rowenc.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)
+		jb.emptyRight[i] = rowenc.DatumToEncDatum(rightTypes[i], tree.DNull)
 	}
 
 	jb.eqCols[leftSide] = leftEqColumns
@@ -82,7 +82,7 @@ func (jb *joinerBase) init(
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
 	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
-	jb.combinedRow = make(sqlbase.EncDatumRow, size)
+	jb.combinedRow = make(rowenc.EncDatumRow, size)
 
 	condTypes := make([]*types.T, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
@@ -138,9 +138,7 @@ func (j joinSide) String() string {
 
 // renderUnmatchedRow creates a result row given an unmatched row on either
 // side. Only used for outer joins.
-func (jb *joinerBase) renderUnmatchedRow(
-	row sqlbase.EncDatumRow, side joinSide,
-) sqlbase.EncDatumRow {
+func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) rowenc.EncDatumRow {
 	lrow, rrow := jb.emptyLeft, jb.emptyRight
 	if side == leftSide {
 		lrow = row
@@ -187,7 +185,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 // Note the left and right merged equality columns (i.e. from a USING clause
 // or after simplifying ON left.x = right.x) are NOT checked for equality.
 // See CompareEncDatumRowForMerge.
-func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
+func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	n := jb.numMergedEqualityColumns
 	jb.combinedRow = jb.combinedRow[:n+len(lrow)+len(rrow)]
 	for i := 0; i < n; i++ {

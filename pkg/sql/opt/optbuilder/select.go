@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -730,9 +730,9 @@ func (b *Builder) buildSequenceSelect(
 	md := b.factory.Metadata()
 	outScope = inScope.push()
 
-	cols := make(opt.ColList, len(sqlbase.SequenceSelectColumns))
+	cols := make(opt.ColList, len(colinfo.SequenceSelectColumns))
 
-	for i, c := range sqlbase.SequenceSelectColumns {
+	for i, c := range colinfo.SequenceSelectColumns {
 		cols[i] = md.AddColumn(c.Name, c.Typ)
 	}
 

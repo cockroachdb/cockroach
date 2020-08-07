@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -33,7 +33,7 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = sqlbase.RandType(rng)
+		typs[i] = rowenc.RandType(rng)
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1

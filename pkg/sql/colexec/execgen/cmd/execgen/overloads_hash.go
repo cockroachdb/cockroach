@@ -146,7 +146,7 @@ func (c intervalCustomizer) getHashAssignFunc() assignFunc {
 func (c datumCustomizer) getHashAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		// Note that this overload assumes that there exists
-		//   var datumAlloc *sqlbase.DatumAlloc.
+		//   var datumAlloc *rowenc.DatumAlloc.
 		// in the scope.
 		return fmt.Sprintf(`b := %s.(*coldataext.Datum).Hash(datumAlloc)`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")

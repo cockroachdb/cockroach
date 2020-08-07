@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,7 +37,7 @@ import (
 // or partial index predicates are created. If the table name was not stripped,
 // these expressions would become invalid if the table is renamed.
 func DequalifyColumnRefs(
-	ctx context.Context, source *sqlbase.DataSourceInfo, expr tree.Expr,
+	ctx context.Context, source *colinfo.DataSourceInfo, expr tree.Expr,
 ) (string, error) {
 	e, err := dequalifyColumnRefs(ctx, source, expr)
 	if err != nil {
@@ -48,9 +49,9 @@ func DequalifyColumnRefs(
 // dequalifyColumnRefs returns an expression with database and table names
 // stripped from qualified column names.
 func dequalifyColumnRefs(
-	ctx context.Context, source *sqlbase.DataSourceInfo, expr tree.Expr,
+	ctx context.Context, source *colinfo.DataSourceInfo, expr tree.Expr,
 ) (tree.Expr, error) {
-	resolver := sqlbase.ColumnResolver{Source: source}
+	resolver := colinfo.ColumnResolver{Source: source}
 	return tree.SimpleVisit(
 		expr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -234,8 +235,8 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // descriptor, replaceColumnVars errs with pgcode.UndefinedColumn.
 func replaceColumnVars(
 	desc catalog.TableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, sqlbase.TableColSet, error) {
-	var colIDs sqlbase.TableColSet
+) (tree.Expr, TableColSet, error) {
+	var colIDs TableColSet
 
 	newExpr, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)

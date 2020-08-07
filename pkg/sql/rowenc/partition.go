@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package rowenc
 
 import (
 	"fmt"
@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -187,20 +186,4 @@ func DecodePartitionTuple(
 	}
 
 	return t, key, nil
-}
-
-type partitionInterval struct {
-	name  string
-	start roachpb.Key
-	end   roachpb.Key
-}
-
-var _ interval.Interface = partitionInterval{}
-
-// ID is part of `interval.Interface` but unused in validatePartitioningDescriptor.
-func (ps partitionInterval) ID() uintptr { return 0 }
-
-// Range is part of `interval.Interface`.
-func (ps partitionInterval) Range() interval.Range {
-	return interval.Range{Start: []byte(ps.start), End: []byte(ps.end)}
 }

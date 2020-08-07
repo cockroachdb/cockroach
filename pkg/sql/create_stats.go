@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -217,7 +217,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
-		isInvIndex := sqlbase.ColumnTypeIsInvertedIndexable(col.Type)
+		isInvIndex := colinfo.ColumnTypeIsInvertedIndexable(col.Type)
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
@@ -434,7 +434,7 @@ func createStatsDefaultColumns(
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colList,
-			HasHistogram:        !sqlbase.ColumnTypeIsInvertedIndexable(col.Type),
+			HasHistogram:        !colinfo.ColumnTypeIsInvertedIndexable(col.Type),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
@@ -493,7 +493,7 @@ func (r *createStatsResumer) Resume(
 	r.tableID = details.Table.ID
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]*types.T{})
+	ci := colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci)
 	defer func() {
 		if rows != nil {

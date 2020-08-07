@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -776,15 +776,15 @@ func (s *sqlSink) Close() error {
 //
 // TODO(dan): There's some potential allocation savings here by reusing the same
 // backing array.
-type encDatumRowBuffer []sqlbase.EncDatumRow
+type encDatumRowBuffer []rowenc.EncDatumRow
 
 func (b *encDatumRowBuffer) IsEmpty() bool {
 	return b == nil || len(*b) == 0
 }
-func (b *encDatumRowBuffer) Push(r sqlbase.EncDatumRow) {
+func (b *encDatumRowBuffer) Push(r rowenc.EncDatumRow) {
 	*b = append(*b, r)
 }
-func (b *encDatumRowBuffer) Pop() sqlbase.EncDatumRow {
+func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 	ret := (*b)[0]
 	*b = (*b)[1:]
 	return ret
@@ -792,7 +792,7 @@ func (b *encDatumRowBuffer) Pop() sqlbase.EncDatumRow {
 
 type bufferSink struct {
 	buf     encDatumRowBuffer
-	alloc   sqlbase.DatumAlloc
+	alloc   rowenc.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
 }
@@ -805,7 +805,7 @@ func (s *bufferSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 	topic := table.GetName()
-	s.buf.Push(sqlbase.EncDatumRow{
+	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},     // key
@@ -827,7 +827,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 		return err
 	}
 	s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
-	s.buf.Push(sqlbase.EncDatumRow{
+	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic
 		{Datum: tree.DNull}, // key

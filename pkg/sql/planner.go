@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -197,7 +198,7 @@ type planner struct {
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
-	alloc *sqlbase.DatumAlloc
+	alloc *rowenc.DatumAlloc
 
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
@@ -287,7 +288,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}}
+	p := &planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}}
 
 	p.txn = txn
 	p.stmt = nil

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -202,7 +203,7 @@ func (p *planner) ResolveType(
 		return nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
-	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+	tdesc := desc.(*typedesc.ImmutableTypeDescriptor)
 
 	// Disllow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
@@ -222,7 +223,7 @@ func (p *planner) ResolveType(
 
 // ResolveTypeByOID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	name, desc, err := p.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
+	name, desc, err := p.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +555,7 @@ type internalLookupCtx struct {
 	schemaDescs map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
-	typDescs    map[descpb.ID]*sqlbase.ImmutableTypeDescriptor
+	typDescs    map[descpb.ID]*typedesc.ImmutableTypeDescriptor
 	typIDs      []descpb.ID
 }
 
@@ -577,7 +578,7 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Table:
 			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
 		case *descpb.Descriptor_Type:
-			descs[i] = sqlbase.NewImmutableTypeDescriptor(*t.Type)
+			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
 		case *descpb.Descriptor_Schema:
 			descs[i] = sqlbase.NewImmutableSchemaDescriptor(*t.Schema)
 		}
@@ -592,7 +593,7 @@ func newInternalLookupCtx(
 	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
-	typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
+	typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
 	var tbIDs, typIDs, dbIDs []descpb.ID
 	// Record database descriptors for name lookups.
 	for i := range descs {
@@ -609,7 +610,7 @@ func newInternalLookupCtx(
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, desc.ID)
 			}
-		case *sqlbase.ImmutableTypeDescriptor:
+		case *typedesc.ImmutableTypeDescriptor:
 			typDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
@@ -732,7 +733,7 @@ func getTableNameFromTableDescriptor(
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
 func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
-) (*sqlbase.MutableTypeDescriptor, error) {
+) (*typedesc.MutableTypeDescriptor, error) {
 	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
 	if err != nil {
 		return nil, err

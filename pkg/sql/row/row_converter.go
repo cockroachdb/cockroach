@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -251,7 +253,7 @@ func NewDatumRowConverter(
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(tableDesc, targetColNames,
+		if targetColDescriptors, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
@@ -290,7 +292,7 @@ func NewDatumRowConverter(
 		evalCtx.Codec,
 		tableDesc,
 		cols,
-		&sqlbase.DatumAlloc{},
+		&rowenc.DatumAlloc{},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")

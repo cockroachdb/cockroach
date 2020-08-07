@@ -11,15 +11,15 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
 	parser.Statement
 
-	ExpectedTypes sqlbase.ResultColumns
+	ExpectedTypes colinfo.ResultColumns
 	AnonymizedStr string
 	queryID       ClusterWideID
 
