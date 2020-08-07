@@ -145,11 +145,23 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
+	exists, id, err := catalogkv.LookupPublicTableID(
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
+	)
+	if err == nil && exists {
+		// Try and see what kind of object we collided with.
+		desc, err := catalogkv.GetAnyDescriptorByID(
+			params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
+		if err != nil {
+			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+		}
+		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+	} else if err != nil {
+		return err
+	}
+
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
-
-	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
@@ -163,28 +175,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.AddDrainingName(renameDetails)
+
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	// We update the descriptor to the new name, but also leave the mapping of the
-	// old name to the id, so that the name is not reused until the schema changer
-	// has made sure it's not in use any more.
-	b := &kv.Batch{}
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
-	}
-	err := catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc)
-	if err != nil {
-		return err
-	}
-
-	exists, id, err := catalogkv.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
-	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
@@ -196,8 +193,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	b.CPut(newTbKey, descID, nil)
-	return p.txn.Run(ctx, b)
+	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
+		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
+
+	return p.writeNameKey(ctx, newTbKey, descID)
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
@@ -228,4 +227,16 @@ func (p *planner) dependentViewError(
 		sqlbase.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
 			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
+}
+
+// writeNameKey writes a name key to a batch and runs the batch.
+func (p *planner) writeNameKey(ctx context.Context, key sqlbase.DescriptorKey, ID descpb.ID) error {
+	marshalledKey := key.Key(p.ExecCfg().Codec)
+	b := &kv.Batch{}
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", marshalledKey, ID)
+	}
+	b.CPut(marshalledKey, ID, nil)
+
+	return p.txn.Run(ctx, b)
 }

@@ -139,9 +139,6 @@ true true
 statement error pq: invalid input value for enum greeting: "notagreeting"
 SELECT 'hello'::greeting = 'notagreeting'
 
-statement error pq: unimplemented: ALTER TYPE SET SCHEMA unsupported
-ALTER TYPE greeting SET SCHEMA newschema
-
 # Tests for enum builtins.
 statement ok
 CREATE TYPE dbs AS ENUM ('postgres', 'mysql', 'spanner', 'cockroach')

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,13 +55,13 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params, n, t)
+		err = params.p.addEnumValue(params.ctx, n, t)
 	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params, n, t.OldVal, t.NewVal)
+		err = params.p.renameTypeValue(params.ctx, n, t.OldVal, t.NewVal)
 	case *tree.AlterTypeRename:
-		err = params.p.renameType(params, n, t.NewName)
+		err = params.p.renameType(params.ctx, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
-		err = unimplemented.NewWithIssue(48672, "ALTER TYPE SET SCHEMA unsupported")
+		err = params.p.setTypeSchema(params.ctx, n, t.Schema)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -73,18 +72,22 @@ func (n *alterTypeNode) startExec(params runParams) error {
 }
 
 func (p *planner) addEnumValue(
-	params runParams, n *alterTypeNode, node *tree.AlterTypeAddValue,
+	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeAddValue,
 ) error {
 	if err := n.desc.AddEnumValue(node); err != nil {
 		return err
 	}
-	return p.writeTypeSchemaChange(params.ctx, n.desc, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return p.writeTypeSchemaChange(
+		ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
 }
 
-func (p *planner) renameType(params runParams, n *alterTypeNode, newName string) error {
+func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
 	// See if there is a name collision with the new name.
 	exists, id, err := catalogkv.LookupObjectID(
-		params.ctx,
+		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
 		n.desc.ParentID,
@@ -93,7 +96,7 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
+		desc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 		if err != nil {
 			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
@@ -104,17 +107,17 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 
 	// Rename the base descriptor.
 	if err := p.performRenameTypeDesc(
-		params.ctx,
+		ctx,
 		n.desc,
 		newName,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
 	}
 
 	// Now rename the array type.
 	newArrayName, err := findFreeArrayTypeName(
-		params.ctx,
+		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
 		n.desc.ParentID,
@@ -124,15 +127,15 @@ func (p *planner) renameType(params runParams, n *alterTypeNode, newName string)
 	if err != nil {
 		return err
 	}
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(params.ctx, p.txn, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 	if err := p.performRenameTypeDesc(
-		params.ctx,
+		ctx,
 		arrayDesc,
 		newArrayName,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
 	}
@@ -143,31 +146,32 @@ func (p *planner) performRenameTypeDesc(
 	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, newName string, jobDesc string,
 ) error {
 	// Record the rename details in the descriptor for draining.
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
+	name := descpb.NameInfo{
 		ParentID:       desc.ParentID,
 		ParentSchemaID: desc.ParentSchemaID,
 		Name:           desc.Name,
-	})
+	}
+	desc.AddDrainingName(name)
+
 	// Set the descriptor up with the new name.
 	desc.Name = newName
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
 	// Construct the new namespace key.
-	b := p.txn.NewBatch()
 	key := catalogkv.MakeObjectNameKey(
 		ctx,
 		p.ExecCfg().Settings,
 		desc.ParentID,
 		desc.ParentSchemaID,
 		newName,
-	).Key(p.ExecCfg().Codec)
-	b.CPut(key, desc.ID, nil /* expected */)
-	return p.txn.Run(ctx, b)
+	)
+
+	return p.writeNameKey(ctx, key, desc.ID)
 }
 
 func (p *planner) renameTypeValue(
-	params runParams, n *alterTypeNode, oldVal string, newVal string,
+	ctx context.Context, n *alterTypeNode, oldVal string, newVal string,
 ) error {
 	enumMemberIndex := -1
 
@@ -192,10 +196,48 @@ func (p *planner) renameTypeValue(
 	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
 
 	return p.writeTypeSchemaChange(
-		params.ctx,
+		ctx,
 		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		tree.AsStringWithFQNames(n.n, p.Ann()),
 	)
+}
+
+func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema string) error {
+	typeDesc := n.desc
+	schemaID := typeDesc.GetParentSchemaID()
+	databaseID := typeDesc.GetParentID()
+
+	desiredSchemaID, err := p.prepareSetSchema(ctx, typeDesc, schema)
+	if err != nil {
+		return err
+	}
+
+	// If the schema being changed to is the same as the current schema for the
+	// type, do a no-op.
+	if desiredSchemaID == schemaID {
+		return nil
+	}
+
+	name := descpb.NameInfo{
+		ParentID:       databaseID,
+		ParentSchemaID: schemaID,
+		Name:           typeDesc.Name,
+	}
+	typeDesc.AddDrainingName(name)
+
+	// Set the tableDesc's new schema id to the desired schema's id.
+	typeDesc.SetParentSchemaID(desiredSchemaID)
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	newKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
+		databaseID, desiredSchemaID, typeDesc.Name)
+
+	return p.writeNameKey(ctx, newKey, typeDesc.ID)
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
