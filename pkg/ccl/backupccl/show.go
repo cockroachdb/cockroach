@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -291,7 +291,7 @@ func backupShowerDefault(
 								IgnoreComments: true,
 							}
 							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-								sqlbase.NewImmutableTableDescriptor(*table), displayOptions)
+								tabledesc.NewImmutableTableDescriptor(*table), displayOptions)
 							if err != nil {
 								continue
 							}

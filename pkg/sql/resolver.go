@@ -22,13 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -478,7 +478,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
+	return tabledesc.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -501,7 +501,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *sqlbase.MutableTableDescriptor
+	newTableDesc *tabledesc.MutableTableDescriptor
 }
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
@@ -559,7 +559,7 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Database:
 			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
 		case *descpb.Descriptor_Table:
-			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
+			descs[i] = tabledesc.NewImmutableTableDescriptor(*t.Table)
 		case *descpb.Descriptor_Type:
 			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
 		case *descpb.Descriptor_Schema:
@@ -587,7 +587,7 @@ func newInternalLookupCtx(
 			if prefix == nil || prefix.GetID() == desc.GetID() {
 				dbIDs = append(dbIDs, desc.GetID())
 			}
-		case *sqlbase.ImmutableTableDescriptor:
+		case *tabledesc.ImmutableTableDescriptor:
 			tbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.

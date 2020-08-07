@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -152,7 +152,7 @@ func createSchemaChangeJobsFromMutations(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	username string,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 ) ([]*jobs.StartableJob, error) {
 	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
 	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.Mutations))

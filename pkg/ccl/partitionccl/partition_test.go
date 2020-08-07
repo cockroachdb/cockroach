@@ -30,10 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -95,7 +95,7 @@ type partitioningTest struct {
 		createStmt string
 
 		// tableDesc is the TableDescriptor created by `createStmt`.
-		tableDesc *sqlbase.MutableTableDescriptor
+		tableDesc *tabledesc.MutableTableDescriptor
 
 		// zoneConfigStmt contains SQL that effects the zone configs described
 		// by `configs`.

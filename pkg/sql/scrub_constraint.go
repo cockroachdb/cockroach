@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -27,7 +27,7 @@ import (
 // CHECK constraint on a table.
 type sqlCheckConstraintCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.ImmutableTableDescriptor
+	tableDesc *tabledesc.ImmutableTableDescriptor
 	checkDesc *descpb.TableDescriptor_CheckConstraint
 	asOf      hlc.Timestamp
 
@@ -51,7 +51,7 @@ type sqlCheckConstraintCheckRun struct {
 
 func newSQLCheckConstraintCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	checkDesc *descpb.TableDescriptor_CheckConstraint,
 	asOf hlc.Timestamp,
 ) *sqlCheckConstraintCheckOperation {
@@ -79,7 +79,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	tn.ExplicitCatalog = true
 	tn.ExplicitSchema = true
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns),
+		Exprs: tabledesc.ColumnsSelectors(o.tableDesc.Columns),
 		From: tree.From{
 			Tables: tree.TableExprs{&tn},
 		},

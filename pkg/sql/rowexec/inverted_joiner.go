@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -62,7 +62,7 @@ type invertedJoiner struct {
 
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
-	desc         sqlbase.ImmutableTableDescriptor
+	desc         tabledesc.ImmutableTableDescriptor
 	// The map from ColumnIDs in the table to the column position.
 	colIdxMap map[descpb.ColumnID]int
 	index     *descpb.IndexDescriptor
@@ -161,7 +161,7 @@ func newInvertedJoiner(
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	ij := &invertedJoiner{
-		desc:                 sqlbase.MakeImmutableTableDescriptor(spec.Table),
+		desc:                 tabledesc.MakeImmutableTableDescriptor(spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		datumsToInvertedExpr: datumsToInvertedExpr,

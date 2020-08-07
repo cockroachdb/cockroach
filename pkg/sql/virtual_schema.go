@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -328,7 +328,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
 				return mutableVirtualDefEntry{
-					desc: sqlbase.NewMutableExistingTableDescriptor(*def.desc.TableDesc()),
+					desc: tabledesc.NewMutableExistingTableDescriptor(*def.desc.TableDesc()),
 				}, nil
 			}
 			return &def, nil
@@ -372,7 +372,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *sqlbase.ImmutableTableDescriptor
+	desc                       *tabledesc.ImmutableTableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -382,7 +382,7 @@ func (e virtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type mutableVirtualDefEntry struct {
-	desc *sqlbase.MutableTableDescriptor
+	desc *tabledesc.MutableTableDescriptor
 }
 
 func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
@@ -637,7 +637,7 @@ func NewVirtualSchemaHolder(
 
 			entry := virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       sqlbase.NewImmutableTableDescriptor(tableDesc),
+				desc:                       tabledesc.NewImmutableTableDescriptor(tableDesc),
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
@@ -722,7 +722,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (virtualDe
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.ImmutableTableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.ImmutableTableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (virtualDefEntry, error)
@@ -735,7 +735,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*sqlbase.ImmutableTableDescriptor, error) {
+) (*tabledesc.ImmutableTableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
