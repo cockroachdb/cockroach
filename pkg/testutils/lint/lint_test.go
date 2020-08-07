@@ -1594,6 +1594,42 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestVectorizedDynamicBatches", func(t *testing.T) {
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			// We prohibit usage of colmem.Allocator.NewMemBatchWithMaxCapacity
+			// in order to remind us to think whether we want the dynamic batch
+			// size behavior or not.
+			fmt.Sprintf(`\.NewMemBatchWithMaxCapacity\(`),
+			"--",
+			"sql/col*",
+			":!sql/col*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; either use ResetMaybeReallocate or NewMemBatchWithFixedCapacity", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestVectorizedAppendColumn", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
