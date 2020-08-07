@@ -1086,7 +1086,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 	}
 	// Use a bogus timestamp for the descriptor modification time.
 	ts := hlc.Timestamp{WallTime: 123}
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), desc, ts)
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), desc, ts)
 	var v roachpb.Value
 	if err := v.SetProto(desc); err != nil {
 		panic(err)

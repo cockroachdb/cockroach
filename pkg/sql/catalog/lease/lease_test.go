@@ -608,10 +608,10 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
 				mu.Lock()
 				defer mu.Unlock()
-				if waitTableID != sqlbase.GetDescriptorID(descriptor) {
+				if waitTableID != descpb.GetDescriptorID(descriptor) {
 					return
 				}
-				if sqlbase.GetDescriptorDropped(descriptor) {
+				if descpb.GetDescriptorDropped(descriptor) {
 					close(deleted)
 					waitTableID = 0
 				}
@@ -1694,7 +1694,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 				t.Fatalf("error while reading proto: %v", err)
 			}
 			// Look at the descriptor that comes back from the database.
-			dbTable := sqlbase.TableFromDescriptor(dbDesc, ts)
+			dbTable := descpb.TableFromDescriptor(dbDesc, ts)
 
 			if dbTable.Version != table.Version || dbTable.ModificationTime != table.ModificationTime {
 				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
@@ -2294,8 +2294,8 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 			// Use this testing knob to ensure that we see an update for the desc
 			// in question. We don't care about events to refresh the first version
 			// which can happen under rare stress scenarios.
-			if sqlbase.GetDescriptorID(descriptor) == interestingTable.Load().(descpb.ID) &&
-				sqlbase.GetDescriptorVersion(descriptor) >= 2 {
+			if descpb.GetDescriptorID(descriptor) == interestingTable.Load().(descpb.ID) &&
+				descpb.GetDescriptorVersion(descriptor) >= 2 {
 				select {
 				case descUpdateChan <- descriptor:
 				case <-unblockAll:
@@ -2363,7 +2363,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	case err := <-selectDone:
 		t.Fatalf("select succeeded before expected: %v", err)
 	case desc := <-descUpdateChan:
-		require.Equal(t, descpb.DescriptorVersion(2), sqlbase.GetDescriptorVersion(desc))
+		require.Equal(t, descpb.DescriptorVersion(2), descpb.GetDescriptorVersion(desc))
 	}
 
 	// Allow the original lease acquisition to proceed.

@@ -66,7 +66,7 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
-		table := sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{})
+		table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{})
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}

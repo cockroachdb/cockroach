@@ -150,7 +150,7 @@ func TestKeyRewriter(t *testing.T) {
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
 	desc := sqlbase.NewImmutableTableDescriptor(*tableDesc).DescriptorProto()
 	// Set the timestamp to a non-zero value.
-	sqlbase.TableFromDescriptor(desc, hlc.Timestamp{WallTime: 1})
+	descpb.TableFromDescriptor(desc, hlc.Timestamp{WallTime: 1})
 	bytes, err := protoutil.Marshal(desc)
 	if err != nil {
 		t.Fatal(err)
