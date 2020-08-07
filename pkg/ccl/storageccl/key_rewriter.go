@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -55,12 +55,12 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // and splits.
 type KeyRewriter struct {
 	prefixes prefixRewriter
-	descs    map[descpb.ID]*sqlbase.ImmutableTableDescriptor
+	descs    map[descpb.ID]*tabledesc.ImmutableTableDescriptor
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
 func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	descs := make(map[descpb.ID]*sqlbase.ImmutableTableDescriptor)
+	descs := make(map[descpb.ID]*tabledesc.ImmutableTableDescriptor)
 	for _, rekey := range rekeys {
 		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
@@ -70,13 +70,15 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[descpb.ID(rekey.OldID)] = sqlbase.NewImmutableTableDescriptor(*table)
+		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutableTableDescriptor(*table)
 	}
 	return MakeKeyRewriter(descs)
 }
 
 // MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(descs map[descpb.ID]*sqlbase.ImmutableTableDescriptor) (*KeyRewriter, error) {
+func MakeKeyRewriter(
+	descs map[descpb.ID]*tabledesc.ImmutableTableDescriptor,
+) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {

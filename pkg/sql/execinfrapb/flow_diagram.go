@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -131,7 +131,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
 
 	if len(tr.Spans) > 0 {
-		tbl := sqlbase.NewImmutableTableDescriptor(tr.Table)
+		tbl := tabledesc.NewImmutableTableDescriptor(tr.Table)
 		// only show the first span
 		idx, _, _ := tbl.FindIndexByIndexIdx(int(tr.IndexIdx))
 		valDirs := catalogkeys.IndexKeyValDirs(idx)

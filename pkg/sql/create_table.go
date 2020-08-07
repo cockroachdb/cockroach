@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -362,8 +362,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var asCols colinfo.ResultColumns
-	var desc *sqlbase.MutableTableDescriptor
-	var affected map[descpb.ID]*sqlbase.MutableTableDescriptor
+	var desc *tabledesc.MutableTableDescriptor
+	var affected map[descpb.ID]*tabledesc.MutableTableDescriptor
 	// creationTime is initialized to a zero value and populated at read time.
 	// See the comment in desc.MaybeIncrementVersion.
 	//
@@ -392,7 +392,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			desc.State = descpb.TableDescriptor_ADD
 		}
 	} else {
-		affected = make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+		affected = make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 		desc, err = newTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected)
 		if err != nil {
 			return err
@@ -490,7 +490,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ctx,
 				params.p.txn,
 				params.ExecCfg().Codec,
-				desc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+				desc.Immutable().(*tabledesc.ImmutableTableDescriptor),
 				desc.Columns,
 				params.p.alloc)
 			if err != nil {
@@ -598,9 +598,9 @@ func (n *createTableNode) Close(ctx context.Context) {
 // descriptors without caching. See the comment on resolveFK().
 func (p *planner) resolveFK(
 	ctx context.Context,
-	tbl *sqlbase.MutableTableDescriptor,
+	tbl *tabledesc.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descpb.ID]*tabledesc.MutableTableDescriptor,
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
@@ -611,7 +611,7 @@ func qualifyFKColErrorWithDB(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	tbl *sqlbase.MutableTableDescriptor,
+	tbl *tabledesc.MutableTableDescriptor,
 	col string,
 ) string {
 	if txn == nil {
@@ -648,7 +648,7 @@ const (
 // to catch upgrade 19.1 version table descriptors that haven't been upgraded yet before an operation
 // like drop index which could cause them to lose FK information in the old representation.
 func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, desc *tabledesc.MutableTableDescriptor,
 ) error {
 	// In order to avoid having old version foreign key descriptors that depend on this
 	// index lose information when this index is dropped, ensure that they get updated.
@@ -660,7 +660,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 		if err != nil {
 			return err
 		}
-		tbl := desc.(*sqlbase.MutableTableDescriptor)
+		tbl := desc.(*tabledesc.MutableTableDescriptor)
 		changes := tbl.GetPostDeserializationChanges()
 		if changes.UpgradedForeignKeyRepresentation {
 			err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID,
@@ -715,9 +715,9 @@ func ResolveFK(
 	ctx context.Context,
 	txn *kv.Txn,
 	sc resolver.SchemaResolver,
-	tbl *sqlbase.MutableTableDescriptor,
+	tbl *tabledesc.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descpb.ID]*tabledesc.MutableTableDescriptor,
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *tree.EvalContext,
@@ -818,7 +818,7 @@ func ResolveFK(
 	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = sqlbase.GenerateUniqueConstraintName(
+		constraintName = tabledesc.GenerateUniqueConstraintName(
 			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -876,7 +876,7 @@ func ResolveFK(
 		// Search for an index on the origin table that matches. If one doesn't exist,
 		// we create one automatically if the table to alter is new or empty. We also
 		// search if an index for the set of columns was created in this transaction.
-		_, err = sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
+		_, err = tabledesc.FindFKOriginIndexInTxn(tbl, originColumnIDs)
 		// If there was no error, we found a suitable index.
 		if err != nil {
 			// No existing suitable index was found.
@@ -905,7 +905,7 @@ func ResolveFK(
 	}
 
 	// Ensure that there is an index on the referenced side to use.
-	_, err = sqlbase.FindFKReferencedIndex(target, targetColIDs)
+	_, err = tabledesc.FindFKReferencedIndex(target, targetColIDs)
 	if err != nil {
 		return err
 	}
@@ -944,12 +944,12 @@ func ResolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
-	tbl *sqlbase.MutableTableDescriptor,
+	tbl *tabledesc.MutableTableDescriptor,
 	srcCols []*descpb.ColumnDescriptor,
 	constraintName string,
 	ts FKTableState,
 ) (descpb.IndexID, error) {
-	autoIndexName := sqlbase.GenerateUniqueConstraintName(
+	autoIndexName := tabledesc.GenerateUniqueConstraintName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
 		func(name string) bool {
 			return tbl.ValidateIndexNameIsUnique(name) != nil
@@ -993,7 +993,7 @@ func addIndexForFK(
 
 func (p *planner) addInterleave(
 	ctx context.Context,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 	index *descpb.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
@@ -1006,7 +1006,7 @@ func addInterleave(
 	ctx context.Context,
 	txn *kv.Txn,
 	vt resolver.SchemaResolver,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 	index *descpb.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
@@ -1096,7 +1096,7 @@ func addInterleave(
 // finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
 func (p *planner) finalizeInterleave(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index *descpb.IndexDescriptor,
+	ctx context.Context, desc *tabledesc.MutableTableDescriptor, index *descpb.IndexDescriptor,
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them
 	if len(index.Interleave.Ancestors) == 0 {
@@ -1104,7 +1104,7 @@ func (p *planner) finalizeInterleave(
 	}
 	// Only the last ancestor needs the backreference.
 	ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
-	var ancestorTable *sqlbase.MutableTableDescriptor
+	var ancestorTable *tabledesc.MutableTableDescriptor
 	if ancestor.TableID == desc.ID {
 		ancestorTable = desc
 	} else {
@@ -1151,7 +1151,7 @@ func CreatePartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {
@@ -1168,7 +1168,7 @@ var CreatePartitioningCCL = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {
@@ -1225,7 +1225,7 @@ func newTableDescIfAs(
 	resultColumns []colinfo.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
-) (desc *sqlbase.MutableTableDescriptor, err error) {
+) (desc *tabledesc.MutableTableDescriptor, err error) {
 	colResIndex := 0
 	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
 	// for each column, and a ConstraintTableDef for any constraints on those
@@ -1303,18 +1303,18 @@ func NewTableDesc(
 	parentID, parentSchemaID, id descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
-	affected map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	affected map[descpb.ID]*tabledesc.MutableTableDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	sessionData *sessiondata.SessionData,
 	persistence tree.Persistence,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.MutableTableDescriptor, error) {
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
 	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
 
-	desc := sqlbase.InitTableDescriptor(
-		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, n.Persistence,
+	desc := tabledesc.InitTableDescriptor(
+		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, persistence,
 	)
 
 	if err := applyStorageParameters(
@@ -1387,7 +1387,7 @@ func NewTableDesc(
 				if n.Interleave != nil {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
-				buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return nil, err
 				}
@@ -1407,7 +1407,7 @@ func NewTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
+			col, idx, expr, err := tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
 			if err != nil {
 				return nil, err
 			}
@@ -1480,7 +1480,7 @@ func NewTableDesc(
 			return err
 		}
 		if newColumn {
-			buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
+			buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
 				return err
 			}
@@ -1675,7 +1675,7 @@ func NewTableDesc(
 			// Ensure that the shard column wasn't explicitly assigned a column family
 			// during table creation (this will happen when a create statement is
 			// "roundtripped", for example).
-			family := sqlbase.GetColumnFamilyForShard(&desc, index.Sharded.ColumnNames)
+			family := tabledesc.GetColumnFamilyForShard(&desc, index.Sharded.ColumnNames)
 			if family != "" {
 				if err := desc.AddColumnToFamilyMaybeCreate(index.Sharded.Name, family, false, false); err != nil {
 					return nil, err
@@ -1886,8 +1886,8 @@ func newTableDesc(
 	parentID, parentSchemaID, id descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
-	affected map[descpb.ID]*sqlbase.MutableTableDescriptor,
-) (ret *sqlbase.MutableTableDescriptor, err error) {
+	affected map[descpb.ID]*tabledesc.MutableTableDescriptor,
+) (ret *tabledesc.MutableTableDescriptor, err error) {
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by NewTableDesc.
 	createStmt := n
@@ -2118,7 +2118,7 @@ func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescript
 		Nullable: false,
 		Type:     types.Int4,
 	}
-	col.Name = sqlbase.GetShardColumnName(colNames, int32(buckets))
+	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
 	col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
 	return col, nil
 }

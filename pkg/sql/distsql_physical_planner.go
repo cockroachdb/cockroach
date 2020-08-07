@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -922,7 +922,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 }
 
 func getIndexIdx(
-	index *descpb.IndexDescriptor, desc *sqlbase.ImmutableTableDescriptor,
+	index *descpb.IndexDescriptor, desc *tabledesc.ImmutableTableDescriptor,
 ) (uint32, error) {
 	if index.ID == desc.PrimaryIndex.ID {
 		return 0, nil
@@ -978,7 +978,7 @@ func initTableReaderSpec(
 
 // scanNodeOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 	colID descpb.ColumnID,
 	visibility execinfrapb.ScanVisibility,
 ) int {
@@ -1009,7 +1009,7 @@ func tableOrdinal(
 // reader column ordinals.
 func toTableOrdinals(
 	cols []*descpb.ColumnDescriptor,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 	visibility execinfrapb.ScanVisibility,
 ) []int {
 	res := make([]int, len(cols))
@@ -1168,7 +1168,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 type tableReaderPlanningInfo struct {
 	spec                  *execinfrapb.TableReaderSpec
 	post                  execinfrapb.PostProcessSpec
-	desc                  *sqlbase.ImmutableTableDescriptor
+	desc                  *tabledesc.ImmutableTableDescriptor
 	spans                 []roachpb.Span
 	reverse               bool
 	scanVisibility        execinfrapb.ScanVisibility

@@ -26,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -290,14 +290,14 @@ func unwrapDescriptor(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		immTable, err := sqlbase.NewFilledInImmutableTableDescriptor(ctx, dg, table)
+		immTable, err := tabledesc.NewFilledInImmutableTableDescriptor(ctx, dg, table)
 		if err != nil {
 			return nil, err
 		}
 		if err := immTable.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewImmutableTableDescriptor(*table), nil
+		return tabledesc.NewImmutableTableDescriptor(*table), nil
 	case database != nil:
 		dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*database)
 		if err := dbDesc.Validate(); err != nil {
@@ -325,7 +325,7 @@ func unwrapDescriptorMutable(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		mutTable, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, dg, false /* skipFKsWithMissingTable */, table)
+		mutTable, err := tabledesc.NewFilledInMutableExistingTableDescriptor(ctx, dg, false /* skipFKsWithMissingTable */, table)
 		if err != nil {
 			return nil, err
 		}
@@ -510,13 +510,13 @@ func GetDatabaseDescByID(
 // returning an error if the table is not found.
 func MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*sqlbase.ImmutableTableDescriptor, error) {
+) (*tabledesc.ImmutableTableDescriptor, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		TableDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.ImmutableTableDescriptor), nil
+	return desc.(*tabledesc.ImmutableTableDescriptor), nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
@@ -639,7 +639,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		return sqlbase.NewMutableExistingTableDescriptor(*table)
+		return tabledesc.NewMutableExistingTableDescriptor(*table)
 	case database != nil:
 		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
 	case typ != nil:

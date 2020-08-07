@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+// Package tabledesc provides concrete implementations of catalog.TableDesc.
+package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"

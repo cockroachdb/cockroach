@@ -38,8 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -457,7 +457,7 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 
 	if _, err := t.node(1).Publish(
 		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*sqlbase.MutableTableDescriptor)
+			table := desc.(*tabledesc.MutableTableDescriptor)
 			table.Version++
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -465,7 +465,7 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	}
 	if _, err := t.node(1).Publish(
 		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*sqlbase.MutableTableDescriptor)
+			table := desc.(*tabledesc.MutableTableDescriptor)
 			table.Version--
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -1669,7 +1669,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
 			}
-			table := desc.(*sqlbase.ImmutableTableDescriptor)
+			table := desc.(*tabledesc.ImmutableTableDescriptor)
 
 			// Wait a little time to give a chance to other goroutines to
 			// race past.
