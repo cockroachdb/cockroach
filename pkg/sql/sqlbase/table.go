@@ -21,113 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/text/language"
 )
-
-// SanitizeVarFreeExpr verifies that an expression is valid, has the correct
-// type and contains no variable expressions. It returns the type-checked and
-// constant-folded expression.
-func SanitizeVarFreeExpr(
-	ctx context.Context,
-	expr tree.Expr,
-	expectedType *types.T,
-	context string,
-	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
-) (tree.TypedExpr, error) {
-	if tree.ContainsVars(expr) {
-		return nil, pgerror.Newf(pgcode.Syntax,
-			"variable sub-expressions are not allowed in %s", context)
-	}
-
-	// We need to save and restore the previous value of the field in
-	// semaCtx in case we are recursively called from another context
-	// which uses the properties field.
-	defer semaCtx.Properties.Restore(semaCtx.Properties)
-
-	// Ensure that the expression doesn't contain special functions.
-	flags := tree.RejectSpecial
-
-	switch maxVolatility {
-	case tree.VolatilityImmutable:
-		flags |= tree.RejectStableOperators
-		fallthrough
-
-	case tree.VolatilityStable:
-		flags |= tree.RejectVolatileFunctions
-
-	case tree.VolatilityVolatile:
-		// Allow anything (no flags needed).
-
-	default:
-		panic(errors.AssertionFailedf("maxVolatility %s not supported", maxVolatility))
-	}
-	semaCtx.Properties.Require(context, flags)
-
-	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, expectedType)
-	if err != nil {
-		return nil, err
-	}
-
-	actualType := typedExpr.ResolvedType()
-	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
-		// The expression must match the column type exactly unless it is a constant
-		// NULL value.
-		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
-			context, expectedType, expr, actualType)
-	}
-	return typedExpr, nil
-}
-
-// ValidateColumnDefType returns an error if the type of a column definition is
-// not valid. It is checked when a column is created or altered.
-func ValidateColumnDefType(t *types.T) error {
-	switch t.Family() {
-	case types.StringFamily, types.CollatedStringFamily:
-		if t.Family() == types.CollatedStringFamily {
-			if _, err := language.Parse(t.Locale()); err != nil {
-				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
-			}
-		}
-
-	case types.DecimalFamily:
-		switch {
-		case t.Precision() == 0 && t.Scale() > 0:
-			// TODO (seif): Find right range for error message.
-			return errors.New("invalid NUMERIC precision 0")
-		case t.Precision() < t.Scale():
-			return fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				t.Scale(), t.Precision())
-		}
-
-	case types.ArrayFamily:
-		if t.ArrayContents().Family() == types.ArrayFamily {
-			// Nested arrays are not supported as a column type.
-			return errors.Errorf("nested array unsupported as column type: %s", t.String())
-		}
-		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
-			return err
-		}
-		return ValidateColumnDefType(t.ArrayContents())
-
-	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
-		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
-		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
-		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily:
-		// These types are OK.
-
-	default:
-		return pgerror.Newf(pgcode.InvalidTableDefinition,
-			"value type %s cannot be used for table columns", t.String())
-	}
-
-	return nil
-}
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
@@ -185,7 +85,7 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		var err error
-		if typedExpr, err = SanitizeVarFreeExpr(
+		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
 		); err != nil {
 			return nil, nil, nil, err
@@ -246,7 +146,7 @@ func EvalShardBucketCount(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
 ) (int32, error) {
 	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
-	typedExpr, err := SanitizeVarFreeExpr(
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
 	)
 	if err != nil {
@@ -508,7 +408,7 @@ func InitTableDescriptor(
 	name string,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
-	persistence tree.Persistence,
+	temporary bool,
 ) MutableTableDescriptor {
 	return MutableTableDescriptor{
 		ImmutableTableDescriptor: ImmutableTableDescriptor{
@@ -522,8 +422,29 @@ func InitTableDescriptor(
 				ModificationTime:        creationTime,
 				Privileges:              privileges,
 				CreateAsOfTime:          creationTime,
-				Temporary:               persistence.IsTemporary(),
+				Temporary:               temporary,
 			},
 		},
 	}
+}
+
+// NewMutableTableDescriptorAsReplacement creates a new MutableTableDescriptor
+// as a replacement of an existing table. This is utilized with truncate.
+//
+// The passed readTimestamp is serialized into the descriptor's ReplacementOf
+// field for debugging purposes. The passed id will be the ID of the newly
+// returned replacement.
+//
+// TODO(ajwerner): Decide whether we need to clone here.
+func NewMutableTableDescriptorAsReplacement(
+	id descpb.ID, replacementOf *MutableTableDescriptor, readTimestamp hlc.Timestamp,
+) *MutableTableDescriptor {
+	replacement := &MutableTableDescriptor{ImmutableTableDescriptor: replacementOf.ImmutableTableDescriptor}
+	replacement.ID = id
+	replacement.Version = 1
+	replacement.ReplacementOf = descpb.TableDescriptor_Replacement{
+		ID:   replacementOf.ID,
+		Time: readTimestamp,
+	}
+	return replacement
 }

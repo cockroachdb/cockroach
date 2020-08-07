@@ -879,7 +879,7 @@ func applyColumnMutation(
 			col.DefaultExpr = nil
 		} else {
 			colDatumType := col.Type
-			expr, err := sqlbase.SanitizeVarFreeExpr(
+			expr, err := schemaexpr.SanitizeVarFreeExpr(
 				params.ctx, t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, tree.VolatilityVolatile,
 			)
 			if err != nil {
