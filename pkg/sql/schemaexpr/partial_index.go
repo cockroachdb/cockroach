@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -238,7 +237,7 @@ func MakePartialIndexExprs(
 	ctx context.Context,
 	indexes []*descpb.IndexDescriptor,
 	cols []descpb.ColumnDescriptor,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 ) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs TableColSet, _ error) {
@@ -255,8 +254,8 @@ func MakePartialIndexExprs(
 
 	exprs := make(map[descpb.IndexID]tree.TypedExpr, partialIndexCount)
 
-	tn := tree.NewUnqualifiedTableName(tree.Name(tableDesc.Name))
-	nr := newNameResolver(evalCtx, tableDesc.ID, tn, columnDescriptorsToPtrs(cols))
+	tn := tree.NewUnqualifiedTableName(tree.Name(tableDesc.GetName()))
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(cols))
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
