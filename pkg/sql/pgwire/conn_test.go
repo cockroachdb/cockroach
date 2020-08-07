@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -229,7 +228,7 @@ func execQuery(
 ) error {
 	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
 		ctx, "test", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser, Database: "system"},
+		sessiondata.InternalExecutorOverride{User: security.RootUser, Database: "system"},
 		query,
 	)
 	if err != nil {

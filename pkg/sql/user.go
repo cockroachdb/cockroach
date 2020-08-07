@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -113,7 +113,7 @@ func retrieveUserAndPassword(
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
@@ -134,7 +134,7 @@ func retrieveUserAndPassword(
 
 		loginDependencies, err := ie.QueryEx(
 			ctx, "get-login-dependencies", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			getLoginDependencies,
 			normalizedUsername,
 		)
@@ -190,7 +190,7 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username FROM system.users`
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx, "read-users", p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		query)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func (p *planner) RoleExists(ctx context.Context, role string) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx, "read-users", p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		query, role,
 	)
 	if err != nil {
