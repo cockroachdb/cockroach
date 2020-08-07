@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -424,6 +425,14 @@ func readPostgresStmt(
 					// Look for function calls that mutate schema (this is actually a thing).
 					semaCtx := tree.MakeSemaContext()
 					if _, err := expr.TypeCheck(ctx, &semaCtx, nil /* desired */); err != nil {
+						// If the expression does not type check, it may be a case of using
+						// a column that does not exist yet (as is the case of PGDUMP output
+						// from ogr2ogr).
+						// In this case, we can safely assume it is not a SELECT statement
+						// mutating a schema so we keep going.
+						if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+							continue
+						}
 						return err
 					}
 					ov := expr.ResolvedOverload()
