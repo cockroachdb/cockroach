@@ -174,13 +174,13 @@ func desiredKindError(desc catalog.Descriptor, kind DescriptorKind, id descpb.ID
 	}
 	var kindMismatched bool
 	switch desc.(type) {
-	case sqlbase.DatabaseDescriptor:
+	case catalog.DatabaseDescriptor:
 		kindMismatched = kind != DatabaseDescriptorKind
-	case sqlbase.SchemaDescriptor:
+	case catalog.SchemaDescriptor:
 		kindMismatched = kind != SchemaDescriptorKind
-	case sqlbase.TableDescriptor:
+	case catalog.TableDescriptor:
 		kindMismatched = kind != TableDescriptorKind
-	case sqlbase.TypeDescriptor:
+	case catalog.TypeDescriptor:
 		kindMismatched = kind != TypeDescriptorKind
 	}
 	if !kindMismatched {
@@ -303,7 +303,7 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]sqlbase.Descriptor, error) {
+) ([]catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching all descriptors")
 	descsKey := sqlbase.MakeAllDescsMetadataKey(codec)
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
@@ -313,7 +313,7 @@ func GetAllDescriptors(
 
 	// TODO(ajwerner): Fill in ModificationTime.
 	rawDescs := make([]descpb.Descriptor, len(kvs))
-	descs := make([]sqlbase.Descriptor, len(kvs))
+	descs := make([]catalog.Descriptor, len(kvs))
 	for i, kv := range kvs {
 		desc := &rawDescs[i]
 		if err := kv.ValueProto(desc); err != nil {
@@ -372,7 +372,7 @@ func WriteDescToBatch(
 	b *kv.Batch,
 	codec keys.SQLCodec,
 	descID descpb.ID,
-	desc sqlbase.Descriptor,
+	desc catalog.Descriptor,
 ) (err error) {
 	descKey := sqlbase.MakeDescMetadataKey(codec, descID)
 	descDesc := desc.DescriptorProto()
@@ -394,7 +394,7 @@ func WriteNewDescToBatch(
 	b *kv.Batch,
 	codec keys.SQLCodec,
 	tableID descpb.ID,
-	desc sqlbase.Descriptor,
+	desc catalog.Descriptor,
 ) (err error) {
 	descKey := sqlbase.MakeDescMetadataKey(codec, tableID)
 	descDesc := desc.DescriptorProto()
@@ -533,7 +533,7 @@ func GetDatabaseDescriptorsFromIDs(
 // because the marshaling is not guaranteed to be stable and also because it's
 // sensitive to things like missing vs default values of fields.
 func ConditionalGetTableDescFromTxn(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation sqlbase.TableDescriptor,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation catalog.TableDescriptor,
 ) ([]byte, error) {
 	key := sqlbase.MakeDescMetadataKey(codec, expectation.GetID())
 	existingKV, err := txn.Get(ctx, key)

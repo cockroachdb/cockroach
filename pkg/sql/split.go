@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,7 +86,7 @@ func (n *splitNode) Close(ctx context.Context) {
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	values []tree.Datum,
 ) ([]byte, error) {

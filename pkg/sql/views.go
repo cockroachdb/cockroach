@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -64,7 +65,7 @@ func (d planDependencies) String() string {
 // checkViewMatchesMaterialized ensures that if a view is required, then the view
 // is materialized or not as desired.
 func checkViewMatchesMaterialized(
-	desc sqlbase.TableDescriptor, requireView, wantMaterialized bool,
+	desc catalog.TableDescriptor, requireView, wantMaterialized bool,
 ) error {
 	if !requireView {
 		return nil

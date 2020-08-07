@@ -776,7 +776,7 @@ const (
 // associated with a table. We should get rid of MutationJobs and start looking
 // up the jobs in the jobs table instead.
 func getJobIDForMutationWithDescriptor(
-	ctx context.Context, tableDesc sqlbase.TableDescriptor, mutationID descpb.MutationID,
+	ctx context.Context, tableDesc catalog.TableDescriptor, mutationID descpb.MutationID,
 ) (int64, error) {
 	for _, job := range tableDesc.GetMutationJobs() {
 		if job.MutationID == mutationID {

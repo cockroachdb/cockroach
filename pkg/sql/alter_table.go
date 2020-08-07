@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -997,7 +998,7 @@ func labeledRowValues(cols []descpb.ColumnDescriptor, values tree.Datums) string
 // JSON). This is useful for reproducing planning issues without importing the
 // data.
 func injectTableStats(
-	params runParams, desc sqlbase.TableDescriptor, statsExpr tree.TypedExpr,
+	params runParams, desc catalog.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
 	val, err := statsExpr.Eval(params.EvalContext())
 	if err != nil {

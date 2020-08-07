@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -105,7 +106,7 @@ func (t *PartitionTuple) String() string {
 func DecodePartitionTuple(
 	a *DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	valueEncBuf []byte,

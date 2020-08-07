@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -165,7 +166,7 @@ func changefeedPlanHook(
 		}
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
-			if table, isTable := desc.(sqlbase.TableDescriptor); isTable {
+			if table, isTable := desc.(catalog.TableDescriptor); isTable {
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
 					StatementTimeName: table.GetName(),
 				}
@@ -469,7 +470,7 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 }
 
 func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc sqlbase.TableDescriptor,
+	targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor,
 ) error {
 	t, ok := targets[tableDesc.GetID()]
 	if !ok {

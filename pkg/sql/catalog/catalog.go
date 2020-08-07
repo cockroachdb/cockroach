@@ -13,16 +13,7 @@ package catalog
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// Descriptor is an interface for retrieved catalog descriptors.
-type Descriptor = sqlbase.Descriptor
-
-type TableDescriptor = sqlbase.TableDescriptor
-type SchemaDescriptor = sqlbase.SchemaDescriptor
-type TypeDescriptor = sqlbase.TypeDescriptor
-type DatabaseDescriptor = sqlbase.DatabaseDescriptor
 
 // MutableDescriptor represents a descriptor undergoing in-memory mutations
 // as part of a schema change.

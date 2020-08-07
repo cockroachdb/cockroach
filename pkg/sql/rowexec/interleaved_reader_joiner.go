@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -128,7 +129,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.Pr
 // ancestor table in this join. err is non-nil if the table was missing from the
 // list.
 func (irj *interleavedReaderJoiner) findTable(
-	table sqlbase.TableDescriptor, index *descpb.IndexDescriptor,
+	table catalog.TableDescriptor, index *descpb.IndexDescriptor,
 ) (tInfo *tableInfo, isAncestorRow bool, err error) {
 	for i := range irj.tables {
 		tInfo = &irj.tables[i]

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,7 +122,7 @@ func createTypeChangeJobFromDesc(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	username string,
-	typ sqlbase.TypeDescriptor,
+	typ catalog.TypeDescriptor,
 ) (*jobs.StartableJob, error) {
 	record := jobs.Record{
 		Description:   fmt.Sprintf("RESTORING: type %d", typ.GetID()),

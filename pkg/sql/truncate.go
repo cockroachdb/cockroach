@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -60,7 +61,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	// to delete. Once changes have been made, the index spans where k/v data for
 	// the table reside are no longer accessible from the table.
 	interleaveCopies := make(map[descpb.ID]*descpb.TableDescriptor)
-	maybeAddInterleave := func(desc sqlbase.TableDescriptor) {
+	maybeAddInterleave := func(desc catalog.TableDescriptor) {
 		if !desc.IsInterleaved() {
 			return
 		}
