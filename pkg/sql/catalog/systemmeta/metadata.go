@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package systemmeta
 
 import (
 	"context"
@@ -20,44 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
-
-// DescriptorKey is the interface implemented by both
-// databaseKey and tableKey. It is used to easily get the
-// descriptor key and plain name.
-type DescriptorKey interface {
-	Key(codec keys.SQLCodec) roachpb.Key
-	Name() string
-}
-
-// wrapDescriptor fills in a Descriptor from a given member of its union.
-//
-// TODO(ajwerner): Replace this with the relevant type-specific DescriptorProto
-// methods.
-func wrapDescriptor(descriptor protoutil.Message) *descpb.Descriptor {
-	desc := &descpb.Descriptor{}
-	switch t := descriptor.(type) {
-	case *MutableTableDescriptor:
-		desc.Union = &descpb.Descriptor_Table{Table: &t.TableDescriptor}
-	case *descpb.TableDescriptor:
-		desc.Union = &descpb.Descriptor_Table{Table: t}
-	case *descpb.DatabaseDescriptor:
-		desc.Union = &descpb.Descriptor_Database{Database: t}
-	case *MutableTypeDescriptor:
-		desc.Union = &descpb.Descriptor_Type{Type: &t.TypeDescriptor}
-	case *descpb.TypeDescriptor:
-		desc.Union = &descpb.Descriptor_Type{Type: t}
-	case *descpb.SchemaDescriptor:
-		desc.Union = &descpb.Descriptor_Schema{Schema: t}
-	default:
-		panic(errors.AssertionFailedf("unknown descriptor type: %T", descriptor))
-	}
-	return desc
-}
 
 // MetadataSchema is used to construct the initial sql schema for a new
 // CockroachDB cluster being bootstrapped. Tables and databases must be
@@ -143,7 +112,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		value.SetInt(int64(desc.GetID()))
 		if parentID != keys.RootNamespaceID {
 			ret = append(ret, roachpb.KeyValue{
-				Key:   NewPublicTableKey(parentID, desc.GetName()).Key(ms.codec),
+				Key:   catalogkeys.NewPublicTableKey(parentID, desc.GetName()).Key(ms.codec),
 				Value: value,
 			})
 		} else {
@@ -154,11 +123,11 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			ret = append(
 				ret,
 				roachpb.KeyValue{
-					Key:   NewDatabaseKey(desc.GetName()).Key(ms.codec),
+					Key:   catalogkeys.NewDatabaseKey(desc.GetName()).Key(ms.codec),
 					Value: value,
 				},
 				roachpb.KeyValue{
-					Key:   NewPublicSchemaKey(desc.GetID()).Key(ms.codec),
+					Key:   catalogkeys.NewPublicSchemaKey(desc.GetID()).Key(ms.codec),
 					Value: publicSchemaValue,
 				})
 		}
@@ -170,7 +139,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		ret = append(ret, roachpb.KeyValue{
-			Key:   MakeDescMetadataKey(ms.codec, desc.GetID()),
+			Key:   catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()),
 			Value: value,
 		})
 		if desc.GetID() > keys.MaxSystemConfigDescID {
@@ -265,7 +234,7 @@ var systemTableIDCache = func() [2]map[string]descpb.ID {
 		// This can be removed in 20.2, when we add a migration to change the
 		// new namespace table's Name to "namespace" again.
 		// TODO(solon): remove this in 20.2.
-		cache[NamespaceTableName] = keys.NamespaceTableID
+		cache[systemschema.NamespaceTableName] = keys.NamespaceTableID
 
 		return cache
 	}
@@ -293,14 +262,14 @@ func LookupSystemTableDescriptorID(
 	dbID descpb.ID,
 	tableName string,
 ) descpb.ID {
-	if dbID != SystemDB.GetID() {
+	if dbID != systemschema.SystemDB.GetID() {
 		return descpb.InvalidID
 	}
 
 	if settings != nil &&
 		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
-		tableName == NamespaceTableName {
-		return DeprecatedNamespaceTable.ID
+		tableName == systemschema.NamespaceTableName {
+		return systemschema.DeprecatedNamespaceTable.ID
 	}
 	systemTenant := boolToInt(codec.ForSystemTenant())
 	dbID, ok := systemTableIDCache[systemTenant][tableName]
@@ -308,4 +277,150 @@ func LookupSystemTableDescriptorID(
 		return descpb.InvalidID
 	}
 	return dbID
+}
+
+// addSystemDescriptorsToSchema populates the supplied MetadataSchema
+// with the system database and table descriptors. The descriptors for
+// these objects exist statically in this file, but a MetadataSchema
+// can be used to persist these descriptors to the cockroach store.
+func addSystemDescriptorsToSchema(target *MetadataSchema) {
+	// Add system database.
+	target.AddDescriptor(keys.RootNamespaceID, systemschema.SystemDB)
+
+	// Add system config tables.
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DeprecatedNamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.NamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UsersTable)
+	if target.codec.ForSystemTenant() {
+		target.AddDescriptor(keys.SystemDatabaseID, systemschema.ZonesTable)
+	}
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SettingsTable)
+	if !target.codec.ForSystemTenant() {
+		// Only add the descriptor ID sequence if this is a non-system tenant.
+		// System tenants use the global descIDGenerator key. See #48513.
+		target.AddDescriptor(keys.SystemDatabaseID, systemschema.DescIDSequence)
+	}
+	if target.codec.ForSystemTenant() {
+		// Only add the tenant table if this is the system tenant.
+		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantsTable)
+	}
+
+	// Add all the other system tables.
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.LeaseTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.EventLogTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RangeEventTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.UITable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.JobsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.WebSessionsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RoleOptionsTable)
+
+	// Tables introduced in 2.0, added here for 2.1.
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.TableStatisticsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.LocationsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.RoleMembersTable)
+
+	// The CommentsTable has been introduced in 2.2. It was added here since it
+	// was introduced, but it's also created as a migration for older clusters.
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.CommentsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReportsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationConstraintStatsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationStatsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ProtectedTimestampsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ProtectedTimestampsRecordsTable)
+
+	// Tables introduced in 20.1.
+
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementBundleChunksTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementDiagnosticsRequestsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementDiagnosticsTable)
+
+	// Tables introduced in 20.2.
+
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ScheduledJobsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SqllivenessTable)
+}
+
+// addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
+// MetadataSchema.
+func addSplitIDs(target *MetadataSchema) {
+	target.AddSplitIDs(keys.PseudoTableIDs...)
+}
+
+// Create a kv pair for the zone config for the given key and config value.
+func createZoneConfigKV(
+	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
+) roachpb.KeyValue {
+	value := roachpb.Value{}
+	if err := value.SetProto(zoneConfig); err != nil {
+		panic(errors.AssertionFailedf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+	}
+	return roachpb.KeyValue{
+		Key:   codec.ZoneKey(uint32(keyID)),
+		Value: value,
+	}
+}
+
+// addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
+// zone configurations that should be populated in a newly bootstrapped cluster.
+func addZoneConfigKVsToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	// If this isn't the system tenant, don't add any zone configuration keys.
+	// Only the system tenant has a zone table.
+	if !target.codec.ForSystemTenant() {
+		return
+	}
+
+	// Adding a new system table? It should be added here to the metadata schema,
+	// and also created as a migration for older cluster. The includedInBootstrap
+	// field should be set on the migration.
+
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.RootNamespaceID, target.codec, defaultZoneConfig))
+
+	systemZoneConf := defaultSystemZoneConfig
+	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+
+	// .meta zone config entry with a shorter GC time.
+	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.MetaRangesID, target.codec, metaRangeZoneConf))
+
+	// Some reporting tables have shorter GC times.
+	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
+		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationConstraintStatsTableTTL.Seconds())},
+	}
+	replicationStatsZoneConf := &zonepb.ZoneConfig{
+		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationStatsTableTTL.Seconds())},
+	}
+
+	// Liveness zone config entry with a shorter GC time.
+	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.LivenessRangesID, target.codec, livenessZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.SystemRangesID, target.codec, systemZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.SystemDatabaseID, target.codec, systemZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, target.codec, replicationConstraintStatsZoneConf))
+	target.otherKV = append(target.otherKV,
+		createZoneConfigKV(keys.ReplicationStatsTableID, target.codec, replicationStatsZoneConf))
+}
+
+// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
+// System database, its tables and zone configurations.
+func addSystemDatabaseToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	addSystemDescriptorsToSchema(target)
+	addSplitIDs(target)
+	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }

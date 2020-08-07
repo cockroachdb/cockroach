@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -117,7 +119,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	var dbDesc *sqlbase.ImmutableDatabaseDescriptor
+	var dbDesc *dbdesc.ImmutableDatabaseDescriptor
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
 		return err
@@ -161,7 +163,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := descExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	tbNameKey := sqlbase.MakeNameMetadataKey(keys.SystemSQLCodec,
+	tbNameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec,
 		tbDesc.GetParentID(), keys.PublicSchemaID, tbDesc.Name)
 	if gr, err := kvDB.Get(ctx, tbNameKey); err != nil {
 		t.Fatal(err)
@@ -177,7 +179,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sqlbase.MakeNameMetadataKey(keys.SystemSQLCodec, 0, 0, dbDesc.Name)
+	dbNameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec, 0, 0, dbDesc.Name)
 	if gr, err := kvDB.Get(ctx, dbNameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -223,7 +225,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	dKey := sqlbase.NewDatabaseKey("t")
+	dKey := catalogkeys.NewDatabaseKey("t")
 	r, err := kvDB.Get(ctx, dKey.Key(keys.SystemSQLCodec))
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +284,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tb2Desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
-	var dbDesc *sqlbase.ImmutableDatabaseDescriptor
+	var dbDesc *dbdesc.ImmutableDatabaseDescriptor
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
 		return err
@@ -616,7 +618,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, "kv").Key(keys.SystemSQLCodec)
+	nameKey := catalogkeys.NewPublicTableKey(keys.MinNonPredefinedUserDescID, "kv").Key(keys.SystemSQLCodec)
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -716,7 +718,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		descs = append(descs, catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
 
-		nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, tableName).Key(keys.SystemSQLCodec)
+		nameKey := catalogkeys.NewPublicTableKey(keys.MinNonPredefinedUserDescID, tableName).Key(keys.SystemSQLCodec)
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)
@@ -833,7 +835,7 @@ func writeTableDesc(
 			return err
 		}
 		tableDesc.ModificationTime = txn.CommitTimestamp()
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
+		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	})
 }
 
@@ -1311,7 +1313,7 @@ WHERE
 		}
 		if getRequest, ok := request.GetArg(roachpb.Get); ok {
 			put := getRequest.(*roachpb.GetRequest)
-			if put.Key.Equal(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(tableID))) {
+			if put.Key.Equal(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(tableID))) {
 				filterState.txnID = uuid.UUID{}
 				return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(
 					request.Txn.ReadTimestamp, afterInsert, request.Txn))

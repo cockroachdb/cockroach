@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package sqlbase_test
 
 import (
 	"fmt"
@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -61,7 +62,7 @@ func EncodeTestKey(tb testing.TB, kvDB *kv.DB, codec keys.SQLCodec, keyStr strin
 
 		// Encode the table ID if the token is a table name.
 		if tableNames[tok] {
-			desc := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
+			desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
 			key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
 			continue
 		}

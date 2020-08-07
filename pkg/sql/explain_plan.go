@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -94,7 +95,7 @@ func emitExplain(
 		if !codec.ForSystemTenant() {
 			skip = 4
 		}
-		return sqlbase.PrettySpans(idxDesc, spans, skip)
+		return catalogkeys.PrettySpans(idxDesc, spans, skip)
 	}
 
 	return explain.Emit(explainPlan, ob, spanFormatFn)
