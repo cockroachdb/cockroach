@@ -49,11 +49,12 @@ func TestVerifier(t *testing.T) {
 	ds := s.DistSenderI().(*kvcoord.DistSender)
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx:        s.DB().AmbientContext,
-			HeartbeatInterval: time.Second,
-			Settings:          s.ClusterSettings(),
-			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			AmbientCtx:           s.DB().AmbientContext,
+			HeartbeatInterval:    time.Second,
+			Settings:             s.ClusterSettings(),
+			Clock:                s.Clock(),
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
 		kv.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			if f := senderFunc.Load().(kv.SenderFunc); f != nil {

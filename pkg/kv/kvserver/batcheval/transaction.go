@@ -29,24 +29,24 @@ var ErrTransactionUnsupported = errors.New("not supported within a transaction")
 // VerifyTransaction runs sanity checks verifying that the transaction in the
 // header and the request are compatible.
 func VerifyTransaction(
-	h roachpb.Header, args roachpb.Request, permittedStatuses ...roachpb.TransactionStatus,
+	txn *roachpb.Transaction, args roachpb.Request, permittedStatuses ...roachpb.TransactionStatus,
 ) error {
-	if h.Txn == nil {
+	if txn == nil {
 		return errors.Errorf("no transaction specified to %s", args.Method())
 	}
-	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
-		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
+	if !bytes.Equal(args.Header().Key, txn.Key) {
+		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, txn.Key)
 	}
 	statusPermitted := false
 	for _, s := range permittedStatuses {
-		if h.Txn.Status == s {
+		if txn.Status == s {
 			statusPermitted = true
 			break
 		}
 	}
 	if !statusPermitted {
 		return roachpb.NewTransactionStatusError(
-			fmt.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status),
+			fmt.Sprintf("cannot perform %s with txn status %v", args.Method(), txn.Status),
 		)
 	}
 	return nil

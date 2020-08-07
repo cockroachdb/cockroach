@@ -224,7 +224,7 @@ func newRootTxnCoordSender(
 		tcs.clock,
 		&tcs.metrics,
 		tcs.heartbeatInterval,
-		&tcs.interceptorAlloc.txnLockGatekeeper,
+		tcf.heartbeatBatcher,
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,
 	)

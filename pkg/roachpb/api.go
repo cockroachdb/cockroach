@@ -1203,7 +1203,7 @@ func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
+func (*HeartbeatTxnRequest) flags() int        { return isWrite }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
 
 // PushTxnRequest updates different marker keys in the timestamp cache when

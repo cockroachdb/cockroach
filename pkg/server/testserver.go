@@ -529,14 +529,15 @@ func makeSQLServerArgs(
 	registry.AddMetricStruct(txnMetrics)
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx:        baseCfg.AmbientCtx,
-			Settings:          st,
-			Clock:             clock,
-			Stopper:           stopper,
-			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
-			Linearizable:      false,
-			Metrics:           txnMetrics,
-			TestingKnobs:      clientKnobs,
+			AmbientCtx:           baseCfg.AmbientCtx,
+			Settings:             st,
+			Clock:                clock,
+			Stopper:              stopper,
+			HeartbeatInterval:    base.DefaultTxnHeartbeatInterval,
+			Linearizable:         false,
+			Metrics:              txnMetrics,
+			TestingKnobs:         clientKnobs,
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
 		ds,
 	)
