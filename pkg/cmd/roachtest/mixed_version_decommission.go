@@ -48,10 +48,9 @@ func runDecommissionMixedVersions(
 		waitForUpgradeStep(allNodes),
 		preventAutoUpgradeStep(h.nodeIDs[0]),
 
-		// We upgrade a subset of the cluster to v20.2 (these may end up
-		// resolving to the same node).
+		// We upgrade a subset of the cluster to v20.2.
 		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
-		binaryUpgradeStep(c.Node(h.getRandNode()), mainVersion),
+		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), mainVersion),
 		checkAllMembership(pinnedUpgrade, "active"),
 
 		// 1. Partially decommission a random node from another random node. We
