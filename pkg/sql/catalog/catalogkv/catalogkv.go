@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -306,7 +307,7 @@ func unwrapDescriptor(
 	case typ != nil:
 		return typedesc.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
-		return sqlbase.NewImmutableSchemaDescriptor(*schema), nil
+		return schemadesc.NewImmutableSchemaDescriptor(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -341,7 +342,7 @@ func unwrapDescriptorMutable(
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
 	case schema != nil:
-		return sqlbase.NewMutableExistingSchemaDescriptor(*schema), nil
+		return schemadesc.NewMutableExistingSchemaDescriptor(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -535,12 +536,12 @@ func MustGetDatabaseDescByID(
 // returning an error if the descriptor is not found.
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*sqlbase.ImmutableSchemaDescriptor, error) {
+) (*schemadesc.ImmutableSchemaDescriptor, error) {
 	desc, err := GetAnyDescriptorByID(ctx, txn, codec, id, Immutable)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	sc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	sc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
 	if !ok {
 		return nil, errors.Newf("descriptor with id %d was not a schema", id)
 	}
@@ -644,7 +645,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ)
 	case schema != nil:
-		return sqlbase.NewMutableExistingSchemaDescriptor(*schema)
+		return schemadesc.NewMutableExistingSchemaDescriptor(*schema)
 	default:
 		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
 		return nil // unreachable
