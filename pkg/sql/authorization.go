@@ -44,16 +44,16 @@ type userRoleMembership map[string]bool
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user string,
 	) error
 
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Descriptor) error
+	CheckAnyPrivilege(ctx context.Context, descriptor catalog.Descriptor) error
 
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
@@ -80,7 +80,7 @@ var _ AuthorizationAccessor = &planner{}
 // CheckPrivilegeForUser implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilegeForUser(
-	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
+	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user string,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -120,7 +120,7 @@ func (p *planner) CheckPrivilegeForUser(
 // CheckPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
 ) error {
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
@@ -129,7 +129,7 @@ func (p *planner) CheckPrivilege(
 // TODO(richardjcai): Add checks for if the user owns the parent of the object.
 // Ie, being the owner of a database gives access to all tables in the db.
 // Issue #51931.
-func IsOwner(desc sqlbase.Descriptor, role string) bool {
+func IsOwner(desc catalog.Descriptor, role string) bool {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner
 
@@ -152,7 +152,7 @@ func IsOwner(desc sqlbase.Descriptor, role string) bool {
 // has ownership privilege of the desc.
 // TODO(richardjcai): SUPERUSER has implicit ownership.
 // We do not have SUPERUSER privilege yet but should we consider root a superuser?
-func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descriptor) (bool, error) {
+func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
 	user := p.SessionData().User
 
 	return p.checkRolePredicate(ctx, user, func(role string) bool {
@@ -182,7 +182,7 @@ func (p *planner) checkRolePredicate(
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Descriptor) error {
+func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Descriptor) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
@@ -304,7 +304,7 @@ func (p *planner) MemberOfWithAdminOption(
 	if err != nil {
 		return nil, err
 	}
-	tableDesc := objDesc.(sqlbase.TableDescriptor)
+	tableDesc := objDesc.(catalog.TableDescriptor)
 	tableVersion := tableDesc.GetVersion()
 
 	// We loop in case the table version changes while we're looking up memberships.

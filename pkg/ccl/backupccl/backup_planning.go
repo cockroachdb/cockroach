@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -157,7 +158,7 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	codec keys.SQLCodec, tables []sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+	codec keys.SQLCodec, tables []catalog.TableDescriptor, revs []BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
@@ -520,15 +521,15 @@ func backupPlanHook(
 			return err
 		}
 
-		var tables []sqlbase.TableDescriptor
+		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
-			case sqlbase.DatabaseDescriptor:
+			case catalog.DatabaseDescriptor:
 				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 					return err
 				}
-			case sqlbase.TableDescriptor:
+			case catalog.TableDescriptor:
 				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 					return err
 				}
@@ -1235,7 +1236,7 @@ func getEncryptedDataKeyByKMSMasterKeyID(
 func checkForNewTables(
 	ctx context.Context,
 	db *kv.DB,
-	targetDescs []sqlbase.Descriptor,
+	targetDescs []catalog.Descriptor,
 	tablesInPrev map[descpb.ID]struct{},
 	dbsInPrev map[descpb.ID]struct{},
 	priorIDs map[descpb.ID]descpb.ID,
@@ -1243,7 +1244,7 @@ func checkForNewTables(
 	endTime hlc.Timestamp,
 ) error {
 	for _, d := range targetDescs {
-		t, ok := d.(sqlbase.TableDescriptor)
+		t, ok := d.(catalog.TableDescriptor)
 		if !ok {
 			continue
 		}
