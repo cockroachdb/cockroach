@@ -410,7 +410,7 @@ func (desc *ImmutableTableDescriptor) GetParentSchemaID() descpb.ID {
 // Sequences count as physical tables because their values are stored in
 // the KV layer.
 func (desc *ImmutableTableDescriptor) IsPhysicalTable() bool {
-	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable())
+	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.
@@ -1133,7 +1133,7 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *MutableTableDescriptor) AllocateIDs() error {
-	// Only physical tables can have / need a primary key.
+	// Only tables with physical data can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
 			return err
@@ -1151,8 +1151,8 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	// Only tables can have / need indexes and column families.
-	if desc.IsTable() {
+	// Only tables and materialized views can have / need indexes and column families.
+	if desc.IsTable() || desc.MaterializedView() {
 		if err := desc.allocateIndexIDs(columnNames); err != nil {
 			return err
 		}
@@ -1817,6 +1817,11 @@ func (desc *ImmutableTableDescriptor) ValidateTable() error {
 			if m.Direction == descpb.DescriptorMutation_NONE {
 				return errors.AssertionFailedf(
 					"computed column swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
+		case *descpb.DescriptorMutation_MaterializedViewRefresh:
+			if m.Direction == descpb.DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"materialized view refresh mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
 		default:
 			return errors.AssertionFailedf(
@@ -3181,6 +3186,12 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m descpb.DescriptorMuta
 			if err := desc.performComputedColumnSwap(t.ComputedColumnSwap); err != nil {
 				return err
 			}
+
+		case *descpb.DescriptorMutation_MaterializedViewRefresh:
+			// Completing a refresh mutation just means overwriting the table's
+			// indexes with the new indexes that have been backfilled already.
+			desc.PrimaryIndex = t.MaterializedViewRefresh.NewPrimaryIndex
+			desc.Indexes = t.MaterializedViewRefresh.NewIndexes
 		}
 
 	case descpb.DescriptorMutation_DROP:
@@ -3434,6 +3445,18 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *descpb.PrimaryKeySwap) {
 	m := descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap},
+		Direction:   descpb.DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// AddMaterializedViewRefreshMutation adds a MaterializedViewRefreshMutation to
+// the table descriptor.
+func (desc *MutableTableDescriptor) AddMaterializedViewRefreshMutation(
+	refresh *descpb.MaterializedViewRefresh,
+) {
+	m := descpb.DescriptorMutation{
+		Descriptor_: &descpb.DescriptorMutation_MaterializedViewRefresh{MaterializedViewRefresh: refresh},
 		Direction:   descpb.DescriptorMutation_ADD,
 	}
 	desc.addMutation(m)

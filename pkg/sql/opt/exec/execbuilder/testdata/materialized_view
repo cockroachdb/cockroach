@@ -1,0 +1,36 @@
+# LogicTest: local
+
+# The test below ensures that querying from a materialized view performs a
+# scan over the view's data, rather than running the view's query.
+
+statement ok
+CREATE TABLE t (x INT, y INT);
+INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
+
+statement ok
+CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
+
+query TTT
+EXPLAIN SELECT * FROM v
+----
+·     distribution  local
+·     vectorized    true
+scan  ·             ·
+·     table         v@primary
+·     spans         FULL SCAN
+
+# Create an index on a materialized view, and ensure that we use it.
+statement ok
+CREATE INDEX i ON v (y)
+
+query TTT
+EXPLAIN SELECT * FROM v WHERE y = 3
+----
+·           distribution  local
+·           vectorized    true
+index join  ·             ·
+ │          table         v@primary
+ │          key columns   rowid
+ └── scan   ·             ·
+·           table         v@i
+·           spans         /3-/4

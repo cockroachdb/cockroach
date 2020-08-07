@@ -120,11 +120,25 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
+	var typed *kvserverbase.DuplicateKeyError
+	if !errors.As(orig, &typed) {
+		return orig
+	}
+	v := &roachpb.Value{RawBytes: typed.Value}
+	return row.NewUniquenessConstraintViolationError(ctx, &sp.tableDesc, typed.Key, v)
+}
+
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
-		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{MinBufferSize: bufferSize},
+		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+			MinBufferSize: bufferSize,
+			// We disallow shadowing here to ensure that we report errors when builds
+			// of unique indexes fail when there are duplicate values.
+			DisallowShadowing: true,
+		},
 	)
 	if err != nil {
 		return err
@@ -137,19 +151,13 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-						return errors.WithStack(err)
-					}
-					return err
+					return sp.wrapDupError(ctx, err)
 				}
 			}
 		}
 
 		if err := adder.Flush(ctx); err != nil {
-			if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-				return errors.WithStack(err)
-			}
-			return err
+			return sp.wrapDupError(ctx, err)
 		}
 		return nil
 	}

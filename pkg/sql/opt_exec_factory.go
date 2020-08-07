@@ -1689,6 +1689,7 @@ func (ef *execFactory) ConstructCreateView(
 	viewName *cat.DataSourceName,
 	ifNotExists bool,
 	replace bool,
+	materialized bool,
 	temporary bool,
 	viewQuery string,
 	columns sqlbase.ResultColumns,
@@ -1719,14 +1720,15 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:    viewName,
-		ifNotExists: ifNotExists,
-		replace:     replace,
-		temporary:   temporary,
-		viewQuery:   viewQuery,
-		dbDesc:      schema.(*optSchema).database,
-		columns:     columns,
-		planDeps:    planDeps,
+		viewName:     viewName,
+		ifNotExists:  ifNotExists,
+		replace:      replace,
+		materialized: materialized,
+		temporary:    temporary,
+		viewQuery:    viewQuery,
+		dbDesc:       schema.(*optSchema).database,
+		columns:      columns,
+		planDeps:     planDeps,
 	}, nil
 }
 
