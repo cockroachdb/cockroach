@@ -275,6 +275,12 @@ func importPlanHook(
 			}
 		}
 
+		// Typically the SQL grammar means it is only possible to specifying exactly
+		// one pgdump/mysqldump URI, but glob-expansion could have changed that.
+		if importStmt.Bundle && len(files) != 1 {
+			return pgerror.New(pgcode.FeatureNotSupported, "SQL dump files must be imported individually")
+		}
+
 		table := importStmt.Table
 
 		var parentID, parentSchemaID descpb.ID

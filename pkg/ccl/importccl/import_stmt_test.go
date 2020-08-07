@@ -4470,6 +4470,11 @@ func TestImportPgDump(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("glob-multi", func(t *testing.T) {
+		sqlDB.ExpectErr(t, "SQL dump files must be imported individually", `IMPORT PGDUMP 'nodelocal://0/*'`)
+	})
+
 	t.Run("target-cols-reordered", func(t *testing.T) {
 		data := `
 				CREATE TABLE "t" ("a" INT, "b" INT DEFAULT 42, "c" INT);
