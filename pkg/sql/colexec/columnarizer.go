@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -33,10 +33,10 @@ type Columnarizer struct {
 
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
-	da         sqlbase.DatumAlloc
+	da         rowenc.DatumAlloc
 	initStatus OperatorInitStatus
 
-	buffered        sqlbase.EncDatumRows
+	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
@@ -93,13 +93,13 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	c.batch, reallocated = c.allocator.ResetMaybeReallocate(c.typs, c.batch, 1 /* minCapacity */)
 	if reallocated {
 		oldRows := c.buffered
-		c.buffered = make(sqlbase.EncDatumRows, c.batch.Capacity())
+		c.buffered = make(rowenc.EncDatumRows, c.batch.Capacity())
 		for i := range c.buffered {
 			if len(oldRows) > 0 {
 				c.buffered[i] = oldRows[0]
 				oldRows = oldRows[1:]
 			} else {
-				c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
+				c.buffered[i] = make(rowenc.EncDatumRow, len(c.typs))
 			}
 		}
 	}

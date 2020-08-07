@@ -25,13 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1007,7 +1007,7 @@ func (c *conn) handleFlush(ctx context.Context) error {
 }
 
 // BeginCopyIn is part of the pgwirebase.Conn interface.
-func (c *conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) error {
+func (c *conn) BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyInResponse)
 	c.msgBuilder.writeByte(byte(pgwirebase.FormatText))
 	c.msgBuilder.putInt16(int16(len(columns)))
@@ -1260,7 +1260,7 @@ func (c *conn) bufferNoDataMsg() {
 // If an error is returned, it has also been saved on c.err.
 func (c *conn) writeRowDescription(
 	ctx context.Context,
-	columns []sqlbase.ResultColumn,
+	columns []colinfo.ResultColumn,
 	formatCodes []pgwirebase.FormatCode,
 	w io.Writer,
 ) error {

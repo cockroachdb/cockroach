@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,7 +61,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	return mutDesc, mutDesc.ValidateTable()
 }
 
-func parseValues(tableDesc catalog.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := &tree.EvalContext{}
@@ -78,9 +79,9 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]sqlbase.En
 		return nil, errors.Errorf("expected *tree.ValuesClause got %T", selectStmt.Select)
 	}
 
-	var rows []sqlbase.EncDatumRow
+	var rows []rowenc.EncDatumRow
 	for _, rowTuple := range valuesClause.Rows {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		for colIdx, expr := range rowTuple {
 			col := tableDesc.GetColumnAtIdx(colIdx)
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
@@ -92,7 +93,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]sqlbase.En
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
-			row = append(row, sqlbase.DatumToEncDatum(col.Type, datum))
+			row = append(row, rowenc.DatumToEncDatum(col.Type, datum))
 		}
 		rows = append(rows, row)
 	}
@@ -180,7 +181,7 @@ func TestAvroSchema(t *testing.T) {
 			// Implement these as customer demand dictates.
 			continue
 		}
-		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
+		datum := rowenc.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
 			// DNull is returned by RandDatum for types.UNKNOWN or if the
 			// column type is unimplemented in RandDatum. In either case, the
@@ -488,7 +489,7 @@ func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
 // popular golang once seem to have it implemented.
 func rowFromBinaryEvolved(
 	buf []byte, writerSchema, readerSchema *avroDataRecord,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	native, newBuf, err := writerSchema.codec.NativeFromBinary(buf)
 	if err != nil {
 		return nil, err

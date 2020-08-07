@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -335,8 +335,8 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			typ := dStartOffset.ResolvedType()
 			spec.Start.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
-			var a sqlbase.DatumAlloc
-			datum := sqlbase.DatumToEncDatum(typ, dStartOffset)
+			var a rowenc.DatumAlloc
+			datum := rowenc.DatumToEncDatum(typ, dStartOffset)
 			buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return err
@@ -379,8 +379,8 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				typ := dEndOffset.ResolvedType()
 				spec.End.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
-				var a sqlbase.DatumAlloc
-				datum := sqlbase.DatumToEncDatum(typ, dEndOffset)
+				var a rowenc.DatumAlloc
+				datum := rowenc.DatumToEncDatum(typ, dEndOffset)
 				buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 				if err != nil {
 					return err

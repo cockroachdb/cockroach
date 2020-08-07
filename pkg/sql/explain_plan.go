@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -34,7 +35,7 @@ type explainPlanNode struct {
 	plan  *explain.Plan
 	run   explainPlanNodeRun
 
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 }
 
 type explainPlanNodeRun struct {

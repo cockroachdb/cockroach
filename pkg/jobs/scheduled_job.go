@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -276,7 +277,7 @@ func (j *ScheduledJob) SetExecutionDetails(executor string, args jobspb.Executio
 }
 
 // InitFromDatums initializes this ScheduledJob object based on datums and column names.
-func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []sqlbase.ResultColumn) error {
+func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.ResultColumn) error {
 	if len(datums) != len(cols) {
 		return errors.Errorf(
 			"datums length != columns length: %d != %d", len(datums), len(cols))

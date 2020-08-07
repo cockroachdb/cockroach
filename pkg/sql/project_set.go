@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // projectSetNode zips through a list of generators for every row of
@@ -41,7 +41,7 @@ type projectSetNode struct {
 type projectSetPlanningInfo struct {
 	// columns contains all the columns from the source, and then
 	// the columns from the generators.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// numColsInSource is the number of columns in the source plan, i.e.
 	// the number of columns at the beginning of rowBuffer that do not

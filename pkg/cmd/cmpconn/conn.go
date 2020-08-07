@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
@@ -134,7 +134,7 @@ func NewConn(uri string, initSQL ...string) (Conn, error) {
 type connWithMutators struct {
 	Conn
 	rng         *rand.Rand
-	sqlMutators []sqlbase.Mutator
+	sqlMutators []rowenc.Mutator
 }
 
 var _ Conn = &connWithMutators{}
@@ -143,7 +143,7 @@ var _ Conn = &connWithMutators{}
 // on it. The mutators are applied to initSQL and will be applied to all
 // queries to be executed in CompareConns.
 func NewConnWithMutators(
-	uri string, rng *rand.Rand, sqlMutators []sqlbase.Mutator, initSQL ...string,
+	uri string, rng *rand.Rand, sqlMutators []rowenc.Mutator, initSQL ...string,
 ) (Conn, error) {
 	mutatedInitSQL := make([]string, len(initSQL))
 	for i, s := range initSQL {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,13 +45,13 @@ type rowFetcher interface {
 	) error
 
 	NextRow(ctx context.Context) (
-		sqlbase.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error)
+		rowenc.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
+	NextRowWithErrors(context.Context) (rowenc.EncDatumRow, error)
 }
 
 // initRowFetcher initializes the fetcher.
@@ -63,7 +64,7 @@ func initRowFetcher(
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,

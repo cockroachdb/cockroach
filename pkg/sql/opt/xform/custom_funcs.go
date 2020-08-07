@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -672,7 +672,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 			// different forms of the same value.
 			colID := cons.Columns.Get(0).ID()
 			colTyp := tab.Column(tabID.ColumnOrdinal(colID)).DatumType()
-			if sqlbase.HasCompositeKeyEncoding(colTyp) {
+			if colinfo.HasCompositeKeyEncoding(colTyp) {
 				continue
 			}
 

@@ -14,17 +14,17 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 type valuesNode struct {
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	tuples  [][]tree.TypedExpr
 
 	// specifiedInQuery is set if the valuesNode represents a literal
@@ -64,7 +64,7 @@ func (p *planner) Values(
 	v.tuples = make([][]tree.TypedExpr, 0, len(n.Rows))
 	tupleBuf := make([]tree.TypedExpr, len(n.Rows)*numCols)
 
-	v.columns = make(sqlbase.ResultColumns, 0, numCols)
+	v.columns = make(colinfo.ResultColumns, 0, numCols)
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -97,7 +97,7 @@ func (p *planner) Values(
 
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
-				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
+				v.columns = append(v.columns, colinfo.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ.Family() == types.UnknownFamily {
 				v.columns[i].Typ = typ
 			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(v.columns[i].Typ) {
@@ -112,13 +112,13 @@ func (p *planner) Values(
 	return v, nil
 }
 
-func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
+func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
 		valuesRun: valuesRun{
 			rows: rowcontainer.NewRowContainerWithCapacity(
 				p.EvalContext().Mon.MakeBoundAccount(),
-				sqlbase.ColTypeInfoFromResCols(columns),
+				colinfo.ColTypeInfoFromResCols(columns),
 				capacity,
 			),
 		},
@@ -144,7 +144,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// This may run subqueries.
 	n.rows = rowcontainer.NewRowContainerWithCapacity(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(n.columns),
+		colinfo.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),
 	)
 

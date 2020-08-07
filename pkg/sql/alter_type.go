@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -25,7 +26,7 @@ import (
 
 type alterTypeNode struct {
 	n    *tree.AlterType
-	desc *sqlbase.MutableTypeDescriptor
+	desc *typedesc.MutableTypeDescriptor
 }
 
 // alterTypeNode implements planNode. We set n here to satisfy the linter.
@@ -191,7 +192,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 // newName and newSchemaID may be the same as the current name and schemaid.
 func (p *planner) performRenameTypeDesc(
 	ctx context.Context,
-	desc *sqlbase.MutableTypeDescriptor,
+	desc *typedesc.MutableTypeDescriptor,
 	newName string,
 	newSchemaID descpb.ID,
 	jobDesc string,

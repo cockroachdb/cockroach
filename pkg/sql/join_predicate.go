@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,9 +58,9 @@ type joinPredicate struct {
 	// equality columns).
 	onCond tree.TypedExpr
 
-	leftCols  sqlbase.ResultColumns
-	rightCols sqlbase.ResultColumns
-	cols      sqlbase.ResultColumns
+	leftCols  colinfo.ResultColumns
+	rightCols colinfo.ResultColumns
+	cols      colinfo.ResultColumns
 
 	// If set, the left equality columns form a key in the left input. Used as a
 	// hint for optimizing execution.
@@ -71,8 +72,8 @@ type joinPredicate struct {
 
 // getJoinResultColumns returns the result columns of a join.
 func getJoinResultColumns(
-	joinType descpb.JoinType, left, right sqlbase.ResultColumns,
-) sqlbase.ResultColumns {
+	joinType descpb.JoinType, left, right colinfo.ResultColumns,
+) colinfo.ResultColumns {
 	// For anti and semi joins, the right columns are omitted from the output (but
 	// they must be available internally for the ON condition evaluation).
 	omitRightColumns := joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin
@@ -80,7 +81,7 @@ func getJoinResultColumns(
 	// The structure of the join data source results is like this:
 	// - all the left columns,
 	// - then all the right columns (except for anti/semi join).
-	columns := make(sqlbase.ResultColumns, 0, len(left)+len(right))
+	columns := make(colinfo.ResultColumns, 0, len(left)+len(right))
 	columns = append(columns, left...)
 	if !omitRightColumns {
 		columns = append(columns, right...)
@@ -90,7 +91,7 @@ func getJoinResultColumns(
 
 // makePredicate constructs a joinPredicate object for joins. The equality
 // columns / on condition must be initialized separately.
-func makePredicate(joinType descpb.JoinType, left, right sqlbase.ResultColumns) *joinPredicate {
+func makePredicate(joinType descpb.JoinType, left, right colinfo.ResultColumns) *joinPredicate {
 	pred := &joinPredicate{
 		joinType:     joinType,
 		numLeftCols:  len(left),

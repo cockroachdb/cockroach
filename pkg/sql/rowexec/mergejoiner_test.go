@@ -17,11 +17,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -32,39 +33,39 @@ type mergeJoinerTestCase struct {
 	spec          execinfrapb.MergeJoinerSpec
 	outCols       []uint32
 	leftTypes     []*types.T
-	leftInput     sqlbase.EncDatumRows
+	leftInput     rowenc.EncDatumRows
 	rightTypes    []*types.T
-	rightInput    sqlbase.EncDatumRows
+	rightInput    rowenc.EncDatumRows
 	expectedTypes []*types.T
-	expected      sqlbase.EncDatumRows
+	expected      rowenc.EncDatumRows
 }
 
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
-	null := sqlbase.EncDatum{Datum: tree.DNull}
+	null := rowenc.EncDatum{Datum: tree.DNull}
 
 	testCases := []mergeJoinerTestCase{
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
 				{v[2], v[4]},
@@ -72,14 +73,14 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: sqlbase.ThreeIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.ThreeIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
@@ -88,32 +89,32 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
 				{v[0], v[0]},
 				{v[0], v[5]},
 				{v[0], v[4]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[1]},
 				{v[0], v[0], v[0]},
@@ -129,11 +130,11 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   descpb.InnerJoin,
@@ -141,15 +142,15 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
 				{v[1], v[1]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
 				{v[0], v[0]},
@@ -161,8 +162,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[1], v[5]},
 				{v[1], v[4]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[5]},
 				{v[0], v[0], v[4]},
@@ -180,11 +181,11 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   descpb.FullOuterJoin,
@@ -192,8 +193,8 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
 
@@ -206,8 +207,8 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[6], v[0]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[5]},
 				{v[0], v[5]},
 
@@ -221,8 +222,8 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[5], v[0]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], null},
 				{v[0], v[0], null},
 				{null, null, v[5]},
@@ -245,19 +246,19 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
 				{v[2], v[4]},
@@ -265,14 +266,14 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: sqlbase.ThreeIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.ThreeIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
 				{v[2], null, null},
@@ -284,25 +285,25 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.RightOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{3, 1, 2},
-			leftTypes: sqlbase.ThreeIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.ThreeIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
 				{v[2], v[4]},
@@ -310,8 +311,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
 				{v[2], null, null},
@@ -323,34 +324,34 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.FullOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
 				{v[2], v[4]},
 				{v[3], v[1]},
 				{v[4], v[5]},
 			},
-			rightTypes: sqlbase.ThreeIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.ThreeIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 				{v[5], v[5], v[1]},
 			},
-			expectedTypes: sqlbase.ThreeIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.ThreeIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
 				{v[2], null, null},
@@ -362,34 +363,34 @@ func TestMergeJoiner(t *testing.T) {
 		{
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 						{ColIdx: 1, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 						{ColIdx: 1, Direction: encoding.Ascending},
 					}),
 				Type: descpb.FullOuterJoin,
 			},
 			outCols:   []uint32{0, 1, 2, 3},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
 			expectedTypes: []*types.T{types.Int, types.Int, types.Int, types.Int},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{null, v[4], null, null},
 				{null, null, null, v[4]},
 				{v[0], null, null, null},
@@ -402,57 +403,57 @@ func TestMergeJoiner(t *testing.T) {
 			// Ensure that NULL = NULL is not matched.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.InnerJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.OneIntCol,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.OneIntCol,
+			leftInput: rowenc.EncDatumRows{
 				{null},
 				{v[0]},
 			},
-			rightTypes: sqlbase.OneIntCol,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.OneIntCol,
+			rightInput: rowenc.EncDatumRows{
 				{null},
 				{v[1]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected:      sqlbase.EncDatumRows{},
+			expectedTypes: rowenc.TwoIntCols,
+			expected:      rowenc.EncDatumRows{},
 		},
 		{
 			// Ensure that semi joins doesn't output duplicates from
 			// the right side.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
 		},
@@ -461,31 +462,31 @@ func TestMergeJoiner(t *testing.T) {
 			// in the output in semi-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[2]},
 				{v[2], v[3]},
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 				{v[3], v[4]},
 				{v[3], v[5]},
@@ -495,29 +496,29 @@ func TestMergeJoiner(t *testing.T) {
 			// Ensure that NULL == NULL doesn't match in semi-join.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
 		},
@@ -525,11 +526,11 @@ func TestMergeJoiner(t *testing.T) {
 			// Ensure that OnExprs are satisfied for semi-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   descpb.LeftSemiJoin,
@@ -537,8 +538,8 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
@@ -548,8 +549,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
 				{v[0], v[0]},
@@ -561,8 +562,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
@@ -572,31 +573,31 @@ func TestMergeJoiner(t *testing.T) {
 			// in the output in anti-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
 				{v[2], v[3]},
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
 			},
@@ -605,29 +606,29 @@ func TestMergeJoiner(t *testing.T) {
 			// Ensure that NULL == NULL doesn't match in anti-join.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{null, v[2]},
 			},
 		},
@@ -635,11 +636,11 @@ func TestMergeJoiner(t *testing.T) {
 			// Ensure that OnExprs are satisfied for semi-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				RightOrdering: execinfrapb.ConvertToSpecOrdering(
-					sqlbase.ColumnOrdering{
+					colinfo.ColumnOrdering{
 						{ColIdx: 0, Direction: encoding.Ascending},
 					}),
 				Type:   descpb.LeftAntiJoin,
@@ -647,8 +648,8 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: sqlbase.TwoIntCols,
-			leftInput: sqlbase.EncDatumRows{
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
@@ -658,8 +659,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: sqlbase.TwoIntCols,
-			rightInput: sqlbase.EncDatumRows{
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
 				{v[0], v[0]},
@@ -671,8 +672,8 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: sqlbase.TwoIntCols,
-			expected: sqlbase.EncDatumRows{
+			expectedTypes: rowenc.TwoIntCols,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
@@ -719,7 +720,7 @@ func TestMergeJoiner(t *testing.T) {
 				t.Fatalf("output RowReceiver not closed")
 			}
 
-			var retRows sqlbase.EncDatumRows
+			var retRows rowenc.EncDatumRows
 			for {
 				row := out.NextNoMeta(t)
 				if row == nil {
@@ -741,55 +742,55 @@ func TestMergeJoiner(t *testing.T) {
 func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	spec := execinfrapb.MergeJoinerSpec{
 		LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-			sqlbase.ColumnOrdering{
+			colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
 		RightOrdering: execinfrapb.ConvertToSpecOrdering(
-			sqlbase.ColumnOrdering{
+			colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
 		Type: descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
-	leftTypes := sqlbase.OneIntCol
-	rightTypes := sqlbase.OneIntCol
+	leftTypes := rowenc.OneIntCol
+	rightTypes := rowenc.OneIntCol
 
 	testCases := []struct {
 		typ       descpb.JoinType
-		leftRows  sqlbase.EncDatumRows
-		rightRows sqlbase.EncDatumRows
+		leftRows  rowenc.EncDatumRows
+		rightRows rowenc.EncDatumRows
 	}{
 		{
 			typ: descpb.InnerJoin,
 			// Implicit @1 = @2 constraint.
-			leftRows: sqlbase.EncDatumRows{
+			leftRows: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			rightRows: sqlbase.EncDatumRows{
+			rightRows: rowenc.EncDatumRows{
 				{v[0]},
 			},
 		},
 		{
 			typ: descpb.LeftOuterJoin,
 			// Implicit @1 = @2 constraint.
-			leftRows: sqlbase.EncDatumRows{
+			leftRows: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			rightRows: sqlbase.EncDatumRows{},
+			rightRows: rowenc.EncDatumRows{},
 		},
 		{
 			typ: descpb.RightOuterJoin,
 			// Implicit @1 = @2 constraint.
-			leftRows: sqlbase.EncDatumRows{},
-			rightRows: sqlbase.EncDatumRows{
+			leftRows: rowenc.EncDatumRows{},
+			rightRows: rowenc.EncDatumRows{
 				{v[0]},
 			},
 		},
@@ -839,11 +840,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	spec := &execinfrapb.MergeJoinerSpec{
 		LeftOrdering: execinfrapb.ConvertToSpecOrdering(
-			sqlbase.ColumnOrdering{
+			colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
 		RightOrdering: execinfrapb.ConvertToSpecOrdering(
-			sqlbase.ColumnOrdering{
+			colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			}),
 		Type: descpb.InnerJoin,
@@ -855,9 +856,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	const numCols = 1
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
-			rows := sqlbase.MakeIntRows(inputSize, numCols)
-			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
-			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			rows := rowenc.MakeIntRows(inputSize, numCols)
+			leftInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rows)
+			rightInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rows)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -875,8 +876,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := inputSize
 		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
-			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
+			leftInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(inputSize, numCols))
+			rightInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -894,9 +895,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			row := sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
-			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, row)
-			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			row := rowenc.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
+			leftInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, row)
+			rightInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

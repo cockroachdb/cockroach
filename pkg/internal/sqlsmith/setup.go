@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Setup generates a SQL query that can be executed to initialize a database
@@ -69,7 +69,7 @@ func randTables(r *rand.Rand) string {
 	`)
 
 	// Create the random tables.
-	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
+	stmts := rowenc.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
 		mutations.PartialIndexMutator,
@@ -84,7 +84,7 @@ func randTables(r *rand.Rand) string {
 	numTypes := r.Intn(5) + 1
 	for i := 0; i < numTypes; i++ {
 		name := fmt.Sprintf("rand_typ_%d", i)
-		stmt := sqlbase.RandCreateType(r, name, letters)
+		stmt := rowenc.RandCreateType(r, name, letters)
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}

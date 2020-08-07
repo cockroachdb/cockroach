@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +35,7 @@ type PrepareMetadata struct {
 	tree.PlaceholderTypesInfo
 
 	// Columns are the types and names of the query output columns.
-	Columns ResultColumns
+	Columns colinfo.ResultColumns
 
 	// InferredTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
@@ -55,7 +56,7 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 	res += int64(len(pm.TypeHints)+len(pm.Types)) *
 		int64(unsafe.Sizeof(tree.PlaceholderIdx(0))+unsafe.Sizeof((*types.T)(nil)))
 
-	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
+	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(colinfo.ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
 
 	return res
