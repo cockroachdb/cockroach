@@ -972,7 +972,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		descs := MapDescGetter{}
+		descs := catalog.MapDescGetter{}
 		descs[1] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{ID: 1})
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
