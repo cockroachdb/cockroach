@@ -1888,6 +1888,15 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   ReadConsistencyType read_consistency = 6;
+  // wait_policy specifies the desired behavior for the batch request if it
+  // encounters a conflicting lock held by another active transaction.
+  //
+  // If an Error wait policy is set and a conflicting lock held by an active
+  // transaction is encountered, a WriteIntentError will be returned.
+  //
+  // If the desired behavior is to block on the conflicting lock up to some
+  // maximum duration, use the Block wait policy and set a context timeout.
+  kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
   // If set to a non-zero value, the total number of keys touched by requests in
   // the batch is limited. A resume span will be provided on the response of the
   // requests that were not able to run to completion before the limit was
