@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -416,7 +416,7 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 
 	// Computed columns cannot be targeted with input values.
 	if tabCol.IsComputed() {
-		panic(sqlbase.CannotWriteToComputedColError(string(tabCol.ColName())))
+		panic(schemaexpr.CannotWriteToComputedColError(string(tabCol.ColName())))
 	}
 
 	// Ensure that the name list does not contain duplicates.

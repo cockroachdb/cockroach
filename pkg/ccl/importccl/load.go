@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -238,7 +239,7 @@ func Load(
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx, &semaCtx)
+				schemaexpr.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx, &semaCtx)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "process default columns")
 			}
@@ -339,7 +340,7 @@ func insertStmtToKVs(
 	}
 
 	b := row.KVInserter(f)
-	computedIVarContainer := sqlbase.RowIndexedVarContainer{
+	computedIVarContainer := schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}

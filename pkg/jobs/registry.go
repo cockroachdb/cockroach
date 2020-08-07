@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -95,7 +96,7 @@ var (
 type Registry struct {
 	ac         log.AmbientContext
 	stopper    *stop.Stopper
-	nl         sqlbase.OptionalNodeLiveness
+	nl         optionalnodeliveness.Container
 	db         *kv.DB
 	ex         sqlutil.InternalExecutor
 	clock      *hlc.Clock
@@ -174,7 +175,7 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	nl sqlbase.OptionalNodeLiveness,
+	nl optionalnodeliveness.Container,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.SQLIDContainer,
@@ -549,7 +550,7 @@ func (r *Registry) Start(
 	return nil
 }
 
-func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNodeLiveness) {
+func (r *Registry) maybeCancelJobs(ctx context.Context, nlw optionalnodeliveness.Container) {
 	// Cancel all jobs if the stopper is quiescing.
 	select {
 	case <-r.stopper.ShouldQuiesce():
@@ -1031,7 +1032,7 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 }
 
 func (r *Registry) maybeAdoptJob(
-	ctx context.Context, nlw sqlbase.OptionalNodeLiveness, randomizeJobOrder bool,
+	ctx context.Context, nlw optionalnodeliveness.Container, randomizeJobOrder bool,
 ) error {
 	const stmt = `
 SELECT id, payload, progress IS NULL, status

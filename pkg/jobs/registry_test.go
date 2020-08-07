@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -64,7 +64,7 @@ func TestRegistryCancelation(t *testing.T) {
 		log.AmbientContext{},
 		stopper,
 		clock,
-		sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
+		optionalnodeliveness.MakeContainer(nodeLiveness),
 		db,
 		nil, /* ex */
 		base.TestingIDContainer,

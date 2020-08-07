@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,7 +90,7 @@ func GenerateInsertRow(
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
-	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
+	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -206,7 +207,7 @@ type DatumRowConverter struct {
 	VisibleCols           []descpb.ColumnDescriptor
 	VisibleColTypes       []*types.T
 	defaultCache          []tree.TypedExpr
-	computedIVarContainer sqlbase.RowIndexedVarContainer
+	computedIVarContainer schemaexpr.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
@@ -267,7 +268,7 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(
+	cols, defaultExprs, err := schemaexpr.ProcessDefaultColumns(
 		ctx, targetColDescriptors, tableDesc, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
@@ -347,7 +348,7 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
+	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}

@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -190,7 +190,7 @@ func (eh *ExprHelper) Init(
 func (eh *ExprHelper) EvalFilter(row rowenc.EncDatumRow) (bool, error) {
 	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := sqlbase.RunFilter(eh.Expr, eh.evalCtx)
+	pass, err := schemaexpr.RunFilter(eh.Expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
 }
