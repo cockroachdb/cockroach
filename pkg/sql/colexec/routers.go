@@ -412,9 +412,10 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
+			// TODO(yuzefovich): consider whether this should be a dynamic batch.
 			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithMaxCapacity(o.types)
 		}
-		available := coldata.BatchSize() - o.mu.pendingBatch.Length()
+		available := o.mu.pendingBatch.Capacity() - o.mu.pendingBatch.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -435,7 +436,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		})
 		newLength := o.mu.pendingBatch.Length() + numAppended
 		o.mu.pendingBatch.SetLength(newLength)
-		if o.testingKnobs.alwaysFlush || newLength >= coldata.BatchSize() {
+		if o.testingKnobs.alwaysFlush || newLength >= o.mu.pendingBatch.Capacity() {
 			// The capacity in o.mu.pendingBatch has been filled.
 			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
 			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {

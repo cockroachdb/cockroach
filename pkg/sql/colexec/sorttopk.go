@@ -44,6 +44,7 @@ func NewTopKSorter(
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
+		batchHelper:  NewDynamicBatchSizeHelper(allocator, inputTypes),
 	}
 }
 
@@ -53,12 +54,15 @@ var _ colexecbase.BufferingInMemoryOperator = &topKSorter{}
 type topKSortState int
 
 const (
-	// sortSpooling is the initial state of the operator, where it spools its
-	// input.
+	// topKSortSpooling is the initial state of the operator, where it spools
+	// its input.
 	topKSortSpooling topKSortState = iota
-	// sortEmitting is the second state of the operator, indicating that each call
-	// to Next will return another batch of the sorted data.
+	// topKSortSpooling is the second state of the operator, indicating that
+	// each call to Next will return another batch of the sorted data.
 	topKSortEmitting
+	// topKSortDone is the final state of the operator, where it always returns
+	// a zero batch.
+	topKSortDone
 )
 
 type topKSorter struct {
@@ -85,8 +89,9 @@ type topKSorter struct {
 	// sel is a selection vector which specifies an ordering on topK.
 	sel []int
 	// emitted is the count of rows which have been emitted so far.
-	emitted int
-	output  coldata.Batch
+	emitted     int
+	output      coldata.Batch
+	batchHelper *DynamicBatchSizeHelper
 
 	exportedFromTopK  int
 	exportedFromBatch int
@@ -107,17 +112,26 @@ func (t *topKSorter) Init() {
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
-	switch t.state {
-	case topKSortSpooling:
-		t.spool(ctx)
-		t.state = topKSortEmitting
-		fallthrough
-	case topKSortEmitting:
-		return t.emit()
+	for {
+		switch t.state {
+		case topKSortSpooling:
+			t.spool(ctx)
+			t.state = topKSortEmitting
+		case topKSortEmitting:
+			output := t.emit()
+			if output.Length() == 0 {
+				t.state = topKSortDone
+				continue
+			}
+			return output
+		case topKSortDone:
+			return coldata.ZeroBatch
+		default:
+			colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
+			// This code is unreachable, but the compiler cannot infer that.
+			return nil
+		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
@@ -195,16 +209,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 	}
 }
 
-func (t *topKSorter) resetOutput() {
-	if t.output == nil {
-		t.output = t.allocator.NewMemBatchWithMaxCapacity(t.inputTypes)
-	} else {
-		t.output.ResetInternalBatch()
-	}
-}
-
 func (t *topKSorter) emit() coldata.Batch {
-	t.resetOutput()
 	toEmit := t.topK.Length() - t.emitted
 	if toEmit == 0 {
 		// We're done.
@@ -213,6 +218,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
+	t.output, _ = t.batchHelper.ResetMaybeReallocate(t.output, toEmit)
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do

@@ -91,12 +91,16 @@ func NewAllocator(
 
 // NewMemBatchWithMaxCapacity allocates a new in-memory coldata.Batch of
 // coldata.BatchSize() capacity.
+// Note: consider whether you want dynamic batch size behavior (in which case
+// you should be using colexec.DynamicBatchSizeHelper).
 func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
 	return a.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
 }
 
-// NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with
-// the given capacity.
+// NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with the
+// given vector capacity.
+// Note: consider whether you want dynamic batch size behavior (in which case
+// you should be using colexec.DynamicBatchSizeHelper).
 func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(capacity) + int64(EstimateBatchSizeBytes(typs, capacity))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {

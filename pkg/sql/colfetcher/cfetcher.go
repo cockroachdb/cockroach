@@ -237,7 +237,8 @@ type cFetcher struct {
 		prettyValueBuf *bytes.Buffer
 
 		// batch is the output batch the fetcher writes to.
-		batch coldata.Batch
+		batch       coldata.Batch
+		batchHelper *colexec.DynamicBatchSizeHelper
 
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
@@ -255,6 +256,23 @@ type cFetcher struct {
 		allocator *colmem.Allocator
 		batch     coldata.Batch
 		err       error
+	}
+}
+
+const cFetcherBatchMinCapacity = 1
+
+func (rf *cFetcher) resetBatch(timestampOutputIdx int) {
+	var reallocated bool
+	rf.machine.batch, reallocated = rf.machine.batchHelper.ResetMaybeReallocate(
+		rf.machine.batch, cFetcherBatchMinCapacity,
+	)
+	if reallocated {
+		rf.machine.colvecs = rf.machine.batch.ColVecs()
+		// If the fetcher is requested to produce a timestamp column, pull out the
+		// column as a decimal and save it.
+		if timestampOutputIdx != noTimestampColumn {
+			rf.machine.timestampCol = rf.machine.colvecs[timestampOutputIdx].Decimal()
+		}
 	}
 }
 
@@ -328,14 +346,8 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.machine.batch = allocator.NewMemBatchWithMaxCapacity(typs)
-	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	// If the fetcher is requested to produce a timestamp column, pull out the
-	// column as a decimal and save it.
-	if table.timestampOutputIdx != noTimestampColumn {
-		rf.machine.timestampCol = rf.machine.colvecs[table.timestampOutputIdx].Decimal()
-	}
-
+	rf.machine.batchHelper = colexec.NewDynamicBatchSizeHelper(allocator, typs)
+	rf.resetBatch(table.timestampOutputIdx)
 	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
@@ -672,7 +684,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			rf.machine.batch.ResetInternalBatch()
+			rf.resetBatch(rf.table.timestampOutputIdx)
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
@@ -904,7 +916,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= coldata.BatchSize() {
+			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0

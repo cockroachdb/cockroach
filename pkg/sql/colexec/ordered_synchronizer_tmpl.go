@@ -73,6 +73,7 @@ type OrderedSynchronizer struct {
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	output      coldata.Batch
+	batchHelper *DynamicBatchSizeHelper
 	outNulls    []*coldata.Nulls
 	// In order to reduce the number of interface conversions, we will get access
 	// to the underlying slice for the output vectors and will use them directly.
@@ -124,6 +125,7 @@ func NewOrderedSynchronizer(
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
+		batchHelper:           NewDynamicBatchSizeHelper(allocator, typs),
 	}, nil
 }
 
@@ -141,10 +143,10 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		}
 		heap.Init(o)
 	}
-	o.output.ResetInternalBatch()
+	o.resetOutput()
 	outputIdx := 0
 	o.allocator.PerformOperation(o.output.ColVecs(), func() {
-		for outputIdx < coldata.BatchSize() {
+		for outputIdx < o.output.Capacity() {
 			if o.Len() == 0 {
 				// All inputs exhausted.
 				break
@@ -203,29 +205,40 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	return o.output
 }
 
+func (o *OrderedSynchronizer) resetOutput() {
+	var reallocated bool
+	o.output, reallocated = o.batchHelper.ResetMaybeReallocate(o.output, 1 /* minCapacity */)
+	if reallocated {
+		// {{range .}}
+		// {{range .WidthOverloads}}
+		o.out_TYPECols = o.out_TYPECols[:0]
+		// {{end}}
+		// {{end}}
+		for i, outVec := range o.output.ColVecs() {
+			o.outNulls[i] = outVec.Nulls()
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
+			// {{range .}}
+			case _CANONICAL_TYPE_FAMILY:
+				switch o.typs[i].Width() {
+				// {{range .WidthOverloads}}
+				case _TYPE_WIDTH:
+					o.outColsMap[i] = len(o.out_TYPECols)
+					o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
+					// {{end}}
+				}
+			// {{end}}
+			default:
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
+			}
+		}
+	}
+}
+
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]int, len(o.inputs))
-	o.output = o.allocator.NewMemBatchWithMaxCapacity(o.typs)
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
-	for i, outVec := range o.output.ColVecs() {
-		o.outNulls[i] = outVec.Nulls()
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
-		// {{range .}}
-		case _CANONICAL_TYPE_FAMILY:
-			switch o.typs[i].Width() {
-			// {{range .WidthOverloads}}
-			case _TYPE_WIDTH:
-				o.outColsMap[i] = len(o.out_TYPECols)
-				o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
-				// {{end}}
-			}
-		// {{end}}
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
-		}
-	}
 	for i := range o.inputs {
 		o.inputs[i].Op.Init()
 	}

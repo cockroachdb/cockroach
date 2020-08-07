@@ -78,6 +78,9 @@ const defaultBatchSize = 1024
 var batchSize int64 = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
+// TODO(yuzefovich): we are treating this method almost as if it were a
+// constant while it performs an atomic operation. Think through whether it has
+// a noticeable performance hit.
 func BatchSize() int {
 	return int(atomic.LoadInt64(&batchSize))
 }

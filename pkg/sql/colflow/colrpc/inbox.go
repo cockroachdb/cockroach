@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -99,8 +100,9 @@ type Inbox struct {
 	flowCtx context.Context
 
 	scratch struct {
-		data []*array.Data
-		b    coldata.Batch
+		data        []*array.Data
+		b           coldata.Batch
+		batchHelper *colexec.DynamicBatchSizeHelper
 	}
 }
 
@@ -130,7 +132,7 @@ func NewInbox(
 		flowCtx:    ctx,
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
-	i.scratch.b = allocator.NewMemBatchWithMaxCapacity(typs)
+	i.scratch.batchHelper = colexec.NewDynamicBatchSizeHelper(allocator, typs)
 	return i, nil
 }
 
@@ -300,6 +302,11 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
 			colexecerror.InternalError(err)
 		}
+		i.scratch.b, _ = i.scratch.batchHelper.ResetMaybeReallocate(
+			// We don't support type-less schema, so len(i.scratch.data) is
+			// always at least 1.
+			i.scratch.b, i.scratch.data[0].Len(),
+		)
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}
