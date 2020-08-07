@@ -122,6 +122,7 @@ func (cb *ColumnBackfiller) init(
 		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&cb.alloc,
 		tableArgs,
@@ -559,6 +560,7 @@ func (ib *IndexBackfiller) init(
 		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&ib.alloc,
 		tableArgs,

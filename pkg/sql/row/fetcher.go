@@ -198,8 +198,13 @@ type Fetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
-	// lockStr represents the row-level locking mode to use when fetching rows.
-	lockStr descpb.ScanLockingStrength
+	// lockStrength represents the row-level locking mode to use when fetching
+	// rows.
+	lockStrength descpb.ScanLockingStrength
+
+	// lockWaitPolicy represents the policy to be used for handling conflicting
+	// locks held by other active transactions.
+	lockWaitPolicy descpb.ScanLockingWaitPolicy
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
@@ -252,7 +257,8 @@ func (rf *Fetcher) Reset() {
 func (rf *Fetcher) Init(
 	codec keys.SQLCodec,
 	reverse bool,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	tables ...FetcherTableArgs,
@@ -263,7 +269,8 @@ func (rf *Fetcher) Init(
 
 	rf.codec = codec
 	rf.reverse = reverse
-	rf.lockStr = lockStr
+	rf.lockStrength = lockStrength
+	rf.lockWaitPolicy = lockWaitPolicy
 	rf.alloc = alloc
 	rf.isCheck = isCheck
 
@@ -489,7 +496,8 @@ func (rf *Fetcher) StartScan(
 		rf.reverse,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
-		rf.lockStr,
+		rf.lockStrength,
+		rf.lockWaitPolicy,
 	)
 	if err != nil {
 		return err
@@ -568,7 +576,8 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.reverse,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
-		rf.lockStr,
+		rf.lockStrength,
+		rf.lockWaitPolicy,
 	)
 	if err != nil {
 		return err
@@ -609,7 +618,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	for {
 		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 		if err != nil {
-			return false, err
+			return false, ConvertFetchError(ctx, rf, err)
 		}
 		rf.kvEnd = !ok
 		if rf.kvEnd {
@@ -835,6 +844,18 @@ func (rf *Fetcher) ReadIndexKey(
 	}
 
 	return key, true, foundNull, nil
+}
+
+// KeyToDesc implements the KeyToDescTranslator interface. The implementation is
+// used by ConvertFetchError.
+func (rf *Fetcher) KeyToDesc(key roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool) {
+	if rf.currentTable != nil && len(key) < rf.currentTable.knownPrefixLength {
+		return nil, false
+	}
+	if _, ok, _, err := rf.ReadIndexKey(key); !ok || err != nil {
+		return nil, false
+	}
+	return rf.currentTable.desc, true
 }
 
 // processKV processes the given key/value, setting values in the row

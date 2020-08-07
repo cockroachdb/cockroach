@@ -55,9 +55,9 @@ SELECT 1 FOR UPDATE OF public.a
 query error pgcode 42601 FOR UPDATE must specify unqualified relation names
 SELECT 1 FOR UPDATE OF db.public.a
 
-# We can't support SKIP LOCKED or NOWAIT, since they would actually behave
-# differently - NOWAIT returns an error to the client instead of blocking,
-# and SKIP LOCKED returns an inconsistent view.
+# We don't currently support SKIP LOCKED, since it returns an inconsistent view
+# and generally has strange semantics with respect to serializable isolation.
+# Support may be added in the future.
 
 query error unimplemented: SKIP LOCKED lock wait policy is not supported
 SELECT 1 FOR UPDATE SKIP LOCKED
@@ -80,23 +80,34 @@ SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b SKIP LOCKED
 query error unimplemented: SKIP LOCKED lock wait policy is not supported
 SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b NOWAIT
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query I
 SELECT 1 FOR UPDATE NOWAIT
+----
+1
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query I
 SELECT 1 FOR NO KEY UPDATE NOWAIT
+----
+1
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query I
 SELECT 1 FOR SHARE NOWAIT
+----
+1
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query I
 SELECT 1 FOR KEY SHARE NOWAIT
+----
+1
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a NOWAIT
 
-query error unimplemented: NOWAIT lock wait policy is not supported
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a NOWAIT FOR NO KEY UPDATE OF b NOWAIT
+
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
+SELECT 1 FOR UPDATE OF a NOWAIT FOR SHARE OF b, c NOWAIT FOR NO KEY UPDATE OF d NOWAIT  FOR KEY SHARE OF e, f NOWAIT 
 
 # Locking clauses both inside and outside of parenthesis are handled correctly.
 
@@ -220,13 +231,7 @@ SELECT * FROM t FOR SHARE
 
 user root
 
-statement ok
-DROP TABLE t
-
 # Use of SELECT FOR UPDATE/SHARE in ReadOnly Transaction
-
-statement ok
-CREATE TABLE t (i INT PRIMARY KEY)
 
 statement ok
 BEGIN READ ONLY
@@ -264,5 +269,77 @@ SELECT * FROM t FOR KEY SHARE
 statement ok
 ROLLBACK
 
+# The NOWAIT wait policy returns error when conflicting lock is encountered.
+
 statement ok
-DROP TABLE t
+INSERT INTO t VALUES (1, 1)
+
+statement ok
+BEGIN; UPDATE t SET v = 2 WHERE k = 1
+
+user testuser
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT * FROM t FOR UPDATE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT * FROM t FOR SHARE FOR UPDATE OF t NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT * FROM t FOR SHARE NOWAIT FOR UPDATE OF t
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+BEGIN; SELECT * FROM t FOR UPDATE NOWAIT
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+ROLLBACK
+
+# The NOWAIT wait policy can be applied to a subset of the tables being locked.
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY, v2 int)
+
+statement ok
+GRANT UPDATE ON t2 TO testuser
+
+statement ok
+INSERT INTO t2 VALUES (1, 11)
+
+statement ok
+BEGIN; UPDATE t SET v = 2 WHERE k = 1
+
+user testuser
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t2 FOR SHARE OF t NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@primary
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t2
+
+statement ok
+SET statement_timeout = '10ms'
+
+query error pgcode 57014 query execution canceled due to statement timeout
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t2 NOWAIT
+
+query error pgcode 57014 query execution canceled due to statement timeout
+SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t FOR SHARE OF t2 NOWAIT
+
+statement ok
+SET statement_timeout = 0
+
+user root
+
+statement ok
+ROLLBACK

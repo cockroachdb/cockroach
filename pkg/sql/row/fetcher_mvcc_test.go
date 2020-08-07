@@ -111,6 +111,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		keys.SystemSQLCodec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		true, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		args...,

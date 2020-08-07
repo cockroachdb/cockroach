@@ -195,8 +195,12 @@ type cFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
-	// lockStr represents the row-level locking mode to use when fetching rows.
-	lockStr descpb.ScanLockingStrength
+	// lockStrength represents the row-level locking mode to use when fetching rows.
+	lockStrength descpb.ScanLockingStrength
+
+	// lockWaitPolicy represents the policy to be used for handling conflicting
+	// locks held by other active transactions.
+	lockWaitPolicy descpb.ScanLockingWaitPolicy
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
@@ -284,7 +288,8 @@ func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	reverse bool,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	tables ...row.FetcherTableArgs,
 ) error {
 	rf.allocator = allocator
@@ -293,7 +298,8 @@ func (rf *cFetcher) Init(
 	}
 
 	rf.reverse = reverse
-	rf.lockStr = lockStr
+	rf.lockStrength = lockStrength
+	rf.lockWaitPolicy = lockWaitPolicy
 
 	if len(tables) > 1 {
 		return errors.New("multiple tables not supported in cfetcher")
@@ -526,7 +532,15 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := row.NewKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.lockStr)
+	f, err := row.NewKVFetcher(
+		txn,
+		spans,
+		rf.reverse,
+		limitBatches,
+		firstBatchLimit,
+		rf.lockStrength,
+		rf.lockWaitPolicy,
+	)
 	if err != nil {
 		return err
 	}
@@ -651,7 +665,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, colexecerror.NewStorageError(err)
+				return nil, rf.convertFetchError(ctx, err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -808,7 +822,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
-					return nil, colexecerror.NewStorageError(err)
+					return nil, rf.convertFetchError(ctx, err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -840,7 +854,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, colexecerror.NewStorageError(err)
+				return nil, rf.convertFetchError(ctx, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -1317,4 +1331,36 @@ func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 	}
 	return descpb.FamilyID(id), nil
+}
+
+// convertFetchError converts an error generated during a key-value fetch to a
+// storage error that will propagate through the exec subsystem unchanged. The
+// error may also undergo a mapping to make it more user friendly for SQL
+// consumers.
+func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
+	err = row.ConvertFetchError(ctx, rf, err)
+	err = colexecerror.NewStorageError(err)
+	return err
+}
+
+// KeyToDesc implements the KeyToDescTranslator interface. The implementation is
+// used by convertFetchError.
+func (rf *cFetcher) KeyToDesc(key roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool) {
+	if len(key) < rf.table.knownPrefixLength {
+		return nil, false
+	}
+	nIndexCols := len(rf.table.index.ColumnIDs) + len(rf.table.index.ExtraColumnIDs)
+	tableKeyVals := make([]sqlbase.EncDatum, nIndexCols)
+	_, ok, _, err := sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+		rf.table.desc,
+		rf.table.index,
+		rf.table.keyValTypes,
+		tableKeyVals,
+		rf.table.indexColumnDirs,
+		key[rf.table.knownPrefixLength:],
+	)
+	if !ok || err != nil {
+		return nil, false
+	}
+	return rf.table.desc, true
 }

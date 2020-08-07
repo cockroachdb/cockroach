@@ -116,8 +116,9 @@ enum ScanLockingStrength {
   FOR_UPDATE = 4;
 }
   
-// ScanLockingWaitPolicy controls the policy used by scans for dealing with rows
-// being locked by FOR UPDATE/SHARE clauses.
+// LockingWaitPolicy controls the policy used for handling conflicting locks
+// held by other active transactions when attempting to lock rows due to FOR
+// UPDATE/SHARE clauses (i.e. it represents the NOWAIT and SKIP LOCKED options).
 enum ScanLockingWaitPolicy {
   // BLOCK represents the default - wait for the lock to become available.
   BLOCK = 0;
@@ -129,8 +130,5 @@ enum ScanLockingWaitPolicy {
   SKIP  = 1;
 
   // ERROR represents NOWAIT - raise an error if a row cannot be locked.
-  //
-  // NOTE: ERROR is not currently implemented and does not make it out of the
-  // SQL optimizer without throwing an error.
   ERROR = 2;
 }
