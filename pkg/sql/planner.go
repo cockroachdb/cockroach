@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -193,7 +194,7 @@ type planner struct {
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	txCtx                 transform.ExprTransformContext
-	nameResolutionVisitor sqlbase.NameResolutionVisitor
+	nameResolutionVisitor schemaexpr.NameResolutionVisitor
 	tableName             tree.TableName
 
 	// Use a common datum allocator across all the plan nodes. This separates the

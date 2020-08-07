@@ -190,7 +190,8 @@ func newNameResolver(
 // resolveNames returns an expression equivalent to the input expression with
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
-	return sqlbase.ResolveNames(expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
+	var v NameResolutionVisitor
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
