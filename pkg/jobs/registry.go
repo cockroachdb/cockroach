@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -329,7 +329,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			query,
 		)
 		if err != nil {
@@ -609,7 +609,7 @@ func (r *Registry) Start(
 
 		if _, err := r.ex.QueryRowEx(
 			ctx, "expire-sessions", nil,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
+			sessiondata.InternalExecutorOverride{User: security.RootUser}, `
 UPDATE system.jobs SET claim_session_id = NULL
 WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 		); err != nil {

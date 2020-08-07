@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -53,7 +53,7 @@ func (p *planner) showStateMachineSetting(
 					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
 						txn,
-						sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+						sessiondata.InternalExecutorOverride{User: security.RootUser},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
 					if err != nil {

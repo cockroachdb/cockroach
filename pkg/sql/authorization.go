@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -434,7 +434,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 
 	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
 		ctx, "has-role-option", p.Txn(),
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = ANY($1) LIMIT 1`,
 			RoleOptionsTableName,
