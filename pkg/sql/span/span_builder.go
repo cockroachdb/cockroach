@@ -14,11 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -28,7 +28,7 @@ import (
 // Builder is a single struct for generating key spans from Constraints, Datums and encDatums.
 type Builder struct {
 	codec         keys.SQLCodec
-	table         *sqlbase.ImmutableTableDescriptor
+	table         *tabledesc.ImmutableTableDescriptor
 	index         *descpb.IndexDescriptor
 	indexColTypes []*types.T
 	indexColDirs  []descpb.IndexDescriptor_Direction
@@ -52,7 +52,7 @@ var _ = (*Builder).UnsetNeededFamilies
 
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
-	codec keys.SQLCodec, table *sqlbase.ImmutableTableDescriptor, index *descpb.IndexDescriptor,
+	codec keys.SQLCodec, table *tabledesc.ImmutableTableDescriptor, index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{
 		codec:          codec,

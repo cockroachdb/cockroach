@@ -24,12 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -282,7 +282,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 func (p *planner) accumulateOwnedSequences(
 	ctx context.Context,
 	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
@@ -311,7 +311,7 @@ func (p *planner) accumulateOwnedSequences(
 func (p *planner) accumulateCascadingViews(
 	ctx context.Context,
 	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)

@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -51,7 +51,7 @@ type indexKeyTest struct {
 
 func makeTableDescForTest(
 	test indexKeyTest,
-) (*sqlbase.ImmutableTableDescriptor, map[descpb.ColumnID]int) {
+) (*tabledesc.ImmutableTableDescriptor, map[descpb.ColumnID]int) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
@@ -101,12 +101,12 @@ func makeTableDescForTest(
 			Interleave:       makeInterleave(2, test.secondaryInterleaves),
 		}},
 	}
-	return sqlbase.NewImmutableTableDescriptor(tableDesc), colMap
+	return tabledesc.NewImmutableTableDescriptor(tableDesc), colMap
 }
 
 func decodeIndex(
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	index *descpb.IndexDescriptor,
 	key []byte,
 ) ([]tree.Datum, error) {

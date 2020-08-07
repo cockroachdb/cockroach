@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -97,7 +97,7 @@ type PlanHookState interface {
 		ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 	) (table *MutableTableDescriptor, err error)
 	ShowCreate(
-		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *sqlbase.ImmutableTableDescriptor, displayOptions ShowCreateDisplayOptions,
+		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.ImmutableTableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
 }
 
