@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -1811,7 +1811,7 @@ func (ex *connExecutor) execCopyIn(
 	if !isNoTxn && !isOpen {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionAbortedError("" /* customMsg */)}
+			err: sqlerrors.NewTransactionAbortedError("" /* customMsg */)}
 		return ev, payload, nil
 	}
 

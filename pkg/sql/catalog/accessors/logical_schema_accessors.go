@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -106,7 +106,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		if desc == nil {
 			if flags.Required {
 				obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
-				return nil, sqlbase.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
+				return nil, sqlerrors.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
 			}
 			return nil, nil
 		}

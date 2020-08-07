@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -475,7 +476,7 @@ func maybeCreateAndAddShardCol(
 		}
 		return existingShardCol, false, nil
 	}
-	columnIsUndefined := sqlbase.IsUndefinedColumnError(err)
+	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !columnIsUndefined {
 		return nil, false, err
 	}

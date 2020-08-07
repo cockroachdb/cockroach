@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,7 +88,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName)
 	if err != nil {
 		switch {
-		case !sqlbase.IsRelationAlreadyExistsError(err):
+		case !sqlerrors.IsRelationAlreadyExistsError(err):
 			return err
 		case n.ifNotExists:
 			return nil

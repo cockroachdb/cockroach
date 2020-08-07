@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+// Package sqlerrors exports errors which can occur in the sql package.
+package sqlerrors
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,7 +97,7 @@ func (p *planner) addColumnImpl(
 			return err
 		}
 		if len(kvs) > 0 {
-			return sqlbase.NewNonNullViolationError(col.Name)
+			return sqlerrors.NewNonNullViolationError(col.Name)
 		}
 	}
 	_, err = n.tableDesc.FindActiveColumnByName(string(d.Name))
@@ -121,7 +122,7 @@ func (p *planner) addColumnImpl(
 		if t.IfNotExists {
 			return nil
 		}
-		return sqlbase.NewColumnAlreadyExistsError(string(d.Name), n.tableDesc.Name)
+		return sqlerrors.NewColumnAlreadyExistsError(string(d.Name), n.tableDesc.Name)
 	}
 
 	n.tableDesc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)

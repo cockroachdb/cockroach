@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -715,7 +716,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 				tn.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
-		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)
+		return virtualDefEntry{}, sqlerrors.NewUndefinedRelationError(tn)
 	}
 	return virtualDefEntry{}, nil
 }
