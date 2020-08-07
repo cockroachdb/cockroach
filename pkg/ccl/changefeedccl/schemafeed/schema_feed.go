@@ -512,7 +512,7 @@ func fetchTableDescriptorVersions(
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}
-				if tableDesc := sqlbase.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
+				if tableDesc := descpb.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
 					tableDescs = append(tableDescs, sqlbase.NewImmutableTableDescriptor(*tableDesc))
 				}
 			}
