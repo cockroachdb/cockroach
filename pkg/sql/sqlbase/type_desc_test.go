@@ -8,19 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package sqlbase_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -192,7 +191,7 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		a, b := NewImmutableTypeDescriptor(test.a), NewImmutableTypeDescriptor(test.b)
+		a, b := sqlbase.NewImmutableTypeDescriptor(test.a), sqlbase.NewImmutableTypeDescriptor(test.b)
 		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
@@ -208,22 +207,22 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	// Write some existing descriptors into the kvDB.
-	writeDesc := func(d *descpb.Descriptor, id descpb.ID) {
-		var v roachpb.Value
-		if err := v.SetProto(d); err != nil {
-			t.Fatal(err)
-		}
-		if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, id), &v); err != nil {
-			t.Fatal(err)
-		}
+	descs := sqlbase.MapDescGetter{
+		Descs: make(map[descpb.ID]catalog.Descriptor),
 	}
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Database{}}, 100)
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{}}, 101)
-	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Type{}}, 102)
+
+	descs.Descs[100] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+		Name: "db",
+		ID:   100,
+	})
+	descs.Descs[101] = sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
+		ID:   101,
+		Name: "schema",
+	})
+	descs.Descs[102] = sqlbase.NewImmutableTypeDescriptor(descpb.TypeDescriptor{
+		ID:   102,
+		Name: "type",
+	})
 
 	testData := []struct {
 		err  string
@@ -354,9 +353,8 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		desc := NewImmutableTypeDescriptor(test.desc)
-		txn := kvDB.NewTxn(ctx, "test")
-		if err := desc.Validate(ctx, txn, keys.SystemSQLCodec); err == nil {
+		desc := sqlbase.NewImmutableTypeDescriptor(test.desc)
+		if err := desc.Validate(ctx, descs); err == nil {
 			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("expected err: %s but found: %s", test.err, err)
