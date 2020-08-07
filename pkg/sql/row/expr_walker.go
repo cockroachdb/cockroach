@@ -14,8 +14,8 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -346,7 +346,7 @@ func sanitizeExprsForImport(
 	semaCtx := tree.MakeSemaContext()
 
 	// If we have immutable expressions, then we can just return it right away.
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 		ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
 	if err == nil {
 		return typedExpr, overrideImmutable, nil

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -151,7 +150,7 @@ func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
 // If the expression references a column that does not exist in the table
 // descriptor, iterColDescriptors errs with pgcode.UndefinedColumn.
 func iterColDescriptors(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*descpb.ColumnDescriptor) error,
+	desc catalog.TableDescriptor, rootExpr tree.Expr, f func(*descpb.ColumnDescriptor) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)

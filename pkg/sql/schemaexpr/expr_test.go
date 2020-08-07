@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schemaexpr
+package schemaexpr_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -76,9 +77,9 @@ func TestValidateExpr(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			deqExpr, _, err := DequalifyAndValidateExpr(
+			deqExpr, _, err := schemaexpr.DequalifyAndValidateExpr(
 				ctx,
-				&desc,
+				desc,
 				expr,
 				d.typ,
 				"test-validate-expr",
@@ -138,7 +139,7 @@ func TestExtractColumnIDs(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			colIDs, err := ExtractColumnIDs(&desc, expr)
+			colIDs, err := schemaexpr.ExtractColumnIDs(desc, expr)
 			if err != nil {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
