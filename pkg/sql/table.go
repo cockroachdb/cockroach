@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -78,7 +78,7 @@ func (p *planner) createDropDatabaseJob(
 // if there is one.
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	jobDesc string,
 	mutationID descpb.MutationID,
 ) error {
@@ -196,7 +196,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 // larger schema change to the same table.
 func (p *planner) writeSchemaChange(
 	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	mutationID descpb.MutationID,
 	jobDesc string,
 ) error {
@@ -215,7 +215,7 @@ func (p *planner) writeSchemaChange(
 }
 
 func (p *planner) writeSchemaChangeToBatch(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, b *kv.Batch,
 ) error {
 	if !p.EvalContext().TxnImplicit {
 		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
@@ -229,7 +229,7 @@ func (p *planner) writeSchemaChangeToBatch(
 }
 
 func (p *planner) writeDropTable(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, queueJob bool, jobDesc string,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, queueJob bool, jobDesc string,
 ) error {
 	if queueJob {
 		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, descpb.InvalidMutationID); err != nil {
@@ -240,7 +240,7 @@ func (p *planner) writeDropTable(
 }
 
 func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	b := p.txn.NewBatch()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, b); err != nil {
@@ -250,7 +250,7 @@ func (p *planner) writeTableDesc(
 }
 
 func (p *planner) writeTableDescToBatch(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, b *kv.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)

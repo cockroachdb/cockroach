@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,7 +83,7 @@ func TestKVFeed(t *testing.T) {
 		spans              []roachpb.Span
 		events             []roachpb.RangeFeedEvent
 
-		descs []*sqlbase.ImmutableTableDescriptor
+		descs []*tabledesc.ImmutableTableDescriptor
 
 		expScans  []hlc.Timestamp
 		expEvents int
@@ -192,7 +192,7 @@ func TestKVFeed(t *testing.T) {
 				ts(2),
 				ts(3),
 			},
-			descs: []*sqlbase.ImmutableTableDescriptor{
+			descs: []*tabledesc.ImmutableTableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -216,7 +216,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*sqlbase.ImmutableTableDescriptor{
+			descs: []*tabledesc.ImmutableTableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -241,7 +241,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*sqlbase.ImmutableTableDescriptor{
+			descs: []*tabledesc.ImmutableTableDescriptor{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
 			},
@@ -268,7 +268,7 @@ type rawTableFeed struct {
 }
 
 func newRawTableFeed(
-	descs []*sqlbase.ImmutableTableDescriptor, initialHighWater hlc.Timestamp,
+	descs []*tabledesc.ImmutableTableDescriptor, initialHighWater hlc.Timestamp,
 ) rawTableFeed {
 	sort.Slice(descs, func(i, j int) bool {
 		if descs[i].ID != descs[j].ID {

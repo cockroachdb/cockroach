@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -58,7 +58,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	toTruncate := make(map[descpb.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
-	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
+	toTraverse := make([]tabledesc.MutableTableDescriptor, 0, len(n.Tables))
 
 	for i := range n.Tables {
 		tn := &n.Tables[i]
@@ -177,7 +177,7 @@ func (p *planner) truncateTable(
 		return err
 	}
 	// tableDesc.DropJobID = dropJobID
-	newTableDesc := sqlbase.NewMutableTableDescriptorAsReplacement(
+	newTableDesc := tabledesc.NewMutableTableDescriptorAsReplacement(
 		newID, tableDesc, p.txn.ReadTimestamp())
 
 	// Remove old name -> id map.
@@ -233,7 +233,7 @@ func (p *planner) truncateTable(
 
 	// Reassign all self references.
 	if changed, err := reassignReferencedTables(
-		[]*sqlbase.MutableTableDescriptor{newTableDesc}, tableDesc.ID, newID,
+		[]*tabledesc.MutableTableDescriptor{newTableDesc}, tableDesc.ID, newID,
 	); err != nil {
 		return err
 	} else if changed {
@@ -305,13 +305,13 @@ func (p *planner) truncateTable(
 
 // For all the references from a table
 func (p *planner) findAllReferences(
-	ctx context.Context, table sqlbase.MutableTableDescriptor,
-) ([]*sqlbase.MutableTableDescriptor, error) {
+	ctx context.Context, table tabledesc.MutableTableDescriptor,
+) ([]*tabledesc.MutableTableDescriptor, error) {
 	refs, err := table.FindAllReferences()
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]*sqlbase.MutableTableDescriptor, 0, len(refs))
+	tables := make([]*tabledesc.MutableTableDescriptor, 0, len(refs))
 	for id := range refs {
 		if id == table.ID {
 			continue
@@ -328,7 +328,7 @@ func (p *planner) findAllReferences(
 
 // reassign all the references from oldID to newID.
 func reassignReferencedTables(
-	tables []*sqlbase.MutableTableDescriptor, oldID, newID descpb.ID,
+	tables []*tabledesc.MutableTableDescriptor, oldID, newID descpb.ID,
 ) (bool, error) {
 	changed := false
 	for _, table := range tables {
@@ -385,7 +385,7 @@ func reassignReferencedTables(
 
 // reassignComments reassign all comments on the table, indexes and columns.
 func reassignComments(
-	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, p *planner, oldTableDesc, newTableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
@@ -412,7 +412,7 @@ func ClearTableDataInChunks(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize

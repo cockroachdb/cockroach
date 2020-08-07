@@ -38,9 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -1350,7 +1350,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		leaseMgr := s.LeaseManager().(*lease.Manager)
 		var version descpb.DescriptorVersion
 		if _, err := leaseMgr.Publish(ctx, id, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*sqlbase.MutableTableDescriptor)
+			table := desc.(*tabledesc.MutableTableDescriptor)
 			// Publish nothing; only update the version.
 			version = table.Version
 			return nil
@@ -3943,7 +3943,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 	// Check that the table descriptor exists so we know the data will
 	// eventually be deleted.
-	var droppedDesc *sqlbase.ImmutableTableDescriptor
+	var droppedDesc *tabledesc.ImmutableTableDescriptor
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		droppedDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
@@ -4964,7 +4964,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
-	var tableDesc *sqlbase.ImmutableTableDescriptor
+	var tableDesc *tabledesc.ImmutableTableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
@@ -5034,7 +5034,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
-	var tableDesc *sqlbase.ImmutableTableDescriptor
+	var tableDesc *tabledesc.ImmutableTableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,

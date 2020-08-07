@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -543,7 +543,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := sqlbase.NewMutableExistingTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
+	table := tabledesc.NewMutableExistingTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -854,7 +854,7 @@ CREATE TABLE system.jobs (
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()

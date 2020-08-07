@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -176,12 +176,12 @@ func BenchmarkImport(b *testing.B) {
 				{
 					// TODO(dan): The following should probably make it into
 					// dataccl.Backup somehow.
-					tableDesc := sqlbase.NewImmutableTableDescriptor(*descpb.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
+					tableDesc := tabledesc.NewImmutableTableDescriptor(*descpb.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
 					oldStartKey = rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, tableDesc.PrimaryIndex.ID)
-					newDesc := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc.TableDesc())
+					newDesc := tabledesc.NewMutableCreatedTableDescriptor(*tableDesc.TableDesc())
 					newDesc.ID = id
 					newDescBytes, err := protoutil.Marshal(newDesc.DescriptorProto())
 					if err != nil {

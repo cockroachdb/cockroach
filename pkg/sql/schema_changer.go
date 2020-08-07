@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -208,7 +208,7 @@ func (e errTableVersionMismatch) Error() string {
 // this writing) this code path is only used for standalone CREATE
 // TABLE AS statements, which cannot be traced.
 func (sc *SchemaChanger) maybeBackfillCreateTableAs(
-	ctx context.Context, table *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, table *tabledesc.ImmutableTableDescriptor,
 ) error {
 	if !(table.Adding() && table.IsAs()) {
 		return nil
@@ -315,7 +315,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 
 // maybe make a table PUBLIC if it's in the ADD state.
 func (sc *SchemaChanger) maybeMakeAddTablePublic(
-	ctx context.Context, table *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, table *tabledesc.ImmutableTableDescriptor,
 ) error {
 	if table.Adding() {
 		log.Info(ctx, "making table public")
@@ -1074,7 +1074,7 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	table *sqlbase.MutableTableDescriptor,
+	table *tabledesc.MutableTableDescriptor,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, table.ID)
@@ -1116,8 +1116,8 @@ func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
 // up for execution after another schema change.
 func (sc *SchemaChanger) notFirstInLine(
 	ctx context.Context,
-) (*sqlbase.ImmutableTableDescriptor, bool, error) {
-	var tableDesc *sqlbase.ImmutableTableDescriptor
+) (*tabledesc.ImmutableTableDescriptor, bool, error) {
+	var tableDesc *tabledesc.ImmutableTableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		return err
@@ -1346,7 +1346,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 // updateJobForRollback updates the schema change job in the case of a rollback.
 func (sc *SchemaChanger) updateJobForRollback(
-	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, txn *kv.Txn, tableDesc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
@@ -1426,7 +1426,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 // references one of the reversed columns. Execute this as a breadth
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, columns map[string]struct{},
+	ctx context.Context, desc *tabledesc.MutableTableDescriptor, columns map[string]struct{},
 ) (map[descpb.MutationID]struct{}, error) {
 	dropMutations := make(map[descpb.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations

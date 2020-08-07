@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -109,8 +109,8 @@ func (b *Backup) NextKeyValues(
 
 	newDesc := *tableDesc
 	newDesc.ID = newTableID
-	kr, err := storageccl.MakeKeyRewriter(map[descpb.ID]*sqlbase.ImmutableTableDescriptor{
-		tableDesc.ID: sqlbase.NewImmutableTableDescriptor(newDesc),
+	kr, err := storageccl.MakeKeyRewriter(map[descpb.ID]*tabledesc.ImmutableTableDescriptor{
+		tableDesc.ID: tabledesc.NewImmutableTableDescriptor(newDesc),
 	})
 	if err != nil {
 		return nil, roachpb.Span{}, err

@@ -28,13 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -143,14 +143,14 @@ func Load(
 
 	privs := dbDesc.GetPrivileges()
 
-	tableDescs := make(map[string]*sqlbase.ImmutableTableDescriptor)
+	tableDescs := make(map[string]*tabledesc.ImmutableTableDescriptor)
 
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
 	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
 	var cols []descpb.ColumnDescriptor
-	var tableDesc *sqlbase.ImmutableTableDescriptor
+	var tableDesc *tabledesc.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
 	var kvs []storage.MVCCKeyValue
@@ -206,7 +206,7 @@ func Load(
 			// rejected during restore.
 			st := cluster.MakeTestingClusterSettings()
 
-			affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+			affected := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 			// A nil txn is safe because it is only used by sql.NewTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
@@ -219,7 +219,7 @@ func Load(
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make table desc")
 			}
 
-			tableDesc = sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
+			tableDesc = tabledesc.NewImmutableTableDescriptor(*desc.TableDesc())
 			tableDescs[tableName] = tableDesc
 			backup.Descriptors = append(backup.Descriptors, descpb.Descriptor{
 				Union: &descpb.Descriptor_Table{Table: desc.TableDesc()},
@@ -304,7 +304,7 @@ func Load(
 
 func insertStmtToKVs(
 	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
 	cols []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,

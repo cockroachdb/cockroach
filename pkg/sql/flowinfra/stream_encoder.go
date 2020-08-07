@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -110,7 +110,7 @@ func (se *StreamEncoder) AddRow(row rowenc.EncDatumRow) error {
 			}
 			sType := se.infos[i].Type
 			if enc != descpb.DatumEncoding_VALUE &&
-				(sqlbase.HasCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
+				(tabledesc.HasCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = descpb.DatumEncoding_VALUE
 			}

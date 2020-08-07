@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -336,7 +336,7 @@ CREATE TABLE system.scheduled_jobs (
 
 func pk(name string) descpb.IndexDescriptor {
 	return descpb.IndexDescriptor{
-		Name:             sqlbase.PrimaryKeyIndexName,
+		Name:             tabledesc.PrimaryKeyIndexName,
 		ID:               1,
 		Unique:           true,
 		ColumnNames:      []string{name},
@@ -381,7 +381,7 @@ var (
 	NamespaceTableName = "namespace"
 
 	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
-	DeprecatedNamespaceTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	DeprecatedNamespaceTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    NamespaceTableName,
 		ID:                      keys.DeprecatedNamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -426,7 +426,7 @@ var (
 	//
 	// TODO(solon): in 20.2, we should change the Name of this descriptor
 	// back to "namespace".
-	NamespaceTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	NamespaceTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "namespace2",
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -462,7 +462,7 @@ var (
 	})
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	DescriptorTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name: "descriptor",
 		ID:   keys.DescriptorTableID,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -496,7 +496,7 @@ var (
 	trueBoolString  = "true"
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	UsersTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "users",
 		ID:                      keys.UsersTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -523,7 +523,7 @@ var (
 	})
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ZonesTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "zones",
 		ID:                      keys.ZonesTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -558,7 +558,7 @@ var (
 
 	// SettingsTable is the descriptor for the settings table.
 	// It contains all cluster settings for which a value has been set.
-	SettingsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	SettingsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "settings",
 		ID:                      keys.SettingsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -589,27 +589,27 @@ var (
 	})
 
 	// DescIDSequence is the descriptor for the descriptor ID sequence.
-	DescIDSequence = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	DescIDSequence = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "descriptor_id_seq",
 		ID:                      keys.DescIDSequenceID,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
-			{Name: sqlbase.SequenceColumnName, ID: sqlbase.SequenceColumnID, Type: types.Int},
+			{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
 		},
 		Families: []descpb.ColumnFamilyDescriptor{{
 			Name:            "primary",
 			ID:              keys.SequenceColumnFamilyID,
-			ColumnNames:     []string{sqlbase.SequenceColumnName},
-			ColumnIDs:       []descpb.ColumnID{sqlbase.SequenceColumnID},
-			DefaultColumnID: sqlbase.SequenceColumnID,
+			ColumnNames:     []string{tabledesc.SequenceColumnName},
+			ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+			DefaultColumnID: tabledesc.SequenceColumnID,
 		}},
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID:               keys.SequenceIndexID,
-			Name:             sqlbase.PrimaryKeyIndexName,
-			ColumnIDs:        []descpb.ColumnID{sqlbase.SequenceColumnID},
-			ColumnNames:      []string{sqlbase.SequenceColumnName},
+			Name:             tabledesc.PrimaryKeyIndexName,
+			ColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+			ColumnNames:      []string{tabledesc.SequenceColumnName},
 			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 		},
 		SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
@@ -623,7 +623,7 @@ var (
 		FormatVersion: descpb.InterleavedFormatVersion,
 	})
 
-	TenantsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	TenantsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "tenants",
 		ID:                      keys.TenantsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -663,7 +663,7 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	LeaseTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "lease",
 		ID:                      keys.LeaseTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -699,7 +699,7 @@ var (
 	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
-	EventLogTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	EventLogTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "eventlog",
 		ID:                      keys.EventLogTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -741,7 +741,7 @@ var (
 	uniqueRowIDString = "unique_rowid()"
 
 	// RangeEventTable is the descriptor for the range log table.
-	RangeEventTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	RangeEventTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "rangelog",
 		ID:                      keys.RangeEventTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -783,7 +783,7 @@ var (
 	})
 
 	// UITable is the descriptor for the ui table.
-	UITable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	UITable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "ui",
 		ID:                      keys.UITableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -813,7 +813,7 @@ var (
 	nowTZString = "now():::TIMESTAMPTZ"
 
 	// JobsTable is the descriptor for the jobs table.
-	JobsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	JobsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "jobs",
 		ID:                      keys.JobsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -881,7 +881,7 @@ var (
 	})
 
 	// WebSessions table to authenticate sessions over stateless connections.
-	WebSessionsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	WebSessionsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "web_sessions",
 		ID:                      keys.WebSessionsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -947,7 +947,7 @@ var (
 	})
 
 	// TableStatistics table to hold statistics about columns and column groups.
-	TableStatisticsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	TableStatisticsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "table_statistics",
 		ID:                      keys.TableStatisticsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1003,7 +1003,7 @@ var (
 	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
-	LocationsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	LocationsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "locations",
 		ID:                      keys.LocationsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1042,7 +1042,7 @@ var (
 	})
 
 	// RoleMembersTable is the descriptor for the role_members table.
-	RoleMembersTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	RoleMembersTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "role_members",
 		ID:                      keys.RoleMembersTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1109,7 +1109,7 @@ var (
 	})
 
 	// CommentsTable is the descriptor for the comments table.
-	CommentsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	CommentsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "comments",
 		ID:                      keys.CommentsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1142,7 +1142,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	ReportsMetaTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ReportsMetaTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "reports_meta",
 		ID:                      keys.ReportsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1184,7 +1184,7 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationConstraintStatsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ReplicationConstraintStatsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "replication_constraint_stats",
 		ID:                      keys.ReplicationConstraintStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1238,7 +1238,7 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationCriticalLocalitiesTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ReplicationCriticalLocalitiesTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "replication_critical_localities",
 		ID:                      keys.ReplicationCriticalLocalitiesTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1289,7 +1289,7 @@ var (
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationStatsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ReplicationStatsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "replication_stats",
 		ID:                      keys.ReplicationStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1338,7 +1338,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	ProtectedTimestampsMetaTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ProtectedTimestampsMetaTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "protected_ts_meta",
 		ID:                      keys.ProtectedTimestampsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1390,7 +1390,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	ProtectedTimestampsRecordsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ProtectedTimestampsRecordsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "protected_ts_records",
 		ID:                      keys.ProtectedTimestampsRecordsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1433,7 +1433,7 @@ var (
 	})
 
 	// RoleOptionsTable is the descriptor for the role_options table.
-	RoleOptionsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	RoleOptionsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "role_options",
 		ID:                      keys.RoleOptionsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1470,7 +1470,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	StatementBundleChunksTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	StatementBundleChunksTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "statement_bundle_chunks",
 		ID:                      keys.StatementBundleChunksTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1500,7 +1500,7 @@ var (
 
 	// TODO(andrei): Add a foreign key reference to the statement_diagnostics table when
 	// it no longer requires us to create an index on statement_diagnostics_id.
-	StatementDiagnosticsRequestsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	StatementDiagnosticsRequestsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "statement_diagnostics_requests",
 		ID:                      keys.StatementDiagnosticsRequestsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1544,7 +1544,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	StatementDiagnosticsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	StatementDiagnosticsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "statement_diagnostics",
 		ID:                      keys.StatementDiagnosticsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1578,7 +1578,7 @@ var (
 	})
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
-	ScheduledJobsTable = sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	ScheduledJobsTable = tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:                    "scheduled_jobs",
 		ID:                      keys.ScheduledJobsTableID,
 		ParentID:                keys.SystemDatabaseID,

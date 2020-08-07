@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -76,7 +76,7 @@ var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 // non-empty db qualifiers with `newDB`.
 //
 // TODO: this AST traversal misses tables named in strings (#24556).
-func rewriteViewQueryDBNames(table *sqlbase.MutableTableDescriptor, newDB string) error {
+func rewriteViewQueryDBNames(table *tabledesc.MutableTableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.Syntax,
@@ -123,12 +123,12 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 // restoreOptSkipMissingViews option is not set, an error is returned if any
 // unrestorable views are found.
 func maybeFilterMissingViews(
-	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor, opts map[string]string,
-) (map[descpb.ID]*sqlbase.MutableTableDescriptor, error) {
+	tablesByID map[descpb.ID]*tabledesc.MutableTableDescriptor, opts map[string]string,
+) (map[descpb.ID]*tabledesc.MutableTableDescriptor, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
-	var hasValidViewDependencies func(desc *sqlbase.MutableTableDescriptor) bool
-	hasValidViewDependencies = func(desc *sqlbase.MutableTableDescriptor) bool {
+	var hasValidViewDependencies func(desc *tabledesc.MutableTableDescriptor) bool
+	hasValidViewDependencies = func(desc *tabledesc.MutableTableDescriptor) bool {
 		if !desc.IsView() {
 			return true
 		}
@@ -140,7 +140,7 @@ func maybeFilterMissingViews(
 		return true
 	}
 
-	filteredTablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+	filteredTablesByID := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 	for id, table := range tablesByID {
 		if hasValidViewDependencies(table) {
 			filteredTablesByID[id] = table
@@ -165,7 +165,7 @@ func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
-	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	tablesByID map[descpb.ID]*tabledesc.MutableTableDescriptor,
 	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
@@ -605,7 +605,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 		for _, desc := range backupManifest.Descriptors {
 			if table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
 				descGetter[table.ID] =
-					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
+					tabledesc.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
 			}
 		}
 	}
@@ -617,10 +617,10 @@ func maybeUpgradeTableDescsInBackupManifests(
 			if table == nil {
 				continue
 			}
-			if !sqlbase.TableHasDeprecatedForeignKeyRepresentation(table) {
+			if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, descGetter, skipFKsWithNoMatchingTable, table)
+			desc, err := tabledesc.NewFilledInMutableExistingTableDescriptor(ctx, descGetter, skipFKsWithNoMatchingTable, table)
 			if err != nil {
 				return err
 			}
@@ -691,7 +691,7 @@ func rewriteTypeDescs(
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
 func RewriteTableDescs(
-	tables []*sqlbase.MutableTableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
+	tables []*tabledesc.MutableTableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := descriptorRewrites[table.ID]
@@ -715,7 +715,7 @@ func RewriteTableDescs(
 
 		// Remap type IDs in all serialized expressions within the TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
-		if err := sqlbase.ForEachExprStringInTableDesc(table, func(expr *string) error {
+		if err := tabledesc.ForEachExprStringInTableDesc(table, func(expr *string) error {
 			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
 			if err != nil {
 				return err
@@ -1095,13 +1095,13 @@ func doRestorePlan(
 	}
 
 	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
-	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
+	tablesByID := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
-		case *sqlbase.MutableTableDescriptor:
+		case *tabledesc.MutableTableDescriptor:
 			tablesByID[desc.ID] = desc
 		case *typedesc.MutableTypeDescriptor:
 			typesByID[desc.ID] = desc
@@ -1129,7 +1129,7 @@ func doRestorePlan(
 		return err
 	}
 
-	var tables []*sqlbase.MutableTableDescriptor
+	var tables []*tabledesc.MutableTableDescriptor
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
 	}

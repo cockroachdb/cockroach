@@ -18,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,7 +33,7 @@ import (
 
 type createIndexNode struct {
 	n         *tree.CreateIndex
-	tableDesc *sqlbase.MutableTableDescriptor
+	tableDesc *tabledesc.MutableTableDescriptor
 }
 
 // CreateIndex creates an index.
@@ -67,7 +67,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	idxColumns []string,
 	buckets int32,
 ) error {
-	family := sqlbase.GetColumnFamilyForShard(tableDesc, idxColumns)
+	family := tabledesc.GetColumnFamilyForShard(tableDesc, idxColumns)
 	if family == "" {
 		return errors.AssertionFailedf("could not find column family for the first column in the index column set")
 	}
@@ -119,7 +119,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 // is hash sharded. Note that `tableDesc` will be modified when this method is called for
 // a hash sharded index.
 func MakeIndexDescriptor(
-	params runParams, n *tree.CreateIndex, tableDesc *sqlbase.MutableTableDescriptor,
+	params runParams, n *tree.CreateIndex, tableDesc *tabledesc.MutableTableDescriptor,
 ) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
@@ -233,7 +233,7 @@ func MakeIndexDescriptor(
 // validateIndexColumnsExists validates that the columns for an index exist
 // in the table and are not being dropped prior to attempting to add the index.
 func validateIndexColumnsExist(
-	desc *sqlbase.MutableTableDescriptor, columns tree.IndexElemList,
+	desc *tabledesc.MutableTableDescriptor, columns tree.IndexElemList,
 ) error {
 	for _, column := range columns {
 		_, dropping, err := desc.FindColumnByName(column.Column)
@@ -265,7 +265,7 @@ func setupShardedIndex(
 	shardedIndexEnabled bool,
 	columns *tree.IndexElemList,
 	bucketsExpr tree.Expr,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
 ) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
@@ -281,7 +281,7 @@ func setupShardedIndex(
 	for _, c := range *columns {
 		colNames = append(colNames, string(c.Column))
 	}
-	buckets, err := sqlbase.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
+	buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
 	if err != nil {
 		return nil, false, err
 	}
@@ -308,7 +308,7 @@ func setupShardedIndex(
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string, isNewTable bool,
+	shardBuckets int, desc *tabledesc.MutableTableDescriptor, colNames []string, isNewTable bool,
 ) (col *descpb.ColumnDescriptor, created bool, err error) {
 	shardCol, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {

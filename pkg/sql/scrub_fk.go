@@ -15,17 +15,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
 	tableName           *tree.TableName
-	tableDesc           *sqlbase.ImmutableTableDescriptor
-	referencedTableDesc *sqlbase.ImmutableTableDescriptor
+	tableDesc           *tabledesc.ImmutableTableDescriptor
+	referencedTableDesc *tabledesc.ImmutableTableDescriptor
 	constraint          *descpb.ConstraintDetail
 	asOf                hlc.Timestamp
 
@@ -44,7 +44,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	constraint descpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
@@ -52,7 +52,7 @@ func newSQLForeignKeyCheckOperation(
 		tableName:           tableName,
 		tableDesc:           tableDesc,
 		constraint:          &constraint,
-		referencedTableDesc: sqlbase.NewImmutableTableDescriptor(*constraint.ReferencedTable),
+		referencedTableDesc: tabledesc.NewImmutableTableDescriptor(*constraint.ReferencedTable),
 		asOf:                asOf,
 	}
 }

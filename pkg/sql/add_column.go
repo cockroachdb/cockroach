@@ -12,11 +12,11 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
@@ -26,7 +26,7 @@ func (p *planner) addColumnImpl(
 	params runParams,
 	n *alterTableNode,
 	tn *tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 	t *tree.AlterTableAddColumn,
 ) error {
 	d := t.ColumnDef
@@ -66,7 +66,7 @@ func (p *planner) addColumnImpl(
 	d = newDef
 	incTelemetryForNewColumn(d)
 
-	col, idx, expr, err := sqlbase.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
+	col, idx, expr, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
 	if err != nil {
 		return err
 	}

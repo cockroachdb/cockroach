@@ -13,9 +13,9 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // This file provides high-level interfaces to abstract access to the
@@ -46,10 +46,10 @@ type (
 	UncachedDatabaseDescriptor = dbdesc.ImmutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTableDescriptor = sqlbase.MutableTableDescriptor
+	MutableTableDescriptor = tabledesc.MutableTableDescriptor
 	// ImmutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ImmutableTableDescriptor = sqlbase.ImmutableTableDescriptor
+	ImmutableTableDescriptor = tabledesc.ImmutableTableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = descpb.TableDescriptor

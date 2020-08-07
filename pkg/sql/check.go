@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -40,7 +40,7 @@ func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	exprStr string,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
@@ -51,7 +51,7 @@ func validateCheckExpr(
 	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
 	tblref := tree.TableRef{TableID: int64(tableDesc.GetID()), As: tree.AliasClause{Alias: "t"}}
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
+		Exprs: tabledesc.ColumnsSelectors(tableDesc.Columns),
 		From:  tree.From{Tables: []tree.TableExpr{&tblref}},
 		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
 	}
@@ -236,7 +236,7 @@ func nonMatchingRowQuery(
 // reuse an existing client.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
-	srcTable *sqlbase.MutableTableDescriptor,
+	srcTable *tabledesc.MutableTableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	ie *InternalExecutor,
 	txn *kv.Txn,

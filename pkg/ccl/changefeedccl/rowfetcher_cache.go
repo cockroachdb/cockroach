@@ -15,9 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,8 +51,8 @@ func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetche
 
 func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
-) (*sqlbase.ImmutableTableDescriptor, error) {
-	var tableDesc *sqlbase.ImmutableTableDescriptor
+) (*tabledesc.ImmutableTableDescriptor, error) {
+	var tableDesc *tabledesc.ImmutableTableDescriptor
 	key, err := c.codec.StripTenantPrefix(key)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
-		tableDesc = desc.(*sqlbase.ImmutableTableDescriptor)
+		tableDesc = desc.(*tabledesc.ImmutableTableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
 		if err := c.leaseMgr.Release(tableDesc); err != nil {
@@ -97,7 +97,7 @@ func (c *rowFetcherCache) TableDescForKey(
 }
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 ) (*row.Fetcher, error) {
 	idVer := idVersion{id: tableDesc.ID, version: tableDesc.Version}
 	if rf, ok := c.fetchers[idVer]; ok {

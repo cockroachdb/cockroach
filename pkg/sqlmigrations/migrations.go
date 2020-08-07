@@ -35,9 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1130,7 +1130,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		return err
 	}
 
-	createSchemaChangeJobForTable := func(txn *kv.Txn, desc *sqlbase.ImmutableTableDescriptor) error {
+	createSchemaChangeJobForTable := func(txn *kv.Txn, desc *tabledesc.ImmutableTableDescriptor) error {
 		var description string
 		if desc.Adding() {
 			description = fmt.Sprintf("adding table %d", desc.ID)
@@ -1182,7 +1182,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 
 	log.Infof(ctx, "evaluating tables for creating jobs")
 	for _, desc := range allDescs {
-		if tableDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
+		if tableDesc, ok := desc.(*tabledesc.ImmutableTableDescriptor); ok {
 			if scJobs := schemaChangeJobsForDesc[tableDesc.ID]; len(scJobs) > 0 {
 				log.VEventf(ctx, 3, "table %d has running schema change jobs %v, skipping", tableDesc.ID, scJobs)
 				continue

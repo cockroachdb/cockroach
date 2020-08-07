@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -133,7 +133,7 @@ func MakeDiskRowContainer(
 		// returns true may not necessarily need to be encoded in the value, so
 		// make this more fine-grained. See IsComposite() methods in
 		// pkg/sql/parser/datum.go.
-		if _, ok := orderingIdxs[i]; !ok || sqlbase.HasCompositeKeyEncoding(d.types[i]) {
+		if _, ok := orderingIdxs[i]; !ok || tabledesc.HasCompositeKeyEncoding(d.types[i]) {
 			d.valueIdxs = append(d.valueIdxs, i)
 		}
 	}
@@ -399,7 +399,7 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
 		// Types with composite key encodings are decoded from the value.
-		if sqlbase.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
+		if tabledesc.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
 			// Skip over the encoded key.
 			encLen, err := encoding.PeekLength(k)
 			if err != nil {

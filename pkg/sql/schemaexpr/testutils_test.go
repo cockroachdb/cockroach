@@ -13,7 +13,7 @@ package schemaexpr_test
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -52,7 +52,7 @@ func testTableDesc(
 			Direction: descpb.DescriptorMutation_ADD,
 		}
 	}
-	return sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:      name,
 		ID:        1,
 		Columns:   cols,

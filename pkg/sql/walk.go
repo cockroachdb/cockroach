@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -844,7 +844,7 @@ func (v *planVisitor) metadataTuples(nodeName string, tuples [][]tree.TypedExpr)
 
 // formatTable returns a string of the form "<table_name>@<index_name>", or
 // "<table_name>@<index_name> (partial index)" if the index is partial.
-func formatTable(desc *sqlbase.ImmutableTableDescriptor, index *descpb.IndexDescriptor) string {
+func formatTable(desc *tabledesc.ImmutableTableDescriptor, index *descpb.IndexDescriptor) string {
 	partial := ""
 	if index.IsPartial() {
 		partial = " (partial index)"

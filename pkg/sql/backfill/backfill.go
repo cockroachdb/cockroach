@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -68,7 +68,7 @@ type ColumnBackfiller struct {
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
-func (cb *ColumnBackfiller) initCols(desc *sqlbase.ImmutableTableDescriptor) {
+func (cb *ColumnBackfiller) initCols(desc *tabledesc.ImmutableTableDescriptor) {
 	if len(desc.Mutations) > 0 {
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
@@ -90,7 +90,7 @@ func (cb *ColumnBackfiller) init(
 	evalCtx *tree.EvalContext,
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -138,7 +138,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -170,7 +170,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 // necessary due to the different procedure for accessing user defined type
 // metadata as part of a distributed flow.
 func (cb *ColumnBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
@@ -224,7 +224,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
@@ -340,17 +340,17 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
 func ConvertBackfillError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.ImmutableTableDescriptor, b *kv.Batch,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IncludeConstraints)
+	desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
 	if err != nil {
 		return err
 	}
-	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()), b)
+	return row.ConvertBatchError(ctx, tabledesc.NewImmutableTableDescriptor(*desc.TableDesc()), b)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -378,7 +378,7 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 
 // Init initializes an IndexBackfiller.
 func (ib *IndexBackfiller) Init(
-	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+	evalCtx *tree.EvalContext, desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	ib.evalCtx = evalCtx
 	numCols := len(desc.Columns)
@@ -445,7 +445,7 @@ func (ib *IndexBackfiller) Init(
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
@@ -514,7 +514,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,

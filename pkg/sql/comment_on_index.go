@@ -16,15 +16,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
-	tableDesc *sqlbase.MutableTableDescriptor
+	tableDesc *tabledesc.MutableTableDescriptor
 	indexDesc *descpb.IndexDescriptor
 }
 
