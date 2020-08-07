@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/sort"
 	"github.com/cockroachdb/errors"
 )
 
@@ -223,7 +224,7 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	cancelChecker := cancelchecker.NewCancelChecker(ctx)
-	sqlbase.Sort(mc, cancelChecker)
+	sort.Sort(mc, cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new
