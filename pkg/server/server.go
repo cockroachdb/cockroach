@@ -327,11 +327,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// and after ValidateAddrs().
 	rpcContext.CheckCertificateAddrs(ctx)
 
-	grpc := newGRPCServer(rpcContext)
+	// TODO(tbg): do we want to opt into the tenant server?
+	grpc := newGRPCServer(rpcContext, rpc.ServeNodeAndTenant)
 
 	var tenantGRPC *grpcServer
 	if cfg.SplitListenTenant {
-		tenantGRPC = newGRPCServer(rpcContext, rpc.ForTenant)
+		tenantGRPC = newGRPCServer(rpcContext, rpc.ServeTenant)
 	}
 
 	g := gossip.New(

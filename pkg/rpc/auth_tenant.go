@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -79,7 +80,11 @@ func (a tenantAuth) tenantFromCert(ctx context.Context) (roachpb.TenantID, error
 	}
 
 	commonName := tlsInfo.State.PeerCertificates[0].Subject.CommonName
-	tenID, err := strconv.ParseUint(commonName, 10, 64)
+	const prefix = "tenant_"
+	if !strings.HasPrefix(commonName, prefix) {
+		return roachpb.TenantID{}, authErrorf("CommonName does not correspond to a tenant")
+	}
+	tenID, err := strconv.ParseUint(commonName[len(prefix):], 10, 64)
 	if err != nil {
 		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from Common Name (CN): %s", err)
 	}

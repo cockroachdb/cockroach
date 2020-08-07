@@ -29,13 +29,16 @@ type grpcServer struct {
 	mode serveMode
 }
 
-func newGRPCServer(rpcCtx *rpc.Context, opts ...rpc.ServerOption) *grpcServer {
+func newGRPCServer(rpcCtx *rpc.Context, serveMode rpc.ServeMode) *grpcServer {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
-	opts = append(opts, rpc.WithInterceptor(func(path string) error {
-		return s.intercept(path)
-	}))
-	s.Server = rpc.NewServer(rpcCtx, opts...)
+	opts := rpc.ServerOptions{
+		ServeMode: serveMode,
+		Interceptor: func(path string) error {
+			return s.intercept(path)
+		},
+	}
+	s.Server = rpc.NewServer(rpcCtx, opts)
 	return s
 }
 

@@ -85,7 +85,8 @@ func LoadServerTLSConfig(sslCA, sslClientCA, sslCert, sslCertKey string) (*tls.C
 // - the certificate of the cluster CA, used to verify other server certificates
 // - the certificate of the client CA, used to verify client certificates
 //
-// caClientPEM can be equal to caPEM (shared CA) or nil (use system CA pool).
+// caPEM and caClientPEM can be equal to caPEM (shared CA) or nil (use system CA
+// pool).
 func newServerTLSConfig(certPEM, keyPEM, caPEM, caClientPEM []byte) (*tls.Config, error) {
 	cfg, err := newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM)
 	if err != nil {

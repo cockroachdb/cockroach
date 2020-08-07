@@ -568,7 +568,7 @@ func WriteTenantClientPair(certsDir string, cp *TenantClientPair, overwrite bool
 	if err != nil {
 		return err
 	}
-	tenantIdentifier := cert.Subject.CommonName
+	tenantIdentifier := cert.Subject.CommonName[len("tenant_"):] // HACK(tbg)
 	certPath := cm.TenantClientCertPath(tenantIdentifier)
 	if err := writeCertificateToFile(certPath, cp.Cert, overwrite); err != nil {
 		return errors.Errorf("error writing tenant certificate to %s: %v", certPath, err)

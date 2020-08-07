@@ -724,10 +724,10 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 		return cm.tenantServerConfig, nil
 	}
 
-	serverCA, err := cm.getTenantServerCACertLocked()
-	if err != nil {
-		return nil, err
-	}
+	// serverCA, err := cm.getTenantServerCACertLocked()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	serverCert, err := cm.getTenantServerCertLocked()
 	if err != nil {
@@ -742,7 +742,7 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 	cfg, err := newServerTLSConfig(
 		serverCert.FileContents,
 		serverCert.KeyFileContents,
-		serverCA.FileContents,
+		nil, // caPEM
 		tenantCA.FileContents)
 	if err != nil {
 		return nil, err
@@ -888,7 +888,7 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getTenantServerCACertLocked() (*CertInfo, error) {
 	c := cm.tenantServerCACert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant CA certificate")
+		return nil, makeError(err, "problem with tenant server CA certificate")
 	}
 	return c, nil
 }

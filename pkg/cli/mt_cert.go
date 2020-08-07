@@ -124,7 +124,9 @@ Creation fails if the CA expiration time is before the desired certificate expir
 				baseCfg.SSLCAKey,
 				keySize,
 				certificateLifetime,
-				args[0],
+				// TODO(tbg): figure out how to *really* distinguish between tenant and node
+				// certs if they share the same CA. x509 must have something for this.
+				"tenant_"+args[0],
 			)
 			if err != nil {
 				return errors.Wrap(
