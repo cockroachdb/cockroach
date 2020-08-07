@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -126,7 +125,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 		func(descriptor *descpb.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			id, version, name, _, _ := sqlbase.GetDescriptorMetadata(descriptor)
+			id, version, name, _, _ := descpb.GetDescriptorMetadata(descriptor)
 			if waitTableID != id {
 				return
 			}

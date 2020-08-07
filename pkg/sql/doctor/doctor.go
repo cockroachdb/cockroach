@@ -41,7 +41,7 @@ func NewDescGetter(rows []DescriptorTableRow) (sqlbase.MapDescGetter, error) {
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
 			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
 		pg[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(context.TODO(), &d)
 	}
 	return pg, nil

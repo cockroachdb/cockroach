@@ -574,12 +574,12 @@ func getAllDescChanges(
 				// descriptors to use during restore.
 				// Note that the modification time of descriptors on disk is usually 0.
 				// See the comment on MaybeSetDescriptorModificationTime... for more.
-				sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
+				descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
 
 				// Collect the prior IDs of table descriptors, as the ID may have been
 				// changed during truncate.
 				r.Desc = &desc
-				t := sqlbase.TableFromDescriptor(&desc, rev.Timestamp)
+				t := descpb.TableFromDescriptor(&desc, rev.Timestamp)
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}

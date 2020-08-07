@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1012,7 +1011,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		if err != nil {
 			return err
 		}
-		sqlbase.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
+		descpb.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to

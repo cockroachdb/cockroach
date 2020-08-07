@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -477,7 +476,7 @@ func (s *Server) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescripto
 		if err := kv.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}
-		if t := sqlbase.TableFromDescriptor(&desc, kv.Value.Timestamp); t != nil && t.ID > keys.MaxReservedDescID {
+		if t := descpb.TableFromDescriptor(&desc, kv.Value.Timestamp); t != nil && t.ID > keys.MaxReservedDescID {
 			if err := reflectwalk.Walk(t, redactor); err != nil {
 				panic(err) // stringRedactor never returns a non-nil err
 			}
