@@ -704,6 +704,56 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 }
 
+// TestEncryptedBackupRestoreSystemJobs ensures that the system jobs entry for encrypted BACKUPs
+// have the passphrase sanitized.
+func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+	conn := sqlDB.DB.(*gosql.DB)
+	defer cleanupFn()
+	backupLoc1 := LocalFoo + "/x"
+
+	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
+	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
+	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+	restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
+
+	// Take an encrypted BACKUP.
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH encryption_passphrase='abcdefg'`,
+		backupLoc1)
+
+	// Verify the BACKUP job description is sanitized.
+	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
+		jobs.Record{
+			Username: security.RootUser,
+			Description: fmt.Sprintf(
+				`BACKUP DATABASE data TO '%s' WITH encryption_passphrase='redacted'`, backupLoc1),
+			DescriptorIDs: descpb.IDs{
+				descpb.ID(backupDatabaseID),
+				descpb.ID(backupTableID),
+			},
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform an encrypted RESTORE.
+	sqlDB.Exec(t, `RESTORE TABLE data.bank FROM $1 WITH OPTIONS (into_db='restoredb', encryption_passphrase='abcdefg')`, backupLoc1)
+
+	// Verify the RESTORE job description is sanitized.
+	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+		Username: security.RootUser,
+		Description: fmt.Sprintf(
+			`RESTORE TABLE data.bank FROM '%s' WITH encryption_passphrase = 'redacted', into_db = 'restoredb'`, backupLoc1),
+		DescriptorIDs: descpb.IDs{
+			descpb.ID(restoreDatabaseID + 1),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type inProgressChecker func(context context.Context, ip inProgressState) error
 
 // inProgressState holds state about an in-progress backup or restore
