@@ -17,16 +17,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// NewDatumToInvertedExpr returns a new DatumToInvertedExpr. Currently there
-// is only one possible implementation returned, geoDatumToInvertedExpr.
-func NewDatumToInvertedExpr(
-	expr tree.TypedExpr, desc *descpb.IndexDescriptor,
-) (invertedexpr.DatumToInvertedExpr, error) {
+// NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr. Currently there
+// is only one possible implementation returned, geoDatumsToInvertedExpr.
+func NewDatumsToInvertedExpr(
+	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, desc *descpb.IndexDescriptor,
+) (invertedexpr.DatumsToInvertedExpr, error) {
 	if geoindex.IsEmptyConfig(&desc.GeoConfig) {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
 	}
 
-	return NewGeoDatumToInvertedExpr(expr, &desc.GeoConfig)
+	return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &desc.GeoConfig)
 }
