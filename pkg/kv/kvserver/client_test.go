@@ -172,10 +172,11 @@ func createTestStoreWithOpts(
 
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: ac,
-			Settings:   storeCfg.Settings,
-			Clock:      storeCfg.Clock,
-			Stopper:    stopper,
+			AmbientCtx:           ac,
+			Settings:             storeCfg.Settings,
+			Clock:                storeCfg.Clock,
+			Stopper:              stopper,
+			RangeDescriptorCache: distSender.RangeDescriptorCache(),
 		},
 		distSender,
 	)
@@ -819,10 +820,11 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 	})
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   m.storeConfig.Settings,
-			Clock:      m.clocks[idx],
-			Stopper:    stopper,
+			AmbientCtx:           ambient,
+			Settings:             m.storeConfig.Settings,
+			Clock:                m.clocks[idx],
+			Stopper:              stopper,
+			RangeDescriptorCache: m.distSenders[idx].RangeDescriptorCache(),
 		},
 		m.distSenders[idx],
 	)

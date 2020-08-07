@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -22,6 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+// TxnHeartbeatBatcher XXX:
+type TxnHeartbeatBatcher struct {
+	rdc     kvbase.RangeDescriptorCache
+	batcher *requestbatcher.RequestBatcher
+}
 
 // TxnCoordSenderFactory implements client.TxnSenderFactory.
 type TxnCoordSenderFactory struct {
@@ -34,14 +42,15 @@ type TxnCoordSenderFactory struct {
 	linearizable      bool // enables linearizable behavior
 	stopper           *stop.Stopper
 	metrics           TxnMetrics
+	heartbeatBatcher  *TxnHeartbeatBatcher
 
 	testingKnobs ClientTestingKnobs
 }
 
 var _ kv.TxnSenderFactory = &TxnCoordSenderFactory{}
 
-// TxnCoordSenderFactoryConfig holds configuration and auxiliary objects that can be passed
-// to NewTxnCoordSenderFactory.
+// TxnCoordSenderFactoryConfig holds configuration and auxiliary objects that
+// can be passed to NewTxnCoordSenderFactory.
 type TxnCoordSenderFactoryConfig struct {
 	AmbientCtx log.AmbientContext
 
@@ -49,9 +58,10 @@ type TxnCoordSenderFactoryConfig struct {
 	Clock    *hlc.Clock
 	Stopper  *stop.Stopper
 
-	HeartbeatInterval time.Duration
-	Linearizable      bool
-	Metrics           TxnMetrics
+	HeartbeatInterval    time.Duration
+	Linearizable         bool
+	Metrics              TxnMetrics
+	RangeDescriptorCache kvbase.RangeDescriptorCache
 
 	TestingKnobs ClientTestingKnobs
 }
@@ -71,6 +81,17 @@ func NewTxnCoordSenderFactory(
 		heartbeatInterval: cfg.HeartbeatInterval,
 		metrics:           cfg.Metrics,
 		testingKnobs:      cfg.TestingKnobs,
+		heartbeatBatcher: &TxnHeartbeatBatcher{
+			rdc: cfg.RangeDescriptorCache,
+			batcher: requestbatcher.New(requestbatcher.Config{
+				// XXX: These configurations need to be tuned.
+				Name:            "heartbeat_batcher",
+				MaxMsgsPerBatch: 10,
+				Stopper:         cfg.Stopper,
+				Sender:          wrapped,
+				MaxWait:         time.Second,
+			}),
+		},
 	}
 	if tcf.st == nil {
 		tcf.st = cluster.MakeTestingClusterSettings()

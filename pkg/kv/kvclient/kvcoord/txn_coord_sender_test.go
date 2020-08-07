@@ -232,10 +232,11 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	})
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   st,
-			Clock:      s.Clock,
-			Stopper:    s.Stopper(),
+			AmbientCtx:           ambient,
+			Settings:             st,
+			Clock:                s.Clock,
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
 		ds,
 	)
@@ -297,19 +298,21 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 	// Make a db with a short heartbeat interval.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ds := NewDistSenderForLocalTestCluster(
+		s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
+		ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+	)
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
-			HeartbeatInterval: time.Millisecond,
-			Settings:          s.Cfg.Settings,
-			Clock:             s.Clock,
-			Stopper:           s.Stopper(),
+			HeartbeatInterval:    time.Millisecond,
+			Settings:             s.Cfg.Settings,
+			Clock:                s.Clock,
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
-		NewDistSenderForLocalTestCluster(
-			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
-		),
+		ds,
 	)
 	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
 
@@ -813,6 +816,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
+					// XXX:
+					RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 				},
 				senderFn,
 			)
@@ -955,6 +960,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 			Clock:      clock,
 			Stopper:    stopper,
 			Settings:   cluster.MakeTestingClusterSettings(),
+			// XXX:
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 		},
 		senderFn,
 	)
@@ -1313,10 +1320,11 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			factory := NewTxnCoordSenderFactory(
 				TxnCoordSenderFactoryConfig{
-					AmbientCtx: ambient,
-					Clock:      clock,
-					Stopper:    stopper,
-					Settings:   cluster.MakeTestingClusterSettings(),
+					AmbientCtx:           ambient,
+					Clock:                clock,
+					Stopper:              stopper,
+					Settings:             cluster.MakeTestingClusterSettings(),
+					RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 				},
 				senderFn,
 			)
@@ -1394,10 +1402,11 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1462,10 +1471,11 @@ func TestOnePCErrorTracking(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1553,10 +1563,11 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1620,10 +1631,11 @@ func TestCommitMutatingTransaction(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1705,10 +1717,11 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1766,6 +1779,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				// itself.
 				MaxTxnRefreshAttempts: -1,
 			},
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1854,10 +1868,11 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	})
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1910,10 +1925,11 @@ func TestSequenceNumbers(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -1960,10 +1976,11 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -2002,10 +2019,11 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -2078,10 +2096,11 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		sender,
 	)
@@ -2145,12 +2164,16 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	}
 
 	ambientCtx := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
-		AmbientCtx: ambientCtx,
-		Settings:   s.Cfg.Settings,
-		Clock:      s.Clock,
-		Stopper:    s.Stopper(),
-	}, senderFn)
+	tsf := NewTxnCoordSenderFactory(
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx:           ambientCtx,
+			Settings:             s.Cfg.Settings,
+			Clock:                s.Clock,
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()), // XXX:
+		},
+		senderFn,
+	)
 	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -2223,10 +2246,11 @@ func TestAnchorKey(t *testing.T) {
 
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-			Settings:   cluster.MakeTestingClusterSettings(),
+			AmbientCtx:           ambient,
+			Clock:                clock,
+			Stopper:              stopper,
+			Settings:             cluster.MakeTestingClusterSettings(),
+			RangeDescriptorCache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper), // XXX:
 		},
 		senderFn,
 	)

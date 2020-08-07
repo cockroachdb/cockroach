@@ -272,7 +272,8 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {
 			var pErr *roachpb.Error
-			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
+			br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg))
+			if pErr != nil {
 				return pErr.GoError()
 			}
 			return nil

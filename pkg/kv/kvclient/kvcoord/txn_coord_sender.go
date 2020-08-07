@@ -224,7 +224,7 @@ func newRootTxnCoordSender(
 		tcs.clock,
 		&tcs.metrics,
 		tcs.heartbeatInterval,
-		&tcs.interceptorAlloc.txnLockGatekeeper,
+		tcf.heartbeatBatcher, // XXX: We bypass the lock gatekeeper entirely here.
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,
 	)
