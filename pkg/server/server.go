@@ -57,8 +57,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -580,7 +580,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
-			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
+			nodeLiveness:           optionalnodeliveness.MakeContainer(nodeLiveness),
 			gossip:                 gossip.MakeOptionalGossip(g),
 			grpcServer:             grpc.Server,
 			recorder:               recorder,
