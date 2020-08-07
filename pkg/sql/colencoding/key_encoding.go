@@ -38,7 +38,7 @@ func DecodeIndexKeyToCols(
 	da *sqlbase.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc sqlbase.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	indexColIdx []int,
 	types []*types.T,
@@ -99,11 +99,11 @@ func DecodeIndexKeyToCols(
 		if err != nil {
 			return nil, false, false, err
 		}
-		if decodedTableID != desc.ID || decodedIndexID != index.ID {
+		if decodedTableID != desc.GetID() || decodedIndexID != index.ID {
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
 			curPos := len(origKey) - len(key)
-			key = sqlbase.EncodePartialTableIDIndexID(origKey[:curPos], desc.ID, index.ID)
+			key = sqlbase.EncodePartialTableIDIndexID(origKey[:curPos], desc.GetID(), index.ID)
 			return key, false, false, nil
 		}
 	}

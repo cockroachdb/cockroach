@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,9 +58,9 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName)
 		}
 		switch sc.Kind {
-		case sqlbase.SchemaPublic, sqlbase.SchemaVirtual, sqlbase.SchemaTemporary:
+		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
-		case sqlbase.SchemaUserDefined:
+		case catalog.SchemaUserDefined:
 			namesBefore := len(d.objectNamesToDelete)
 			// TODO (rohany): Do a permissions check on the schema.
 			if err := d.collectObjectsInSchema(ctx, p, db, &sc); err != nil {

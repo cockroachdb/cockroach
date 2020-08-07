@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -94,7 +95,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	oldTn := n.oldTn
 	prevDBID := tableDesc.ParentID
 
-	var targetDbDesc *ImmutableDatabaseDescriptor
+	var targetDbDesc catalog.DatabaseDescriptor
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn

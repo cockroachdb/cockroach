@@ -86,7 +86,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().ID))
+		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().GetID()))
 		// Delete rows and indexes starting with the table's prefix.
 		resume = roachpb.Span{
 			Key:    tablePrefix,
@@ -121,7 +121,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           &td.tableDesc().PrimaryIndex,
+		Index:           td.tableDesc().GetPrimaryIndex(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -248,7 +248,7 @@ func (td *tableDeleter) deleteIndexScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           &td.tableDesc().PrimaryIndex,
+		Index:           td.tableDesc().GetPrimaryIndex(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -292,6 +292,6 @@ func (td *tableDeleter) deleteIndexScan(
 	return resume, td.finalize(ctx)
 }
 
-func (td *tableDeleter) tableDesc() *sqlbase.ImmutableTableDescriptor {
+func (td *tableDeleter) tableDesc() sqlbase.TableDescriptor {
 	return td.rd.Helper.TableDesc
 }

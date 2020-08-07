@@ -234,7 +234,7 @@ func ResolveTargetObject(
 		return nil, prefix, err
 	}
 	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
-	if scInfo.Schema.Kind == sqlbase.SchemaVirtual {
+	if scInfo.Schema.Kind == catalog.SchemaVirtual {
 		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}

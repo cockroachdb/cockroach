@@ -464,7 +464,7 @@ func (p *planner) removeFKForBackReference(
 		return nil
 	}
 
-	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc.TableDesc()); err != nil {
+	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc); err != nil {
 		return err
 	}
 	// No job description, since this is presumably part of some larger schema change.
@@ -477,11 +477,11 @@ func (p *planner) removeFKForBackReference(
 func removeFKForBackReferenceFromTable(
 	originTableDesc *sqlbase.MutableTableDescriptor,
 	backref *descpb.ForeignKeyConstraint,
-	referencedTableDesc *descpb.TableDescriptor,
+	referencedTableDesc sqlbase.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, fk := range originTableDesc.OutboundFKs {
-		if fk.ReferencedTableID == referencedTableDesc.ID && fk.Name == backref.Name {
+		if fk.ReferencedTableID == referencedTableDesc.GetID() && fk.Name == backref.Name {
 			// We found a match! We want to delete it from the list now.
 			matchIdx = i
 			break
@@ -522,7 +522,7 @@ func (p *planner) removeFKBackReference(
 		return nil
 	}
 
-	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc.TableDesc()); err != nil {
+	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc); err != nil {
 		return err
 	}
 	// No job description, since this is presumably part of some larger schema change.
@@ -535,11 +535,11 @@ func (p *planner) removeFKBackReference(
 func removeFKBackReferenceFromTable(
 	referencedTableDesc *sqlbase.MutableTableDescriptor,
 	fkName string,
-	originTableDesc *descpb.TableDescriptor,
+	originTableDesc sqlbase.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, backref := range referencedTableDesc.InboundFKs {
-		if backref.OriginTableID == originTableDesc.ID && backref.Name == fkName {
+		if backref.OriginTableID == originTableDesc.GetID() && backref.Name == fkName {
 			// We found a match! We want to delete it from the list now.
 			matchIdx = i
 			break
@@ -550,7 +550,7 @@ func removeFKBackReferenceFromTable(
 		// matched the foreign key constraint that we were trying to delete.
 		// This really shouldn't happen...
 		return errors.AssertionFailedf("there was no foreign key backreference "+
-			"for constraint %q on table %q", fkName, originTableDesc.Name)
+			"for constraint %q on table %q", fkName, originTableDesc.GetName())
 	}
 	// Delete our match.
 	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx], referencedTableDesc.InboundFKs[matchIdx+1:]...)

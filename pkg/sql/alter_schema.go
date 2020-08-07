@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -45,9 +46,9 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "schema %q does not exist", n.Schema)
 	}
 	switch schema.Kind {
-	case sqlbase.SchemaPublic, sqlbase.SchemaVirtual, sqlbase.SchemaTemporary:
+	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
-	case sqlbase.SchemaUserDefined:
+	case catalog.SchemaUserDefined:
 		// TODO (rohany): Check permissions here.
 		desc, err := p.Descriptors().GetMutableSchemaDescriptorByID(ctx, schema.ID, p.txn)
 		if err != nil {

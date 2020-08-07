@@ -175,7 +175,7 @@ func (p *planner) SetSequenceValue(
 			`cannot set the value of virtual sequence %q`, tree.ErrString(seqName))
 	}
 
-	seqValueKey, newVal, err := MakeSequenceKeyVal(p.ExecCfg().Codec, descriptor.TableDesc(), newVal, isCalled)
+	seqValueKey, newVal, err := MakeSequenceKeyVal(p.ExecCfg().Codec, descriptor, newVal, isCalled)
 	if err != nil {
 		return err
 	}
@@ -189,21 +189,21 @@ func (p *planner) SetSequenceValue(
 // MakeSequenceKeyVal returns the key and value of a sequence being set
 // with newVal.
 func MakeSequenceKeyVal(
-	codec keys.SQLCodec, sequence *TableDescriptor, newVal int64, isCalled bool,
+	codec keys.SQLCodec, sequence sqlbase.TableDescriptor, newVal int64, isCalled bool,
 ) ([]byte, int64, error) {
-	opts := sequence.SequenceOpts
+	opts := sequence.GetSequenceOpts()
 	if newVal > opts.MaxValue || newVal < opts.MinValue {
 		return nil, 0, pgerror.Newf(
 			pgcode.NumericValueOutOfRange,
 			`value %d is out of bounds for sequence "%s" (%d..%d)`,
-			newVal, sequence.Name, opts.MinValue, opts.MaxValue,
+			newVal, sequence.GetName(), opts.MinValue, opts.MaxValue,
 		)
 	}
 	if !isCalled {
-		newVal = newVal - sequence.SequenceOpts.Increment
+		newVal = newVal - opts.Increment
 	}
 
-	seqValueKey := codec.SequenceKey(uint32(sequence.ID))
+	seqValueKey := codec.SequenceKey(uint32(sequence.GetID()))
 	return seqValueKey, newVal, nil
 }
 

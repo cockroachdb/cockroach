@@ -1792,7 +1792,7 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 	}
 
 	return &unsplitAllNode{
-		tableDesc: &index.Table().(*optTable).desc.TableDescriptor,
+		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).desc,
 	}, nil
 }

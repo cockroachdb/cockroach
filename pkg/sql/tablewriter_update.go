@@ -58,7 +58,7 @@ func (tu *tableUpdater) rowForUpdate(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *tableUpdater) tableDesc() *sqlbase.ImmutableTableDescriptor {
+func (tu *tableUpdater) tableDesc() sqlbase.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
 
