@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -89,7 +90,7 @@ func (mt mutationTest) makeMutationsActive() {
 	}
 	if err := mt.kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
@@ -147,7 +148,7 @@ func (mt mutationTest) writeMutation(m descpb.DescriptorMutation) {
 	}
 	if err := mt.kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
@@ -1201,7 +1202,7 @@ func TestAddingFKs(t *testing.T) {
 	ordersDesc.Version++
 	if err := kvDB.Put(
 		context.Background(),
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, ordersDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, ordersDesc.ID),
 		ordersDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)

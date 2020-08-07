@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -58,9 +59,9 @@ func TestGetAllNamesInternal(t *testing.T) {
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(sqlbase.NewDeprecatedTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
-		batch.Put(sqlbase.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(keys.SystemSQLCodec), 9999)
+		batch.Put(catalogkeys.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
+		batch.Put(catalogkeys.NewDeprecatedTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(catalogkeys.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(keys.SystemSQLCodec), 9999)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -226,7 +227,7 @@ CREATE TABLE t.test (k INT);
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
+		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
 	}

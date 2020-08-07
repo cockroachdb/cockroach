@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,8 +68,8 @@ CREATE SCHEMA sc;
 		t.Fatal(err)
 	}
 
-	getDB := func() *sqlbase.ImmutableDatabaseDescriptor {
-		var db *sqlbase.ImmutableDatabaseDescriptor
+	getDB := func() *dbdesc.ImmutableDatabaseDescriptor {
+		var db *dbdesc.ImmutableDatabaseDescriptor
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
 			if err != nil {
