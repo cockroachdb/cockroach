@@ -596,7 +596,7 @@ func allocateDescriptorRewrites(
 func maybeUpgradeTableDescsInBackupManifests(
 	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
-	descGetter := sqlbase.MapDescGetter{}
+	descGetter := catalog.MapDescGetter{}
 
 	// Populate the descGetter with all table descriptors in all backup
 	// descriptors so that they can be looked up.

@@ -604,27 +604,6 @@ func maybeFillInDescriptor(
 	return changes, nil
 }
 
-// MapDescGetter is a protoGetter that has a hard-coded map of keys to proto
-// messages.
-type MapDescGetter map[descpb.ID]catalog.Descriptor
-
-// GetDesc implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-	desc := m[id]
-	return desc, nil
-}
-
-// GetDescs implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDescs(
-	ctx context.Context, ids []descpb.ID,
-) ([]catalog.Descriptor, error) {
-	ret := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		ret[i], _ = m.GetDesc(ctx, id)
-	}
-	return ret, nil
-}
-
 func indexHasDeprecatedForeignKeyRepresentation(idx *descpb.IndexDescriptor) bool {
 	return idx.ForeignKey.IsSet() || len(idx.ReferencedBy) > 0
 }
