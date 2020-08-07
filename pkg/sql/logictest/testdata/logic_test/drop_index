@@ -296,7 +296,7 @@ CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
 
-# test correct error reporting from NewUniquenessConstraintViolationError; see #46376
+# test correct error reporting from NewUniquenessConstraintViolationError; see #46276
 subtest new_uniqueness_constraint_error
 
 statement ok
@@ -309,5 +309,5 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-statement error pq: duplicate key value
+statement error pgcode 23505 duplicate key value: decoding err=column-id "2" does not exist
 UPSERT INTO t SELECT a + 1 FROM t;

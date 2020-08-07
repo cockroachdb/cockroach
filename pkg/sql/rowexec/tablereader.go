@@ -138,6 +138,7 @@ func newTableReader(
 		&tr.alloc,
 		spec.Visibility,
 		spec.LockingStrength,
+		spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
 		return nil, err

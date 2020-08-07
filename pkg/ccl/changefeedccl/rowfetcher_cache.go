@@ -115,6 +115,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		c.codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&c.a,
 		row.FetcherTableArgs{

@@ -1027,9 +1027,10 @@ func (s LockingStrength) Max(s2 LockingStrength) LockingStrength {
 	return LockingStrength(max(byte(s), byte(s2)))
 }
 
-// LockingWaitPolicy represents the possible policies for dealing with rows
-// being locked by FOR UPDATE/SHARE clauses (i.e., it represents the NOWAIT
-// and SKIP LOCKED options).
+// LockingWaitPolicy represents the possible policies for handling conflicting
+// locks held by other active transactions when attempting to lock rows due to
+// FOR UPDATE/SHARE clauses (i.e. it represents the NOWAIT and SKIP LOCKED
+// options).
 type LockingWaitPolicy byte
 
 // The ordering of the variants is important, because the highest numerical

@@ -180,7 +180,8 @@ func NewColBatchScan(
 	}
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
-		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, sysColDescs,
+		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
+		sysColDescs,
 	); err != nil {
 		return nil, err
 	}
@@ -213,7 +214,8 @@ func initCRowFetcher(
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	scanVisibility execinfrapb.ScanVisibility,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
@@ -237,7 +239,9 @@ func initCRowFetcher(
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
-	if err := fetcher.Init(codec, allocator, reverseScan, lockStr, tableArgs); err != nil {
+	if err := fetcher.Init(
+		codec, allocator, reverseScan, lockStrength, lockWaitPolicy, tableArgs,
+	); err != nil {
 		return nil, false, err
 	}
 
