@@ -68,7 +68,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return n.desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec)
+	return n.desc.Validate(params.ctx, catalogkv.NewDescGetter(params.p.txn, params.ExecCfg().Codec))
 }
 
 func (p *planner) addEnumValue(

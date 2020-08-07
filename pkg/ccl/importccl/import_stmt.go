@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -999,7 +1000,7 @@ func prepareExistingTableDescForIngestion(
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
 	err = txn.CPut(ctx,
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID),
 		importing.DescriptorProto(),
 		existingDesc)
 	if err != nil {
@@ -1283,7 +1284,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 				return errors.Wrap(err, "publishing tables")
 			}
 			b.CPut(
-				sqlbase.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
+				catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
 				existingDesc)
 		}
@@ -1429,7 +1430,7 @@ func (r *importResumer) dropTables(
 			return errors.Wrap(err, "rolling back tables")
 		}
 		b.CPut(
-			sqlbase.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
+			catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 			newTableDesc.DescriptorProto(),
 			existingDesc)
 	}

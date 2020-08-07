@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -146,7 +147,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.ImmutableDatabaseDescriptor:
+		case *dbdesc.ImmutableDatabaseDescriptor:
 			if err := d.Validate(); err != nil {
 				return err
 			}

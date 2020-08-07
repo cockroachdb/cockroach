@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -156,7 +155,7 @@ type TableDescriptor interface {
 		getType func(descpb.ID) (TypeDescriptor, error),
 	) (descpb.IDs, error)
 
-	Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error
+	Validate(ctx context.Context, txn DescGetter) error
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID

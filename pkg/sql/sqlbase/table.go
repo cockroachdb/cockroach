@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -318,16 +317,12 @@ func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) (
 
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *ImmutableTableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn protoGetter, codec keys.SQLCodec,
+	ctx context.Context, dg catalog.DescGetter,
 ) (map[string]descpb.ConstraintDetail, error) {
 	var tableLookup catalog.TableLookupFn
-	if txn != nil {
+	if dg != nil {
 		tableLookup = func(id descpb.ID) (catalog.TableDescriptor, error) {
-			raw, err := getTableDescFromID(ctx, txn, codec, id)
-			if err != nil {
-				return nil, err
-			}
-			return NewImmutableTableDescriptor(*raw), nil
+			return getTableDescFromID(ctx, dg, id)
 		}
 	}
 	return desc.collectConstraintInfo(tableLookup)

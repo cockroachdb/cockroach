@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package systemschema
 
 import (
 	"testing"
@@ -16,17 +16,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShouldSplitAtDesc(t *testing.T) {
 	for inner, should := range map[catalog.Descriptor]bool{
-		NewImmutableTableDescriptor(descpb.TableDescriptor{}):                    true,
-		NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}): false,
-		NewInitialDatabaseDescriptor(42, "db", security.AdminRole):               false,
-		NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                 false,
-		NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                  false,
+		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{}):                    true,
+		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}): false,
+		dbdesc.NewInitialDatabaseDescriptor(42, "db", security.AdminRole):                false,
+		sqlbase.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                 false,
+		sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                  false,
 	} {
 		var rawDesc roachpb.Value
 		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))

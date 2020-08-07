@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -217,7 +218,7 @@ func TestValidateTypeDesc(t *testing.T) {
 		if err := v.SetProto(d); err != nil {
 			t.Fatal(err)
 		}
-		if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, id), &v); err != nil {
+		if err := kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id), &v); err != nil {
 			t.Fatal(err)
 		}
 	}

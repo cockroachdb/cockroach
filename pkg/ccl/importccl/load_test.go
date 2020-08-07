@@ -21,8 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -59,19 +60,19 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	aliceDesc := sqlbase.NewInitialDatabaseDescriptor(10000, "alice", security.AdminRole)
-	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob", security.AdminRole)
+	aliceDesc := dbdesc.NewInitialDatabaseDescriptor(10000, "alice", security.AdminRole)
+	bobDesc := dbdesc.NewInitialDatabaseDescriptor(9999, "bob", security.AdminRole)
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), bobDesc.GetID())
-		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), aliceDesc.GetID())
+		batch.Put(catalogkeys.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), bobDesc.GetID())
+		batch.Put(catalogkeys.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), aliceDesc.GetID())
 
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, bobDesc.GetID()), bobDesc.DescriptorProto())
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, aliceDesc.GetID()), aliceDesc.DescriptorProto())
+		batch.Put(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, bobDesc.GetID()), bobDesc.DescriptorProto())
+		batch.Put(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, aliceDesc.GetID()), aliceDesc.DescriptorProto())
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)

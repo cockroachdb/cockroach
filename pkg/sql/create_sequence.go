@@ -141,7 +141,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := desc.Validate(params.ctx, catalogkv.NewDescGetter(params.p.txn, params.ExecCfg().Codec)); err != nil {
 		return err
 	}
 

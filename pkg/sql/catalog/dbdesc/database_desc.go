@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package dbdesc
 
 import (
 	"fmt"
@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -152,7 +153,7 @@ func (desc *MutableDatabaseDescriptor) SetName(name string) {
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
 func (desc *ImmutableDatabaseDescriptor) Validate() error {
-	if err := validateName(desc.GetName(), "descriptor"); err != nil {
+	if err := sqlbase.ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
 	if desc.GetID() == 0 {
@@ -167,6 +168,14 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }
+
+// SchemaMeta implements the tree.SchemaMeta interface.
+// TODO (rohany): I don't want to keep this here, but it seems to be used
+//  by backup only for the fake resolution that occurs in backup. Is it possible
+//  to have this implementation only visible there? Maybe by creating a type
+//  alias for database descriptor in the backupccl package, and then defining
+//  SchemaMeta on it?
+func (desc *ImmutableDatabaseDescriptor) SchemaMeta() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {

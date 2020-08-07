@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -227,7 +228,7 @@ func TestRegistryGC(t *testing.T) {
 		desc.Mutations = mutations
 		if err := kvDB.Put(
 			context.Background(),
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
@@ -241,7 +242,7 @@ func TestRegistryGC(t *testing.T) {
 		desc.GCMutations = gcMutations
 		if err := kvDB.Put(
 			context.Background(),
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
@@ -260,7 +261,7 @@ func TestRegistryGC(t *testing.T) {
 		}
 		if err := kvDB.Put(
 			context.Background(),
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
 			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)

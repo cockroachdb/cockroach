@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -35,7 +37,7 @@ import (
 
 type dropDatabaseNode struct {
 	n                       *tree.DropDatabase
-	dbDesc                  *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc                  *dbdesc.ImmutableDatabaseDescriptor
 	td                      []toDelete
 	schemasToDelete         []string
 	allTableObjectsToDelete []*sqlbase.MutableTableDescriptor
@@ -256,7 +258,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
+	descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
 
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {

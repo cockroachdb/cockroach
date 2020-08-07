@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -363,7 +363,7 @@ func migrateJobToOldFormat(
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
-		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+		return kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(
 			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	})
@@ -448,7 +448,7 @@ func migrateGCJobToOldFormat(
 			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
-			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+			return kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(
 				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		})
@@ -892,7 +892,7 @@ func TestGCJobCreated(t *testing.T) {
 		); err != nil {
 			return err
 		}
-		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+		return kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(
 			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	}); err != nil {
@@ -970,7 +970,7 @@ func TestMissingMutation(t *testing.T) {
 			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
-			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
+			return kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(
 				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		}),

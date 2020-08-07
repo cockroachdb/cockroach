@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -198,7 +200,7 @@ type Collection struct {
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*sqlbase.ImmutableDatabaseDescriptor
+	allDatabaseDescriptors []*dbdesc.ImmutableDatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -419,7 +421,7 @@ func (tc *Collection) getObjectVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-desc.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(name.Catalog() == sqlbase.SystemDatabaseName && name.Object() != sqlbase.RoleMembersTable.Name)
+		(name.Catalog() == systemschema.SystemDatabaseName && name.Object() != systemschema.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
@@ -1009,11 +1011,11 @@ func (tc *Collection) GetAllDescriptors(
 		}
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
-		dbDescs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
+		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 		typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
-			case *sqlbase.ImmutableDatabaseDescriptor:
+			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
 			case *sqlbase.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
@@ -1072,7 +1074,7 @@ func (tc *Collection) GetAllDescriptors(
 // in the database cache, if necessary.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*sqlbase.ImmutableDatabaseDescriptor, error) {
+) ([]*dbdesc.ImmutableDatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {

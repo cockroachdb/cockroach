@@ -11,6 +11,8 @@
 package catalog
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -97,4 +99,9 @@ type ResolvedSchema struct {
 	// The descriptor backing the resolved schema. It is only set for
 	// SchemaUserDefined.
 	Desc SchemaDescriptor
+}
+
+type DescGetter interface {
+	GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error)
+	GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error)
 }

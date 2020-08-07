@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -731,7 +732,7 @@ func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.Muta
 	case table != nil:
 		return sqlbase.NewMutableExistingTableDescriptor(*table)
 	case database != nil:
-		return sqlbase.NewMutableExistingDatabaseDescriptor(*database)
+		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
 	case typ != nil:
 		return sqlbase.NewMutableExistingTypeDescriptor(*typ)
 	case schema != nil:

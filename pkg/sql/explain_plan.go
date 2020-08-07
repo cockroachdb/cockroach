@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -285,7 +286,7 @@ func (e *explainer) spans(
 	spans []roachpb.Span,
 	hardLimitSet bool,
 ) {
-	spanss := sqlbase.PrettySpans(index, spans, 2)
+	spanss := catalogkeys.PrettySpans(index, spans, 2)
 	if spanss != "" {
 		if spanss == "-" {
 			spanss = getAttrForSpansAll(hardLimitSet)

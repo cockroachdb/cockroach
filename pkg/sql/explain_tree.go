@@ -15,10 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -56,7 +56,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 			// PrettySpans, just to check to see whether the output is - or
 			// not. Unfortunately it's not so clear yet how to write a
 			// shorter function. Suggestions welcome.
-			spanss := sqlbase.PrettySpans(index, spans, 2)
+			spanss := catalogkeys.PrettySpans(index, spans, 2)
 			if spanss != "" {
 				if spanss == "-" {
 					spanss = getAttrForSpansAll(hardLimitSet)

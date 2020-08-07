@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -45,14 +46,14 @@ import (
 // TestingGetDescriptorFromDB is a wrapper for getDescriptorFromDB.
 func TestingGetDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	return getDescriptorFromDB(ctx, db, dbName)
 }
 
 // getDescriptorFromDB returns the descriptor in bytes of the given table name.
 func getDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	var dbDescBytes []byte
 	// Due to the namespace migration, the row may not exist in system.namespace
 	// so a fallback to system.namespace_deprecated is required.
@@ -89,7 +90,7 @@ func getDescriptorFromDB(
 		if dbDesc == nil {
 			return nil, errors.Errorf("found non-database descriptor: %v", desc)
 		}
-		return sqlbase.NewImmutableDatabaseDescriptor(*dbDesc), nil
+		return dbdesc.NewImmutableDatabaseDescriptor(*dbDesc), nil
 	}
 	return nil, gosql.ErrNoRows
 }

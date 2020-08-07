@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -184,7 +185,7 @@ func (p *planner) getSchemaIDForCreate(
 // the desired object exists.
 func getTableCreateParams(
 	params runParams, dbID descpb.ID, isTemporary bool, tableName *tree.TableName,
-) (tKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+) (tKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
@@ -217,7 +218,7 @@ func getTableCreateParams(
 		if err != nil {
 			return nil, 0, err
 		}
-		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName.Table())
+		tKey = catalogkeys.NewTableKey(dbID, schemaID, tableName.Table())
 	} else {
 		// Otherwise, find the ID of the schema to create the table within.
 		var err error
@@ -392,7 +393,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	if err := desc.Validate(params.ctx, catalogkv.NewDescGetter(params.p.txn, params.ExecCfg().Codec)); err != nil {
 		return err
 	}
 
@@ -754,7 +755,7 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil, evalCtx.Codec)
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
 	if err != nil {
 		return err
 	}

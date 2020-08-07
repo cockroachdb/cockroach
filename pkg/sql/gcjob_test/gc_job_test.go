@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -153,10 +154,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
+				descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
 				descDesc := myTableDesc.DescriptorProto()
 				b.Put(descKey, descDesc)
-				descKey2 := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
+				descKey2 := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
 				descDesc2 := myOtherTableDesc.DescriptorProto()
 				b.Put(descKey2, descDesc2)
 				return txn.Run(ctx, b)

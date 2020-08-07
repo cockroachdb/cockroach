@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,7 +27,7 @@ import (
 func testingGetDescriptor(
 	ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
 ) (hlc.Timestamp, *descpb.Descriptor) {
-	dKey := NewDatabaseKey(database)
+	dKey := catalogkeys.NewDatabaseKey(database)
 	gr, err := kvDB.Get(ctx, dKey.Key(codec))
 	if err != nil {
 		panic(err)
@@ -36,7 +37,7 @@ func testingGetDescriptor(
 	}
 	dbDescID := descpb.ID(gr.ValueInt())
 
-	tKey := NewPublicTableKey(dbDescID, object)
+	tKey := catalogkeys.NewPublicTableKey(dbDescID, object)
 	gr, err = kvDB.Get(ctx, tKey.Key(codec))
 	if err != nil {
 		panic(err)
@@ -45,7 +46,7 @@ func testingGetDescriptor(
 		panic("object missing")
 	}
 
-	descKey := MakeDescMetadataKey(codec, descpb.ID(gr.ValueInt()))
+	descKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(gr.ValueInt()))
 	desc := &descpb.Descriptor{}
 	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
 	if err != nil || desc.Equal(descpb.Descriptor{}) {

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -926,7 +927,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		if err := v.SetProto(desc); err != nil {
 			t.Fatal(err)
 		}
-		if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, 0), &v); err != nil {
+		if err := kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, 0), &v); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -939,7 +940,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			if err := v.SetProto(desc); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID), &v); err != nil {
+			if err := kvDB.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID), &v); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -951,7 +952,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
 		for _, otherDesc := range test.otherDescs {
-			if err := kvDB.Del(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID)); err != nil {
+			if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}
