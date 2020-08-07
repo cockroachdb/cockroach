@@ -25,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -275,7 +278,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
-	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	databases []*dbdesc.ImmutableDatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
@@ -287,7 +290,7 @@ func WriteDescriptors(
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
-		wroteDBs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
+		wroteDBs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 		for _, desc := range databases {
 			// If the restore is not a full cluster restore we cannot know that
 			// the users on the restoring cluster match the ones that were on the
@@ -320,7 +323,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			skey := sqlbase.NewSchemaKey(sc.GetParentID(), sc.GetName())
+			skey := catalogkeys.NewSchemaKey(sc.GetParentID(), sc.GetName())
 			b.CPut(skey.Key(keys.SystemSQLCodec), sc.GetID(), nil)
 		}
 
@@ -405,7 +408,7 @@ func WriteDescriptors(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
+			if err := table.Validate(ctx, catalogkv.NewDescGetter(txn, keys.SystemSQLCodec)); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.GetID()))
 			}
@@ -674,7 +677,7 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job       *jobs.Job
 	settings  *cluster.Settings
-	databases []*sqlbase.ImmutableDatabaseDescriptor
+	databases []*dbdesc.ImmutableDatabaseDescriptor
 	tables    []catalog.TableDescriptor
 	// writtenTypes is the set of types that are restored from the backup into
 	// the database. Note that this is not always the set of types within the
@@ -757,7 +760,7 @@ func remapRelevantStatistics(
 func isDatabaseEmpty(
 	ctx context.Context,
 	db *kv.DB,
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
+	dbDesc *dbdesc.ImmutableDatabaseDescriptor,
 	ignoredTables map[descpb.ID]struct{},
 ) (bool, error) {
 	var allDescs []catalog.Descriptor
@@ -787,7 +790,7 @@ func isDatabaseEmpty(
 func createImportingDescriptors(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []catalog.Descriptor, r *restoreResumer,
 ) (
-	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	databases []*dbdesc.ImmutableDatabaseDescriptor,
 	tables []catalog.TableDescriptor,
 	oldTableIDs []descpb.ID,
 	writtenTypes []catalog.TypeDescriptor,
@@ -813,7 +816,7 @@ func createImportingDescriptors(
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
+				rewriteDesc := dbdesc.NewInitialDatabaseDescriptorWithPrivileges(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
@@ -830,7 +833,7 @@ func createImportingDescriptors(
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
+		databases = append(databases, dbdesc.NewInitialDatabaseDescriptor(
 			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
 	}
 
@@ -1184,7 +1187,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
 			b.CPut(
-				sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
+				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
 				existingDescVal,
 			)
@@ -1307,7 +1310,7 @@ func (r *restoreResumer) dropDescriptors(
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
 		b.CPut(
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
 			tableToDrop.DescriptorProto(),
 			existingDescVal,
 		)
@@ -1329,7 +1332,7 @@ func (r *restoreResumer) dropDescriptors(
 		); err != nil {
 			return err
 		}
-		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
 	// Drop any schema descriptors that this restore created.
@@ -1346,7 +1349,7 @@ func (r *restoreResumer) dropDescriptors(
 		); err != nil {
 			return err
 		}
-		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
 	}
 
 	// Queue a GC job.
@@ -1389,9 +1392,9 @@ func (r *restoreResumer) dropDescriptors(
 		}
 
 		if isDBEmpty {
-			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
+			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
 			b.Del(descKey)
-			b.Del(sqlbase.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
+			b.Del(catalogkeys.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
 		}
 	}
 	if err := txn.Run(ctx, b); err != nil {
@@ -1412,7 +1415,7 @@ func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) err
 			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
 			// Don't clear the jobs table as to not delete the jobs that are performing
 			// the restore.
-			if systemTable != sqlbase.JobsTable.Name {
+			if systemTable != systemschema.JobsTable.Name {
 				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
 				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
 				if err != nil {

@@ -27,8 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -426,7 +428,7 @@ func drainNamesForDescriptor(
 			// If the descriptor to drain is a schema, then we need to delete the
 			// draining names from the parent database's schema mapping.
 			if isSchema {
-				db := descs[desc.GetParentID()].(*sqlbase.MutableDatabaseDescriptor)
+				db := descs[desc.GetParentID()].(*dbdesc.MutableDatabaseDescriptor)
 				for _, name := range namesToReclaim {
 					delete(db.Schemas, name.Name)
 				}
@@ -593,7 +595,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		switch desc.(type) {
 		case catalog.SchemaDescriptor:
 			if desc.Dropped() {
-				if err := sc.execCfg.DB.Del(ctx, sqlbase.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
+				if err := sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
 					return err
 				}
 			}

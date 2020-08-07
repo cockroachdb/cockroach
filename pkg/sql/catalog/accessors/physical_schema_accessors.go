@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -71,7 +72,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
-	isSystemDB := name == sqlbase.SystemDatabaseName
+	isSystemDB := name == systemschema.SystemDatabaseName
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
 		if refuseFurtherLookup || err != nil {

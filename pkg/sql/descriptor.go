@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -53,7 +55,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*sqlbase.ImmutableDatabaseDescriptor, bool, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -84,7 +86,7 @@ func (p *planner) createDatabase(
 	// MutableDatabaseDescriptor and where/how this will interact with the
 	// descs.Collection (now it happens well above this call, which is probably
 	// fine).
-	desc := sqlbase.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
+	desc := dbdesc.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -93,7 +95,7 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaNamespaceEntry(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
+		if err := p.createSchemaNamespaceEntry(ctx, catalogkeys.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
 			return nil, true, err
 		}
 	}
@@ -145,7 +147,9 @@ func (p *planner) createDescriptorWithID(
 	}
 
 	if mutType, ok := descriptor.(*sqlbase.MutableTypeDescriptor); ok {
-		if err := mutType.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+		if err := mutType.Validate(
+			ctx, catalogkv.NewDescGetter(p.txn, p.ExecCfg().Codec),
+		); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutType); err != nil {

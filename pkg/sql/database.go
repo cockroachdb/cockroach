@@ -14,11 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -32,10 +33,10 @@ import (
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, oldDesc *sqlbase.ImmutableDatabaseDescriptor, newName string,
+	ctx context.Context, oldDesc *dbdesc.ImmutableDatabaseDescriptor, newName string,
 ) error {
 	oldName := oldDesc.GetName()
-	newDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*oldDesc.DatabaseDesc())
+	newDesc := dbdesc.NewMutableExistingDatabaseDescriptor(*oldDesc.DatabaseDesc())
 	newDesc.Version++
 	newDesc.SetName(newName)
 	if err := newDesc.Validate(); err != nil {
@@ -52,7 +53,7 @@ func (p *planner) renameDatabase(
 	newKey := catalogkv.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
 
 	descID := newDesc.GetID()
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
+	descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
 	descDesc := newDesc.DescriptorProto()
 
 	b := &kv.Batch{}
@@ -76,7 +77,7 @@ func (p *planner) renameDatabase(
 }
 
 func (p *planner) writeDatabaseChange(
-	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor,
+	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor,
 ) error {
 	desc.MaybeIncrementVersion()
 	// TODO (rohany, lucy): This usage of descs.DBCreated is awkward, but since

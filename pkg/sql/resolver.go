@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -36,14 +37,14 @@ var _ resolver.SchemaResolver = &planner{}
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *sqlbase.ImmutableDatabaseDescriptor, err error) {
+) (res *dbdesc.ImmutableDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		var desc catalog.DatabaseDescriptor
 		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
 			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
 		)
 		if desc != nil {
-			res = desc.(*sqlbase.ImmutableDatabaseDescriptor)
+			res = desc.(*dbdesc.ImmutableDatabaseDescriptor)
 		}
 	})
 	return res, err
@@ -530,7 +531,7 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
-	dbDescs     map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor
+	dbDescs     map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor
 	schemaDescs map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
@@ -546,14 +547,14 @@ type tableLookupFn = *internalLookupCtx
 // appropriate implementation of Descriptor before constructing a
 // new internalLookupCtx. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	rawDescs []descpb.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
+	rawDescs []descpb.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	descs := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		desc := &rawDescs[i]
 		switch t := desc.Union.(type) {
 		case *descpb.Descriptor_Database:
-			descs[i] = sqlbase.NewImmutableDatabaseDescriptor(*t.Database)
+			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
 		case *descpb.Descriptor_Table:
 			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
 		case *descpb.Descriptor_Type:
@@ -566,10 +567,10 @@ func newInternalLookupCtxFromDescriptors(
 }
 
 func newInternalLookupCtx(
-	descs []catalog.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
+	descs []catalog.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
-	dbDescs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
+	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
@@ -577,7 +578,7 @@ func newInternalLookupCtx(
 	// Record database descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
-		case *sqlbase.ImmutableDatabaseDescriptor:
+		case *dbdesc.ImmutableDatabaseDescriptor:
 			dbNames[desc.GetID()] = desc.GetName()
 			dbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.GetID() {
@@ -613,7 +614,7 @@ func newInternalLookupCtx(
 
 func (l *internalLookupCtx) getDatabaseByID(
 	id descpb.ID,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -805,7 +806,7 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id descpb.ID) (*sqlbase.ImmutableDatabaseDescriptor, error)
+	getDatabaseByID(id descpb.ID) (*dbdesc.ImmutableDatabaseDescriptor, error)
 	getSchemaByID(id descpb.ID) (*sqlbase.ImmutableSchemaDescriptor, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

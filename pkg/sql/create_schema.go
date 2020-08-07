@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -99,7 +101,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	})
 
 	// Update the parent database with this schema information.
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
+	mutDB := dbdesc.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
 	if mutDB.Schemas == nil {
 		mutDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
@@ -114,7 +116,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Finally create the schema on disk.
 	return p.createDescriptorWithID(
 		params.ctx,
-		sqlbase.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
+		catalogkeys.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,

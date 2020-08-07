@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -48,7 +49,7 @@ func newDropCascadeState() *dropCascadeState {
 func (d *dropCascadeState) collectObjectsInSchema(
 	ctx context.Context,
 	p *planner,
-	db *sqlbase.ImmutableDatabaseDescriptor,
+	db *dbdesc.ImmutableDatabaseDescriptor,
 	schema *catalog.ResolvedSchema,
 ) error {
 	names, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
@@ -63,7 +64,7 @@ func (d *dropCascadeState) collectObjectsInSchema(
 }
 
 func (d *dropCascadeState) resolveCollectedObjects(
-	ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
+	ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor,
 ) error {
 	d.td = make([]toDelete, 0, len(d.objectNamesToDelete))
 	// Resolve each of the collected names.

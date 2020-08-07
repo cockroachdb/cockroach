@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -29,7 +30,7 @@ import (
 
 type dropSchemaNode struct {
 	n  *tree.DropSchema
-	db *sqlbase.ImmutableDatabaseDescriptor
+	db *dbdesc.ImmutableDatabaseDescriptor
 	d  *dropCascadeState
 }
 
@@ -95,7 +96,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*n.db.DatabaseDesc())
+	mutDB := dbdesc.NewMutableExistingDatabaseDescriptor(*n.db.DatabaseDesc())
 
 	// Queue the job to actually drop the schema.
 	schemaIDs := make([]descpb.ID, len(n.d.schemasToDelete))
