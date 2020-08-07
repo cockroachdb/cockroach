@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -282,11 +284,13 @@ const maxNonIndexCols = 100
 // useful to have statistics on prefixes of those columns. For example, if a
 // table abc contains indexes on (a ASC, b ASC) and (b ASC, c ASC), we will
 // collect statistics on a, {a, b}, b, and {b, c}. (But if multiColEnabled is
-// false, we will only collect stats on a and b).
+// false, we will only collect stats on a and b). Columns in partial index
+// predicate expressions are also likely to appear in query filters, so stats
+// are collected for those columns as well.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
-// plus any other boolean columns (where the "histogram" is tiny).
+// plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
 	desc *ImmutableTableDescriptor, multiColEnabled bool,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -294,55 +298,112 @@ func createStatsDefaultColumns(
 
 	requestedStats := make(map[string]struct{})
 
+	// trackStatsIfNotExists adds the given column IDs as a set to the
+	// requestedStats set. If the columnIDs were not already in the set, it
+	// returns true.
+	trackStatsIfNotExists := func(colIDs []descpb.ColumnID) bool {
+		key := makeColStatKey(colIDs)
+		if _, ok := requestedStats[key]; ok {
+			return false
+		}
+		requestedStats[key] = struct{}{}
+		return true
+	}
+
+	// addIndexColumnStatsIfNotExists appends column stats for the given column
+	// ID if they have not already been added. Histogram stats are collected for
+	// every indexed column.
+	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) {
+		colList := []descpb.ColumnID{colID}
+
+		// Check for existing stats and remember the requested stats.
+		if !trackStatsIfNotExists(colList) {
+			return
+		}
+
+		colStat := jobspb.CreateStatsDetails_ColStat{
+			ColumnIDs:    colList,
+			HasHistogram: !isInverted,
+		}
+		colStats = append(colStats, colStat)
+
+		// Generate histograms for inverted indexes. The above
+		// colStat append is still needed for a basic sketch of
+		// the column. The following colStat is needed for the
+		// sampling and sketch of the inverted index keys of
+		// the column.
+		if isInverted {
+			colStat.Inverted = true
+			colStat.HasHistogram = true
+			colStats = append(colStats, colStat)
+		}
+	}
+
 	// Add column stats for the primary key.
 	for i := range desc.PrimaryIndex.ColumnIDs {
-		if i != 0 && !multiColEnabled {
-			break
+		// Generate stats for each column in the primary key.
+		addIndexColumnStatsIfNotExists(desc.PrimaryIndex.ColumnIDs[i], false /* isInverted */)
+
+		// Only collect multi-column stats if enabled.
+		if i == 0 || !multiColEnabled {
+			continue
 		}
 
 		colIDs := desc.PrimaryIndex.ColumnIDs[: i+1 : i+1]
 
 		// Remember the requested stats so we don't request duplicates.
-		key := makeColStatKey(colIDs)
-		requestedStats[key] = struct{}{}
+		trackStatsIfNotExists(colIDs)
 
+		// Only generate non-histogram multi-column stats.
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:    colIDs,
-			HasHistogram: i == 0,
+			HasHistogram: false,
 		})
 	}
 
 	// Add column stats for each secondary index.
 	for i := range desc.Indexes {
+		isInverted := desc.Indexes[i].Type == descpb.IndexDescriptor_INVERTED
+
 		for j := range desc.Indexes[i].ColumnIDs {
-			if j != 0 && !multiColEnabled {
-				break
+			// Generate stats for each indexed column.
+			addIndexColumnStatsIfNotExists(desc.Indexes[i].ColumnIDs[j], isInverted)
+
+			// Only collect multi-column stats if enabled.
+			if j == 0 || !multiColEnabled {
+				continue
 			}
 
 			colIDs := desc.Indexes[i].ColumnIDs[: j+1 : j+1]
 
 			// Check for existing stats and remember the requested stats.
-			key := makeColStatKey(colIDs)
-			if _, ok := requestedStats[key]; ok {
+			if !trackStatsIfNotExists(colIDs) {
 				continue
 			}
-			requestedStats[key] = struct{}{}
 
-			// Only generate a histogram for forward indexes.
-			colStat := jobspb.CreateStatsDetails_ColStat{
+			// Only generate non-histogram multi-column stats.
+			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 				ColumnIDs:    colIDs,
-				HasHistogram: j == 0 && desc.Indexes[i].Type == descpb.IndexDescriptor_FORWARD,
+				HasHistogram: false,
+			})
+		}
+
+		// Add columns referenced in partial index predicate expressions.
+		if desc.Indexes[i].IsPartial() {
+			expr, err := parser.ParseExpr(desc.Indexes[i].Predicate)
+			if err != nil {
+				return nil, err
 			}
-			colStats = append(colStats, colStat)
-			// Generate histograms for inverted indexes. The above
-			// colStat append is still needed for a basic sketch of
-			// the column. The following colStat is needed for the
-			// sampling and sketch of the inverted index keys of
-			// the column.
-			if desc.Indexes[i].Type == descpb.IndexDescriptor_INVERTED {
-				colStat.Inverted = true
-				colStat.HasHistogram = true
-				colStats = append(colStats, colStat)
+
+			// Extract the IDs of columns referenced in the predicate.
+			colIDs, err := schemaexpr.ExtractColumnIDs(desc, expr)
+			if err != nil {
+				return nil, err
+			}
+
+			// Generate stats for each column individually.
+			for _, colID := range colIDs.Ordered() {
+				addIndexColumnStatsIfNotExists(colID, isInverted)
 			}
 		}
 	}
@@ -352,14 +413,16 @@ func createStatsDefaultColumns(
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
 		colList := []descpb.ColumnID{col.ID}
-		key := makeColStatKey(colList)
-		if _, ok := requestedStats[key]; !ok {
-			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-				ColumnIDs:    colList,
-				HasHistogram: col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily,
-			})
-			nonIdxCols++
+
+		if !trackStatsIfNotExists(colList) {
+			continue
 		}
+
+		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+			ColumnIDs:    colList,
+			HasHistogram: col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily,
+		})
+		nonIdxCols++
 	}
 
 	return colStats, nil

@@ -124,13 +124,13 @@ FROM
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 NULL             {a}           256        4               0           true
+NULL             {b}           256        4               0           true
 NULL             {a,b}         256        16              0           false
-NULL             {a,b,c}       256        64              0           false
-NULL             {a,b,c,d}     256        256             0           false
 NULL             {c}           256        4               0           true
+NULL             {a,b,c}       256        64              0           false
+NULL             {d}           256        4               0           true
+NULL             {a,b,c,d}     256        256             0           false
 NULL             {c,d}         256        16              0           false
-NULL             {b}           256        4               0           false
-NULL             {d}           256        4               0           false
 NULL             {e}           256        2               0           true
 
 statement ok
@@ -212,9 +212,9 @@ WHERE statistics_name = 's3'
 ----
 column_names  row_count  distinct_count  null_count  has_histogram
 {a}           256        4               0           true
+{b}           256        4               0           true
 {c}           256        4               0           true
-{b}           256        4               0           false
-{d}           256        4               0           false
+{d}           256        4               0           true
 {e}           256        2               0           true
 
 
@@ -237,14 +237,14 @@ WHERE statistics_name = 's4'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
+{b}           256        4               0
 {a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {c}           256        4               0
+{a,b,c}       256        64              0
+{d}           256        4               0
+{a,b,c,d}     256        256             0
 {c,d}         256        16              0
 {c,b}         256        16              0
-{b}           256        4               0
-{d}           256        4               0
 {e}           256        2               0
 
 statement ok
@@ -262,12 +262,12 @@ WHERE statistics_name = 's5'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
-{a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {b}           256        4               0
+{a,b}         256        16              0
 {c}           256        4               0
+{a,b,c}       256        64              0
 {d}           256        4               0
+{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 # Table with a hidden primary key and no other indexes.
@@ -357,12 +357,12 @@ FROM [SHOW STATISTICS FOR TABLE data]
 statistics_name  column_names  row_count  distinct_count  null_count
 s4               {c,d}         256        16              0
 s4               {c,b}         256        16              0
-s5               {a,b}         256        16              0
-s5               {a,b,c}       256        64              0
-s5               {a,b,c,d}     256        256             0
 s5               {b}           256        4               0
+s5               {a,b}         256        16              0
 s5               {c}           256        4               0
+s5               {a,b,c}       256        64              0
 s5               {d}           256        4               0
+s5               {a,b,c,d}     256        256             0
 s5               {e}           256        2               0
 s6               {a}           256        4               0
 
@@ -377,12 +377,12 @@ WHERE statistics_name = '__auto__'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
-{a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {b}           256        4               0
+{a,b}         256        16              0
 {c}           256        4               0
+{a,b,c}       256        64              0
 {d}           256        4               0
+{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 #
@@ -709,3 +709,83 @@ statistics_name  column_names    row_count  distinct_count  null_count  has_hist
 s                {last_updated}  5          1               0           false
 s                {profile_id}    5          5               0           true
 s                {user_profile}  5          4               1           true
+
+
+# Test that individual columns in primary keys always have histograms collected
+# for them.
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
+statement ok
+CREATE TABLE prim (a INT, b INT, c INT, PRIMARY KEY (a, b, c));
+INSERT INTO prim VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM prim
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE prim]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+
+# Test that individual columns in secondary indexes always have histograms
+# collected for them.
+statement ok
+CREATE TABLE sec (a INT, b INT, c INT, INDEX (a, b, c));
+INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM sec
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE sec]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
+
+# Test that columns referenced in partial index predicates always have
+# histograms collected for them.
+statement ok
+SET experimental_partial_indexes=on;
+CREATE TABLE partial (a INT, b INT, c INT, INDEX (a) WHERE b > 0 OR c > 0);
+INSERT INTO partial VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM partial
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE partial]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
