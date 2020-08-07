@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -105,17 +105,17 @@ func (e *JobSchedulerTestEnv) NowExpr() string {
 // GetScheduledJobsTableSchema returns schema for the scheduled jobs table.
 func GetScheduledJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 	if env.ScheduledJobsTableName() == "system.jobs" {
-		return sqlbase.ScheduledJobsTableSchema
+		return systemschema.ScheduledJobsTableSchema
 	}
-	return strings.Replace(sqlbase.ScheduledJobsTableSchema,
+	return strings.Replace(systemschema.ScheduledJobsTableSchema,
 		"system.scheduled_jobs", env.ScheduledJobsTableName(), 1)
 }
 
 // GetJobsTableSchema returns schema for the jobs table.
 func GetJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 	if env.SystemJobsTableName() == "system.jobs" {
-		return sqlbase.JobsTableSchema
+		return systemschema.JobsTableSchema
 	}
-	return strings.Replace(sqlbase.JobsTableSchema,
+	return strings.Replace(systemschema.JobsTableSchema,
 		"system.jobs", env.SystemJobsTableName(), 1)
 }

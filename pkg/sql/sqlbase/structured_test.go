@@ -19,10 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/stretchr/testify/require"
 )
 
 // Makes an descpb.IndexDescriptor with all columns being ascending.
@@ -657,9 +655,6 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
 	pointer := func(s string) *string {
 		return &s
 	}
@@ -919,42 +914,20 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		},
 	}
 
-	{
-		var v roachpb.Value
-		desc := &descpb.Descriptor{
-			Union: &descpb.Descriptor_Database{Database: &descpb.DatabaseDescriptor{}},
-		}
-		if err := v.SetProto(desc); err != nil {
-			t.Fatal(err)
-		}
-		if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, 0), &v); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	for i, test := range tests {
+		descs := MapDescGetter{
+			Descs: make(map[descpb.ID]catalog.Descriptor),
+		}
+		descs.Descs[0] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{})
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
-			var v roachpb.Value
-			desc := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &otherDesc}}
-			if err := v.SetProto(desc); err != nil {
-				t.Fatal(err)
-			}
-			if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID), &v); err != nil {
-				t.Fatal(err)
-			}
+			descs.Descs[otherDesc.ID] = NewImmutableTableDescriptor(otherDesc)
 		}
-		txn := kv.NewTxn(ctx, kvDB, s.NodeID())
 		desc := NewImmutableTableDescriptor(test.desc)
-		if err := desc.validateCrossReferences(ctx, txn, keys.SystemSQLCodec); err == nil {
+		if err := desc.validateCrossReferences(ctx, descs); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
-		}
-		for _, otherDesc := range test.otherDescs {
-			if err := kvDB.Del(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, otherDesc.ID)); err != nil {
-				t.Fatal(err)
-			}
 		}
 	}
 }
@@ -1365,49 +1338,6 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 	if c, ok := after["fk"]; !ok || !c.Unvalidated {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", c)
-	}
-}
-
-func TestKeysPerRow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
-	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
-	// sqlbase. If/when that happens, use it here instead of this server.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	tests := []struct {
-		createTable string
-		indexID     descpb.IndexID
-		expected    int
-	}{
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
-	}
-
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(conn)
-			tableName := fmt.Sprintf("t%d", i)
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
-
-			desc := TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
-			require.NotNil(t, desc)
-			keys, err := desc.KeysPerRow(test.indexID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if test.expected != keys {
-				t.Errorf("expected %d keys got %d", test.expected, keys)
-			}
-		})
 	}
 }
 

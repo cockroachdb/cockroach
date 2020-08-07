@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -696,7 +697,7 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id SystemTenantObjectID) 
 		shouldSplit = true
 	} else {
 		desc := s.getSystemTenantDesc(keys.SystemSQLCodec.DescMetadataKey(uint32(id)))
-		shouldSplit = desc != nil && sqlbase.ShouldSplitAtDesc(desc)
+		shouldSplit = desc != nil && systemschema.ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
 	s.mu.Lock()

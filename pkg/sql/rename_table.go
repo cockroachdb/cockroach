@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -168,7 +169,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.GetID()
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := tableDesc.Validate(
+		ctx, catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec),
+	); err != nil {
 		return err
 	}
 
@@ -235,7 +238,9 @@ func (p *planner) dependentViewError(
 }
 
 // writeNameKey writes a name key to a batch and runs the batch.
-func (p *planner) writeNameKey(ctx context.Context, key sqlbase.DescriptorKey, ID descpb.ID) error {
+func (p *planner) writeNameKey(
+	ctx context.Context, key catalogkeys.DescriptorKey, ID descpb.ID,
+) error {
 	marshalledKey := key.Key(p.ExecCfg().Codec)
 	b := &kv.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {

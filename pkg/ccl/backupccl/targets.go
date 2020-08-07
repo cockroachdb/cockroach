@@ -19,8 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -516,7 +519,7 @@ func getRelevantDescChanges(
 		if _, ok := interestingIDs[change.ID]; ok {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			desc := unwrapDescriptor(ctx, change.Desc)
+			desc := catalogkv.UnwrapDescriptorRaw(ctx, change.Desc)
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor, catalog.TypeDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
@@ -683,9 +686,9 @@ func fullClusterTargetsBackup(
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
 	allDescs []catalog.Descriptor,
-) ([]catalog.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
+) ([]catalog.Descriptor, []*dbdesc.ImmutableDatabaseDescriptor, error) {
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
-	fullClusterDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0)
+	fullClusterDBs := make([]*dbdesc.ImmutableDatabaseDescriptor, 0)
 
 	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
 	for _, tableName := range fullClusterSystemTables {
@@ -695,9 +698,9 @@ func fullClusterTargets(
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor:
-			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*desc.DatabaseDesc())
+			dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*desc.DatabaseDesc())
 			fullClusterDescs = append(fullClusterDescs, desc)
-			if dbDesc.GetID() != sqlbase.SystemDB.GetID() {
+			if dbDesc.GetID() != systemschema.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.
 				fullClusterDBs = append(fullClusterDBs, dbDesc)
 			}
@@ -770,13 +773,13 @@ func fullClusterTargetsRestore(
 	}
 	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
 	for _, desc := range fullClusterDescs {
-		if _, isDefaultDB := sqlbase.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
+		if _, isDefaultDB := catalogkeys.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
 	}
 	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
 	for _, db := range fullClusterDBs {
-		if _, isDefaultDB := sqlbase.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
+		if _, isDefaultDB := catalogkeys.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
 			filteredDBs = append(filteredDBs, db)
 		}
 	}

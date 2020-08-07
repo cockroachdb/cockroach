@@ -225,7 +225,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	if err != nil {
 		return err
 	}
-	info, err := tableDesc.GetConstraintInfo(ctx, nil, p.ExecCfg().Codec)
+	info, err := tableDesc.GetConstraintInfo(ctx, nil)
 	if err != nil {
 		return err
 	}

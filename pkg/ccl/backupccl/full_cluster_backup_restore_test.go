@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -127,14 +127,14 @@ FROM system.jobs
 		// Note the absence of the jobs table. Jobs are tested by another test as
 		// jobs are created during the RESTORE process.
 		systemTablesToVerify := []string{
-			sqlbase.CommentsTable.Name,
-			sqlbase.LocationsTable.Name,
-			sqlbase.RoleMembersTable.Name,
-			sqlbase.SettingsTable.Name,
-			sqlbase.TableStatisticsTable.Name,
-			sqlbase.UITable.Name,
-			sqlbase.UsersTable.Name,
-			sqlbase.ZonesTable.Name,
+			systemschema.CommentsTable.Name,
+			systemschema.LocationsTable.Name,
+			systemschema.RoleMembersTable.Name,
+			systemschema.SettingsTable.Name,
+			systemschema.TableStatisticsTable.Name,
+			systemschema.UITable.Name,
+			systemschema.UsersTable.Name,
+			systemschema.ZonesTable.Name,
 		}
 
 		verificationQueries := make([]string, len(systemTablesToVerify))
@@ -142,7 +142,7 @@ FROM system.jobs
 		// that can be used to ensure that data in those tables is restored.
 		for i, table := range systemTablesToVerify {
 			switch table {
-			case sqlbase.TableStatisticsTable.Name:
+			case systemschema.TableStatisticsTable.Name:
 				// createdAt and statisticsID are re-generated on RESTORE.
 				query := fmt.Sprintf("SELECT \"tableID\", name, \"columnIDs\", \"rowCount\" FROM system.table_statistics")
 				verificationQueries[i] = query

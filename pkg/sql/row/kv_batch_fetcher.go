@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -339,7 +339,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			return errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
-				sqlbase.PrettySpans(nil, f.spans, 0 /* skip */))
+				catalogkeys.PrettySpans(nil, f.spans, 0 /* skip */))
 		}
 
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {

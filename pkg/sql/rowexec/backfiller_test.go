@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,7 +78,7 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	if err := kvDB.Put(
 		ctx,
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
 		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)

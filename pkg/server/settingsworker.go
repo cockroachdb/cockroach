@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +30,7 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable
+	tbl := systemschema.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
 	codec := keys.TODOSQLCodec

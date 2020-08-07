@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -280,7 +281,7 @@ func GetForDatabase(
 ) (map[descpb.ID]string, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
 
-	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key(codec)
+	nameKey := catalogkeys.NewSchemaKey(dbID, "" /* name */).Key(codec)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
@@ -297,7 +298,7 @@ func GetForDatabase(
 		if _, ok := ret[id]; ok {
 			continue
 		}
-		_, _, name, err := sqlbase.DecodeNameMetadataKey(codec, kv.Key)
+		_, _, name, err := catalogkeys.DecodeNameMetadataKey(codec, kv.Key)
 		if err != nil {
 			return nil, err
 		}

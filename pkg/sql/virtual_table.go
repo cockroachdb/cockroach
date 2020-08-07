@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -192,7 +193,7 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *sqlbase.ImmutableDatabaseDescriptor
+	db     *dbdesc.ImmutableDatabaseDescriptor
 	table  *sqlbase.ImmutableTableDescriptor
 	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
@@ -258,7 +259,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	v.db = db.(*sqlbase.ImmutableDatabaseDescriptor)
+	v.db = db.(*dbdesc.ImmutableDatabaseDescriptor)
 	return err
 }
 

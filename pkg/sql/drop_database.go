@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,7 +36,7 @@ import (
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *sqlbase.MutableDatabaseDescriptor
+	dbDesc *dbdesc.MutableDatabaseDescriptor
 	d      *dropCascadeState
 }
 
@@ -145,7 +147,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 
 		// Delete the database from the system.descriptor table.
-		descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
+		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 			log.VEventf(ctx, 2, "Del %s", descKey)
 		}

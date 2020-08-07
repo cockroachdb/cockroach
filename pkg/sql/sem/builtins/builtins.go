@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -3745,7 +3746,7 @@ may increase either contention or retry errors, or both.`,
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(sqlbase.PrettyKey(
+				return tree.NewDString(catalogkeys.PrettyKey(
 					nil, /* valDirs */
 					roachpb.Key(tree.MustBeDBytes(args[0])),
 					int(tree.MustBeDInt(args[1])))), nil

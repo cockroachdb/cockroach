@@ -15,6 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -27,7 +29,7 @@ import (
 
 type alterSchemaNode struct {
 	n    *tree.AlterSchema
-	db   *sqlbase.MutableDatabaseDescriptor
+	db   *dbdesc.MutableDatabaseDescriptor
 	desc *sqlbase.MutableSchemaDescriptor
 }
 
@@ -39,7 +41,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	found, schema, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.ID, n.Schema)
+	found, schema, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), n.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
-	db *sqlbase.MutableDatabaseDescriptor,
+	db *dbdesc.MutableDatabaseDescriptor,
 	scDesc *sqlbase.MutableSchemaDescriptor,
 	newOwner string,
 	jobDesc string,
@@ -108,7 +110,7 @@ func (p *planner) alterSchemaOwner(
 
 func (p *planner) renameSchema(
 	ctx context.Context,
-	db *sqlbase.MutableDatabaseDescriptor,
+	db *dbdesc.MutableDatabaseDescriptor,
 	desc *sqlbase.MutableSchemaDescriptor,
 	newName string,
 	jobDesc string,
@@ -132,7 +134,7 @@ func (p *planner) renameSchema(
 	desc.SetName(newName)
 
 	// Write a new namespace entry for the new name.
-	nameKey := sqlbase.NewSchemaKey(desc.ParentID, newName).Key(p.execCfg.Codec)
+	nameKey := catalogkeys.NewSchemaKey(desc.ParentID, newName).Key(p.execCfg.Codec)
 	b := p.txn.NewBatch()
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, desc.ID)

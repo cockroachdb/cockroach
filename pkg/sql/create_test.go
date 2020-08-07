@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,7 +55,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := sqlbase.NewDatabaseKey("test").Key(codec)
+	nameKey := catalogkeys.NewDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -63,7 +63,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
+	dbDescKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
 	dbDesc := &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
 			Database: &descpb.DatabaseDescriptor{
@@ -118,7 +118,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbDescKey = sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
+	dbDescKey = catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func verifyTables(
 		if _, ok := tableIDs[id]; ok {
 			continue
 		}
-		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 		desc := &descpb.Descriptor{}
 		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)

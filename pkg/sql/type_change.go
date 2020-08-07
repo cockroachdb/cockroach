@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -217,7 +218,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if typeDesc.Dropped() {
 		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			b := txn.NewBatch()
-			b.Del(sqlbase.MakeDescMetadataKey(codec, typeDesc.ID))
+			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.ID))
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return err

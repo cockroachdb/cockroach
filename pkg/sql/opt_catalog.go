@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -87,7 +88,7 @@ func (oc *optCatalog) reset() {
 type optSchema struct {
 	planner *planner
 
-	database *sqlbase.ImmutableDatabaseDescriptor
+	database *dbdesc.ImmutableDatabaseDescriptor
 	schema   catalog.ResolvedSchema
 
 	name cat.SchemaName
@@ -180,7 +181,7 @@ func (oc *optCatalog) ResolveSchema(
 	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
-		database: prefix.Database.(*sqlbase.ImmutableDatabaseDescriptor),
+		database: prefix.Database.(*dbdesc.ImmutableDatabaseDescriptor),
 		schema:   prefix.Schema,
 		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil

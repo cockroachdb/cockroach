@@ -16,11 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -153,7 +154,7 @@ type TableDescriptor interface {
 		getType func(descpb.ID) (TypeDescriptor, error),
 	) (descpb.IDs, error)
 
-	Validate(ctx context.Context, protoGetter ProtoGetter, codec keys.SQLCodec) error
+	Validate(ctx context.Context, txn DescGetter) error
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID
@@ -245,11 +246,11 @@ func FilterDescriptorState(desc Descriptor) error {
 // getting constraint info.
 type TableLookupFn func(descpb.ID) (TableDescriptor, error)
 
-// ProtoGetter is a sub-interface of client.Txn that can fetch protobufs in a
-// transaction.
-type ProtoGetter interface {
-	// GetProtoTs retrieves a protoutil.Message that's stored at key, storing it
-	// into the input msg parameter. If the key doesn't exist, the input proto
-	// will be reset.
-	GetProtoTs(ctx context.Context, key interface{}, msg protoutil.Message) (hlc.Timestamp, error)
+// ValidateName validates the name for a descriptor.
+func ValidateName(name, typ string) error {
+	if len(name) == 0 {
+		return pgerror.Newf(pgcode.Syntax, "empty %s name", typ)
+	}
+	// TODO(pmattis): Do we want to be more restrictive than this?
+	return nil
 }

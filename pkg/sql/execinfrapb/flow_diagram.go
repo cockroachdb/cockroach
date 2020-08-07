@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -133,11 +134,11 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		tbl := sqlbase.NewImmutableTableDescriptor(tr.Table)
 		// only show the first span
 		idx, _, _ := tbl.FindIndexByIndexIdx(int(tr.IndexIdx))
-		valDirs := sqlbase.IndexKeyValDirs(idx)
+		valDirs := catalogkeys.IndexKeyValDirs(idx)
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")
-		spanStr.WriteString(sqlbase.PrettySpan(valDirs, tr.Spans[0].Span, 2))
+		spanStr.WriteString(catalogkeys.PrettySpan(valDirs, tr.Spans[0].Span, 2))
 
 		if len(tr.Spans) > 1 {
 			spanStr.WriteString(fmt.Sprintf(" and %d other", len(tr.Spans)-1))

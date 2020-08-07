@@ -19,6 +19,9 @@ import (
 var _ catalog.TableDescriptor = (*ImmutableTableDescriptor)(nil)
 var _ catalog.TableDescriptor = (*MutableTableDescriptor)(nil)
 
+// NameResolutionResult implements the tree.NameResolutionResult interface.
+func (*ImmutableTableDescriptor) NameResolutionResult() {}
+
 // Immutable implements the MutableDescriptor interface.
 func (desc *MutableTableDescriptor) Immutable() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a

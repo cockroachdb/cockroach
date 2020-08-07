@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package sqlbase_test
 
 import (
 	"bytes"
@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type indexKeyTest struct {
@@ -48,7 +51,9 @@ type indexKeyTest struct {
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(test indexKeyTest) (*ImmutableTableDescriptor, map[descpb.ColumnID]int) {
+func makeTableDescForTest(
+	test indexKeyTest,
+) (*sqlbase.ImmutableTableDescriptor, map[descpb.ColumnID]int) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
@@ -98,22 +103,22 @@ func makeTableDescForTest(test indexKeyTest) (*ImmutableTableDescriptor, map[des
 			Interleave:       makeInterleave(2, test.secondaryInterleaves),
 		}},
 	}
-	return NewImmutableTableDescriptor(tableDesc), colMap
+	return sqlbase.NewImmutableTableDescriptor(tableDesc), colMap
 }
 
 func decodeIndex(
 	codec keys.SQLCodec,
-	tableDesc *ImmutableTableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	index *descpb.IndexDescriptor,
 	key []byte,
 ) ([]tree.Datum, error) {
-	types, err := GetColumnTypes(tableDesc, index.ColumnIDs)
+	types, err := sqlbase.GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]EncDatum, len(index.ColumnIDs))
+	values := make([]sqlbase.EncDatum, len(index.ColumnIDs))
 	colDirs := index.ColumnDirections
-	_, ok, _, err := DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
+	_, ok, _, err := sqlbase.DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +127,7 @@ func decodeIndex(
 	}
 
 	decodedValues := make([]tree.Datum, len(values))
-	var da DatumAlloc
+	var da sqlbase.DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(types[i], &da)
 		if err != nil {
@@ -136,7 +141,7 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	var a DatumAlloc
+	var a sqlbase.DatumAlloc
 
 	tests := []indexKeyTest{
 		{50, nil, nil,
@@ -179,7 +184,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, types.Int, true)
+			t.primaryValues[j] = sqlbase.RandDatum(rng, types.Int, true)
 		}
 
 		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
@@ -189,7 +194,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, types.Int, true)
+			t.secondaryValues[j] = sqlbase.RandDatum(rng, types.Int, true)
 		}
 
 		tests = append(tests, t)
@@ -219,15 +224,15 @@ func TestIndexKey(t *testing.T) {
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		codec := keys.SystemSQLCodec
-		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
-		primaryKey, _, err := EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
+		primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
+		primaryKey, _, err := sqlbase.EncodeIndexKey(tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
 		}
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
-		secondaryIndexEntry, err := EncodeSecondaryIndex(
+		secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
 			codec, tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
@@ -253,7 +258,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+			indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -261,7 +266,7 @@ func TestIndexKey(t *testing.T) {
 				t.Errorf("%d", i)
 			}
 
-			extracted, err := ExtractIndexKey(&a, codec, tableDesc, entry)
+			extracted, err := sqlbase.ExtractIndexKey(&a, codec, tableDesc, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -272,6 +277,49 @@ func TestIndexKey(t *testing.T) {
 
 		checkEntry(&tableDesc.PrimaryIndex, primaryIndexKV)
 		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
+	}
+}
+
+func TestKeysPerRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
+	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
+	// sqlbase. If/when that happens, use it here instead of this server.
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	tests := []struct {
+		createTable string
+		indexID     descpb.IndexID
+		expected    int
+	}{
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+			tableName := fmt.Sprintf("t%d", i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
+
+			desc := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			require.NotNil(t, desc)
+			keys, err := desc.KeysPerRow(test.indexID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.expected != keys {
+				t.Errorf("expected %d keys got %d", test.expected, keys)
+			}
+		})
 	}
 }
 
@@ -369,7 +417,7 @@ func TestArrayEncoding(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run("encode "+test.name, func(t *testing.T) {
-			enc, err := encodeArray(&test.datum, nil)
+			enc, err := sqlbase.EncodeArray(&test.datum, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -382,7 +430,7 @@ func TestArrayEncoding(t *testing.T) {
 			enc := make([]byte, 0)
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
-			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			d, _, err := sqlbase.DecodeArray(&sqlbase.DatumAlloc{}, test.datum.ParamTyp, enc)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
 				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
@@ -406,7 +454,7 @@ func BenchmarkArrayEncoding(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = encodeArray(&ary, nil)
+		_, _ = sqlbase.EncodeArray(&ary, nil)
 	}
 }
 
@@ -547,7 +595,7 @@ func TestMarshalColumnValue(t *testing.T) {
 		typ := testCase.typ
 		col := descpb.ColumnDescriptor{ID: descpb.ColumnID(typ.Family() + 1), Type: typ}
 
-		if actual, err := MarshalColumnValue(&col, testCase.datum); err != nil {
+		if actual, err := sqlbase.MarshalColumnValue(&col, testCase.datum); err != nil {
 			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
 		} else if !reflect.DeepEqual(actual, testCase.exp) {
 			t.Errorf("%d: MarshalColumnValue() got %v, expected %v", i, actual, testCase.exp)
@@ -670,14 +718,14 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
-			primaryKey, _, err := EncodeIndexKey(
+			primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+			primaryKey, _, err := sqlbase.EncodeIndexKey(
 				desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			tableIdx, restKey, match, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
+			tableIdx, restKey, match, err := sqlbase.IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -693,7 +741,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := sqlbase.EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -728,7 +776,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+			equivSigs, err := sqlbase.TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -811,15 +859,15 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
-				primaryKey, _, err := EncodeIndexKey(
+				primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
+				primaryKey, _, err := sqlbase.EncodeIndexKey(
 					desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
+				tempEquivSigs, err := sqlbase.TableEquivSignatures(&desc.TableDescriptor, &desc.PrimaryIndex)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -832,7 +880,7 @@ func TestEquivSignature(t *testing.T) {
 				}
 				// Extract out the corresponding table index
 				// of the index key's signature.
-				tableIdx, _, _, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
+				tableIdx, _, _, err := sqlbase.IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -883,9 +931,9 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 	//    parent		(pid1)
 	//	child		(pid1, cid1, cid2)
 	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
+	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
+	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
@@ -1061,7 +1109,7 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			codec := keys.SystemSQLCodec
 			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			actual, err := AdjustStartKeyForInterleave(codec, tc.index, actual)
+			actual, err := sqlbase.AdjustStartKeyForInterleave(codec, tc.index, actual)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1095,9 +1143,9 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 	//    parent		(pid1)
 	//	child		(pid1, cid1, cid2)
 	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
+	parent := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
+	child := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	grandchild := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
@@ -1106,7 +1154,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
-		table *descpb.TableDescriptor
+		table *sqlbase.ImmutableTableDescriptor
 		index *descpb.IndexDescriptor
 		// See ShortToLongKeyFmt for how to represent a key.
 		input string
@@ -1483,8 +1531,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			codec := keys.SystemSQLCodec
 			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			table := NewImmutableTableDescriptor(*tc.table)
-			actual, err := AdjustEndKeyForInterleave(codec, table, tc.index, actual, tc.inclusive)
+			actual, err := sqlbase.AdjustEndKeyForInterleave(codec, tc.table, tc.index, actual, tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1498,7 +1545,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 }
 
 func TestDecodeTableValue(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &sqlbase.DatumAlloc{}
 	for _, tc := range []struct {
 		in  tree.Datum
 		typ *types.T
@@ -1515,11 +1562,11 @@ func TestDecodeTableValue(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			var prefix, scratch []byte
-			buf, err := EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
+			buf, err := sqlbase.EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
 			if err != nil {
 				t.Fatal(err)
 			}
-			d, _, err := DecodeTableValue(a, tc.typ, buf)
+			d, _, err := sqlbase.DecodeTableValue(a, tc.typ, buf)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("expected error %q, but got %v", tc.err, err)
 			} else if err != nil {

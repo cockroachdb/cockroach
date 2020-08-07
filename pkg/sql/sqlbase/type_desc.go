@@ -16,7 +16,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -133,20 +132,17 @@ func makeImmutableTypeDescriptor(desc descpb.TypeDescriptor) ImmutableTypeDescri
 // TODO(ajwerner): Remove this when we have a higher-level interface for
 // retrieving descriptors by ID during validation.
 func getTypeDescFromID(
-	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
-) (*ImmutableTypeDescriptor, error) {
-	descKey := MakeDescMetadataKey(codec, id)
-	desc := &descpb.Descriptor{}
-	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	ctx context.Context, dg catalog.DescGetter, id descpb.ID,
+) (catalog.TypeDescriptor, error) {
+	desc, err := dg.GetDesc(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	typ := desc.GetType()
-	if typ == nil {
+	typ, ok := desc.(catalog.TypeDescriptor)
+	if !ok {
 		return nil, ErrDescriptorNotFound
 	}
-	// TODO(ajwerner): Fill in ModificationTime.
-	return NewImmutableTypeDescriptor(*typ), nil
+	return typ, nil
 }
 
 // TypeIDToOID converts a type descriptor ID into a type OID.
@@ -369,11 +365,9 @@ func (e EnumMembers) Less(i, j int) bool {
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
 // Validate performs validation on the TypeDescriptor.
-func (desc *ImmutableTypeDescriptor) Validate(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) error {
+func (desc *ImmutableTypeDescriptor) Validate(ctx context.Context, dg catalog.DescGetter) error {
 	// Validate local properties of the descriptor.
-	if err := validateName(desc.Name, "type"); err != nil {
+	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
 		return err
 	}
 
@@ -421,13 +415,13 @@ func (desc *ImmutableTypeDescriptor) Validate(
 	// Validate all cross references on the descriptor.
 
 	// Buffer all the requested requests and error checks together to run at once.
-	b := txn.NewBatch()
-	var opChecks []func(kv.KeyValue) error
+	var checks []func(got catalog.Descriptor) error
+	var reqs []descpb.ID
 
 	// Validate the parentID.
-	b.Get(MakeDescMetadataKey(codec, desc.ParentID))
-	opChecks = append(opChecks, func(k kv.KeyValue) error {
-		if !k.Exists() {
+	reqs = append(reqs, desc.ParentID)
+	checks = append(checks, func(got catalog.Descriptor) error {
+		if _, isDB := got.(catalog.DatabaseDescriptor); !isDB {
 			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 		}
 		return nil
@@ -435,9 +429,9 @@ func (desc *ImmutableTypeDescriptor) Validate(
 
 	// Validate the parentSchemaID.
 	if desc.ParentSchemaID != keys.PublicSchemaID {
-		b.Get(MakeDescMetadataKey(codec, desc.ParentSchemaID))
-		opChecks = append(opChecks, func(k kv.KeyValue) error {
-			if !k.Exists() {
+		reqs = append(reqs, desc.ParentSchemaID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			if _, isSchema := got.(catalog.SchemaDescriptor); !isSchema {
 				return errors.AssertionFailedf("parentSchemaID %d does not exist", errors.Safe(desc.ParentSchemaID))
 			}
 			return nil
@@ -447,9 +441,9 @@ func (desc *ImmutableTypeDescriptor) Validate(
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM:
 		// Ensure that the referenced array type exists.
-		b.Get(MakeDescMetadataKey(codec, desc.ArrayTypeID))
-		opChecks = append(opChecks, func(k kv.KeyValue) error {
-			if !k.Exists() {
+		reqs = append(reqs, desc.ArrayTypeID)
+		checks = append(checks, func(got catalog.Descriptor) error {
+			if _, isType := got.(catalog.TypeDescriptor); !isType {
 				return errors.AssertionFailedf("arrayTypeID %d does not exist", errors.Safe(desc.ArrayTypeID))
 			}
 			return nil
@@ -461,30 +455,30 @@ func (desc *ImmutableTypeDescriptor) Validate(
 	}
 
 	// Validate that all of the referencing descriptors exist.
+	tableExists := func(id descpb.ID) func(got catalog.Descriptor) error {
+		return func(got catalog.Descriptor) error {
+			if _, isTable := got.(catalog.TableDescriptor); !isTable {
+				return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
+			}
+			return nil
+		}
+	}
 	if !desc.Dropped() {
+
 		for _, id := range desc.ReferencingDescriptorIDs {
-			b.Get(MakeDescMetadataKey(codec, id))
-			opChecks = append(opChecks, func(k kv.KeyValue) error {
-				if !k.Exists() {
-					return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
-				}
-				return nil
-			})
+			reqs = append(reqs, id)
+			checks = append(checks, tableExists(id))
 		}
 	}
 
-	if err := txn.Run(ctx, b); err != nil {
+	descs, err := dg.GetDescs(ctx, reqs)
+	if err != nil {
 		return err
 	}
 
 	// For each result in the batch, apply the corresponding check.
-	for i := range opChecks {
-		check := opChecks[i]
-		res := b.Results[i]
-		if res.Err != nil {
-			return res.Err
-		}
-		if err := check(res.Rows[0]); err != nil {
+	for i := range checks {
+		if err := checks[i](descs[i]); err != nil {
 			return err
 		}
 	}

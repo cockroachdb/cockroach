@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -46,7 +47,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	idCounter := keys.MinNonPredefinedUserDescID
 
 	// Database name.
-	dKey := sqlbase.NewDeprecatedDatabaseKey("test").Key(codec)
+	dKey := catalogkeys.NewDeprecatedDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, dKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -94,7 +95,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	} else if gr.Exists() {
 		t.Fatal("database key unexpectedly found in the deprecated system.namespace")
 	}
-	newDKey := sqlbase.NewDatabaseKey("test").Key(codec)
+	newDKey := catalogkeys.NewDatabaseKey("test").Key(codec)
 	if gr, err := kvDB.Get(ctx, newDKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
@@ -111,7 +112,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 
 	// Simulate the same test for a table and sequence.
-	tKey := sqlbase.NewDeprecatedTableKey(dbID, "rel").Key(codec)
+	tKey := catalogkeys.NewDeprecatedTableKey(dbID, "rel").Key(codec)
 	if err := kvDB.CPut(ctx, tKey, idCounter, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +131,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	if _, err := kvDB.Inc(ctx, codec.DescIDSequenceKey(), 1); err != nil {
 		t.Fatal(err)
 	}
-	mKey := sqlbase.MakeDescMetadataKey(codec, descpb.ID(idCounter))
+	mKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(idCounter))
 	// Fill the dummy descriptor with garbage.
 	desc := sqlbase.InitTableDescriptor(
 		descpb.ID(idCounter),
@@ -200,7 +201,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	} else if gr.Exists() {
 		t.Fatal("table key unexpectedly found in the deprecated system.namespace")
 	}
-	newTKey := sqlbase.NewPublicTableKey(dbID, "rel").Key(codec)
+	newTKey := catalogkeys.NewPublicTableKey(dbID, "rel").Key(codec)
 	if gr, err := kvDB.Get(ctx, newTKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {

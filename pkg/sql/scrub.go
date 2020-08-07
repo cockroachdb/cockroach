@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -422,7 +423,8 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn, p.ExecCfg().Codec)
+	dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
+	constraints, err := tableDesc.GetConstraintInfo(ctx, dg)
 	if err != nil {
 		return nil, err
 	}

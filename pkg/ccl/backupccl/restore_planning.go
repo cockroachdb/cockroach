@@ -24,8 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -151,7 +154,7 @@ func maybeFilterMissingViews(
 func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*sqlbase.MutableDatabaseDescriptor,
+	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
 	schemasByID map[descpb.ID]*sqlbase.MutableSchemaDescriptor,
 	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
 	typesByID map[descpb.ID]*sqlbase.MutableTypeDescriptor,
@@ -380,27 +383,27 @@ func allocateDescriptorRewrites(
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
-			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < sqlbase.MaxDefaultDescriptorID {
+			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < catalogkeys.MaxDefaultDescriptorID {
 				// This is a table that is in a database that already existed at
 				// cluster creation time.
-				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.DefaultDatabaseName)
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
 				if err != nil {
 					return err
 				}
-				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.PgDatabaseName)
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
 				if err != nil {
 					return err
 				}
 
-				if table.ParentID == sqlbase.SystemDB.GetID() {
+				if table.ParentID == systemschema.SystemDB.GetID() {
 					// For full cluster backups, put the system tables in the temporary
 					// system table.
 					targetDB = restoreTempSystemDB
 					descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 				} else if table.ParentID == defaultDBID {
-					targetDB = sqlbase.DefaultDatabaseName
+					targetDB = catalogkeys.DefaultDatabaseName
 				} else if table.ParentID == postgresDBID {
-					targetDB = sqlbase.PgDatabaseName
+					targetDB = catalogkeys.PgDatabaseName
 				}
 			} else {
 				database, ok := databasesByID[table.ParentID]
@@ -608,7 +611,7 @@ func allocateDescriptorRewrites(
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
-			if table.ParentID == sqlbase.SystemDB.GetID() {
+			if table.ParentID == systemschema.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
 				descriptorsToRemap = append(descriptorsToRemap, table)
 			} else {
@@ -675,16 +678,16 @@ func maybeUpgradeTableDescsInBackupManifests(
 	codec keys.SQLCodec,
 	skipFKsWithNoMatchingTable bool,
 ) error {
-	protoGetter := sqlbase.MapProtoGetter{
-		Protos: make(map[interface{}]protoutil.Message),
+	protoGetter := sqlbase.MapDescGetter{
+		Descs: make(map[descpb.ID]catalog.Descriptor),
 	}
 	// Populate the protoGetter with all table descriptors in all backup
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
 			if table := sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
-				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(codec, table.ID))] =
-					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor)).DescriptorProto()
+				protoGetter.Descs[table.ID] =
+					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
 			}
 		}
 	}
@@ -699,7 +702,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 			if !sqlbase.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, protoGetter, codec, skipFKsWithNoMatchingTable, table)
+			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, protoGetter, skipFKsWithNoMatchingTable, table)
 			if err != nil {
 				return err
 			}
@@ -1306,13 +1309,13 @@ func doRestorePlan(
 		}
 	}
 
-	databasesByID := make(map[descpb.ID]*sqlbase.MutableDatabaseDescriptor)
+	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
 	schemasByID := make(map[descpb.ID]*sqlbase.MutableSchemaDescriptor)
 	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 	typesByID := make(map[descpb.ID]*sqlbase.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
-		case *sqlbase.MutableDatabaseDescriptor:
+		case *dbdesc.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
 		case *sqlbase.MutableSchemaDescriptor:
 			schemasByID[desc.ID] = desc

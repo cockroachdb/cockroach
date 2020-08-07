@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -72,7 +73,9 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	if err := tableDesc.Validate(
+		ctx, catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec),
+	); err != nil {
 		return err
 	}
 
