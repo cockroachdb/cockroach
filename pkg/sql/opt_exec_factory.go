@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -1394,7 +1395,7 @@ func (ef *execFactory) ConstructUpdate(
 		run: updateRun{
 			tu:        tableUpdater{ru: ru},
 			checkOrds: checks,
-			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+			iVarContainerForComputedCols: schemaexpr.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
 				Cols:         ru.FetchCols,
 				Mapping:      ru.FetchColIDtoRowIndex,

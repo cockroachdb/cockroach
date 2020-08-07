@@ -15,8 +15,8 @@ package physicalplan
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -88,7 +88,7 @@ func MakeExpression(
 
 	if indexVarMap != nil {
 		// Remap our indexed vars.
-		expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
+		expr = schemaexpr.RemapIVarsInTypedExpr(expr, indexVarMap)
 	}
 	expression := execinfrapb.Expression{LocalExpr: expr}
 	if ctx.IsLocal() {

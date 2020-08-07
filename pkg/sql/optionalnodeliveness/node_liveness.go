@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package optionalnodeliveness
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -16,28 +16,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
-// OptionalNodeLivenessI is the interface used in OptionalNodeLiveness.
-type OptionalNodeLivenessI interface {
+// Interface is the interface used in Container.
+type Interface interface {
 	Self() (kvserverpb.Liveness, error)
 	GetLivenesses() []kvserverpb.Liveness
 	IsLive(roachpb.NodeID) (bool, error)
 }
 
-// OptionalNodeLiveness optionally gives access to liveness information about
+// Container optionally gives access to liveness information about
 // the KV nodes. It is typically not available to anyone but the system tenant.
-type OptionalNodeLiveness struct {
+type Container struct {
 	w errorutil.TenantSQLDeprecatedWrapper
 }
 
-// MakeOptionalNodeLiveness initializes an OptionalNodeLiveness wrapping a
+// MakeContainer initializes an Container wrapping a
 // (possibly nil) *NodeLiveness.
 //
 // Use of node liveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeOptionalNodeLiveness(nl OptionalNodeLivenessI) OptionalNodeLiveness {
-	return OptionalNodeLiveness{
+func MakeContainer(nl Interface) Container {
+	return Container{
 		w: errorutil.MakeTenantSQLDeprecatedWrapper(nl, nl != nil),
 	}
 }
@@ -47,25 +47,25 @@ func MakeOptionalNodeLiveness(nl OptionalNodeLivenessI) OptionalNodeLiveness {
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *OptionalNodeLiveness) OptionalErr(issueNos ...int) (OptionalNodeLivenessI, error) {
+func (nl *Container) OptionalErr(issueNos ...int) (Interface, error) {
 	v, err := nl.w.OptionalErr(issueNos...)
 	if err != nil {
 		return nil, err
 	}
-	return v.(OptionalNodeLivenessI), nil
+	return v.(Interface), nil
 }
 
-var _ = (*OptionalNodeLiveness)(nil).OptionalErr // silence unused lint
+var _ = (*Container)(nil).OptionalErr // silence unused lint
 
 // Optional returns the NodeLiveness instance and true if available.
 // Otherwise, returns nil and false. Prefer OptionalErr where possible.
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *OptionalNodeLiveness) Optional(issueNos ...int) (OptionalNodeLivenessI, bool) {
+func (nl *Container) Optional(issueNos ...int) (Interface, bool) {
 	v, ok := nl.w.Optional()
 	if !ok {
 		return nil, false
 	}
-	return v.(OptionalNodeLivenessI), true
+	return v.(Interface), true
 }

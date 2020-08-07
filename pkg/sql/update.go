@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -64,7 +65,7 @@ type updateRun struct {
 	// iVarContainerForComputedCols is used as a temporary buffer that
 	// holds the updated values for every column in the source, to
 	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
+	iVarContainerForComputedCols schemaexpr.RowIndexedVarContainer
 
 	// sourceSlots is the helper that maps RHS expressions to LHS targets.
 	// This is necessary because there may be fewer RHS expressions than

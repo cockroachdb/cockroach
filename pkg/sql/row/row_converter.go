@@ -90,7 +90,7 @@ func GenerateInsertRow(
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
-	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
+	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -215,7 +215,7 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	computedExprs         []tree.TypedExpr
 	defaultCache          []tree.TypedExpr
-	computedIVarContainer sqlbase.RowIndexedVarContainer
+	computedIVarContainer schemaexpr.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
@@ -279,9 +279,9 @@ func NewDatumRowConverter(
 	relevantColumns := func(col *descpb.ColumnDescriptor) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
-	cols := sqlbase.ProcessColumnSet(
+	cols := schemaexpr.ProcessColumnSet(
 		targetColDescriptors, tableDesc, relevantColumns)
-	defaultExprs, err := sqlbase.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -383,7 +383,7 @@ func NewDatumRowConverter(
 		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
 	}
 
-	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
+	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}

@@ -141,7 +141,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	desc *sqlbase.ImmutableTableDescriptor,
 ) error {
 	cb.initCols(desc)
-	defaultExprs, err := sqlbase.MakeDefaultExprs(
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(
 		ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, semaCtx,
 	)
 	if err != nil {
@@ -184,7 +184,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		semaCtx := tree.MakeSemaContext()
 		semaCtx.TypeResolver = resolver
 		var err error
-		defaultExprs, err = sqlbase.MakeDefaultExprs(
+		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
 		)
 		if err != nil {
@@ -269,7 +269,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	updateValues := make(tree.Datums, len(cb.updateExprs))
 	b := txn.NewBatch()
 	rowLength := 0
-	iv := &sqlbase.RowIndexedVarContainer{
+	iv := &schemaexpr.RowIndexedVarContainer{
 		Cols:    append(tableDesc.Columns, cb.added...),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
@@ -599,7 +599,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil, nil, err
 	}
 
-	iv := &sqlbase.RowIndexedVarContainer{
+	iv := &schemaexpr.RowIndexedVarContainer{
 		Cols:    ib.cols,
 		Mapping: ib.colIdxMap,
 	}
