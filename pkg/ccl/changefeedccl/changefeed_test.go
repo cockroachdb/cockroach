@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -851,7 +850,7 @@ func fetchDescVersionModificationTime(
 			if err := value.GetProto(&desc); err != nil {
 				t.Fatal(err)
 			}
-			if tableDesc := sqlbase.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
+			if tableDesc := descpb.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
 				if int(tableDesc.Version) == version {
 					return tableDesc.ModificationTime
 				}

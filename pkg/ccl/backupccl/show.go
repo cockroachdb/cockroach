@@ -211,9 +211,9 @@ func backupShowerDefault(
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
 					if descriptor.GetDatabase() != nil {
-						id := sqlbase.GetDescriptorID(descriptor)
+						id := descpb.GetDescriptorID(descriptor)
 						if _, ok := descs[id]; !ok {
-							descs[id] = sqlbase.GetDescriptorName(descriptor)
+							descs[id] = descpb.GetDescriptorName(descriptor)
 						}
 					}
 				}
@@ -246,7 +246,7 @@ func backupShowerDefault(
 				var row tree.Datums
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
-					if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
+					if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 						dbName := descs[table.ParentID]
 						row = tree.Datums{
 							tree.NewDString(dbName),
@@ -297,7 +297,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privDesc *descpb.PrivilegeDescriptor
 	if db := descriptor.GetDatabase(); db != nil {
 		privDesc = db.GetPrivileges()
-	} else if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
+	} else if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
 	}
 	if privDesc == nil {
@@ -318,7 +318,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 			privStringBuilder.WriteString(priv)
 		}
 		privStringBuilder.WriteString(" ON ")
-		privStringBuilder.WriteString(sqlbase.GetDescriptorName(descriptor))
+		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
 		privStringBuilder.WriteString(user)
 		privStringBuilder.WriteString("; ")

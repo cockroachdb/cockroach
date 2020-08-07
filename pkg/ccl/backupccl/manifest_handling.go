@@ -726,8 +726,8 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 // TODO(ajwerner): This may prove problematic for backups of database
 // descriptors without modification time.
 func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.MutableDescriptor {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
-	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:

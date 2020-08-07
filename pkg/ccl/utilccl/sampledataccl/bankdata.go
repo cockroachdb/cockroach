@@ -97,7 +97,7 @@ func (b *Backup) NextKeyValues(
 ) ([]storage.MVCCKeyValue, roachpb.Span, error) {
 	var userTables []*descpb.TableDescriptor
 	for _, d := range b.Desc.Descriptors {
-		if t := sqlbase.TableFromDescriptor(&d, hlc.Timestamp{}); t != nil && t.ParentID != keys.SystemDatabaseID {
+		if t := descpb.TableFromDescriptor(&d, hlc.Timestamp{}); t != nil && t.ParentID != keys.SystemDatabaseID {
 			userTables = append(userTables, t)
 		}
 	}

@@ -1560,7 +1560,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		if err != nil {
 			return err
 		}
-		sqlbase.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
+		descpb.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to

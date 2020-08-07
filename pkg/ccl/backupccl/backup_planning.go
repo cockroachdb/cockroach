@@ -191,7 +191,7 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		rawTbl := sqlbase.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
 			tbl := sqlbase.NewImmutableTableDescriptor(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
@@ -821,7 +821,7 @@ func backupPlanHook(
 			dbsInPrev := make(map[descpb.ID]struct{})
 			rawDescs := prevBackups[len(prevBackups)-1].Descriptors
 			for i := range rawDescs {
-				if t := sqlbase.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
+				if t := descpb.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}
@@ -1044,7 +1044,7 @@ func backupPlanHook(
 			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 				for i := range backupManifest.Descriptors {
 					sqlDescIDs = append(sqlDescIDs,
-						sqlbase.GetDescriptorID(&backupManifest.Descriptors[i]))
+						descpb.GetDescriptorID(&backupManifest.Descriptors[i]))
 				}
 				return sqlDescIDs
 			}(),

@@ -602,7 +602,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
-			if table := sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
+			if table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
 				descGetter[table.ID] =
 					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
 			}
@@ -612,7 +612,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 	for i := range backupManifests {
 		backupManifest := &backupManifests[i]
 		for j := range backupManifest.Descriptors {
-			table := sqlbase.TableFromDescriptor(&backupManifest.Descriptors[j], hlc.Timestamp{})
+			table := descpb.TableFromDescriptor(&backupManifest.Descriptors[j], hlc.Timestamp{})
 			if table == nil {
 				continue
 			}

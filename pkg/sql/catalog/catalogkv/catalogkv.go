@@ -279,8 +279,8 @@ var _ catalog.DescGetter = (*txnDescGetter)(nil)
 func unwrapDescriptor(
 	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.Descriptor, error) {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
@@ -313,9 +313,9 @@ func unwrapDescriptor(
 func unwrapDescriptorMutable(
 	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.MutableDescriptor, error) {
-	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
 	table, database, typ, schema :=
-		sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}),
+		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
@@ -568,7 +568,7 @@ func GetDatabaseDescriptorsFromIDs(
 				desc.String(),
 			)
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
 		results = append(results, dbdesc.NewImmutableDatabaseDescriptor(*db))
 	}
 	return results, nil

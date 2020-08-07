@@ -796,7 +796,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
-			table := sqlbase.TableFromDescriptor(desc, ts)
+			table := descpb.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = systemschema.NamespaceTable.CreateAsOfTime
 			table.ModificationTime = systemschema.NamespaceTable.ModificationTime
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
@@ -804,7 +804,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
-			table := sqlbase.TableFromDescriptor(desc, ts)
+			table := descpb.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.CreateAsOfTime
 			table.ModificationTime = systemschema.DeprecatedNamespaceTable.ModificationTime
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))

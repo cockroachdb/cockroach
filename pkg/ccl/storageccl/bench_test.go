@@ -176,7 +176,7 @@ func BenchmarkImport(b *testing.B) {
 				{
 					// TODO(dan): The following should probably make it into
 					// dataccl.Backup somehow.
-					tableDesc := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
+					tableDesc := sqlbase.NewImmutableTableDescriptor(*descpb.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
