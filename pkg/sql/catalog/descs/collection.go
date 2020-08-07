@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -355,7 +356,7 @@ func (tc *Collection) GetTableVersion(
 	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(tn)
+			return nil, sqlerrors.NewUndefinedRelationError(tn)
 		}
 		return nil, nil
 	}
@@ -494,14 +495,14 @@ func (tc *Collection) GetTableVersionByID(
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlbase.NewUndefinedRelationError(
+			return nil, sqlerrors.NewUndefinedRelationError(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
 	}
 	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
 	if !ok {
-		return nil, sqlbase.NewUndefinedRelationError(
+		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
 	}
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
@@ -823,7 +824,7 @@ func (tc *Collection) GetMutableTypeDescriptor(
 	mutDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedTypeError(tn)
+			return nil, sqlerrors.NewUndefinedTypeError(tn)
 		}
 		return nil, nil
 	}
@@ -853,7 +854,7 @@ func (tc *Collection) GetTypeVersion(
 	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedTypeError(tn)
+			return nil, sqlerrors.NewUndefinedTypeError(tn)
 		}
 		return nil, nil
 	}
@@ -912,7 +913,7 @@ func (tc *Collection) GetUncommittedDatabaseID(
 		if requestedDbName == db.name {
 			if db.dropped {
 				if required {
-					return true, descpb.InvalidID, sqlbase.NewUndefinedDatabaseError(requestedDbName)
+					return true, descpb.InvalidID, sqlerrors.NewUndefinedDatabaseError(requestedDbName)
 				}
 				return true, descpb.InvalidID, nil
 			}
@@ -950,7 +951,7 @@ func (tc *Collection) getUncommittedDescriptor(
 				// Name has gone away.
 				if required {
 					// If it's required here, say it doesn't exist.
-					err = sqlbase.NewUndefinedRelationError(tree.NewUnqualifiedTableName(tree.Name(name)))
+					err = sqlerrors.NewUndefinedRelationError(tree.NewUnqualifiedTableName(tree.Name(name)))
 				}
 				// The desc collection knows better; the caller has to avoid
 				// going to KV in any case: refuseFurtherLookup = true

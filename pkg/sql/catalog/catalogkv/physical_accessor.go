@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -60,7 +61,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return nil, err
 	} else if !found {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedDatabaseError(name)
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
 		return nil, nil
 	}
@@ -136,7 +137,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	if !ok {
 		if flags.Required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), "")
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
 		}
 		return nil, nil
 	}
@@ -236,7 +237,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if !ok {
 		if flags.Required {
 			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&a.tn))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&a.tn))
 		}
 		return nil, nil
 	}
@@ -256,7 +257,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// KV name resolution failed.
 			if flags.Required {
 				a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
-				return nil, sqlbase.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+				return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
 			}
 			return nil, nil
 		}

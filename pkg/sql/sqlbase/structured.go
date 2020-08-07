@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1638,7 +1639,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 func (desc *ImmutableTableDescriptor) ValidateIndexNameIsUnique(indexName string) error {
 	for _, index := range desc.AllNonDropIndexes() {
 		if indexName == index.Name {
-			return NewRelationAlreadyExistsError(indexName)
+			return sqlerrors.NewRelationAlreadyExistsError(indexName)
 		}
 	}
 	return nil

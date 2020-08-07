@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -312,7 +312,7 @@ func descriptorsMatchingTargets(
 				return ret, err
 			}
 			if !found {
-				return ret, sqlbase.NewInvalidWildcardError(tree.ErrString(p))
+				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
 			}
 			desc := descI.(catalog.DatabaseDescriptor)
 
@@ -689,9 +689,9 @@ func CheckObjectExists(
 		// Find what object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, id, catalogkv.Immutable)
 		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
+		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
 	}
 	return nil
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -89,7 +90,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// drop need to be visible to the second drop.
 		tableDesc, err := params.p.ResolveMutableTableDescriptor(
 			ctx, index.tn, true /*required*/, tree.ResolveRequireTableDesc)
-		if sqlbase.IsUndefinedRelationError(err) {
+		if sqlerrors.IsUndefinedRelationError(err) {
 			// Somehow the descriptor we had during planning is not there
 			// any more.
 			return errors.NewAssertionErrorWithWrappedErrf(err,
@@ -279,8 +280,8 @@ func (p *planner) dropIndexByName(
 					zone.Subzones,
 					false, /* newSubzones */
 				)
-				if sqlbase.IsCCLRequiredError(err) {
-					return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+				if sqlerrors.IsCCLRequiredError(err) {
+					return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
 						"because table %q has at least one remaining index or partition with a zone config",
 						tableDesc.Name))
 				}

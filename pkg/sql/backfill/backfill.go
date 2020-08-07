@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -294,10 +295,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		for j, e := range cb.updateExprs {
 			val, err := e.Eval(cb.evalCtx)
 			if err != nil {
-				return roachpb.Key{}, sqlbase.NewInvalidSchemaDefinitionError(err)
+				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
 			if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
-				return roachpb.Key{}, sqlbase.NewNonNullViolationError(cb.added[j].Name)
+				return roachpb.Key{}, sqlerrors.NewNonNullViolationError(cb.added[j].Name)
 			}
 
 			// Added computed column values should be usable for the next

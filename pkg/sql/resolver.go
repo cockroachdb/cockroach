@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -590,7 +591,7 @@ func (l *internalLookupCtx) getDatabaseByID(
 ) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
 }
@@ -598,7 +599,7 @@ func (l *internalLookupCtx) getDatabaseByID(
 func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
 	tb, ok := l.tbDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedRelationError(
+		return nil, sqlerrors.NewUndefinedRelationError(
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
 	return tb, nil
@@ -609,7 +610,7 @@ func (l *internalLookupCtx) getSchemaByID(
 ) (*sqlbase.ImmutableSchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
 	return sc, nil
 }

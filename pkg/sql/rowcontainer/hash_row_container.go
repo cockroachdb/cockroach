@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -884,7 +884,7 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if !sqlbase.IsOutOfMemoryError(err) {
+	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := h.SpillToDisk(ctx); spillErr != nil {
