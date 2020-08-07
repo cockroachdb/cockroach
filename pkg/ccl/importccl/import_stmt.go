@@ -995,7 +995,7 @@ func prepareNewTableDescsForIngestion(
 
 	// tableDescs contains the same slice as newMutableTableDescriptors but
 	// as sqlbase.TableDescriptor.
-	tableDescs := make([]sqlbase.TableDescriptor, len(newMutableTableDescriptors))
+	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
 		newMutableTableDescriptors[i].State = descpb.TableDescriptor_OFFLINE
 		newMutableTableDescriptors[i].OfflineReason = "importing"

@@ -46,7 +46,7 @@ func newDropCascadeState() *dropCascadeState {
 }
 
 func (d *dropCascadeState) collectObjectsInSchema(
-	ctx context.Context, p *planner, db sqlbase.DatabaseDescriptor, schema *catalog.ResolvedSchema,
+	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, schema *catalog.ResolvedSchema,
 ) error {
 	names, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
 	if err != nil {
@@ -60,7 +60,7 @@ func (d *dropCascadeState) collectObjectsInSchema(
 }
 
 func (d *dropCascadeState) resolveCollectedObjects(
-	ctx context.Context, p *planner, db sqlbase.DatabaseDescriptor,
+	ctx context.Context, p *planner, db catalog.DatabaseDescriptor,
 ) error {
 	d.td = make([]toDelete, 0, len(d.objectNamesToDelete))
 	// Resolve each of the collected names.

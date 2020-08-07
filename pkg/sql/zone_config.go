@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -253,7 +254,7 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 // Returns res = nil if the zone specifier is not for a table or index.
 func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
-) (res sqlbase.TableDescriptor, err error) {
+) (res catalog.TableDescriptor, err error) {
 	if zs.TargetsIndex() {
 		var mutRes *MutableTableDescriptor
 		_, mutRes, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
@@ -304,7 +305,7 @@ func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (desc
 }
 
 func resolveSubzone(
-	zs *tree.ZoneSpecifier, table sqlbase.TableDescriptor,
+	zs *tree.ZoneSpecifier, table catalog.TableDescriptor,
 ) (*descpb.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() || zs.TableOrIndex.Index == "" && zs.Partition == "" {
 		return nil, "", nil
@@ -336,7 +337,7 @@ func resolveSubzone(
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
 	oldPartDesc *descpb.PartitioningDescriptor,
 	newPartDesc *descpb.PartitioningDescriptor,

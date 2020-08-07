@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,7 +57,7 @@ type tableInfo struct {
 	// Used to determine whether a key retrieved belongs to the span we
 	// want to scan.
 	spans            roachpb.Spans
-	desc             sqlbase.TableDescriptor
+	desc             catalog.TableDescriptor
 	index            *descpb.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []descpb.IndexDescriptor_Direction
@@ -139,7 +140,7 @@ type FetcherTableArgs struct {
 	// This is irrelevant if Fetcher is initialize with only one
 	// table.
 	Spans            roachpb.Spans
-	Desc             sqlbase.TableDescriptor
+	Desc             catalog.TableDescriptor
 	Index            *descpb.IndexDescriptor
 	ColIdxMap        map[descpb.ColumnID]int
 	IsSecondaryIndex bool
@@ -848,7 +849,7 @@ func (rf *Fetcher) ReadIndexKey(
 
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
 // used by ConvertFetchError.
-func (rf *Fetcher) KeyToDesc(key roachpb.Key) (sqlbase.TableDescriptor, bool) {
+func (rf *Fetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if rf.currentTable != nil && len(key) < rf.currentTable.knownPrefixLength {
 		return nil, false
 	}
@@ -1180,7 +1181,7 @@ func (rf *Fetcher) NextRow(
 	ctx context.Context,
 ) (
 	row sqlbase.EncDatumRow,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	err error,
 ) {
@@ -1224,7 +1225,7 @@ func (rf *Fetcher) NextRow(
 // (relevant when more than one table is specified during initialization).
 func (rf *Fetcher) NextRowDecoded(
 	ctx context.Context,
-) (datums tree.Datums, table sqlbase.TableDescriptor, index *descpb.IndexDescriptor, err error) {
+) (datums tree.Datums, table catalog.TableDescriptor, index *descpb.IndexDescriptor, err error) {
 	row, table, index, err := rf.NextRow(ctx)
 	if err != nil {
 		err = scrub.UnwrapScrubError(err)
