@@ -238,7 +238,7 @@ func cleanupSchemaObjects(
 	var views descpb.IDs
 	var sequences descpb.IDs
 
-	descsByID := make(map[descpb.ID]*TableDescriptor, len(tbNames))
+	tblDescsByID := make(map[descpb.ID]sqlbase.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
 		objDesc, err := a.GetObjectDesc(
@@ -258,7 +258,7 @@ func cleanupSchemaObjects(
 		// exist.
 		desc := objDesc.(*ImmutableTableDescriptor)
 
-		descsByID[desc.ID] = desc.TableDesc()
+		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName
 
 		if desc.SequenceOpts != nil {
@@ -288,14 +288,14 @@ func cleanupSchemaObjects(
 			"SEQUENCE",
 			sequences,
 			func(id descpb.ID) error {
-				desc := descsByID[id]
+				desc := tblDescsByID[id]
 				// For any dependent tables, we need to drop the sequence dependencies.
 				// This can happen if a permanent table references a temporary table.
-				for _, d := range desc.DependedOnBy {
+				return desc.ForeachDependedOnBy(func(d *descpb.TableDescriptor_Reference) error {
 					// We have already cleaned out anything we are depended on if we've seen
 					// the descriptor already.
-					if _, ok := descsByID[d.ID]; ok {
-						continue
+					if _, ok := tblDescsByID[d.ID]; ok {
+						return nil
 					}
 					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
 					if err != nil {
@@ -342,8 +342,8 @@ func cleanupSchemaObjects(
 							}
 						}
 					}
-				}
-				return nil
+					return nil
+				})
 			},
 		},
 	} {
