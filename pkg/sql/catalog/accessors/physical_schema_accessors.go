@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,7 +84,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 			// Use that to get the descriptor.
 			desc, err := a.tc.DatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.Required {
-				return nil, sqlbase.NewUndefinedDatabaseError(name)
+				return nil, sqlerrors.NewUndefinedDatabaseError(name)
 			} else if desc == nil {
 				// NB: We must return the actual value nil here as a typed nil will not
 				// be easily detectable by the caller.

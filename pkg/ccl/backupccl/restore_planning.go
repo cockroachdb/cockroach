@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -541,7 +542,7 @@ func allocateDescriptorRewrites(
 					// If the collided object isn't a type, then error out.
 					existingType, isType := desc.(*typedesc.ImmutableTypeDescriptor)
 					if !isType {
-						return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
+						return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
 
 					// Check if the collided type is compatible to be remapped to.

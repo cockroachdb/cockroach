@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -73,7 +74,7 @@ func (p *planner) createDatabase(
 			// Noop.
 			return nil, false, nil
 		}
-		return nil, false, sqlbase.NewDatabaseAlreadyExistsError(dbName)
+		return nil, false, sqlerrors.NewDatabaseAlreadyExistsError(dbName)
 	} else if err != nil {
 		return nil, false, err
 	}

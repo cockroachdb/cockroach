@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1035,7 +1036,7 @@ func (r oneAtATimeSchemaResolver) getSchemaByID(
 	}
 	sc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
 	if !ok {
-		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
 	return sc, nil
 }
@@ -1088,7 +1089,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					table, err := p.LookupTableByID(ctx, id)
 					if err != nil {
-						if sqlbase.IsUndefinedRelationError(err) {
+						if sqlerrors.IsUndefinedRelationError(err) {
 							// No table found, so no rows. In this case, we'll fall back to the
 							// full table scan if the index isn't complete - see the
 							// indexContainsNonTableDescriptorIDs parameter.

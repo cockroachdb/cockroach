@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -376,7 +376,7 @@ func (w *windower) spillAllRowsToDisk() error {
 // one more time.
 func (w *windower) growMemAccount(acc *mon.BoundAccount, usage int64) error {
 	if err := acc.Grow(w.Ctx, usage); err != nil {
-		if sqlbase.IsOutOfMemoryError(err) {
+		if sqlerrors.IsOutOfMemoryError(err) {
 			if err := w.spillAllRowsToDisk(); err != nil {
 				return err
 			}
