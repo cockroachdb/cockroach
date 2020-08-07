@@ -54,6 +54,9 @@ type (
 	// TypeDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TypeDescriptor = descpb.TypeDescriptor
+	// MutableTypeDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	MutableTypeDescriptor = sqlbase.MutableTypeDescriptor
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ViewDescriptor = descpb.TableDescriptor

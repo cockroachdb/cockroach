@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type alterTableSetSchemaNode struct {
@@ -52,6 +50,11 @@ func (p *planner) AlterTableSetSchema(
 		return newZeroNode(nil /* columns */), nil
 	}
 
+	if tableDesc.Temporary {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot move objects into or out of temporary schemas")
+	}
+
 	// The user needs DROP privilege on the table to set the schema.
 	err = p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
 	if err != nil {
@@ -77,53 +80,16 @@ func (p *planner) AlterTableSetSchema(
 }
 
 func (n *alterTableSetSchemaNode) startExec(params runParams) error {
-	p := params.p
 	ctx := params.ctx
+	p := params.p
 	tableDesc := n.tableDesc
+	schemaID := tableDesc.GetParentSchemaID()
+	databaseID := tableDesc.GetParentID()
 
-	if tableDesc.Temporary {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of temporary schemas")
-	}
-
-	databaseID := n.tableDesc.GetParentID()
-	schemaID := n.tableDesc.GetParentSchemaID()
-
-	// Lookup the the schema we want to set to.
-	exists, res, err := params.p.LogicalSchemaAccessor().GetSchema(
-		ctx, p.txn,
-		p.ExecCfg().Codec,
-		databaseID,
-		n.newSchema,
-	)
+	desiredSchemaID, err := p.prepareSetSchema(ctx, tableDesc, n.newSchema)
 	if err != nil {
 		return err
 	}
-
-	if !exists {
-		return pgerror.Newf(pgcode.InvalidSchemaName,
-			"schema %s does not exist", n.newSchema)
-	}
-
-	switch res.Kind {
-	case sqlbase.SchemaTemporary:
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of temporary schemas")
-	case sqlbase.SchemaVirtual:
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of virtual schemas")
-	case sqlbase.SchemaPublic:
-		// We do not need to check for privileges on the public schema.
-	default:
-		// The user needs CREATE privilege on the target schema to move a table
-		// to the schema.
-		err = p.CheckPrivilege(ctx, res.Desc, privilege.CREATE)
-		if err != nil {
-			return err
-		}
-	}
-
-	desiredSchemaID := res.ID
 
 	// If the schema being changed to is the same as the current schema for the
 	// table, do a no-op.
@@ -131,7 +97,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, _, err = catalogkv.LookupObjectID(
+	exists, _, err := catalogkv.LookupObjectID(
 		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, tableDesc.Name,
 	)
 	if err == nil && exists {
@@ -149,7 +115,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	tableDesc.AddDrainingName(renameDetails)
 
 	// Set the tableDesc's new schema id to the desired schema's id.
-	n.tableDesc.SetParentSchemaID(desiredSchemaID)
+	tableDesc.SetParentSchemaID(desiredSchemaID)
 
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
@@ -158,16 +124,9 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	}
 
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, tableDesc.Name).Key(p.ExecCfg().Codec)
+		databaseID, desiredSchemaID, tableDesc.Name)
 
-	b := &kv.Batch{}
-	if params.p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, tableDesc.ID)
-	}
-
-	b.CPut(newTbKey, tableDesc.ID, nil)
-
-	return p.txn.Run(ctx, b)
+	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
