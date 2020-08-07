@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -250,7 +251,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if queryTimedOut {
 				res.SetError(sqlbase.QueryTimeoutError)
 			} else {
-				res.SetError(sqlbase.QueryCanceledError)
+				res.SetError(cancelchecker.QueryCanceledError)
 			}
 		}
 	}
@@ -572,7 +573,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = &stmt
-	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err

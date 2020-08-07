@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,7 @@ type windower struct {
 	diskMonitor  *mon.BytesMonitor
 
 	scratch       []byte
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 
 	partitionBy                []uint32
 	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer
@@ -218,7 +219,7 @@ func newWindower(
 func (w *windower) Start(ctx context.Context) context.Context {
 	w.input.Start(ctx)
 	ctx = w.StartInternal(ctx, windowerProcName)
-	w.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	w.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	w.runningState = windowerAccumulating
 	return ctx
 }
