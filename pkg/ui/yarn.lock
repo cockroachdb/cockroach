@@ -1806,14 +1806,13 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.9":
-  version "0.1.9"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.9.tgz#e43a2508bc258e368d0c50c5ecf5d5c7fcf72c53"
-  integrity sha512-qWp4K0ChHHrNQYVCMhZxX5Ugwqjgog6htBm24d7KWmiHtZmEeqRzowuiO1I6289LvRk885yQJouD9XRe+vqjXA==
+"@cockroachlabs/admin-ui-components@^0.1.10":
+  version "0.1.10"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.10.tgz#e71e7f00ba4a51e868b01bae3479e3b28cff5014"
+  integrity sha512-t0fza4KPVEdsgmcfY8WW3QUC5r2+PvzZgWCiHShzTKyElZTqyXYbqpzTDsrJoD+wNXqy5L5Y/7yBvrINWEpCYw==
   dependencies:
     "@cockroachlabs/icons" "^0.2.2"
     "@popperjs/core" "^2.4.0"
-    d3 "<4.0.0"
     long "^4.0.0"
     react-helmet "^5.2.0"
     react-popper "^2.2.3"
