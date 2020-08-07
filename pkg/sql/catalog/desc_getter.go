@@ -52,3 +52,22 @@ func GetTableDescFromID(ctx context.Context, dg DescGetter, id descpb.ID) (Table
 	}
 	return table, nil
 }
+
+// MapDescGetter is a protoGetter that has a hard-coded map of keys to proto
+// messages.
+type MapDescGetter map[descpb.ID]Descriptor
+
+// GetDesc implements the catalog.DescGetter interface.
+func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error) {
+	desc := m[id]
+	return desc, nil
+}
+
+// GetDescs implements the catalog.DescGetter interface.
+func (m MapDescGetter) GetDescs(ctx context.Context, ids []descpb.ID) ([]Descriptor, error) {
+	ret := make([]Descriptor, len(ids))
+	for i, id := range ids {
+		ret[i], _ = m.GetDesc(ctx, id)
+	}
+	return ret, nil
+}

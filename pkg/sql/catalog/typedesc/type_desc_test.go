@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -211,7 +212,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	descs := sqlbase.MapDescGetter{}
+	descs := catalog.MapDescGetter{}
 	descs[100] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
