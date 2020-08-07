@@ -849,9 +849,9 @@ message AdminRelocateRangeResponse {
 // gossip protocol.
 message HeartbeatTxnRequest {
   option (gogoproto.equal) = true;
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
+  Transaction txn = 3 [(gogoproto.nullable) = true];
 }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()

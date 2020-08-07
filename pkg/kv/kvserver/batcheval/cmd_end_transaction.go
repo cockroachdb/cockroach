@@ -179,7 +179,7 @@ func EndTxn(
 	ms := cArgs.Stats
 	reply := resp.(*roachpb.EndTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
+	if err := VerifyTransaction(h.Txn, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
 	if args.Require1PC {

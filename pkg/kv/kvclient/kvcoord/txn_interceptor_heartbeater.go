@@ -62,10 +62,11 @@ var txnHeartbeatFor1PC = envutil.EnvOrDefaultBool("COCKROACH_TXN_HEARTBEAT_DURIN
 // the future.
 type txnHeartbeater struct {
 	log.AmbientContext
-	stopper      *stop.Stopper
-	clock        *hlc.Clock
-	metrics      *TxnMetrics
-	loopInterval time.Duration
+	stopper          *stop.Stopper
+	clock            *hlc.Clock
+	metrics          *TxnMetrics
+	loopInterval     time.Duration
+	heartbeatBatcher *TxnHeartbeatBatcher
 
 	// wrapped is the next sender in the interceptor stack.
 	wrapped lockedSender
@@ -123,6 +124,7 @@ func (h *txnHeartbeater) init(
 	clock *hlc.Clock,
 	metrics *TxnMetrics,
 	loopInterval time.Duration,
+	heartbeatBatcher *TxnHeartbeatBatcher,
 	gatekeeper lockedSender,
 	mu sync.Locker,
 	txn *roachpb.Transaction,
@@ -132,6 +134,7 @@ func (h *txnHeartbeater) init(
 	h.clock = clock
 	h.metrics = metrics
 	h.loopInterval = loopInterval
+	h.heartbeatBatcher = heartbeatBatcher
 	h.gatekeeper = gatekeeper
 	h.mu.Locker = mu
 	h.mu.txn = txn
@@ -300,19 +303,26 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-	ba := roachpb.BatchRequest{}
-	ba.Txn = txn
-	ba.Add(&roachpb.HeartbeatTxnRequest{
+
+	log.VEvent(ctx, 2, "heartbeat")
+
+	rangeCacheEntry, err := h.heartbeatBatcher.rdc.Lookup(ctx, txn.Key)
+	if err != nil {
+		return false
+	}
+	h.mu.Unlock()
+	resp, err := h.heartbeatBatcher.batcher.Send(ctx, rangeCacheEntry.Desc().RangeID, &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
+		Txn: txn,
 	})
 
-	// Send the heartbeat request directly through the gatekeeper interceptor.
-	// See comment on h.gatekeeper for a discussion of why.
-	log.VEvent(ctx, 2, "heartbeat")
-	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
+	h.mu.Lock()
+	if err != nil {
+		log.Fatalf(ctx, "XXX: error! %s", err.Error())
+	}
 
 	// If the txn is no longer pending, ignore the result of the heartbeat
 	// and tear down the heartbeat loop.
@@ -321,32 +331,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	}
 
 	var respTxn *roachpb.Transaction
-	if pErr != nil {
-		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
-
-		// We need to be prepared here to handle the case of a
-		// TransactionAbortedError with no transaction proto in it.
-		//
-		// TODO(nvanbenschoten): Make this the only case where we get back an
-		// Aborted txn.
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
-			// Note that it's possible that the txn actually committed but its
-			// record got GC'ed. In that case, aborting won't hurt anyone though,
-			// since all intents have already been resolved.
-			// The only thing we must ascertain is that we don't tell the client
-			// about this error - it will get either a definitive result of
-			// its commit or an ambiguous one and we have nothing to offer that
-			// provides more clarity. We do however prevent it from running more
-			// requests in case it isn't aware that the transaction is over.
-			h.abortTxnAsyncLocked(ctx)
-			h.mu.finalObservedStatus = roachpb.ABORTED
-			return false
-		}
-
-		respTxn = pErr.GetTxn()
-	} else {
-		respTxn = br.Txn
-	}
+	respTxn = resp.Header().Txn
 
 	// Tear down the heartbeat loop if the response transaction is finalized.
 	if respTxn != nil && respTxn.Status.IsFinalized() {

@@ -539,6 +539,7 @@ func makeSQLServerArgs(
 			TestingKnobs:      clientKnobs,
 		},
 		ds,
+		ds.RangeDescriptorCache(),
 	)
 	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 

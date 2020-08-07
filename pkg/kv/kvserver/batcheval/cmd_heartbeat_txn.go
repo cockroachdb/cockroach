@@ -12,7 +12,6 @@ package batcheval
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -42,32 +41,38 @@ func HeartbeatTxn(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.HeartbeatTxnRequest)
-	h := cArgs.Header
 	reply := resp.(*roachpb.HeartbeatTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING); err != nil {
-		return result.Result{}, err
+	if err := VerifyTransaction(args.Txn, args, roachpb.PENDING, roachpb.STAGING); err != nil {
+		reply.Txn = args.Txn
+		return result.Result{}, nil
 	}
 
 	if args.Now.IsEmpty() {
-		return result.Result{}, fmt.Errorf("now not specified for heartbeat")
+		reply.Txn = args.Txn
+		return result.Result{}, nil // , fmt.Errorf("now not specified for heartbeat")
 	}
 
-	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
+	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
 		ctx, readWriter, key, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); err != nil {
-		return result.Result{}, err
+		reply.Txn = &txn
+		return result.Result{}, nil // err
 	} else if !ok {
 		// No existing transaction record was found - create one by writing
 		// it below.
-		txn = *h.Txn
+		txn = *args.Txn
 
 		// Verify that it is safe to create the transaction record.
 		if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, &txn); err != nil {
-			return result.Result{}, err
+			// create a txn with ABORTED status (CanCreateTxnRecord returns a
+			// TransactionAbortedError)
+			txn.Status = roachpb.ABORTED
+			reply.Txn = &txn
+			return result.Result{}, nil
 		}
 	}
 
@@ -78,7 +83,8 @@ func HeartbeatTxn(
 		txn.LastHeartbeat.Forward(args.Now)
 		txnRecord := txn.AsRecord()
 		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
-			return result.Result{}, err
+			reply.Txn = &txn
+			return result.Result{}, nil //, err
 		}
 	}
 

@@ -83,5 +83,6 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// lock again.
 	gs.mu.Unlock()
 	defer gs.mu.Lock()
+
 	return gs.wrapped.Send(ctx, ba)
 }

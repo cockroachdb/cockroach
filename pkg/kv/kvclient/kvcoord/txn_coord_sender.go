@@ -148,7 +148,8 @@ type TxnCoordSender struct {
 
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
-	typ kv.TxnType
+	typ              kv.TxnType
+	heartbeatBatcher *TxnHeartbeatBatcher
 }
 
 var _ kv.TxnSender = &TxnCoordSender{}
@@ -208,6 +209,7 @@ func newRootTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   kv.RootTxn,
 		TxnCoordSenderFactory: tcf,
+		heartbeatBatcher:      tcf.heartbeatBatcher,
 	}
 	tcs.mu.txnState = txnPending
 	tcs.mu.userPriority = pri
@@ -224,6 +226,7 @@ func newRootTxnCoordSender(
 		tcs.clock,
 		&tcs.metrics,
 		tcs.heartbeatInterval,
+		tcs.heartbeatBatcher,
 		&tcs.interceptorAlloc.txnLockGatekeeper,
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,

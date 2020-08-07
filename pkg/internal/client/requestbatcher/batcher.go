@@ -272,7 +272,11 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {
 			var pErr *roachpb.Error
-			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
+			if ba.reqs[0].req.Method() == roachpb.HeartbeatTxn {
+				log.Infof(ctx, "XXX: sent batch of size: %d, request type: %s", len(ba.reqs), ba.reqs[0].req.Method().String())
+			}
+			br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg))
+			if pErr != nil {
 				return pErr.GoError()
 			}
 			return nil
