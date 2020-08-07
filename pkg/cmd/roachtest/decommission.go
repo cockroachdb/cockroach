@@ -288,31 +288,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
 
-	// We use a few helpers for random node ID access.
-	var nodeIDs []int
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		nodeIDs = append(nodeIDs, i)
-	}
-	getRandNode := func() int {
-		return nodeIDs[rand.Intn(len(nodeIDs))]
-	}
-	getRandNodeOtherThan := func(ids ...int) int {
-		for {
-			cur := nodeIDs[rand.Intn(len(nodeIDs))]
-			inBlockList := false
-			for _, id := range ids {
-				if cur == id {
-					inBlockList = true
-				}
-			}
-			if inBlockList {
-				continue
-			}
-			return cur
-		}
-	}
-
-	h := &decommTestHelper{c: c, t: t}
+	h := newDecommTestHelper(t, c)
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
@@ -322,7 +298,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 	// Partially decommission then recommission a random node, from another
 	// random node. Run a couple of status checks while doing so.
 	{
-		targetNode, runNode := getRandNode(), getRandNode()
+		targetNode, runNode := h.getRandNode(), h.getRandNode()
 		t.l.Printf("partially decommissioning n%d from n%d\n", targetNode, runNode)
 		o, err := h.decommission(ctx, c.Node(targetNode), runNode,
 			"--wait=none", "--format=csv")
@@ -341,7 +317,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that `node status` reflects an ongoing decommissioning status
 		// for the second node.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("checking that `node status` (from n%d) shows n%d as decommissioning\n",
 				runNode, targetNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
@@ -360,7 +336,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Recommission the target node, cancel the in-flight decommissioning
 		// process.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("recommissioning n%d (from n%d)\n", targetNode, runNode)
 			if _, err := h.recommission(ctx, c.Node(targetNode), runNode); err != nil {
 				t.Fatalf("recommission failed: %v", err)
@@ -370,7 +346,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that `node status` now reflects a 'active' status for the
 		// target node.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("checking that `node status` (from n%d) shows n%d as active\n",
 				targetNode, runNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
@@ -393,7 +369,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 	{
 		// Attempt to decommission all the nodes.
 		{
-			runNode := getRandNode()
+			runNode := h.getRandNode()
 			t.l.Printf("attempting to decommission all nodes from n%d\n", runNode)
 			o, err := h.decommission(ctx, c.All(), runNode,
 				"--wait=none", "--format=csv")
@@ -414,7 +390,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that `node status` reflects an ongoing decommissioning status for
 		// all nodes.
 		{
-			runNode := getRandNode()
+			runNode := h.getRandNode()
 			t.l.Printf("checking that `node status` (from n%d) shows all nodes as decommissioning\n",
 				runNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
@@ -436,7 +412,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that we can still do stuff, creating a database should be good
 		// enough.
 		{
-			runNode := getRandNode()
+			runNode := h.getRandNode()
 			t.l.Printf("checking that we're able to create a database (from n%d)\n", runNode)
 			db := c.Conn(ctx, runNode)
 			defer db.Close()
@@ -448,7 +424,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 
 		// Cancel in-flight decommissioning process of all nodes.
 		{
-			runNode := getRandNode()
+			runNode := h.getRandNode()
 			t.l.Printf("recommissioning all nodes (from n%d)\n", runNode)
 			if _, err := h.recommission(ctx, c.All(), runNode); err != nil {
 				t.Fatalf("recommission failed: %v", err)
@@ -458,7 +434,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that `node status` now reflects an 'active' status for all
 		// nodes.
 		{
-			runNode := getRandNode()
+			runNode := h.getRandNode()
 			t.l.Printf("checking that `node status` (from n%d) shows all nodes as active\n",
 				runNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
@@ -482,15 +458,15 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 	// between using --wait={all,none}. We pin these two nodes to not re-use
 	// them for the block after, as they will have been fully decommissioned and
 	// by definition, non-operational.
-	decommissionedNodeA := getRandNode()
-	decommissionedNodeB := getRandNodeOtherThan(decommissionedNodeA)
+	decommissionedNodeA := h.getRandNode()
+	decommissionedNodeB := h.getRandNodeOtherThan(decommissionedNodeA)
 	{
 		targetNodeA, targetNodeB := decommissionedNodeA, decommissionedNodeB
 		if targetNodeB < targetNodeA {
 			targetNodeB, targetNodeA = targetNodeA, targetNodeB
 		}
 
-		runNode := getRandNode()
+		runNode := h.getRandNode()
 		waitStrategy := "all" // Blocking decommission.
 		if i := rand.Intn(2); i == 0 {
 			waitStrategy = "none" // Polling decommission.
@@ -529,7 +505,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Check that even though two nodes are decommissioned, we still see
 		// them (since they remain live) in `node ls`.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("checking that `node ls` (from n%d) shows all nodes\n", runNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "ls", "--format=csv")
 			if err != nil {
@@ -546,7 +522,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 
 		// Ditto for `node status`.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("checking that `node status` (from n%d) shows all nodes\n", runNode)
 			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
 			if err != nil {
@@ -567,7 +543,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Attempt to recommission the fully decommissioned nodes (expecting it
 		// to fail).
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("expected to fail: recommissioning [n%d,n%d] (from n%d)\n",
 				targetNodeA, targetNodeB, runNode)
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
@@ -578,7 +554,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		// Decommissioning the same nodes again should be a no-op. We do it from
 		// a random node.
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("checking that decommissioning [n%d,n%d] (from n%d) is a no-op\n",
 				targetNodeA, targetNodeB, runNode)
 			o, err := h.decommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode,
@@ -600,7 +576,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 
 		// We restart the nodes and attempt to recommission (should still fail).
 		{
-			runNode = getRandNode()
+			runNode = h.getRandNode()
 			t.l.Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
@@ -640,11 +616,11 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 			}()
 		}
 
-		targetNode := getRandNodeOtherThan(decommissionedNodeA, decommissionedNodeB)
+		targetNode := h.getRandNodeOtherThan(decommissionedNodeA, decommissionedNodeB)
 		t.l.Printf("intentionally killing n%d to later decommission it when down\n", targetNode)
 		c.Stop(ctx, c.Node(targetNode))
 
-		runNode := getRandNodeOtherThan(targetNode)
+		runNode := h.getRandNodeOtherThan(targetNode)
 		t.l.Printf("decommissioning n%d (from n%d) in absentia\n", targetNode, runNode)
 		if _, err := h.decommission(ctx, c.Node(targetNode), runNode,
 			"--wait=all", "--format=csv"); err != nil {
@@ -682,7 +658,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 			// Check that (at least after a bit) the node disappears from `node
 			// ls` because it is decommissioned and not live.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
-				runNode := getRandNodeOtherThan(targetNode)
+				runNode := h.getRandNodeOtherThan(targetNode)
 				o, err := execCLI(ctx, t, c, runNode, "node", "ls", "--format=csv")
 				if err != nil {
 					t.Fatalf("node-ls failed: %v", err)
@@ -700,7 +676,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 
 			// Ditto for `node status`
 			if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
-				runNode := getRandNodeOtherThan(targetNode)
+				runNode := h.getRandNodeOtherThan(targetNode)
 				o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
 				if err != nil {
 					t.Fatalf("node-status failed: %v", err)
@@ -733,7 +709,7 @@ func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 		}
 
 		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
-			o, err := execCLI(ctx, t, c, getRandNode(), "node", "status", "--format=csv")
+			o, err := execCLI(ctx, t, c, h.getRandNode(), "node", "status", "--format=csv")
 			if err != nil {
 				t.Fatalf("node-status failed: %v", err)
 			}
@@ -840,8 +816,21 @@ var statusHeaderWithDecommission = []string{
 const statusHeaderMembershipColumnIdx = 11
 
 type decommTestHelper struct {
-	t *test
-	c *cluster
+	t       *test
+	c       *cluster
+	nodeIDs []int
+}
+
+func newDecommTestHelper(t *test, c *cluster) *decommTestHelper {
+	var nodeIDs []int
+	for i := 1; i <= c.spec.NodeCount; i++ {
+		nodeIDs = append(nodeIDs, i)
+	}
+	return &decommTestHelper{
+		t:       t,
+		c:       c,
+		nodeIDs: nodeIDs,
+	}
 }
 
 // decommission decommissions the given targetNodes, running the process
@@ -999,6 +988,26 @@ func (h *decommTestHelper) expectIDsInStatusOut(ids []string, numCols int) [][]s
 		res = append(res, build)
 	}
 	return res
+}
+
+func (h *decommTestHelper) getRandNode() int {
+	return h.nodeIDs[rand.Intn(len(h.nodeIDs))]
+}
+
+func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
+	for {
+		cur := h.nodeIDs[rand.Intn(len(h.nodeIDs))]
+		inBlockList := false
+		for _, id := range ids {
+			if cur == id {
+				inBlockList = true
+			}
+		}
+		if inBlockList {
+			continue
+		}
+		return cur
+	}
 }
 
 func execCLI(
