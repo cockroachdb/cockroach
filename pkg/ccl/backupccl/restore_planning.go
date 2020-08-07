@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -158,7 +159,7 @@ func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
-	schemasByID map[descpb.ID]*sqlbase.MutableSchemaDescriptor,
+	schemasByID map[descpb.ID]*schemadesc.MutableSchemaDescriptor,
 	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
 	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
@@ -771,7 +772,7 @@ func rewriteTypeDescs(
 // rewriteSchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
 // using the input ID rewrite mapping.
 func rewriteSchemaDescs(
-	schemas []*sqlbase.MutableSchemaDescriptor, descriptorRewrites DescRewriteMap,
+	schemas []*schemadesc.MutableSchemaDescriptor, descriptorRewrites DescRewriteMap,
 ) error {
 	for _, sc := range schemas {
 		rewrite, ok := descriptorRewrites[sc.ID]
@@ -1310,14 +1311,14 @@ func doRestorePlan(
 	}
 
 	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
-	schemasByID := make(map[descpb.ID]*sqlbase.MutableSchemaDescriptor)
+	schemasByID := make(map[descpb.ID]*schemadesc.MutableSchemaDescriptor)
 	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
-		case *sqlbase.MutableSchemaDescriptor:
+		case *schemadesc.MutableSchemaDescriptor:
 			schemasByID[desc.ID] = desc
 		case *sqlbase.MutableTableDescriptor:
 			tablesByID[desc.ID] = desc
@@ -1350,7 +1351,7 @@ func doRestorePlan(
 		return err
 	}
 
-	var schemas []*sqlbase.MutableSchemaDescriptor
+	var schemas []*schemadesc.MutableSchemaDescriptor
 	for i := range schemasByID {
 		schemas = append(schemas, schemasByID[i])
 	}
