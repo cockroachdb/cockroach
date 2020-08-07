@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +35,9 @@ import (
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
-func MakeIndexKeyPrefix(codec keys.SQLCodec, desc TableDescriptor, indexID descpb.IndexID) []byte {
+func MakeIndexKeyPrefix(
+	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
+) []byte {
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
 		ancestor := &i.Interleave.Ancestors[0]
 		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
@@ -55,7 +58,7 @@ func MakeIndexKeyPrefix(codec keys.SQLCodec, desc TableDescriptor, indexID descp
 // Note that ExtraColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
@@ -75,7 +78,7 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
 	colMap map[descpb.ColumnID]int,
@@ -104,7 +107,7 @@ func EncodePartialIndexSpan(
 //  - index.ColumnIDs for unique indexes, and
 //  - append(index.ColumnIDs, index.ExtraColumnIDs) for non-unique indexes.
 func EncodePartialIndexKey(
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	numCols int,
 	colMap map[descpb.ColumnID]int,
@@ -206,7 +209,7 @@ func MakeSpanFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	alloc *DatumAlloc,
 	keyPrefix []byte,
@@ -240,7 +243,7 @@ func MakeSpanFromEncDatums(
 // retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededColOrdinals util.FastIntSet, table TableDescriptor, index *descpb.IndexDescriptor,
+	neededColOrdinals util.FastIntSet, table catalog.TableDescriptor, index *descpb.IndexDescriptor,
 ) []descpb.FamilyID {
 	if table.NumFamilies() == 1 {
 		return []descpb.FamilyID{table.GetFamilies()[0].ID}
@@ -409,7 +412,7 @@ func makeKeyFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	alloc *DatumAlloc,
 	keyPrefix []byte,
@@ -531,7 +534,7 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID,
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	codec keys.SQLCodec, desc TableDescriptor, key []byte,
+	codec keys.SQLCodec, desc catalog.TableDescriptor, key []byte,
 ) (indexID descpb.IndexID, remaining []byte, err error) {
 	key, err = codec.StripTenantPrefix(key)
 	if err != nil {
@@ -602,7 +605,7 @@ func DecodeIndexKeyPrefix(
 // no error.
 func DecodeIndexKey(
 	codec keys.SQLCodec,
-	desc TableDescriptor,
+	desc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	types []*types.T,
 	vals []EncDatum,
@@ -624,7 +627,7 @@ func DecodeIndexKey(
 // except it expects its index key is missing in its tenant id and first table
 // id / index id key prefix.
 func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-	desc TableDescriptor,
+	desc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	types []*types.T,
 	vals []EncDatum,
@@ -869,7 +872,7 @@ func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err err
 // It returns indexEntries in family sorted order.
 func EncodePrimaryIndex(
 	codec keys.SQLCodec,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
@@ -956,7 +959,7 @@ func EncodePrimaryIndex(
 // index entries is in family sorted order.
 func EncodeSecondaryIndex(
 	codec keys.SQLCodec,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	secondaryIndex *descpb.IndexDescriptor,
 	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
@@ -1217,7 +1220,7 @@ func writeColumnValues(
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
 	codec keys.SQLCodec,
-	tableDesc TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	indexes []descpb.IndexDescriptor,
 	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
@@ -1500,7 +1503,7 @@ func AdjustStartKeyForInterleave(
 // AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
 func AdjustEndKeyForInterleave(
 	codec keys.SQLCodec,
-	table TableDescriptor,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	end roachpb.Key,
 	inclusive bool,

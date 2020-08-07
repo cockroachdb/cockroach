@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1344,8 +1345,8 @@ func TestUnvalidateConstraints(t *testing.T) {
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	lookup := func(_ descpb.ID) (TableDescriptor, error) {
-		return desc.Immutable().(TableDescriptor), nil
+	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
+		return desc.Immutable().(catalog.TableDescriptor), nil
 	}
 
 	before, err := desc.GetConstraintInfoWithLookup(lookup)

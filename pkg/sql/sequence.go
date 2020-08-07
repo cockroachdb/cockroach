@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -189,7 +190,7 @@ func (p *planner) SetSequenceValue(
 // MakeSequenceKeyVal returns the key and value of a sequence being set
 // with newVal.
 func MakeSequenceKeyVal(
-	codec keys.SQLCodec, sequence sqlbase.TableDescriptor, newVal int64, isCalled bool,
+	codec keys.SQLCodec, sequence catalog.TableDescriptor, newVal int64, isCalled bool,
 ) ([]byte, int64, error) {
 	opts := sequence.GetSequenceOpts()
 	if newVal > opts.MaxValue || newVal < opts.MinValue {

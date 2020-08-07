@@ -44,7 +44,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc sqlbase.DatabaseDescriptor, err error) {
+) (desc catalog.DatabaseDescriptor, err error) {
 	if name == sqlbase.SystemDatabaseName {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
@@ -106,7 +106,7 @@ func (a UncachedPhysicalAccessor) GetSchema(
 		return false, catalog.ResolvedSchema{}, nil
 	}
 
-	sc, ok := desc.(sqlbase.SchemaDescriptor)
+	sc, ok := desc.(catalog.SchemaDescriptor)
 	if !ok {
 		return false, catalog.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
 	}
@@ -122,7 +122,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
@@ -265,7 +265,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 	switch desc := desc.(type) {
-	case sqlbase.TableDescriptor:
+	case catalog.TableDescriptor:
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[descpb.TableDescriptor_State]bool{
@@ -289,7 +289,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			}
 		}
 		return nil, nil
-	case sqlbase.TypeDescriptor:
+	case catalog.TypeDescriptor:
 		if desc.Dropped() {
 			return nil, nil
 		}

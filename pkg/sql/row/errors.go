@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,7 +44,7 @@ func (f *singleKVFetcher) nextBatch(
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(ctx context.Context, tableDesc sqlbase.TableDescriptor, b *kv.Batch) error {
+func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
@@ -63,7 +64,7 @@ func ConvertBatchError(ctx context.Context, tableDesc sqlbase.TableDescriptor, b
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
 	// Strip the tenant prefix and pretend use the system tenant's SQL codec for
 	// the rest of this function. This is safe because the key is just used to

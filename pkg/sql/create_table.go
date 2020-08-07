@@ -2161,7 +2161,7 @@ func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
 }
 
 func createInheritedPrivilegesFromDBDesc(
-	dbDesc sqlbase.DatabaseDescriptor, user string,
+	dbDesc catalog.DatabaseDescriptor, user string,
 ) *descpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.

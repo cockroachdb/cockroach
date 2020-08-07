@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -340,7 +341,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *optTableUpserter) tableDesc() sqlbase.TableDescriptor {
+func (tu *optTableUpserter) tableDesc() catalog.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
 

@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +30,7 @@ import (
 // DeserializeTableDescExpr performs this logic, but only returns a
 // tree.Expr to be clear that these returned expressions are not safe to Eval.
 func DeserializeTableDescExpr(
-	ctx context.Context, semaCtx *tree.SemaContext, desc sqlbase.TableDescriptor, exprStr string,
+	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor, exprStr string,
 ) (tree.Expr, error) {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
@@ -52,7 +53,7 @@ func DeserializeTableDescExpr(
 // Returns the type-checked and constant-folded expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
-	desc sqlbase.TableDescriptor,
+	desc catalog.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
 	op string,
@@ -97,7 +98,7 @@ func DequalifyAndValidateExpr(
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
 func ExtractColumnIDs(
-	desc sqlbase.TableDescriptor, rootExpr tree.Expr,
+	desc catalog.TableDescriptor, rootExpr tree.Expr,
 ) (sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 

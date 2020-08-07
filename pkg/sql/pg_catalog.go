@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -399,7 +400,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 )`,
 	virtualMany, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table sqlbase.TableDescriptor,
+		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		colNum := 0
@@ -467,7 +468,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table sqlbase.TableDescriptor,
+		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
@@ -518,7 +519,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 
 		// Columns for each index.
 		columnIdxMap := table.ColumnIdxMap()
-		return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 			for _, colID := range index.ColumnIDs {
 				idxID := h.IndexOid(table.GetID(), index.ID)
 				column := table.GetColumnAtIdx(columnIdxMap[colID])
@@ -689,7 +690,7 @@ CREATE TABLE pg_catalog.pg_class (
 )`,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table sqlbase.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
@@ -742,7 +743,7 @@ CREATE TABLE pg_catalog.pg_class (
 		}
 
 		// Indexes.
-		return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+		return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 			indexType := forwardIndexOid
 			if index.Type == descpb.IndexDescriptor_INVERTED {
 				indexType = invertedIndexOid
@@ -861,7 +862,7 @@ func populateTableConstraints(
 	h oidHasher,
 	db *sqlbase.ImmutableDatabaseDescriptor,
 	scName string,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
@@ -1006,7 +1007,7 @@ func (r oneAtATimeSchemaResolver) getDatabaseByID(
 	return r.p.Descriptors().DatabaseCache().GetDatabaseDescByID(r.ctx, r.p.txn, id)
 }
 
-func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (sqlbase.TableDescriptor, error) {
+func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
 	table, err := r.p.LookupTableByID(r.ctx, id)
 	if err != nil {
 		return nil, err
@@ -1042,14 +1043,14 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	virtualOpts virtualOpts,
 	includesIndexEntries bool,
 	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor,
-		scName string, table sqlbase.TableDescriptor, lookup simpleSchemaResolver,
+		scName string, table catalog.TableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
 ) virtualSchemaTable {
 	populateAll := func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor, lookup tableLookupFn) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor, lookup tableLookupFn) error {
 				return populateFromTable(ctx, p, h, db, scName, table, lookup, addRow)
 			})
 	}
@@ -1312,7 +1313,7 @@ CREATE TABLE pg_catalog.pg_depend (
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db *sqlbase.ImmutableDatabaseDescriptor,
 			scName string,
-			table sqlbase.TableDescriptor,
+			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			pgConstraintTableOid := tableOid(pgConstraintsDesc.ID)
@@ -1648,9 +1649,9 @@ CREATE TABLE pg_catalog.pg_index (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
-				return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, isPrimary bool) error {
+				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, isPrimary bool) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.ID)
 					isReady := isMutation && isWriteOnly
@@ -1735,10 +1736,10 @@ CREATE TABLE pg_catalog.pg_indexes (
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor, tableLookup tableLookupFn) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
-				return table.ForeachIndex(sqlbase.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
 					def, err := indexDefFromDescriptor(ctx, p, db, table, index, tableLookup)
 					if err != nil {
 						return err
@@ -1763,7 +1764,7 @@ func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
 	db *sqlbase.ImmutableDatabaseDescriptor,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	tableLookup tableLookupFn,
 ) (string, error) {
@@ -2421,7 +2422,7 @@ CREATE TABLE pg_catalog.pg_sequence (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -2555,7 +2556,7 @@ CREATE TABLE pg_catalog.pg_tables (
 		// empty -- listing tables across databases can yield duplicate
 		// schema/table names.
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsTable() {
 					return nil
 				}
@@ -3060,7 +3061,7 @@ CREATE TABLE pg_catalog.pg_views (
 		// Note: pg_views is not well defined if the dbContext is empty,
 		// because it does not distinguish views in separate databases.
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*virtual schemas do not have views*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, desc sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, desc catalog.TableDescriptor) error {
 				if !desc.IsView() {
 					return nil
 				}

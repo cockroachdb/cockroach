@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -43,7 +44,7 @@ type rowFetcher interface {
 	) error
 
 	NextRow(ctx context.Context) (
-		sqlbase.EncDatumRow, sqlbase.TableDescriptor, *descpb.IndexDescriptor, error)
+		sqlbase.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)

@@ -78,7 +78,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 func doCreateSequence(
 	params runParams,
 	context string,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 	name *TableName,
 	isTemporary bool,

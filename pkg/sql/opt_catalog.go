@@ -135,7 +135,7 @@ func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceNa
 	)
 }
 
-func (os *optSchema) getDescriptorForPermissionsCheck() sqlbase.Descriptor {
+func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	// If the schema is backed by a descriptor, then return it.
 	if os.schema.Kind == catalog.SchemaUserDefined {
 		return os.schema.Desc
@@ -240,7 +240,7 @@ func (oc *optCatalog) ResolveTypeByID(ctx context.Context, id uint32) (*types.T,
 	return oc.planner.ResolveTypeByID(ctx, id)
 }
 
-func getDescFromCatalogObjectForPermissions(o cat.Object) (sqlbase.Descriptor, error) {
+func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
 	switch t := o.(type) {
 	case *optSchema:
 		return t.getDescriptorForPermissionsCheck(), nil

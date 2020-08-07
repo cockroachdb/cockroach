@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -466,7 +467,7 @@ func (p *planner) removeFKForBackReference(
 func removeFKForBackReferenceFromTable(
 	originTableDesc *sqlbase.MutableTableDescriptor,
 	backref *descpb.ForeignKeyConstraint,
-	referencedTableDesc sqlbase.TableDescriptor,
+	referencedTableDesc catalog.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, fk := range originTableDesc.OutboundFKs {
@@ -524,7 +525,7 @@ func (p *planner) removeFKBackReference(
 func removeFKBackReferenceFromTable(
 	referencedTableDesc *sqlbase.MutableTableDescriptor,
 	fkName string,
-	originTableDesc sqlbase.TableDescriptor,
+	originTableDesc catalog.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, backref := range referencedTableDesc.InboundFKs {

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,7 +37,7 @@ import (
 )
 
 // DescriptorInterfaces is a sortable list of DescriptorInterfaces.
-type DescriptorInterfaces []Descriptor
+type DescriptorInterfaces []catalog.Descriptor
 
 func (d DescriptorInterfaces) Len() int           { return len(d) }
 func (d DescriptorInterfaces) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
@@ -628,7 +629,7 @@ func (desc *ImmutableTableDescriptor) ForeachPublicColumn(
 func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
 	f func(*descpb.IndexDescriptor) error,
 ) error {
-	if err := desc.ForeachIndex(IndexOpts{AddMutations: true}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+	if err := desc.ForeachIndex(catalog.IndexOpts{AddMutations: true}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
 		return f(idxDesc)
 	}); err != nil {
 		return err
@@ -638,7 +639,7 @@ func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
 
 // ForeachPublicIndex runs a function on all public indexes.
 func (desc *ImmutableTableDescriptor) ForeachIndex(
-	opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
+	opts catalog.IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
 ) error {
 	if desc.IsPhysicalTable() || opts.NonPhysicalPrimaryIndex {
 		if err := f(&desc.PrimaryIndex, true /* isPrimary */); err != nil {
@@ -1063,7 +1064,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 // ForEachExprStringInTableDesc runs a closure for each expression string
 // within a TableDescriptor. The closure takes in a string pointer so that
 // it can mutate the TableDescriptor if desired.
-func ForEachExprStringInTableDesc(descI TableDescriptor, f func(expr *string) error) error {
+func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *string) error) error {
 	desc, ok := descI.(*ImmutableTableDescriptor)
 	if !ok {
 		mut, ok := descI.(*MutableTableDescriptor)
@@ -1146,7 +1147,7 @@ func ForEachExprStringInTableDesc(descI TableDescriptor, f func(expr *string) er
 // this table references. It takes in a function that returns the TypeDescriptor
 // with the desired ID.
 func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
-	getType func(descpb.ID) (TypeDescriptor, error),
+	getType func(descpb.ID) (catalog.TypeDescriptor, error),
 ) (descpb.IDs, error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
@@ -1759,7 +1760,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 	// Validate the all types present in the descriptor exist. typeMap caches
 	// accesses to TypeDescriptors, and is wrapped by getType.
 	typeMap := make(map[descpb.ID]*ImmutableTypeDescriptor)
-	getType := func(id descpb.ID) (TypeDescriptor, error) {
+	getType := func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		if typeDesc, ok := typeMap[id]; ok {
 			return typeDesc, nil
 		}

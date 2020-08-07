@@ -260,7 +260,7 @@ CREATE TABLE crdb_internal.tables (
 				}
 			}
 
-			addDesc := func(table sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
+			addDesc := func(table catalog.TableDescriptor, dbName tree.Datum, scName string) error {
 				leaseNodeDatum := tree.DNull
 				leaseExpDatum := tree.DNull
 				if lease := table.GetLease(); lease != nil {
@@ -1463,7 +1463,7 @@ CREATE TABLE crdb_internal.create_statements (
 )
 `, virtualOnce, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table sqlbase.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table catalog.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""
 		parentNameStr := tree.DNull
 		if db != nil {
@@ -1511,7 +1511,7 @@ CREATE TABLE crdb_internal.create_statements (
 			createNofk = stmt
 		}
 		hasPartitions := false
-		_ = table.ForeachIndex(sqlbase.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+		_ = table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
 			if idxDesc.Partitioning.NumColumns != 0 {
 				hasPartitions = true
 			}
@@ -1539,7 +1539,7 @@ func showAlterStatementWithInterleave(
 	contextName string,
 	lCtx simpleSchemaResolver,
 	allIdx []descpb.IndexDescriptor,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
 ) error {
@@ -1657,7 +1657,7 @@ CREATE TABLE crdb_internal.table_columns (
 		row := make(tree.Datums, 8)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					columns := table.GetPublicColumns()
@@ -1717,12 +1717,12 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make(tree.Datums, 7)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
 					// indexes are not reported as a part of ForeachIndex.
-					return table.ForeachIndex(sqlbase.IndexOpts{
+					return table.ForeachIndex(catalog.IndexOpts{
 						NonPhysicalPrimaryIndex: true,
 					}, func(idx *descpb.IndexDescriptor, isPrimary bool) error {
 						row = row[:0]
@@ -1777,7 +1777,7 @@ CREATE TABLE crdb_internal.index_columns (
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
@@ -1850,7 +1850,7 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				return table.ForeachIndex(sqlbase.IndexOpts{
+				return table.ForeachIndex(catalog.IndexOpts{
 					NonPhysicalPrimaryIndex: true,
 				}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 					return reportIndex(idxDesc)
@@ -1885,7 +1885,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
 			/* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor, tableLookup tableLookupFn) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
@@ -1931,7 +1931,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := table.ForeachIndex(sqlbase.IndexOpts{},
+				if err := table.ForeachIndex(catalog.IndexOpts{},
 					func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 						return reportIdxDeps(idxDesc)
 					}); err != nil {
@@ -2026,7 +2026,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
@@ -2062,7 +2062,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := table.ForeachIndex(sqlbase.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+				if err := table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
 					return reportIdxDeps(idxDesc)
 				}); err != nil {
 					return err
@@ -2902,7 +2902,7 @@ func addPartitioningRows(
 	ctx context.Context,
 	p *planner,
 	database string,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	partitioning *descpb.PartitioningDescriptor,
 	parentName tree.Datum,
@@ -3075,8 +3075,8 @@ CREATE TABLE crdb_internal.partitions (
 		}
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
-					return table.ForeachIndex(sqlbase.IndexOpts{
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+					return table.ForeachIndex(catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index *descpb.IndexDescriptor, _ bool) error {
 						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,

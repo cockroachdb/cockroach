@@ -776,13 +776,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 			desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, id,
 				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
 			if err != nil {
 				return nil, err
 			}
-			return desc.(sqlbase.TypeDescriptor), nil
+			return desc.(catalog.TypeDescriptor), nil
 		})
 		if err != nil {
 			return err
@@ -1002,7 +1002,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				return descs[id].(*sqlbase.MutableTypeDescriptor), nil
 			})
 			if err != nil {

@@ -61,7 +61,7 @@ func GetObjectNames(
 	txn *kv.Txn,
 	sc SchemaResolver,
 	codec keys.SQLCodec,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
 ) (res tree.TableNames, err error) {
@@ -166,7 +166,7 @@ func ResolveExistingObject(
 	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
-		_, isType := obj.(sqlbase.TypeDescriptor)
+		_, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
 		}
@@ -175,7 +175,7 @@ func ResolveExistingObject(
 		}
 		return obj.(*sqlbase.ImmutableTypeDescriptor), prefix, nil
 	case tree.TableObject:
-		table, ok := obj.(sqlbase.TableDescriptor)
+		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
 			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
 		}
@@ -286,7 +286,7 @@ func ResolveTypeDescByID(
 	codec keys.SQLCodec,
 	id descpb.ID,
 	lookupFlags tree.ObjectLookupFlags,
-) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+) (tree.TypeName, catalog.TypeDescriptor, error) {
 	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id, catalogkv.Immutable,
 		catalogkv.TypeDescriptorKind, lookupFlags.Required)
 	if err != nil {
@@ -309,7 +309,7 @@ func ResolveTypeDescByID(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeNewQualifiedTypeName(db.GetName(), schemaName, typDesc.GetName())
-	var ret sqlbase.TypeDescriptor
+	var ret catalog.TypeDescriptor
 	if lookupFlags.RequireMutable {
 		// TODO(ajwerner): Figure this out later when we construct this inside of
 		// the name resolution. This really shouldn't be happening here. Instead we

@@ -12,20 +12,14 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// SchemaDescriptor will eventually be called schemadesc.Descriptor.
-// It is implemented by ImmutableSchemaDescriptor.
-type SchemaDescriptor interface {
-	Descriptor
-	SchemaDesc() *descpb.SchemaDescriptor
-}
-
-var _ SchemaDescriptor = (*ImmutableSchemaDescriptor)(nil)
-var _ SchemaDescriptor = (*MutableSchemaDescriptor)(nil)
+var _ catalog.SchemaDescriptor = (*ImmutableSchemaDescriptor)(nil)
+var _ catalog.SchemaDescriptor = (*MutableSchemaDescriptor)(nil)
 
 // ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
 // on it.
@@ -173,7 +167,7 @@ func (desc *MutableSchemaDescriptor) OriginalVersion() descpb.DescriptorVersion 
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) Immutable() Descriptor {
+func (desc *MutableSchemaDescriptor) Immutable() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))

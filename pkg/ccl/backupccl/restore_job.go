@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -275,8 +276,8 @@ func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
-	tables []sqlbase.TableDescriptor,
-	types []sqlbase.TypeDescriptor,
+	tables []catalog.TableDescriptor,
+	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
@@ -451,7 +452,7 @@ func restore(
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-	tables []sqlbase.TableDescriptor,
+	tables []catalog.TableDescriptor,
 	oldTableIDs []descpb.ID,
 	spans []roachpb.Span,
 	job *jobs.Job,
@@ -621,7 +622,7 @@ func loadBackupSQLDescs(
 	p sql.PlanHookState,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
+) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
 	backupManifests, err := loadBackupManifests(ctx, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
@@ -640,7 +641,7 @@ func loadBackupSQLDescs(
 
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 
-	var sqlDescs []sqlbase.Descriptor
+	var sqlDescs []catalog.Descriptor
 	for _, desc := range allDescs {
 		id := desc.GetID()
 		if _, ok := details.DescriptorRewrites[id]; ok {
@@ -654,11 +655,11 @@ type restoreResumer struct {
 	job       *jobs.Job
 	settings  *cluster.Settings
 	databases []*sqlbase.ImmutableDatabaseDescriptor
-	tables    []sqlbase.TableDescriptor
+	tables    []catalog.TableDescriptor
 	// writtenTypes is the set of types that are restored from the backup into
 	// the database. Note that this is not always the set of types within the
 	// backup, as some types might be remapped to existing types in the database.
-	writtenTypes       []sqlbase.TypeDescriptor
+	writtenTypes       []catalog.TypeDescriptor
 	descriptorCoverage tree.DescriptorCoverage
 	latestStats        []*stats.TableStatisticProto
 	execCfg            *sql.ExecutorConfig
@@ -739,7 +740,7 @@ func isDatabaseEmpty(
 	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
 	ignoredTables map[descpb.ID]struct{},
 ) (bool, error) {
-	var allDescs []sqlbase.Descriptor
+	var allDescs []catalog.Descriptor
 	if err := db.Txn(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
@@ -764,12 +765,12 @@ func isDatabaseEmpty(
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
-	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
+	ctx context.Context, p sql.PlanHookState, sqlDescs []catalog.Descriptor, r *restoreResumer,
 ) (
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
-	tables []sqlbase.TableDescriptor,
+	tables []catalog.TableDescriptor,
 	oldTableIDs []descpb.ID,
-	writtenTypes []sqlbase.TypeDescriptor,
+	writtenTypes []catalog.TypeDescriptor,
 	spans []roachpb.Span,
 	err error,
 ) {
@@ -784,18 +785,18 @@ func createImportingDescriptors(
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
-		case sqlbase.TableDescriptor:
+		case catalog.TableDescriptor:
 			mut := sqlbase.NewMutableCreatedTableDescriptor(*desc.TableDesc())
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
-		case sqlbase.DatabaseDescriptor:
+		case catalog.DatabaseDescriptor:
 			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
 				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
-		case sqlbase.TypeDescriptor:
+		case catalog.TypeDescriptor:
 			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
 	}
@@ -854,7 +855,7 @@ func createImportingDescriptors(
 	}
 
 	// Collect all types after they have had their ID's rewritten.
-	typesByID := make(map[descpb.ID]sqlbase.TypeDescriptor)
+	typesByID := make(map[descpb.ID]catalog.TypeDescriptor)
 	for i := range types {
 		typesByID[types[i].GetID()] = types[i]
 	}
@@ -872,7 +873,7 @@ func createImportingDescriptors(
 			b := txn.NewBatch()
 			for _, table := range mutableTables {
 				// Collect all types used by this table.
-				typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+				typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 					return typesByID[id], nil
 				})
 				if err != nil {
@@ -1230,7 +1231,7 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
 		tableToDrop := sqlbase.NewMutableExistingTableDescriptor(*tbl)
-		prev := tableToDrop.Immutable().(sqlbase.TableDescriptor)
+		prev := tableToDrop.Immutable().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP
 		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)

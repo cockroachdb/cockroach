@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -262,7 +263,7 @@ func createPartitioning(
 // selectPartitionExprs constructs an expression for selecting all rows in the
 // given partitions.
 func selectPartitionExprs(
-	evalCtx *tree.EvalContext, tableDesc sqlbase.TableDescriptor, partNames tree.NameList,
+	evalCtx *tree.EvalContext, tableDesc catalog.TableDescriptor, partNames tree.NameList,
 ) (tree.Expr, error) {
 	exprsByPartName := make(map[string]tree.TypedExpr)
 	for _, partName := range partNames {
@@ -271,7 +272,7 @@ func selectPartitionExprs(
 
 	a := &sqlbase.DatumAlloc{}
 	var prefixDatums []tree.Datum
-	if err := tableDesc.ForeachIndex(sqlbase.IndexOpts{
+	if err := tableDesc.ForeachIndex(catalog.IndexOpts{
 		AddMutations: true,
 	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 		genExpr := true
@@ -328,7 +329,7 @@ func selectPartitionExprs(
 func selectPartitionExprsByName(
 	a *sqlbase.DatumAlloc,
 	evalCtx *tree.EvalContext,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	prefixDatums tree.Datums,

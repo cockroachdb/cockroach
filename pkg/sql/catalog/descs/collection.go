@@ -194,7 +194,7 @@ type Collection struct {
 	//
 	// TODO(ajwerner): This cache may be problematic in clusters with very large
 	// numbers of descriptors.
-	allDescriptors []sqlbase.Descriptor
+	allDescriptors []catalog.Descriptor
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
@@ -605,14 +605,14 @@ func (tc *Collection) getMutableDescriptorByID(
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
 // are not modified during the process of metadata installation.
 func (tc *Collection) hydrateTypesInTableDesc(
-	ctx context.Context, txn *kv.Txn, desc sqlbase.TableDescriptor,
-) (sqlbase.TableDescriptor, error) {
+	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
+) (catalog.TableDescriptor, error) {
 	switch t := desc.(type) {
 	case *sqlbase.MutableTableDescriptor:
 		// It is safe to hydrate directly into MutableTableDescriptor since it is
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
-		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -640,7 +640,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		//  make a copy. However, we could avoid hitting the cache if any of the
 		//  user defined types have been modified in this transaction.
 
-		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -737,7 +737,7 @@ func (tc *Collection) WaitForCacheToDropDatabases(ctx context.Context) {
 // tables.
 func (tc *Collection) HasUncommittedTables() bool {
 	for _, desc := range tc.uncommittedDescriptors {
-		if _, isTable := desc.immutable.(sqlbase.TableDescriptor); isTable {
+		if _, isTable := desc.immutable.(catalog.TableDescriptor); isTable {
 			return true
 		}
 	}
@@ -748,7 +748,7 @@ func (tc *Collection) HasUncommittedTables() bool {
 // types.
 func (tc *Collection) HasUncommittedTypes() bool {
 	for _, desc := range tc.uncommittedDescriptors {
-		if _, isType := desc.immutable.(sqlbase.TypeDescriptor); isType {
+		if _, isType := desc.immutable.(catalog.TypeDescriptor); isType {
 			return true
 		}
 	}
@@ -1001,7 +1001,7 @@ func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) catalog.Mutable
 // before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]sqlbase.Descriptor, error) {
+) ([]catalog.Descriptor, error) {
 	if tc.allDescriptors == nil {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
@@ -1025,7 +1025,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+			typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
 				if dbDesc == nil {
@@ -1247,7 +1247,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
-) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+) (tree.TypeName, catalog.TypeDescriptor, error) {
 	desc, err := dt.descriptors.getDescriptorVersionByID(
 		ctx,
 		dt.txn,
