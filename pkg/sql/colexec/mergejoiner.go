@@ -488,7 +488,8 @@ type mergeJoinBase struct {
 	right              mergeJoinInput
 
 	// Output buffer definition.
-	output coldata.Batch
+	output      coldata.Batch
+	outputTypes []*types.T
 	// outputReady is a flag to indicate that merge joiner is ready to emit an
 	// output batch.
 	outputReady bool
@@ -530,11 +531,10 @@ func (o *mergeJoinBase) InternalMemoryUsage() int {
 }
 
 func (o *mergeJoinBase) Init() {
-	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
+	o.outputTypes = append([]*types.T{}, o.left.sourceTypes...)
 	if o.joinType.ShouldIncludeRightColsInOutput() {
-		outputTypes = append(outputTypes, o.right.sourceTypes...)
+		o.outputTypes = append(o.outputTypes, o.right.sourceTypes...)
 	}
-	o.output = o.unlimitedAllocator.NewMemBatchWithMaxCapacity(outputTypes)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.proberState.lBufferedGroup.spillingQueue = newSpillingQueue(

@@ -89,14 +89,10 @@ func NewAllocator(
 	}
 }
 
-// NewMemBatchWithMaxCapacity allocates a new in-memory coldata.Batch of
-// coldata.BatchSize() capacity.
-func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
-	return a.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
-}
-
-// NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with
-// the given capacity.
+// NewMemBatchWithFixedCapacity allocates a new in-memory coldata.Batch with the
+// given vector capacity.
+// Note: consider whether you want the dynamic batch size behavior (in which
+// case you should be using ResetMaybeReallocate).
 func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(capacity) + int64(EstimateBatchSizeBytes(typs, capacity))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
@@ -105,15 +101,55 @@ func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) 
 	return coldata.NewMemBatchWithCapacity(typs, capacity, a.factory)
 }
 
+// NewMemBatchWithMaxCapacity is a convenience shortcut of
+// NewMemBatchWithFixedCapacity with capacity=coldata.BatchSize() and should
+// only be used in tests (this is enforced by a linter).
+func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
+	return a.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
+}
+
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
 // allocates memory for the selection vector but does *not* allocate any memory
 // for the column vectors - those will have to be added separately.
-func (a *Allocator) NewMemBatchNoCols(types []*types.T, capacity int) coldata.Batch {
+func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchNoCols(types, capacity)
+	return coldata.NewMemBatchNoCols(typs, capacity)
+}
+
+// ResetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
+// state (meaning it is ready to be used) and to have the capacity of at least
+// minCapacity. The method will grow the allocated capacity of the batch
+// exponentially (possibly incurring a reallocation), until the batch reaches
+// coldata.BatchSize().
+// Note: the method assumes that minCapacity is at least 1 and will "truncate"
+// minCapacity if it is larger than coldata.BatchSize().
+func (a *Allocator) ResetMaybeReallocate(
+	typs []*types.T, oldBatch coldata.Batch, minCapacity int,
+) (newBatch coldata.Batch, reallocated bool) {
+	if minCapacity < 1 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
+	}
+	reallocated = true
+	if oldBatch == nil {
+		newBatch = a.NewMemBatchWithFixedCapacity(typs, minCapacity)
+	} else if oldBatch.Capacity() < coldata.BatchSize() {
+		newCapacity := oldBatch.Capacity() * 2
+		if newCapacity < minCapacity {
+			newCapacity = minCapacity
+		}
+		if newCapacity > coldata.BatchSize() {
+			newCapacity = coldata.BatchSize()
+		}
+		newBatch = a.NewMemBatchWithFixedCapacity(typs, newCapacity)
+	} else {
+		reallocated = false
+		oldBatch.ResetInternalBatch()
+		newBatch = oldBatch
+	}
+	return newBatch, reallocated
 }
 
 // RetainBatch adds the size of the batch to the memory account. This shouldn't
