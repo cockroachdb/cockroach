@@ -157,7 +157,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		//    need to explicitly initialize.
 		shouldInit := !h.useStartSingleNode(vers) && vers.AtLeast(version.MustParse("v20.1.0"))
 		if shouldInit {
-			fmt.Printf("%s: initializing cluster", h.c.Name)
+			fmt.Printf("%s: initializing cluster\n", h.c.Name)
 			initOut, err := h.initializeCluster(nodeIdx)
 			if err != nil {
 				log.Fatalf("unable to initialize cluster: %v", err)
@@ -188,7 +188,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			}
 		}
 
-		fmt.Printf("%s: setting cluster settings", h.c.Name)
+		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
 		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
 		if err != nil {
 			log.Fatalf("unable to set cluster settings: %v", err)
