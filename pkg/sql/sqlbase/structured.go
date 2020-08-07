@@ -706,6 +706,24 @@ func (desc *ImmutableTableDescriptor) ForeachInboundFK(
 	return nil
 }
 
+// NumFamilies returns the number of column families in the descriptor.
+func (desc *ImmutableTableDescriptor) NumFamilies() int {
+	return len(desc.Families)
+}
+
+// ForeachFamily calls f for every column family key in desc until an
+// error is returned.
+func (desc *ImmutableTableDescriptor) ForeachFamily(
+	f func(family *descpb.ColumnFamilyDescriptor) error,
+) error {
+	for i := range desc.Families {
+		if err := f(&desc.Families[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "fam_%d", familyID)
@@ -3670,11 +3688,11 @@ func (desc *ImmutableTableDescriptor) ColumnTypes() []*types.T {
 // ColumnsWithMutations returns all column descriptors, optionally including
 // mutation columns.
 func (desc *ImmutableTableDescriptor) ColumnsWithMutations(
-	mutations bool,
+	includeMutations bool,
 ) []descpb.ColumnDescriptor {
 	n := len(desc.Columns)
 	columns := desc.Columns[:n:n] // immutable on append
-	if mutations {
+	if includeMutations {
 		for i := range desc.Mutations {
 			if col := desc.Mutations[i].GetColumn(); col != nil {
 				columns = append(columns, *col)

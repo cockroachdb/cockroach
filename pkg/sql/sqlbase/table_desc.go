@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -53,16 +54,19 @@ type TableDescriptor interface {
 
 	GetPrimaryIndexID() descpb.IndexID
 	GetPrimaryIndex() *descpb.IndexDescriptor
+	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor
 	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error
 	AllNonDropIndexes() []*descpb.IndexDescriptor
 	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	IsInterleaved() bool
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
 	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
+	KeysPerRow(id descpb.IndexID) (int, error)
+	PartialIndexOrds() util.FastIntSet
+	DeletableIndexes() []descpb.IndexDescriptor
 
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
@@ -77,7 +81,14 @@ type TableDescriptor interface {
 	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor
 	AllNonDropColumns() []descpb.ColumnDescriptor
 	VisibleColumns() []descpb.ColumnDescriptor
+	ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor
+	ColumnIdxMapWithMutations(includeMutations bool) map[descpb.ColumnID]int
+	DeletableColumns() []descpb.ColumnDescriptor
+
 	GetFamilies() []descpb.ColumnFamilyDescriptor
+	NumFamilies() int
+	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
+	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
 
 	IsTable() bool
 	IsView() bool
@@ -86,6 +97,7 @@ type TableDescriptor interface {
 	IsTemporary() bool
 	IsVirtualTable() bool
 	IsPhysicalTable() bool
+	IsInterleaved() bool
 
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
@@ -102,6 +114,7 @@ type TableDescriptor interface {
 	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
+	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 }
 

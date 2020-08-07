@@ -108,7 +108,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 // GetSchema implements the Accessor interface.
 func (a *CachedPhysicalAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	return a.tc.ResolveSchema(ctx, txn, dbID, scName)
 }
 

@@ -44,9 +44,7 @@ func (f *singleKVFetcher) nextBatch(
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
-) error {
+func ConvertBatchError(ctx context.Context, tableDesc sqlbase.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
@@ -70,7 +68,7 @@ type KeyToDescTranslator interface {
 	// descriptor. An implementation can return (nil, false) if the translation
 	// failed because the key is not part of a table it was scanning, but is
 	// instead part of an interleaved relative (parent/sibling/child) table.
-	KeyToDesc(roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool)
+	KeyToDesc(roachpb.Key) (sqlbase.TableDescriptor, bool)
 }
 
 // ConvertFetchError attempts to a map key-value error generated during a
@@ -88,10 +86,7 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	key roachpb.Key,
-	value *roachpb.Value,
+	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
 	index, datums, err := decodeRowInfo(ctx, tableDesc, key, value)
 	if err != nil {
@@ -115,7 +110,7 @@ func NewUniquenessConstraintViolationError(
 // table descriptor corresponding to the key is unknown due to a table
 // interleaving.
 func NewLockNotAvailableError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, key roachpb.Key,
+	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key,
 ) error {
 	if tableDesc == nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
@@ -136,7 +131,7 @@ func NewLockNotAvailableError(
 		"could not obtain lock on row (%s)=(%s) in %s@%s",
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(datumStrs, ","),
-		tableDesc.Name,
+		tableDesc.GetName(),
 		index.Name)
 }
 
@@ -144,10 +139,7 @@ func NewLockNotAvailableError(
 // returns information about the corresponding SQL row. If successful, the index
 // and datums corresponding to the provided key are returned.
 func decodeRowInfo(
-	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	key roachpb.Key,
-	value *roachpb.Value,
+	ctx context.Context, tableDesc sqlbase.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) (*descpb.IndexDescriptor, tree.Datums, error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
@@ -185,7 +177,7 @@ func decodeRowInfo(
 		Desc:             tableDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}

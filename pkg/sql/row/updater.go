@@ -486,7 +486,7 @@ func (ru *Updater) UpdateRow(
 					if oldEntry.Family == descpb.FamilyID(0) {
 						return nil, errors.AssertionFailedf(
 							"index entry for family 0 for table %s, index %s was not generated",
-							ru.Helper.TableDesc.Name, index.Name,
+							ru.Helper.TableDesc.GetName(), index.Name,
 						)
 					}
 					// In this case, the index has a k/v for a family that does not exist in
@@ -500,7 +500,7 @@ func (ru *Updater) UpdateRow(
 					if newEntry.Family == descpb.FamilyID(0) {
 						return nil, errors.AssertionFailedf(
 							"index entry for family 0 for table %s, index %s was not generated",
-							ru.Helper.TableDesc.Name, index.Name,
+							ru.Helper.TableDesc.GetName(), index.Name,
 						)
 					}
 					// In this case, the index now has a k/v that did not exist in the
