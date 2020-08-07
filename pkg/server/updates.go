@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -323,7 +324,7 @@ func (s *Server) getReportingInfo(
 	// flattened for quick reads, but we'd rather only report the non-defaults.
 	if datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-setting", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -339,7 +340,7 @@ func (s *Server) getReportingInfo(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warningf(ctx, "%v", err)

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -420,7 +421,7 @@ func (p *planner) reassignIndexComments(
 		ctx,
 		"update-table-comments",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
 		table.ID,
 		keys.IndexCommentType,
@@ -434,7 +435,7 @@ func (p *planner) reassignIndexComments(
 				ctx,
 				"update-table-comments",
 				p.txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
 				new,
 				old,

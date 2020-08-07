@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -210,7 +210,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -284,7 +284,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				jobControl,
 			)
 			require.NoError(t, err)
