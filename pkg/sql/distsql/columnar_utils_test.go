@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -46,7 +46,7 @@ type verifyColOperatorArgs struct {
 	// with caution and leave a comment that justifies using this knob.
 	colIdxsToCheckForEquality []int
 	inputTypes                [][]*types.T
-	inputs                    []sqlbase.EncDatumRows
+	inputs                    []rowenc.EncDatumRows
 	outputTypes               []*types.T
 	pspec                     *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
@@ -184,7 +184,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	defer outProc.ConsumerClosed()
 	defer outColOp.ConsumerClosed()
 
-	printRowForChecking := func(r sqlbase.EncDatumRow) []string {
+	printRowForChecking := func(r rowenc.EncDatumRow) []string {
 		res := make([]string, len(args.outputTypes))
 		for i, col := range r {
 			res[i] = col.String(args.outputTypes[i])

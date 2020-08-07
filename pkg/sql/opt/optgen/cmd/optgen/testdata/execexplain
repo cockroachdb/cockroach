@@ -15,7 +15,7 @@ define Filter {
 }
 
 define HashJoin {
-    JoinType sqlbase.JoinType
+    JoinType descpb.JoinType
     Left exec.Node
     Right exec.Node
     LeftEqCols []exec.NodeColumnOrdinal
@@ -31,6 +31,7 @@ define HashJoin {
 package explain
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (f *Factory) ConstructScan(
@@ -100,7 +100,7 @@ func (f *Factory) ConstructFilter(
 }
 
 func (f *Factory) ConstructHashJoin(
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left exec.Node,
 	right exec.Node,
 	leftEqCols []exec.NodeColumnOrdinal,
@@ -166,7 +166,7 @@ type filterArgs struct {
 }
 
 type hashJoinArgs struct {
-	JoinType          sqlbase.JoinType
+	JoinType          descpb.JoinType
 	Left              *Node
 	Right             *Node
 	LeftEqCols        []exec.NodeColumnOrdinal

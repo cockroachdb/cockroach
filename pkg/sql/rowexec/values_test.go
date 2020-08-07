@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -32,7 +32,7 @@ func TestValuesProcessor(t *testing.T) {
 		for _, numCols := range []int{1, 3} {
 			for _, rowsPerChunk := range []int{1, 2, 5} {
 				t.Run(fmt.Sprintf("%d-%d-%d", numRows, numCols, rowsPerChunk), func(t *testing.T) {
-					inRows, colTypes := sqlbase.RandEncDatumRows(rng, numRows, numCols)
+					inRows, colTypes := rowenc.RandEncDatumRows(rng, numRows, numCols)
 
 					spec, err := execinfra.GenerateValuesSpec(colTypes, inRows, rowsPerChunk)
 					if err != nil {
@@ -57,7 +57,7 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatalf("output RowReceiver not closed")
 					}
 
-					var res sqlbase.EncDatumRows
+					var res rowenc.EncDatumRows
 					for {
 						row := out.NextNoMeta(t)
 						if row == nil {
@@ -70,7 +70,7 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
-					var a sqlbase.DatumAlloc
+					var a rowenc.DatumAlloc
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
@@ -111,8 +111,8 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
-				rows := sqlbase.MakeIntRows(numRows, numCols)
-				spec, err := execinfra.GenerateValuesSpec(sqlbase.TwoIntCols, rows, rowsPerChunk)
+				rows := rowenc.MakeIntRows(numRows, numCols)
+				spec, err := execinfra.GenerateValuesSpec(rowenc.TwoIntCols, rows, rowsPerChunk)
 				if err != nil {
 					b.Fatal(err)
 				}

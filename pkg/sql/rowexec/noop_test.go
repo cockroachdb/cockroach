@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -43,7 +43,7 @@ func BenchmarkNoop(b *testing.B) {
 			for i := range cols {
 				cols[i] = types.Int
 			}
-			input := execinfra.NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(cols, rowenc.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()

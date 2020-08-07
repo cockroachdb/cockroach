@@ -14,11 +14,12 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -307,7 +308,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 					streams[i] = rowChan
 				}
 				var err error
-				ordering := sqlbase.NoOrdering
+				ordering := colinfo.NoOrdering
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
@@ -426,11 +427,11 @@ func (f *rowBasedFlow) Cleanup(ctx context.Context) {
 
 type copyingRowReceiver struct {
 	execinfra.RowReceiver
-	alloc sqlbase.EncDatumRowAlloc
+	alloc rowenc.EncDatumRowAlloc
 }
 
 func (r *copyingRowReceiver) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if row != nil {
 		row = r.alloc.CopyRow(row)

@@ -12,6 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -100,7 +100,7 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 // tuples in IN clause are sorted.
 
 func (e *distSQLSpecExecFactory) ConstructValues(
-	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
+	rows [][]tree.TypedExpr, cols colinfo.ResultColumns,
 ) (exec.Node, error) {
 	if (len(cols) == 0 && len(rows) == 1) || len(rows) == 0 {
 		physPlan, err := e.dsp.createValuesPlan(
@@ -196,7 +196,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
-	p.ResultColumns = sqlbase.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
+	p.ResultColumns = colinfo.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
 		// Note that empty rows argument is handled by ConstructValues first -
@@ -375,7 +375,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 
 func (e *distSQLSpecExecFactory) ConstructRender(
 	n exec.Node,
-	columns sqlbase.ResultColumns,
+	columns colinfo.ResultColumns,
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -395,7 +395,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 func (e *distSQLSpecExecFactory) ConstructApplyJoin(
 	joinType descpb.JoinType,
 	left exec.Node,
-	rightColumns sqlbase.ResultColumns,
+	rightColumns colinfo.ResultColumns,
 	onCond tree.TypedExpr,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
@@ -420,7 +420,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	joinType descpb.JoinType,
 	left, right exec.Node,
 	onCond tree.TypedExpr,
-	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
@@ -494,7 +494,7 @@ func populateAggFuncSpec(
 func (e *distSQLSpecExecFactory) constructAggregators(
 	input exec.Node,
 	groupCols []exec.NodeColumnOrdinal,
-	groupColOrdering sqlbase.ColumnOrdering,
+	groupColOrdering colinfo.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 	isScalar bool,
@@ -554,7 +554,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	input exec.Node,
 	groupCols []exec.NodeColumnOrdinal,
-	groupColOrdering sqlbase.ColumnOrdering,
+	groupColOrdering colinfo.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -612,7 +612,7 @@ func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	e.dsp.addSorters(physPlan, sqlbase.ColumnOrdering(ordering), alreadyOrderedPrefix)
+	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -707,7 +707,7 @@ func (e *distSQLSpecExecFactory) ConstructMax1Row(
 }
 
 func (e *distSQLSpecExecFactory) ConstructProjectSet(
-	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
+	n exec.Node, exprs tree.TypedExprs, zipCols colinfo.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	cols := append(plan.physPlan.ResultColumns, zipCols...)
@@ -817,7 +817,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	passthrough sqlbase.ResultColumns,
+	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
@@ -877,7 +877,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	persistence tree.Persistence,
 	materialized bool,
 	viewQuery string,
-	columns sqlbase.ResultColumns,
+	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create view")
@@ -991,7 +991,7 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	onCond tree.TypedExpr,
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
-	mergeJoinOrdering sqlbase.ColumnOrdering,
+	mergeJoinOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	leftPhysPlan, leftPlan := getPhysPlan(left)

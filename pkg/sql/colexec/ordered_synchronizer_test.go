@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,7 +32,7 @@ func TestOrderedSync(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		sources  []tuples
-		ordering sqlbase.ColumnOrdering
+		ordering colinfo.ColumnOrdering
 		expected tuples
 	}{
 		{
@@ -51,7 +51,7 @@ func TestOrderedSync(t *testing.T) {
 					{4, 4, 4},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 				{ColIdx: 1, Direction: encoding.Ascending},
 			},
@@ -81,7 +81,7 @@ func TestOrderedSync(t *testing.T) {
 					{0, 0, 0},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: encoding.Descending},
 				{ColIdx: 0, Direction: encoding.Ascending},
 				{ColIdx: 2, Direction: encoding.Ascending},
@@ -108,7 +108,7 @@ func TestOrderedSync(t *testing.T) {
 					{nil},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Ascending},
 			},
 			expected: tuples{
@@ -129,7 +129,7 @@ func TestOrderedSync(t *testing.T) {
 					{nil},
 				},
 			},
-			ordering: sqlbase.ColumnOrdering{
+			ordering: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: encoding.Descending},
 			},
 			expected: tuples{
@@ -186,7 +186,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	for i := range inputs {
 		inputs[i].Op = newOpTestInput(batchSize, sources[i], typs)
 	}
-	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
 	require.NoError(t, err)
 	op.Init()
@@ -216,7 +216,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		inputs[i].Op = colexecbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
-	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
 	require.NoError(b, err)
 	op.Init()

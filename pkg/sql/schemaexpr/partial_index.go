@@ -241,7 +241,7 @@ func MakePartialIndexExprs(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs sqlbase.TableColSet, _ error) {
+) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs TableColSet, _ error) {
 	// If none of the indexes are partial indexes, return early.
 	partialIndexCount := 0
 	for i := range indexes {

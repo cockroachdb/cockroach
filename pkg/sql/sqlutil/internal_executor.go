@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -81,7 +82,7 @@ type InternalExecutor interface {
 	QueryWithCols(
 		ctx context.Context, opName string, txn *kv.Txn,
 		o sqlbase.InternalExecutorSessionDataOverride, statement string, qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
+	) ([]tree.Datums, colinfo.ResultColumns, error)
 
 	// QueryRow is like Query, except it returns a single row, or nil if not row is
 	// found, or an error if more that one row is returned.

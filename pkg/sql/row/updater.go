@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,8 +49,8 @@ type Updater struct {
 	key             roachpb.Key
 	valueBuf        []byte
 	value           roachpb.Value
-	oldIndexEntries [][]sqlbase.IndexEntry
-	newIndexEntries [][]sqlbase.IndexEntry
+	oldIndexEntries [][]rowenc.IndexEntry
+	newIndexEntries [][]rowenc.IndexEntry
 }
 
 type rowUpdaterType int
@@ -85,7 +86,7 @@ func MakeUpdater(
 	updateCols []descpb.ColumnDescriptor,
 	requestedCols []descpb.ColumnDescriptor,
 	updateType rowUpdaterType,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 ) (Updater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
@@ -168,8 +169,8 @@ func MakeUpdater(
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshaled:             make([]roachpb.Value, len(updateCols)),
-		oldIndexEntries:       make([][]sqlbase.IndexEntry, len(includeIndexes)),
-		newIndexEntries:       make([][]sqlbase.IndexEntry, len(includeIndexes)),
+		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
+		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 	}
 
 	if primaryKeyColChange {
@@ -280,7 +281,7 @@ func (ru *Updater) UpdateRow(
 	if err != nil {
 		return nil, err
 	}
-	var deleteOldSecondaryIndexEntries []sqlbase.IndexEntry
+	var deleteOldSecondaryIndexEntries []rowenc.IndexEntry
 	if ru.DeleteHelper != nil {
 		// We want to include empty k/v pairs because we want
 		// to delete all k/v's for this row. By setting includeEmpty
@@ -301,7 +302,7 @@ func (ru *Updater) UpdateRow(
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
 	for i, val := range updateValues {
-		if ru.marshaled[i], err = sqlbase.MarshalColumnValue(&ru.UpdateCols[i], val); err != nil {
+		if ru.marshaled[i], err = rowenc.MarshalColumnValue(&ru.UpdateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
@@ -346,7 +347,7 @@ func (ru *Updater) UpdateRow(
 		if pm.IgnoreForDel.Contains(int(index.ID)) {
 			ru.oldIndexEntries[i] = nil
 		} else {
-			ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
+			ru.oldIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
 				ru.Helper.Codec,
 				ru.Helper.TableDesc,
 				index,
@@ -361,7 +362,7 @@ func (ru *Updater) UpdateRow(
 		if pm.IgnoreForPut.Contains(int(index.ID)) {
 			ru.newIndexEntries[i] = nil
 		} else {
-			ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
+			ru.newIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
 				ru.Helper.Codec,
 				ru.Helper.TableDesc,
 				index,
@@ -573,7 +574,7 @@ func (ru *Updater) UpdateRow(
 	return ru.newValues, nil
 }
 
-func compareIndexEntries(left, right sqlbase.IndexEntry) int {
+func compareIndexEntries(left, right rowenc.IndexEntry) int {
 	cmp := bytes.Compare(left.Key, right.Key)
 	if cmp != 0 {
 		return cmp

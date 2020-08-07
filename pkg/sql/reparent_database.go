@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -115,7 +117,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	if err := p.createDescriptorWithID(
 		ctx,
-		sqlbase.NewSchemaKey(n.newParent.ID, schema.Name).Key(p.ExecCfg().Codec),
+		catalogkeys.NewSchemaKey(n.newParent.ID, schema.Name).Key(p.ExecCfg().Codec),
 		id,
 		schema,
 		params.ExecCfg().Settings,
@@ -222,7 +224,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 				continue
 			}
 			// Remap the ID's on the type.
-			typ, ok := desc.(*sqlbase.MutableTypeDescriptor)
+			typ, ok := desc.(*typedesc.MutableTypeDescriptor)
 			if !ok {
 				return errors.AssertionFailedf("%q was not a MutableTypeDescriptor", objName.Object())
 			}

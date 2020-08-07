@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -224,11 +225,11 @@ func mysqlValueToDatum(
 			// raw byte strings that do not use the same escaping as our ParseBytes
 			// function expects, and the difference between ParseStringAs and
 			// ParseDatumStringAs is whether or not it attempts to parse bytes.
-			return sqlbase.ParseDatumStringAsWithRawBytes(desired, s, evalContext)
+			return rowenc.ParseDatumStringAsWithRawBytes(desired, s, evalContext)
 		case mysql.IntVal:
-			return sqlbase.ParseDatumStringAs(desired, string(v.Val), evalContext)
+			return rowenc.ParseDatumStringAs(desired, string(v.Val), evalContext)
 		case mysql.FloatVal:
-			return sqlbase.ParseDatumStringAs(desired, string(v.Val), evalContext)
+			return rowenc.ParseDatumStringAs(desired, string(v.Val), evalContext)
 		case mysql.HexVal:
 			v, err := v.HexDecode()
 			return tree.NewDBytes(tree.DBytes(v)), err

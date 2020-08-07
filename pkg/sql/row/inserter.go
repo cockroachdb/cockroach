@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,7 +47,7 @@ func MakeInserter(
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	insertCols []descpb.ColumnDescriptor,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableIndexes()),
@@ -137,7 +138,7 @@ func (ri *Inserter) InsertRow(
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshaled[i], err = sqlbase.MarshalColumnValue(&ri.InsertCols[i], val); err != nil {
+		if ri.marshaled[i], err = rowenc.MarshalColumnValue(&ri.InsertCols[i], val); err != nil {
 			return err
 		}
 	}

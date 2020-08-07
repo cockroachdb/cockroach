@@ -19,10 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -64,7 +65,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	}
 
 	post := &execinfrapb.PostProcessSpec{}
-	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
+	input := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(1000, 1))
 	aggSpec := execinfrapb.AggregatorSpec_ARRAY_AGG
 	spec := execinfrapb.WindowerSpec{
 		PartitionBy: []uint32{},
@@ -86,7 +87,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		}},
 	}
 	output := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol, nil, distsqlutils.RowBufferArgs{},
+		rowenc.OneIntCol, nil, distsqlutils.RowBufferArgs{},
 	)
 
 	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)
@@ -121,7 +122,7 @@ type windowTestSpec struct {
 type windowFnTestSpec struct {
 	funcName       string
 	argsIdxs       []uint32
-	columnOrdering sqlbase.ColumnOrdering
+	columnOrdering colinfo.ColumnOrdering
 }
 
 func windows(windowTestSpecs []windowTestSpec) ([]execinfrapb.WindowerSpec, error) {
@@ -170,7 +171,7 @@ func BenchmarkWindower(b *testing.B) {
 			windowFn: windowFnTestSpec{
 				funcName:       "SUM",
 				argsIdxs:       []uint32{0},
-				columnOrdering: sqlbase.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
+				columnOrdering: colinfo.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
 			},
 		},
 		{ // sum(@1) OVER (PARTITION BY @2)
@@ -185,7 +186,7 @@ func BenchmarkWindower(b *testing.B) {
 			windowFn: windowFnTestSpec{
 				funcName:       "SUM",
 				argsIdxs:       []uint32{0},
-				columnOrdering: sqlbase.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
+				columnOrdering: colinfo.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
 			},
 		},
 	})
@@ -208,10 +209,10 @@ func BenchmarkWindower(b *testing.B) {
 		},
 	}
 
-	rowsGenerators := []func(int, int) sqlbase.EncDatumRows{
-		sqlbase.MakeIntRows,
-		func(numRows, numCols int) sqlbase.EncDatumRows {
-			return sqlbase.MakeRepeatedIntRows(numRows/100, numRows, numCols)
+	rowsGenerators := []func(int, int) rowenc.EncDatumRows{
+		rowenc.MakeIntRows,
+		func(numRows, numCols int) rowenc.EncDatumRows {
+			return rowenc.MakeRepeatedIntRows(numRows/100, numRows, numCols)
 		},
 	}
 	skipRepeatedSpecs := map[int]bool{0: true, 1: true}
@@ -242,7 +243,7 @@ func BenchmarkWindower(b *testing.B) {
 			b.Run(runName, func(b *testing.B) {
 				post := &execinfrapb.PostProcessSpec{}
 				disposer := &rowDisposer{}
-				input := execinfra.NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
+				input := execinfra.NewRepeatableRowSource(rowenc.ThreeIntCols, rowsGenerator(numRows, numCols))
 
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()

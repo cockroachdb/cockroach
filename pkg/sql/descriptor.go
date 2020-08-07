@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -149,7 +150,7 @@ func (p *planner) createDescriptorWithID(
 	}
 	isTable := false
 	switch desc := mutDesc.(type) {
-	case *sqlbase.MutableTypeDescriptor:
+	case *typedesc.MutableTypeDescriptor:
 		if err := desc.Validate(ctx, catalogkv.NewDescGetter(p.txn, p.ExecCfg().Codec)); err != nil {
 			return err
 		}
