@@ -224,7 +224,7 @@ func newRootTxnCoordSender(
 		tcs.clock,
 		&tcs.metrics,
 		tcs.heartbeatInterval,
-		&tcs.interceptorAlloc.txnLockGatekeeper,
+		tcf.heartbeatBatcher, // XXX: We bypass the lock gatekeeper entirely here.
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,
 	)
@@ -675,7 +675,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		tc.metrics.RestartsReadWithinUncertainty.Inc()
 
 	case *roachpb.TransactionAbortedError:
-		tc.metrics.RestartsTxnAborted.Inc()
+		tc.metrics.RestartsTxnAborted.Inc() // XXX: We'll need to make sure this codepath still gets exercised.
 
 	case *roachpb.TransactionPushError:
 		tc.metrics.RestartsTxnPush.Inc()

@@ -525,11 +525,15 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	} else {
 		expReason = roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}
-	if _, pErr := lhsStore.Send(ctx, ba); pErr == nil {
-		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
-	} else if abortErr, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
-	} else if abortErr.Reason != expReason {
+	br, pErr := lhsStore.Send(ctx, ba)
+	if pErr != nil {
+		t.Fatalf("unexpected pErr %v", pErr)
+	}
+
+	hbR := br.Responses[0].GetHeartbeatTxn()
+	if hbR.Error == nil {
+		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, hbR.Error)
+	} else if hbR.Error.Reason != expReason {
 		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
 	}
 }

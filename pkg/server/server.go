@@ -359,13 +359,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())
 	registry.AddMetricStruct(txnMetrics)
 	txnCoordSenderFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
-		AmbientCtx:   cfg.AmbientCtx,
-		Settings:     st,
-		Clock:        clock,
-		Stopper:      stopper,
-		Linearizable: cfg.Linearizable,
-		Metrics:      txnMetrics,
-		TestingKnobs: clientTestingKnobs,
+		AmbientCtx:           cfg.AmbientCtx,
+		Settings:             st,
+		Clock:                clock,
+		Stopper:              stopper,
+		Linearizable:         cfg.Linearizable,
+		Metrics:              txnMetrics,
+		TestingKnobs:         clientTestingKnobs,
+		RangeDescriptorCache: distSender.RangeDescriptorCache(),
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 

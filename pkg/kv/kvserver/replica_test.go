@@ -1716,6 +1716,10 @@ func revScanArgs(start, end []byte) *roachpb.ReverseScanRequest {
 	}
 }
 
+// XXX: Do we want to return a header here?
+// XXX: Check usages. Is it safe for to remove pErr returns, and enclose error
+// results within txn response err? Or just make them aborted instead? What are
+// we losing? Where's this being used?
 func heartbeatArgs(
 	txn *roachpb.Transaction, now hlc.Timestamp,
 ) (roachpb.HeartbeatTxnRequest, roachpb.Header) {
@@ -1723,7 +1727,8 @@ func heartbeatArgs(
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
-		Now: now,
+		Now:          now,
+		HeartbeatTxn: txn,
 	}, roachpb.Header{Txn: txn}
 }
 
@@ -3896,9 +3901,9 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 		// HeartbeatTxn.
 		hb, hbH := heartbeatArgs(pushee, tc.Clock().Now())
 		resp, pErr = tc.SendWrappedWith(hbH, &hb)
-		if pErr == nil {
-			t.Fatalf("unexpected success: %+v", resp)
-		} else if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
+		if pErr != nil {
+			t.Fatalf("unexpected error: %+v", pErr)
+		} else if hbR := resp.(*roachpb.HeartbeatTxnResponse); !testutils.IsError(hbR.Error, regexp.QuoteMeta(expErr)) {
 			t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
 		}
 
@@ -4100,7 +4105,9 @@ func TestEndTxnBeforeHeartbeat(t *testing.T) {
 			t.Error(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != expStatus {
+		// XXX: Here we were previously reaching into batchheader.Txn instead of
+		// the new return txn resp type. Where else are we doing this?
+		if hBR.HeartbeatTxn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s, but got %s", expStatus, hBR.Txn.Status)
 		}
 	})
@@ -4134,8 +4141,11 @@ func TestEndTxnAfterHeartbeat(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != roachpb.PENDING {
-			t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, roachpb.PENDING)
+		// XXX: Check for all usages, and make sure we always use .HeartbeatTxn
+		// after. We're going to probably want to include it in both anyway for
+		// backwards compat.
+		if hBR.HeartbeatTxn.Status != roachpb.PENDING {
+			t.Errorf("expected transaction status to be %s, but got %s", hBR.HeartbeatTxn.Status, roachpb.PENDING)
 		}
 
 		et, h := endTxnArgs(txn, commit)
@@ -4152,9 +4162,9 @@ func TestEndTxnAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat != hBR.Txn.LastHeartbeat {
+		if reply.Txn.LastHeartbeat != hBR.HeartbeatTxn.LastHeartbeat {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
-				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
+				reply.Txn.LastHeartbeat, hBR.HeartbeatTxn.LastHeartbeat)
 		}
 		key = key.Next()
 	})
@@ -4672,13 +4682,27 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	}
 
 	// Heartbeat should fail with a TransactionAbortedError.
-	_, pErr = tc.SendWrappedWith(hbH, &hb)
-	expErr := "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)"
-	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
-		t.Errorf("expected %s; got %v", expErr, pErr)
+	// XXX: What happens if we're foregoing the roachpb.Error returned by
+	// heartbeat txn request eval entirely? I don't understand where we nil out
+	// resp when pErr is non-nil. I don't know what breakage I'm causing with
+	// this.
+	resp, pErr := tc.SendWrappedWith(hbH, &hb)
+	hresp := resp.(*roachpb.HeartbeatTxnResponse)
+	expReason := roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
+	if txnStatus := hresp.HeartbeatTxn.Status; txnStatus != roachpb.ABORTED {
+		t.Errorf("expected aborted txn, got %s", txnStatus)
+	}
+
+	if gotErr := hresp.Error; gotErr != nil {
+		t.Errorf("expected non-nil error")
+	}
+
+	if gotReason := hresp.Error.Reason; gotReason != expReason {
+		t.Errorf("expected %s; got %v", expReason, gotReason)
 	}
 
 	// EndTxn should fail with a TransactionAbortedError.
+	expErr := "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)"
 	_, pErr = tc.SendWrappedWith(etH, &et)
 	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
@@ -4848,7 +4872,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 	}
 	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
 	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey()}}
-	if !reflect.DeepEqual(hbResp.Txn.LockSpans, expIntents) {
+	if !reflect.DeepEqual(hbResp.HeartbeatTxn.LockSpans, expIntents) {
 		t.Fatalf("expected persisted intents %v, got %v",
 			expIntents, hbResp.Txn.LockSpans)
 	}
@@ -8869,6 +8893,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 	hbTxnReq := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: rh,
 		Now:           cfg.Clock.Now(),
+		HeartbeatTxn:  txn,
 	}
 	pushTxnReq := &roachpb.PushTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -8910,7 +8935,6 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		setup       func(context.Context, *Replica) *roachpb.Error // optional
 		useTxn      bool
 		req         roachpb.Request
-		expFailure  string // regexp pattern to match on error if not empty
 		expProposal bool
 	}{
 		{
@@ -9056,14 +9080,8 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			_, pErr := repl.Send(ctx, ba)
 
 			// Check return error.
-			if c.expFailure == "" {
-				if pErr != nil {
-					t.Fatalf("unexpected error: %v", pErr)
-				}
-			} else {
-				if !testutils.IsPError(pErr, c.expFailure) {
-					t.Fatalf("expected error %q, found %v", c.expFailure, pErr)
-				}
+			if pErr != nil {
+				t.Fatalf("unexpected error: %v", pErr)
 			}
 
 			// Check proposal status.
@@ -10722,6 +10740,19 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), h, args)
 		return pErr.GoError()
 	}
+	// XXX:
+	sendHBWrappedWithErr := func(h roachpb.Header, args roachpb.Request) error {
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Sender(), h, args)
+		if pErr != nil {
+			t.Error(pErr)
+		}
+		hbR := resp.(*roachpb.HeartbeatTxnResponse)
+		err := hbR.Error
+		if err == nil {
+			return nil
+		}
+		return err
+	}
 
 	intents := []roachpb.Span{{Key: roachpb.Key("a")}}
 	inFlightWrites := []roachpb.SequencedWrite{{Key: roachpb.Key("a"), Sequence: 1}}
@@ -10757,7 +10788,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "heartbeat transaction",
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
@@ -10857,11 +10888,11 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "heartbeat transaction after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now.Add(0, 5))
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
@@ -10873,13 +10904,13 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "heartbeat transaction with epoch bump after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now.Add(0, 5))
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
@@ -10896,7 +10927,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "end transaction (stage) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
@@ -10909,7 +10940,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "end transaction (abort) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
@@ -10922,7 +10953,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "end transaction (commit) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
@@ -10935,7 +10966,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "end transaction (abort) without eager gc after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
@@ -10948,7 +10979,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "end transaction (commit) without eager gc after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
@@ -10961,7 +10992,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "push transaction (timestamp) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
@@ -10979,7 +11010,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "push transaction (abort) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
@@ -11001,7 +11032,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStagingStatusAndInFlightWrites(txn, hbTs)
@@ -11272,7 +11303,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
 			expTxn:   noTxnRecord,
@@ -11291,7 +11322,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
 			expTxn:   noTxnRecord,
@@ -11372,7 +11403,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
 			expTxn:   noTxnRecord,
@@ -11453,7 +11484,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			// The heartbeat request won't throw an error, but also won't update the
 			// transaction record. It will simply return the updated transaction state.
@@ -11543,7 +11574,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			// The heartbeat request won't throw an error, but also won't update the
 			// transaction record. It will simply return the updated transaction state.
@@ -11635,7 +11666,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now.Add(0, 5))
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
@@ -11744,7 +11775,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 			expTxn:   noTxnRecord,
@@ -11763,7 +11794,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 			expTxn:   noTxnRecord,
@@ -11814,7 +11845,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (implicitly committed) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
@@ -11951,7 +11982,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (not implicitly committed) after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
@@ -11968,7 +11999,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, clone.MinTimestamp)
-				return sendWrappedWithErr(hbH, &hb)
+				return sendHBWrappedWithErr(hbH, &hb)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
@@ -12117,6 +12148,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			disableTxnAutoGC: true,
 		},
 	}
+	// XXX: HeartbeatTxn errors are supplied differently.
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			defer setTxnAutoGC(!c.disableTxnAutoGC)()
@@ -12203,22 +12235,27 @@ func TestRollbackMissingTxnRecordNoError(t *testing.T) {
 
 	// For good measure, let's take the opportunity to check replay protection for
 	// a HeartbeatTxn arriving after the rollback.
-	_, pErr = kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
+	res, pErr = kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
 		RangeID: tc.repl.RangeID,
 		Txn:     txn,
 	}, &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
-		Now: tc.Clock().Now(),
+		Now:          tc.Clock().Now(),
+		HeartbeatTxn: txn,
 	})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
 	// Note that, as explained in the abort reason comments, the server generates
 	// a retryable TransactionAbortedError, but if there's actually a sort of
 	// replay at work and a client is still waiting for the error, the error would
 	// be transformed into something more ambiguous on the way.
-	expErr := "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)"
-	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
-		t.Errorf("expected %s; got %v", expErr, pErr)
+	expReason := roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
+	if gotReason := res.(*roachpb.HeartbeatTxnResponse).Error.Reason; gotReason != expReason {
+		t.Errorf("expected %s; got %v", expReason, gotReason)
 	}
 }
 

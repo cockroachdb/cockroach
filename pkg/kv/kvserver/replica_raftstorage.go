@@ -1163,8 +1163,8 @@ func extractRangeFromEntries(logEntries [][]byte) (string, error) {
 			return "", err
 		}
 
-		firstIndex = string(firstAndLastLogEntries[0].Index)
-		lastIndex = string(firstAndLastLogEntries[1].Index)
+		firstIndex = fmt.Sprint(firstAndLastLogEntries[0].Index)
+		lastIndex = fmt.Sprint(firstAndLastLogEntries[1].Index)
 	}
 	return fmt.Sprintf("[%s, %s]", firstIndex, lastIndex), nil
 }
