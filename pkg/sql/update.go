@@ -407,7 +407,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckDatumTypeFitsColumnType(&ss.column, typ)
+	return colinfo.CheckDatumTypeFitsColumnType(&ss.column, typ)
 }
 
 // enforceLocalColumnConstraints asserts the column constraints that
@@ -428,7 +428,7 @@ func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescript
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlbase.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
+		outVal, err := colinfo.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
 			return err
 		}

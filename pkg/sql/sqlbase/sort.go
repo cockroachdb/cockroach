@@ -17,7 +17,11 @@
 
 package sqlbase
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+)
 
 // The next few sorting functions are largely unmodified
 // from the GO standard library implementation, save for occasional
@@ -55,7 +59,7 @@ func siftDown(data sort.Interface, lo, hi, first int) {
 	}
 }
 
-func heapSort(data sort.Interface, a, b int, cancelChecker *CancelChecker) {
+func heapSort(data sort.Interface, a, b int, cancelChecker *cancelchecker.CancelChecker) {
 	first := a
 	lo := 0
 	hi := b - a
@@ -192,7 +196,9 @@ func maxDepth(n int) int {
 	return depth * 2
 }
 
-func quickSort(data sort.Interface, a, b, maxDepth int, cancelChecker *CancelChecker) {
+func quickSort(
+	data sort.Interface, a, b, maxDepth int, cancelChecker *cancelchecker.CancelChecker,
+) {
 	for b-a > 12 { // Use ShellSort for slices <= 12 elements
 		if maxDepth == 0 {
 			heapSort(data, a, b, cancelChecker)
@@ -229,7 +235,7 @@ func quickSort(data sort.Interface, a, b, maxDepth int, cancelChecker *CancelChe
 // Sort sorts data.
 // It makes one call to data.Len to determine n, and O(n*log(n)) calls to
 // data.Less and data.Swap. The sort is not guaranteed to be stable.
-func Sort(data sort.Interface, cancelChecker *CancelChecker) {
+func Sort(data sort.Interface, cancelChecker *cancelchecker.CancelChecker) {
 	n := data.Len()
 	quickSort(data, 0, n, maxDepth(n), cancelChecker)
 }

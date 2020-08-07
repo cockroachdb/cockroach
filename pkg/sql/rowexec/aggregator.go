@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -77,7 +77,7 @@ type aggregatorBase struct {
 	row              rowenc.EncDatumRow
 	scratch          []byte
 
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 }
 
 // init initializes the aggregatorBase.
@@ -366,7 +366,7 @@ func (ag *orderedAggregator) Start(ctx context.Context) context.Context {
 func (ag *aggregatorBase) start(ctx context.Context, procName string) context.Context {
 	ag.input.Start(ctx)
 	ctx = ag.StartInternal(ctx, procName)
-	ag.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	ag.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	ag.runningState = aggAccumulating
 	return ctx
 }

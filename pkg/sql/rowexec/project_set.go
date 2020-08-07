@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,7 +57,7 @@ type projectSetProcessor struct {
 	// thus also whether NULLs should be emitted instead.
 	done []bool
 
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
@@ -118,7 +118,7 @@ func newProjectSetProcessor(
 func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 	ctx = ps.input.Start(ctx)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
-	ps.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	return ctx
 }
 

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -99,7 +99,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		// a query canceled here. So, only check the error if
 		// it is non-nil.
 		if err != nil {
-			require.Equal(t, sqlbase.QueryCanceledError, err)
+			require.Equal(t, cancelchecker.QueryCanceledError, err)
 		}
 		cleanup()
 
@@ -111,7 +111,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.Equal(t, tree.Datums{tree.NewDInt(1)}, row)
 		cancel()
 		_, err = next()
-		require.Equal(t, sqlbase.QueryCanceledError, err)
+		require.Equal(t, cancelchecker.QueryCanceledError, err)
 		cleanup()
 
 		// Test cancellation after asking for all the rows.

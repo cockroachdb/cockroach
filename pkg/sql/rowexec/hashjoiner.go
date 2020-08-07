@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -120,7 +121,7 @@ type hashJoiner struct {
 	}
 
 	// Context cancellation checker.
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &hashJoiner{}
@@ -221,7 +222,7 @@ func (h *hashJoiner) Start(ctx context.Context) context.Context {
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
 	ctx = h.StartInternal(ctx, hashJoinerProcName)
-	h.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	h.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	h.runningState = hjBuilding
 	return ctx
 }

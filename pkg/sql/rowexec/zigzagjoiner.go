@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -227,7 +228,7 @@ type zigzagJoiner struct {
 	joinerBase
 
 	evalCtx       *tree.EvalContext
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 
 	// numTables stored the number of tables involved in the join.
 	numTables int
@@ -357,7 +358,7 @@ func valuesSpecToEncDatum(
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.FlowCtx.NewEvalCtx()
-	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	z.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 	return ctx
 }

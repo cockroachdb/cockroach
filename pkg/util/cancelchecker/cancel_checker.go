@@ -8,11 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package cancelchecker
 
 import (
 	"context"
 	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
@@ -64,3 +67,7 @@ func (c *CancelChecker) Reset(ctx context.Context) {
 		ctx: ctx,
 	}
 }
+
+// QueryCanceledError is an error representing query cancellation.
+var QueryCanceledError = pgerror.New(
+	pgcode.QueryCanceled, "query execution canceled")

@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -33,7 +33,7 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 
 	leftSource, rightSource execinfra.RowSource
 	leftRows, rightRows     []rowenc.EncDatumRow
@@ -117,7 +117,7 @@ func newMergeJoiner(
 func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 	m.streamMerger.start(ctx)
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
-	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	m.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	return ctx
 }
 

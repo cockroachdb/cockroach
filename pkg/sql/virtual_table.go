@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,7 +81,7 @@ func setupGenerator(
 	addRow := func(datums ...tree.Datum) error {
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case comm <- virtualTableGeneratorResponse{datums: datums}:
 		}
 
@@ -94,7 +95,7 @@ func setupGenerator(
 		// worker, and then back to the next() caller after it is done.
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case <-comm:
 		}
 		return nil
@@ -114,7 +115,7 @@ func setupGenerator(
 		err := worker(funcRowPusher(addRow))
 		// If the query was canceled, next() will already return a
 		// QueryCanceledError, so just exit here.
-		if errors.Is(err, sqlbase.QueryCanceledError) {
+		if errors.Is(err, cancelchecker.QueryCanceledError) {
 			return
 		}
 
@@ -131,13 +132,13 @@ func setupGenerator(
 		select {
 		case comm <- virtualTableGeneratorResponse{}:
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		}
 
 		// Wait for the row to be sent.
 		select {
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		case resp := <-comm:
 			return resp.datums, resp.err
 		}

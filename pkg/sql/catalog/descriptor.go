@@ -163,6 +163,7 @@ type TableDescriptor interface {
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
+	WritableColumns() []descpb.ColumnDescriptor
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
