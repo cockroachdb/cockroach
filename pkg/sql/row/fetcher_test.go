@@ -79,6 +79,7 @@ func initFetcher(
 		fetcherCodec,
 		reverseScan,
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		alloc,
 		fetcherArgs...,
@@ -1063,7 +1064,13 @@ func TestRowFetcherReset(t *testing.T) {
 
 	fetcherArgs := makeFetcherArgs(args)
 	if err := resetFetcher.Init(
-		keys.SystemSQLCodec, false /*reverse*/, 0 /* todo */, false /* isCheck */, &da, fetcherArgs...,
+		keys.SystemSQLCodec,
+		false, /*reverse*/
+		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
+		false, /* isCheck */
+		&da,
+		fetcherArgs...,
 	); err != nil {
 		t.Fatal(err)
 	}

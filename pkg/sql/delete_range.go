@@ -113,6 +113,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// strength here. Consider hooking this in to the same knob that will
 		// control whether we perform locking implicitly during DELETEs.
 		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		params.p.alloc,
 		allTables...,
