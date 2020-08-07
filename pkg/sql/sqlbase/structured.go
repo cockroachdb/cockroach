@@ -472,6 +472,27 @@ func (desc *ImmutableTableDescriptor) ForeachPublicColumn(
 	return nil
 }
 
+// ForeachPublicColumn runs a function on all public columns and columns
+// currently being added.
+func (desc *ImmutableTableDescriptor) ForeachNonDropColumn(
+	f func(column *descpb.ColumnDescriptor) error,
+) error {
+	if err := desc.ForeachPublicColumn(f); err != nil {
+		return err
+	}
+
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		mutCol := mut.GetColumn()
+		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
+			if err := f(mutCol); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // ForeachNonDropIndex runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(

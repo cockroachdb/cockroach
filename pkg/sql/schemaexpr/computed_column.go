@@ -13,13 +13,13 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,7 +27,7 @@ import (
 // column. See Validate for more details.
 type ComputedColumnValidator struct {
 	ctx       context.Context
-	desc      *sqlbase.MutableTableDescriptor
+	desc      catalog.TableDescriptor
 	semaCtx   *tree.SemaContext
 	tableName *tree.TableName
 }
@@ -35,10 +35,7 @@ type ComputedColumnValidator struct {
 // MakeComputedColumnValidator returns an ComputedColumnValidator struct that
 // can be used to validate computed columns. See Validate for more details.
 func MakeComputedColumnValidator(
-	ctx context.Context,
-	desc *sqlbase.MutableTableDescriptor,
-	semaCtx *tree.SemaContext,
-	tn *tree.TableName,
+	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, tn *tree.TableName,
 ) ComputedColumnValidator {
 	return ComputedColumnValidator{
 		ctx:       ctx,
@@ -85,12 +82,11 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	for i := range v.desc.OutboundFKs {
-		fk := &v.desc.OutboundFKs[i]
+	if err := v.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		for _, id := range fk.OriginColumnIDs {
 			if !depColIDs.Contains(id) {
 				// We don't depend on this column.
-				continue
+				return nil
 			}
 			for _, action := range []descpb.ForeignKeyReference_Action{
 				fk.OnDelete,
@@ -105,6 +101,9 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 				}
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Resolve the type of the computed column expression.
@@ -171,23 +170,9 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 		})
 	}
 
-	for i := range v.desc.Columns {
-		if err := checkComputed(&v.desc.Columns[i]); err != nil {
-			return err
-		}
-	}
-
-	for i := range v.desc.Mutations {
-		mut := &v.desc.Mutations[i]
-		mutCol := mut.GetColumn()
-		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
-			if err := checkComputed(mutCol); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return v.desc.ForeachNonDropColumn(func(col *descpb.ColumnDescriptor) error {
+		return checkComputed(col)
+	})
 }
 
 // MakeComputedExprs returns a slice of the computed expressions for the
@@ -203,7 +188,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 func MakeComputedExprs(
 	ctx context.Context,
 	cols []descpb.ColumnDescriptor,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	tn *tree.TableName,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
@@ -237,7 +222,7 @@ func MakeComputedExprs(
 		return nil, err
 	}
 
-	nr := newNameResolver(evalCtx, tableDesc.ID, tn, columnDescriptorsToPtrs(tableDesc.Columns))
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(tableDesc.GetPublicColumns()))
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
