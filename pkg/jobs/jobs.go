@@ -144,14 +144,14 @@ var (
 	errJobCanceled = errors.New("job canceled by user")
 )
 
-// isOldSchemaChangeJob returns whether the provided payload is for a job that
-// is a 19.2-style schema change, and therefore cannot be run or updated in 20.1
-// (without first having undergone a migration).
-// TODO (lucy): Remove this in 20.2. (I think it's possible in theory for a 19.2
+// deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
+// job that is a 19.2-style schema change, and therefore cannot be run or
+// updated in 20.1 (without first having undergone a migration).
+// TODO(lucy): Remove this in 20.2. (I think it's possible in theory for a 19.2
 // schema change job to persist on a 20.1 cluster indefinitely, since the
 // migration is asynchronous, so this will take some care beyond just removing
 // the format version gate.)
-func isOldSchemaChangeJob(payload *jobspb.Payload) bool {
+func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 	schemaChangeDetails, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
 	return ok && schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion
 }
@@ -431,7 +431,7 @@ func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.
 		// could encounter.
 		//
 		// TODO (lucy): Remove this in 20.2.
-		if isOldSchemaChangeJob(md.Payload) {
+		if deprecatedIsOldSchemaChangeJob(md.Payload) {
 			return errors.Newf(
 				"schema change job was created in earlier version, and cannot be " +
 					"canceled in this version until the upgrade is finalized and an internal migration is complete")
@@ -482,7 +482,7 @@ func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 		// possible in 19.2.
 		//
 		// TODO (lucy): Remove this in 20.2.
-		if isOldSchemaChangeJob(md.Payload) {
+		if deprecatedIsOldSchemaChangeJob(md.Payload) {
 			return errors.Newf(
 				"schema change job was created in earlier version, and cannot be " +
 					"paused in this version until the upgrade is finalized and an internal migration is complete")
