@@ -80,6 +80,10 @@ func (f *FilterArgs) InRaftCmd() bool {
 // processing or non-nil to terminate processing with the returned error.
 type ReplicaRequestFilter func(context.Context, roachpb.BatchRequest) *roachpb.Error
 
+// ReplicaConcurrencyRetryFilter can be used to examine a concurrency retry
+// error before it is handled and its batch is re-evaluated.
+type ReplicaConcurrencyRetryFilter func(context.Context, roachpb.BatchRequest, *roachpb.Error)
+
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
 // nil to continue with regular processing or non-nil to terminate processing

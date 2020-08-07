@@ -3676,6 +3676,175 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	}
 }
 
+// TestHistoricalReadsAfterSubsume tests that a subsumed right hand side range
+// can only serve read-only traffic for timestamps that precede the subsumption
+// time, but don't contain the subsumption time in their uncertainty interval.
+func TestHistoricalReadsAfterSubsume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	maxOffset := 100 * time.Millisecond
+	send := func(store *kvserver.Store,
+		desc *roachpb.RangeDescriptor,
+		ts hlc.Timestamp,
+		args roachpb.Request) error {
+		txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(),
+			0, ts, maxOffset.Nanoseconds())
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, args)
+		return pErr.GoError()
+	}
+	checkRangeNotFound := func(err error) error {
+		if err == nil {
+			return errors.Newf("expected RangeNotFoundError, got nil")
+		}
+		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+			return nil
+		}
+		return err
+	}
+	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
+			Logical:  ts.Logical,
+		}
+	}
+
+	type testCase struct {
+		name          string
+		queryTsFunc   func(freezeStart hlc.Timestamp) hlc.Timestamp
+		queryArgsFunc func(key roachpb.Key) roachpb.Request
+		shouldBlock   bool
+	}
+
+	tests := []testCase{
+		// Ensure that a read query for a timestamp older than freezeStart-MaxOffset
+		// is let through.
+		{
+			name:        "historical read",
+			queryTsFunc: preUncertaintyTs,
+			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+				return getArgs(key)
+			},
+			shouldBlock: false,
+		},
+		// Write queries for the same historical timestamp should block (and then
+		// eventually fail because the range no longer exists).
+		{
+			name:        "historical write",
+			queryTsFunc: preUncertaintyTs,
+			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+				return putArgs(key, []byte(`test value`))
+			},
+			shouldBlock: true,
+		},
+		// Read queries that contain the subsumption time in its uncertainty interval
+		// should block and eventually fail.
+		{
+			name: "historical read with uncertainty",
+			queryTsFunc: func(freezeStart hlc.Timestamp) hlc.Timestamp {
+				return freezeStart.Prev()
+			},
+			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+				return getArgs(key)
+			},
+			shouldBlock: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
+				setupClusterWithSubsumedRange(ctx, t, maxOffset)
+			defer tc.Stopper().Stop(ctx)
+			errCh := make(chan error)
+			go func() {
+				errCh <- send(store, rhsDesc, test.queryTsFunc(freezeStart),
+					test.queryArgsFunc(rhsDesc.StartKey.AsRawKey()))
+			}()
+			if test.shouldBlock {
+				waitForBlocked()
+				// Requests that wait for the merge must fail with a RangeNotFoundError
+				// because the RHS should cease to exist once the merge completes.
+				cleanupFunc()
+				require.NoError(t, checkRangeNotFound(<-errCh))
+			} else {
+				require.NoError(t, <-errCh)
+				// We cleanup *after* the non-blocking read request succeeds to prevent
+				// it from racing with the merge commit trigger.
+				cleanupFunc()
+			}
+		})
+	}
+}
+
+// setupClusterWithSubsumedRange returns a TestCluster during an ongoing merge
+// transaction, such that the merge has been suspended right before the merge
+// trigger is evaluated. This leaves the right hand side range of the merge in
+// its subsumed state. It is the responsibility of the caller to call
+// `cleanupFunc` to unblock the merge and Stop() the tc's Stopper when done.
+func setupClusterWithSubsumedRange(
+	ctx context.Context, t *testing.T, testMaxOffset time.Duration,
+) (
+	tc serverutils.TestClusterInterface,
+	store *kvserver.Store,
+	rhsDesc *roachpb.RangeDescriptor,
+	freezeStart hlc.Timestamp,
+	waitForBlocked func(),
+	cleanupFunc func(),
+) {
+	state := mergeFilterState{
+		blockMergeTrigger: make(chan hlc.Timestamp),
+		finishMergeTxn:    make(chan struct{}),
+	}
+	var blockedRequestCount int32
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DisableMergeQueue:    true,
+					MaxOffset:            testMaxOffset,
+					TestingRequestFilter: state.suspendMergeTrigger,
+					TestingConcurrencyRetryFilter: func(
+						ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+					) {
+						if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok {
+							atomic.AddInt32(&blockedRequestCount, 1)
+						}
+					},
+				},
+			},
+		},
+	}
+	tc = serverutils.StartTestCluster(t, 1, clusterArgs)
+	ts := tc.Server(0)
+	stores, _ := ts.GetStores().(*kvserver.Stores)
+	store, err := stores.GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
+	require.NoError(t, err)
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	errCh := make(chan error)
+	go func() {
+		_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
+		errCh <- err.GoError()
+	}()
+	freezeStart = <-state.blockMergeTrigger
+	cleanupFunc = func() {
+		// Let the merge commit.
+		close(state.finishMergeTxn)
+		require.NoError(t, <-errCh)
+	}
+	waitForBlocked = func() {
+		testutils.SucceedsSoon(t, func() error {
+			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked != 1 {
+				return errors.Newf("expected 1 blocked request but found %d", actualBlocked)
+			}
+			return nil
+		})
+	}
+	return tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc
+}
+
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	ctx := context.Background()
 	var mtc multiTestContext
