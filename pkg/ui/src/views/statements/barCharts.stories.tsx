@@ -68,6 +68,10 @@ storiesOf("BarCharts", module)
     stat.squared_diffs = 25;
     const barChartFactory = genericBarChart(stat, Long.fromInt(10));
     return barChartFactory();
+  })
+  .add("genericBarChart (missing data)", () => {
+    const barChartFactory = genericBarChart(null, Long.fromInt(10));
+    return barChartFactory();
   });
 
 storiesOf("BarCharts/within column (150px)", module)
