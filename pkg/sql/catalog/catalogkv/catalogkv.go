@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -204,13 +205,13 @@ func requiredError(kind DescriptorKind, id descpb.ID) error {
 	var err error
 	switch kind {
 	case TableDescriptorKind:
-		err = sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
+		err = sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
 	case DatabaseDescriptorKind:
-		err = sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		err = sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	case SchemaDescriptorKind:
-		err = sqlbase.NewUnsupportedSchemaUsageError(fmt.Sprintf("[%d]", id))
+		err = sqlerrors.NewUnsupportedSchemaUsageError(fmt.Sprintf("[%d]", id))
 	case TypeDescriptorKind:
-		err = sqlbase.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
+		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
 	}
@@ -484,7 +485,7 @@ func GetDatabaseID(
 		return descpb.InvalidID, err
 	}
 	if !found && required {
-		return dbID, sqlbase.NewUndefinedDatabaseError(name)
+		return dbID, sqlerrors.NewUndefinedDatabaseError(name)
 	}
 	return dbID, nil
 }

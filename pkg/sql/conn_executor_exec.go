@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -276,7 +276,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// nicer to look at for the client.
 		if res != nil && ctx.Err() != nil && res.Err() != nil {
 			if queryTimedOut {
-				res.SetError(sqlbase.QueryTimeoutError)
+				res.SetError(sqlerrors.QueryTimeoutError)
 			} else {
 				res.SetError(cancelchecker.QueryCanceledError)
 			}
@@ -1174,7 +1174,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 	reject := func() (fsm.Event, fsm.EventPayload) {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionAbortedError("" /* customMsg */),
+			err: sqlerrors.NewTransactionAbortedError("" /* customMsg */),
 		}
 		return ev, payload
 	}
@@ -1233,7 +1233,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 	default:
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionCommittedError(),
+			err: sqlerrors.NewTransactionCommittedError(),
 		}
 		return ev, payload
 	}

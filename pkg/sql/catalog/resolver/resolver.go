@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -159,7 +160,7 @@ func ResolveExistingObject(
 	resolvedTn := tree.MakeTableNameFromPrefix(prefix, tree.Name(un.Object()))
 	if !found {
 		if lookupFlags.Required {
-			return nil, prefix, sqlbase.NewUndefinedObjectError(&resolvedTn, lookupFlags.DesiredObjectKind)
+			return nil, prefix, sqlerrors.NewUndefinedObjectError(&resolvedTn, lookupFlags.DesiredObjectKind)
 		}
 		return nil, prefix, nil
 	}
@@ -169,7 +170,7 @@ func ResolveExistingObject(
 	case tree.TypeObject:
 		_, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
-			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
 			return obj.(*typedesc.MutableTypeDescriptor), prefix, nil
@@ -178,7 +179,7 @@ func ResolveExistingObject(
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
-			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedRelationError(&resolvedTn)
 		}
 		goodType := true
 		switch lookupFlags.DesiredTableDescKind {
@@ -192,7 +193,7 @@ func ResolveExistingObject(
 			goodType = table.IsSequence()
 		}
 		if !goodType {
-			return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
+			return nil, prefix, sqlerrors.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
 		}
 
 		// If the table does not have a primary key, return an error

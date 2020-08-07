@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -88,7 +88,7 @@ func getCreateTypeParams(
 	// schema for PostgreSQL.
 	if name.Schema() == tree.PublicSchema {
 		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
-			return nil, 0, sqlbase.NewTypeAlreadyExistsError(name.String())
+			return nil, 0, sqlerrors.NewTypeAlreadyExistsError(name.String())
 		}
 	}
 	// Get the ID of the schema the type is being created in.
@@ -103,9 +103,9 @@ func getCreateTypeParams(
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided, catalogkv.Immutable)
 		if err != nil {
-			return nil, 0, sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+			return nil, 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
-		return nil, 0, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
+		return nil, 0, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
 	}
 	if err != nil {
 		return nil, 0, err

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -242,9 +243,9 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 		return pgerror.Newf(
 			pgcode.InvalidCatalogName, "zone %q does not exist", zs.NamedZone)
 	} else if zs.Database != "" {
-		return sqlbase.NewUndefinedDatabaseError(string(zs.Database))
+		return sqlerrors.NewUndefinedDatabaseError(string(zs.Database))
 	} else {
-		return sqlbase.NewUndefinedRelationError(&zs.TableOrIndex)
+		return sqlerrors.NewUndefinedRelationError(&zs.TableOrIndex)
 	}
 }
 
