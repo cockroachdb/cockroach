@@ -90,7 +90,7 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 }
 
 func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Session) error {
-	log.Infof(ctx, "job %d: attempting to resume", jobID)
+	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
@@ -119,6 +119,15 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	if err != nil {
 		return err
 	}
+
+	// In version 20.1, the registry must not adopt 19.2-style schema change jobs
+	// until they've undergone a migration.
+	// TODO(lucy): Remove this in 20.2.
+	if deprecatedIsOldSchemaChangeJob(payload) {
+		log.VEventf(ctx, 2, "job %d: skipping adoption because schema change job has not been migrated", jobID)
+		return nil
+	}
+
 	progress, err := UnmarshalProgress(row[2])
 	if err != nil {
 		return err
