@@ -502,7 +502,6 @@ func init() {
 	for _, cmd := range []*cobra.Command{
 		createCACertCmd,
 		createClientCACertCmd,
-		mtCreateTenantServerCACertCmd,
 		mtCreateTenantClientCACertCmd,
 	} {
 		f := cmd.Flags()
@@ -515,7 +514,6 @@ func init() {
 	for _, cmd := range []*cobra.Command{
 		createNodeCertCmd,
 		createClientCertCmd,
-		mtCreateTenantServerCertCmd,
 		mtCreateTenantClientCertCmd,
 	} {
 		f := cmd.Flags()
@@ -528,8 +526,6 @@ func init() {
 		createClientCACertCmd,
 		createNodeCertCmd,
 		createClientCertCmd,
-		mtCreateTenantServerCACertCmd,
-		mtCreateTenantServerCertCmd,
 		mtCreateTenantClientCACertCmd,
 		mtCreateTenantClientCertCmd,
 	} {
@@ -543,8 +539,6 @@ func init() {
 
 	// The certs dir is given to all clientCmds below, but the following are not clientCmds.
 	for _, cmd := range []*cobra.Command{
-		mtCreateTenantServerCACertCmd,
-		mtCreateTenantServerCertCmd,
 		mtCreateTenantClientCACertCmd,
 		mtCreateTenantClientCertCmd,
 	} {
