@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -149,7 +149,7 @@ func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
 // This implementation doesn't follow the usual patterns of other processors; it
 // makes more limited use of the ProcessorBase's facilities because it needs to
 // inspect metadata while draining.
-func (mtr *MetadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (mtr *MetadataTestReceiver) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
 		if mtr.State == StateTrailingMeta {
 			if meta := mtr.popTrailingMeta(); meta != nil {

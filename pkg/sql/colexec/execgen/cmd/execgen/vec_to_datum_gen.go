@@ -43,7 +43,7 @@ type vecToDatumWidthTmplInfo struct {
 
 // AssignConverted returns a string that performs a conversion of the element
 // in typedCol at position tupleIdx and assigns the result to targetElem.
-// datumAlloc is the name of *sqlbase.DatumAlloc struct that can be used to
+// datumAlloc is the name of *rowenc.DatumAlloc struct that can be used to
 // allocate new datums.
 func (i vecToDatumWidthTmplInfo) AssignConverted(
 	targetElem, typedCol, tupleIdx, datumAlloc string,

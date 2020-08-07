@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,7 +72,7 @@ type RowReceiver interface {
 	// and they might not all be aware of the last status returned).
 	//
 	// Implementations of Push() must be thread-safe.
-	Push(row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
+	Push(row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
 
 	// Types returns the types of the EncDatumRow that this RowReceiver expects
 	// to be pushed.
@@ -131,7 +131,7 @@ type RowSource interface {
 	// RowSource to drain, and separately discard any future data rows. A consumer
 	// receiving an error should also call ConsumerDone() on any other input it
 	// has.
-	Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
+	Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 
 	// ConsumerDone lets the source know that we will not need any more data
 	// rows. The source is expected to start draining and only send metadata
@@ -344,7 +344,7 @@ func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSourc
 // that it's not under the impression that everything is hunky-dory and it can
 // continue consuming rows. So, this interface returns the error. Just like with
 // a raw RowSource, the consumer should generally call ConsumerDone() and drain.
-func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
+func (rs *NoMetadataRowSource) NextRow() (rowenc.EncDatumRow, error) {
 	for {
 		row, meta := rs.src.Next()
 		if meta == nil {
@@ -365,7 +365,7 @@ func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
 // local physical streams (i.e. the RowChannel's).
 type RowChannelMsg struct {
 	// Only one of these fields will be set.
-	Row  sqlbase.EncDatumRow
+	Row  rowenc.EncDatumRow
 	Meta *execinfrapb.ProducerMetadata
 }
 
@@ -439,7 +439,7 @@ func (rc *RowChannel) InitWithBufSizeAndNumSenders(types []*types.T, chanBufSize
 
 // Push is part of the RowReceiver interface.
 func (rc *RowChannel) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) ConsumerStatus {
 	consumerStatus := ConsumerStatus(
 		atomic.LoadUint32((*uint32)(&rc.ConsumerStatus)))
@@ -477,7 +477,7 @@ func (rc *RowChannel) OutputTypes() []*types.T {
 func (rc *RowChannel) Start(ctx context.Context) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
-func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (rc *RowChannel) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	d, ok := <-rc.C
 	if !ok {
 		// No more rows.

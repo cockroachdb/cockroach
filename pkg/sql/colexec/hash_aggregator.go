@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -93,7 +93,7 @@ type hashAggregator struct {
 
 	aggFnsAlloc *aggregateFuncsAlloc
 	hashAlloc   hashAggBucketAlloc
-	datumAlloc  sqlbase.DatumAlloc
+	datumAlloc  rowenc.DatumAlloc
 	toClose     Closers
 }
 

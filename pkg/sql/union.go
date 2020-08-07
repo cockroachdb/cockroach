@@ -13,10 +13,10 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -64,7 +64,7 @@ type unionNode struct {
 	right, left planNode
 
 	// columns contains the metadata for the results of this node.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	// inverted, when true, indicates that the right plan corresponds to
 	// the left operand in the input SQL syntax, and vice-versa.
 	inverted bool
@@ -102,7 +102,7 @@ func (p *planner) newUnionNode(
 			typ, len(leftColumns), len(rightColumns),
 		)
 	}
-	unionColumns := append(sqlbase.ResultColumns(nil), leftColumns...)
+	unionColumns := append(colinfo.ResultColumns(nil), leftColumns...)
 	for i := 0; i < len(unionColumns); i++ {
 		l := leftColumns[i]
 		r := rightColumns[i]

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -404,7 +405,7 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 			mb.addTargetCol(ord)
 			continue
 		}
-		panic(sqlbase.NewUndefinedColumnError(string(name)))
+		panic(colinfo.NewUndefinedColumnError(string(name)))
 	}
 }
 

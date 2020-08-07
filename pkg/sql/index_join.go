@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // indexJoinNode implements joining of results from an index with the rows
@@ -35,7 +35,7 @@ type indexJoinNode struct {
 	// be different in some cases.
 	cols []descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 
 	reqOrdering ReqOrdering
 }

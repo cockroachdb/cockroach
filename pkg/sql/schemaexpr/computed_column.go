@@ -67,7 +67,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		)
 	}
 
-	var depColIDs sqlbase.TableColSet
+	var depColIDs TableColSet
 	// First, check that no column in the expression is a computed column.
 	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *descpb.ColumnDescriptor) error {
 		if c.IsComputed() {

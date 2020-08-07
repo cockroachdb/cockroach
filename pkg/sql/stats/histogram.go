@@ -15,8 +15,8 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -101,7 +101,7 @@ func EquiDepthHistogram(
 		numEq := int64(num-numLess) * numRows / int64(numSamples)
 		numRange := int64(numLess) * numRows / int64(numSamples)
 		distinctRange := estimatedDistinctValuesInRange(float64(numRange), lowerBound, upper)
-		encoded, err := sqlbase.EncodeTableKey(nil, upper, encoding.Ascending)
+		encoded, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
 		if err != nil {
 			return HistogramData{}, err
 		}
