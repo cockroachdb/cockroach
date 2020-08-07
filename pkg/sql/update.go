@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -427,7 +427,7 @@ func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescript
 	for i := range cols {
 		col := &cols[i]
 		if !col.Nullable && row[i] == tree.DNull {
-			return sqlbase.NewNonNullViolationError(col.Name)
+			return sqlerrors.NewNonNullViolationError(col.Name)
 		}
 		outVal, err := colinfo.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
