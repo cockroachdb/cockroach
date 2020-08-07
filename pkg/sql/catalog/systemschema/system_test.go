@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}): false,
 		dbdesc.NewInitialDatabaseDescriptor(42, "db", security.AdminRole):                false,
 		typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                false,
-		sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                  false,
+		schemadesc.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):               false,
 	} {
 		var rawDesc roachpb.Value
 		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -737,7 +738,7 @@ func unwrapDescriptor(ctx context.Context, desc *descpb.Descriptor) catalog.Muta
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ)
 	case schema != nil:
-		return sqlbase.NewMutableExistingSchemaDescriptor(*schema)
+		return schemadesc.NewMutableExistingSchemaDescriptor(*schema)
 	default:
 		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
 		return nil // unreachable

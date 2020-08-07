@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -302,7 +303,7 @@ func unwrapDescriptor(
 	case typ != nil:
 		return typedesc.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
-		return sqlbase.NewImmutableSchemaDescriptor(*schema), nil
+		return schemadesc.NewImmutableSchemaDescriptor(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -337,7 +338,7 @@ func unwrapDescriptorMutable(
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
 	case schema != nil:
-		return sqlbase.NewMutableExistingSchemaDescriptor(*schema), nil
+		return schemadesc.NewMutableExistingSchemaDescriptor(*schema), nil
 	default:
 		return nil, nil
 	}

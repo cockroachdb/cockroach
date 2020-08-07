@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -117,7 +117,7 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	return true, catalog.ResolvedSchema{
 		ID:   sc.GetID(),
 		Kind: catalog.SchemaUserDefined,
-		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc.SchemaDesc()),
+		Desc: schemadesc.NewImmutableSchemaDescriptor(*sc.SchemaDesc()),
 	}, nil
 }
 
