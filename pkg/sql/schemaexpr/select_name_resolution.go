@@ -11,7 +11,7 @@
 // This file implements the select code that deals with column references
 // and resolving column names in expressions.
 
-package sqlbase
+package schemaexpr
 
 import (
 	"context"
