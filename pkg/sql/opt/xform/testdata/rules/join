@@ -181,7 +181,7 @@ memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
 memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12])
- ├── G1: (inner-join G2 G3 G4) (inner-join G5 G6 G7) (inner-join G8 G9 G7) (inner-join G3 G2 G4) (merge-join G2 G3 G10 inner-join,+1,+6) (inner-join G6 G5 G7) (merge-join G5 G6 G10 inner-join,+6,+10) (inner-join G9 G8 G7) (merge-join G8 G9 G10 inner-join,+6,+10) (lookup-join G8 G10 xyz@xy,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G3 G2 G10 inner-join,+6,+1) (lookup-join G3 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G6 G5 G10 inner-join,+10,+6) (lookup-join G6 G10 stu,keyCols=[10],outCols=(1-3,6-8,10-12)) (merge-join G9 G8 G10 inner-join,+10,+6)
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+6) (merge-join G3 G2 G10 inner-join,+6,+1) (lookup-join G3 G10 abc@ab,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G5 G6 G10 inner-join,+6,+10) (merge-join G6 G5 G10 inner-join,+10,+6) (lookup-join G6 G10 stu,keyCols=[10],outCols=(1-3,6-8,10-12)) (merge-join G8 G9 G10 inner-join,+6,+10) (lookup-join G8 G10 xyz@xy,keyCols=[6],outCols=(1-3,6-8,10-12)) (merge-join G9 G8 G10 inner-join,+10,+6)
  │    └── [presentation: a:1,b:2,c:3,s:6,t:7,u:8,x:10,y:11,z:12]
  │         ├── best: (merge-join G5="[ordering: +6]" G6="[ordering: +(1|10)]" G10 inner-join,+6,+10)
  │         └── cost: 12980.08
@@ -316,7 +316,7 @@ memo (optimized, ~34KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1
  │    └── []
  │         ├── best: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
  │         └── cost: 2767.07
- ├── G2: (inner-join G4 G5 G6) (inner-join G7 G8 G9) (inner-join G10 G11 G9) (inner-join G5 G4 G6) (merge-join G4 G5 G12 inner-join,+1,+10) (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,6-8,10,11)) (inner-join G8 G7 G9) (merge-join G7 G8 G12 inner-join,+1,+2,+6,+7) (inner-join G11 G10 G9) (merge-join G10 G11 G12 inner-join,+6,+7,+1,+2) (merge-join G5 G4 G12 inner-join,+10,+1) (merge-join G8 G7 G12 inner-join,+6,+7,+1,+2) (lookup-join G8 G12 grandchild1,keyCols=[6 7],outCols=(1-4,6-8,10,11)) (merge-join G11 G10 G12 inner-join,+1,+2,+6,+7) (lookup-join G11 G12 child1,keyCols=[1 2],outCols=(1-4,6-8,10,11))
+ ├── G2: (inner-join G4 G5 G6) (inner-join G7 G8 G9) (inner-join G8 G7 G9) (inner-join G10 G11 G9) (inner-join G11 G10 G9) (inner-join G5 G4 G6) (merge-join G4 G5 G12 inner-join,+1,+10) (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,6-8,10,11)) (merge-join G7 G8 G12 inner-join,+1,+2,+6,+7) (merge-join G8 G7 G12 inner-join,+6,+7,+1,+2) (lookup-join G8 G12 grandchild1,keyCols=[6 7],outCols=(1-4,6-8,10,11)) (merge-join G10 G11 G12 inner-join,+6,+7,+1,+2) (merge-join G11 G10 G12 inner-join,+1,+2,+6,+7) (lookup-join G11 G12 child1,keyCols=[1 2],outCols=(1-4,6-8,10,11)) (merge-join G5 G4 G12 inner-join,+10,+1)
  │    ├── [ordering: +(1|6|10)]
  │    │    ├── best: (lookup-join G4="[ordering: +(1|6)]" G12 parent1,keyCols=[1],outCols=(1-4,6-8,10,11))
  │    │    └── cost: 2766.06
@@ -597,7 +597,12 @@ Source expression:
    └── filters
         └── a = s
 
-No new expressions.
+New expression 1 of 1:
+  inner-join (hash)
+   ├── scan stu
+   ├── scan abc
+   └── filters
+        └── a = s
 ----
 ----
 
@@ -673,7 +678,16 @@ Source expression:
    └── filters
         └── b = y
 
-No new expressions.
+New expression 1 of 1:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
 
 ================================================================================
 ReorderJoins
@@ -688,7 +702,7 @@ Source expression:
    └── filters
         └── b = y
 
-New expression 1 of 1:
+New expression 1 of 3:
   inner-join (hash)
    ├── scan stu
    ├── inner-join (hash)
@@ -698,6 +712,27 @@ New expression 1 of 1:
    │         └── b = y
    └── filters
         └── s = a
+
+New expression 2 of 3:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   ├── scan stu
+   └── filters
+        └── s = a
+
+New expression 3 of 3:
+  inner-join (hash)
+   ├── scan xyz
+   ├── inner-join (merge)
+   │    ├── scan stu
+   │    ├── scan abc@ab
+   │    └── filters (true)
+   └── filters
+        └── b = y
 ----
 ----
 
@@ -864,7 +899,17 @@ Source expression:
         └── filters
              └── small.m = large.m
 
-No new expressions.
+New expression 1 of 1:
+  project
+   └── left-join (hash)
+        ├── scan small
+        ├── inner-join (hash)
+        │    ├── scan medium
+        │    ├── scan large
+        │    └── filters
+        │         └── large.n = medium.n
+        └── filters
+             └── small.m = large.m
 
 ================================================================================
 ReorderJoins
@@ -938,7 +983,7 @@ Source expression:
         ├── scan xyz
         └── filters (true)
 
-New expression 1 of 1:
+New expression 1 of 2:
   project
    └── inner-join (cross)
         ├── select
@@ -952,6 +997,22 @@ New expression 1 of 1:
         │    │    └── filters
         │    │         └── large.m = medium.m
         │    └── filters
+        │         └── (small.m = large.n) OR (large.n IS NULL)
+        ├── scan xyz
+        └── filters (true)
+
+New expression 2 of 2:
+  project
+   └── inner-join (cross)
+        ├── inner-join (hash)
+        │    ├── scan small
+        │    ├── right-join (hash)
+        │    │    ├── scan large
+        │    │    ├── scan medium
+        │    │    └── filters
+        │    │         └── large.m = medium.m
+        │    └── filters
+        │         ├── medium.n = small.n
         │         └── (small.m = large.n) OR (large.n IS NULL)
         ├── scan xyz
         └── filters (true)
@@ -977,7 +1038,23 @@ Source expression:
         ├── scan xyz
         └── filters (true)
 
-No new expressions.
+New expression 1 of 1:
+  project
+   └── inner-join (cross)
+        ├── scan xyz
+        ├── select
+        │    ├── right-join (hash)
+        │    │    ├── scan large
+        │    │    ├── inner-join (hash)
+        │    │    │    ├── scan medium
+        │    │    │    ├── scan small
+        │    │    │    └── filters
+        │    │    │         └── medium.n = small.n
+        │    │    └── filters
+        │    │         └── large.m = medium.m
+        │    └── filters
+        │         └── (small.m = large.n) OR (large.n IS NULL)
+        └── filters (true)
 ----
 ----
 
@@ -1002,7 +1079,16 @@ Source expression:
    └── filters
         └── b = y
 
-No new expressions.
+New expression 1 of 1:
+  full-join (hash)
+   ├── full-join (hash)
+   │    ├── scan stu
+   │    ├── scan abc
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
 
 ================================================================================
 ReorderJoins
@@ -1017,7 +1103,7 @@ Source expression:
    └── filters
         └── b = y
 
-New expression 1 of 1:
+New expression 1 of 3:
   full-join (hash)
    ├── full-join (hash)
    │    ├── scan abc
@@ -1027,6 +1113,27 @@ New expression 1 of 1:
    ├── scan stu
    └── filters
         └── s = a
+
+New expression 2 of 3:
+  full-join (hash)
+   ├── scan stu
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   └── filters
+        └── s = a
+
+New expression 3 of 3:
+  full-join (hash)
+   ├── scan xyz
+   ├── full-join (merge)
+   │    ├── scan abc@ab
+   │    ├── scan stu
+   │    └── filters (true)
+   └── filters
+        └── b = y
 ----
 ----
 
@@ -1055,7 +1162,16 @@ Source expression:
    └── filters
         └── a = x
 
-No new expressions.
+New expression 1 of 1:
+  full-join (hash)
+   ├── scan abc
+   ├── full-join (hash)
+   │    ├── scan xyz
+   │    ├── scan stu
+   │    └── filters
+   │         └── t = y
+   └── filters
+        └── a = x
 
 ================================================================================
 ReorderJoins
@@ -1071,7 +1187,18 @@ Source expression:
    └── filters
         └── a = x
 
-New expression 1 of 1:
+New expression 1 of 3:
+  full-join (hash)
+   ├── full-join (hash)
+   │    ├── scan stu
+   │    ├── scan xyz
+   │    └── filters
+   │         └── t = y
+   ├── scan abc
+   └── filters
+        └── a = x
+
+New expression 2 of 3:
   full-join (hash)
    ├── scan stu
    ├── full-join (hash)
@@ -1079,6 +1206,17 @@ New expression 1 of 1:
    │    ├── scan xyz
    │    └── filters
    │         └── a = x
+   └── filters
+        └── t = y
+
+New expression 3 of 3:
+  full-join (hash)
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── a = x
+   ├── scan stu
    └── filters
         └── t = y
 ----
@@ -1154,7 +1292,16 @@ Source expression:
    └── filters
         └── b = y
 
-No new expressions.
+New expression 1 of 1:
+  left-join (hash)
+   ├── full-join (hash)
+   │    ├── scan stu
+   │    ├── scan abc
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── b = y
 
 ================================================================================
 ReorderJoins
@@ -1169,7 +1316,7 @@ Source expression:
    └── filters
         └── b = y
 
-New expression 1 of 1:
+New expression 1 of 2:
   full-join (hash)
    ├── left-join (hash)
    │    ├── scan abc
@@ -1179,16 +1326,23 @@ New expression 1 of 1:
    ├── scan stu
    └── filters
         └── s = a
-----
-----
 
-# --------------------------------------------------
-# CommuteJoin
-# --------------------------------------------------
+New expression 2 of 2:
+  full-join (hash)
+   ├── scan stu
+   ├── left-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   └── filters
+        └── s = a
+----
+----
 
 # Verify that the reversed join expressions get added to the memo, and there
 # are no duplicates.
-memo expect=CommuteJoin
+memo expect=ReorderJoins
 SELECT * FROM abc JOIN xyz ON a=z
 ----
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
@@ -1216,7 +1370,7 @@ memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G7: (variable a)
  └── G8: (variable z)
 
-memo expect=CommuteJoin
+memo expect=ReorderJoins
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
 ----
 memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
@@ -1245,7 +1399,7 @@ memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  └── G8: (variable z)
 
 # Verify that we swap to get the smaller side on the right.
-opt expect=CommuteJoin
+opt expect=ReorderJoins
 SELECT * FROM abc INNER JOIN xyz ON a=c WHERE b=1
 ----
 inner-join (cross)
@@ -1265,7 +1419,7 @@ inner-join (cross)
  └── filters (true)
 
 # Verify that the hash join hint prevents swapping the sides.
-opt expect=CommuteJoin
+opt expect-not=ReorderJoins
 SELECT * FROM abc INNER HASH JOIN xyz ON a=c WHERE b=1
 ----
 inner-join (cross)
@@ -1285,7 +1439,7 @@ inner-join (cross)
  │    └── columns: x:6 y:7 z:8
  └── filters (true)
 
-opt expect=CommuteJoin
+opt expect=ReorderJoins
 SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
@@ -1302,11 +1456,11 @@ full-join (hash)
 # Verify that commuting works correctly when there is a lookup join hint
 # (specifically that it returns the original expression and flags when applied
 # twice; if it didn't, we'd see more inner-join expressions).
-memo expect=CommuteJoin
+memo expect=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
 memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8))
+ ├── G1: (inner-join G2 G3 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8))
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,6-8))
  │         └── cost: 23150.03
@@ -1323,6 +1477,63 @@ memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
  ├── G6: (eq G7 G8)
  ├── G7: (variable a)
  └── G8: (variable x)
+
+# Verify that setting the join limit to 1 allows only commutation.
+exploretrace rule=ReorderJoins format=hide-all join-limit=1
+SELECT * FROM abc
+INNER JOIN stu ON s = a
+INNER JOIN xyz ON s = x
+----
+----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── s = x
+
+New expression 1 of 1:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan stu
+   │    ├── scan abc
+   │    └── filters
+   │         └── s = a
+   ├── scan xyz
+   └── filters
+        └── s = x
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── inner-join (merge)
+   │    ├── scan abc@ab
+   │    ├── scan stu
+   │    └── filters (true)
+   ├── scan xyz
+   └── filters
+        └── s = x
+
+New expression 1 of 1:
+  inner-join (hash)
+   ├── scan xyz
+   ├── inner-join (merge)
+   │    ├── scan abc@ab
+   │    ├── scan stu
+   │    └── filters (true)
+   └── filters
+        └── s = x
+----
+----
 
 # --------------------------------------------------
 # CommuteLeftJoin
@@ -1469,8 +1680,8 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
 memo
 SELECT * FROM abc INNER HASH JOIN xyz ON a=x
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
+memo (optimized, ~8KB, required=[presentation: a:1,b:2,c:3,x:6,y:7,z:8])
+ ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,x:6,y:7,z:8]
  │         ├── best: (inner-join G2 G3 G4)
  │         └── cost: 2180.06
@@ -2237,7 +2448,7 @@ memo
 SELECT a,b,n,m FROM small INNER HASH JOIN abcd ON a=m
 ----
 memo (optimized, ~8KB, required=[presentation: a:5,b:6,n:2,m:1])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
+ ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:5,b:6,n:2,m:1]
  │         ├── best: (inner-join G2 G3 G4)
  │         └── cost: 1079.17
