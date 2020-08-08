@@ -904,9 +904,7 @@ func (r *Replica) mergeInProgressRLocked() bool {
 	return r.mu.mergeComplete != nil
 }
 
-func (r *Replica) getFreezeStart() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *Replica) getFreezeStartRLocked() hlc.Timestamp {
 	return r.mu.freezeStart
 }
 
@@ -1210,7 +1208,7 @@ func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
 
 	// The range is being merged into its left-hand neighbor.
 	if ba.IsReadOnly() {
-		freezeStart := r.getFreezeStart()
+		freezeStart := r.getFreezeStartRLocked()
 		ts := ba.Timestamp
 		if ba.Txn != nil {
 			ts.Forward(ba.Txn.MaxTimestamp)
