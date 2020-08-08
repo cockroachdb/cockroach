@@ -208,8 +208,19 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		)
 	}
 	for i := range expected.Indexes {
+		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext()
 		tableName := &descpb.AnonymousTable
-		e, g := expected.Indexes[i].SQLString(tableName), got.Indexes[i].SQLString(tableName)
+		expectedDesc := sqlbase.NewImmutableTableDescriptor(*expected)
+		gotDesc := sqlbase.NewImmutableTableDescriptor(*got)
+		e, err := schemaexpr.FormatIndexForDisplay(ctx, expectedDesc, tableName, &expected.Indexes[i], &semaCtx)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		g, err := schemaexpr.FormatIndexForDisplay(ctx, gotDesc, tableName, &got.Indexes[i], &semaCtx)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
 		if e != g {
 			t.Fatalf("index %d: expected\n%s\ngot\n%s\n", i, e, g)
 		}

@@ -143,7 +143,11 @@ func ShowCreateTable(
 		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(&descpb.AnonymousTable))
+			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
+			if err != nil {
+				return "", err
+			}
+			f.WriteString(idxStr)
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
 

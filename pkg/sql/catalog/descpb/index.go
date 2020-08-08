@@ -153,50 +153,6 @@ func (desc *IndexDescriptor) ColNamesString() string {
 
 // TODO (tyler): Issue #39771 Same comment as ColNamesString above.
 
-// SQLString returns the SQL string describing this index. If non-empty,
-// "ON tableName" is included in the output in the correct place.
-func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	if desc.Unique {
-		f.WriteString("UNIQUE ")
-	}
-	if desc.Type == IndexDescriptor_INVERTED {
-		f.WriteString("INVERTED ")
-	}
-	f.WriteString("INDEX ")
-	f.FormatNameP(&desc.Name)
-	if *tableName != AnonymousTable {
-		f.WriteString(" ON ")
-		f.FormatNode(tableName)
-	}
-	f.WriteString(" (")
-	desc.ColNamesFormat(f)
-	f.WriteByte(')')
-
-	if desc.IsSharded() {
-		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT = %v",
-			desc.Sharded.ShardBuckets)
-	}
-
-	if len(desc.StoreColumnNames) > 0 {
-		f.WriteString(" STORING (")
-		for i := range desc.StoreColumnNames {
-			if i > 0 {
-				f.WriteString(", ")
-			}
-			f.FormatNameP(&desc.StoreColumnNames[i])
-		}
-		f.WriteByte(')')
-	}
-
-	if desc.IsPartial() {
-		f.WriteString(" WHERE ")
-		f.WriteString(desc.Predicate)
-	}
-
-	return f.CloseAndGetString()
-}
-
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
 func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
