@@ -145,7 +145,7 @@ type avroEnvelopeRecord struct {
 func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
 		Name:     SQLNameToAvroName(colDesc.Name),
-		Metadata: colDesc.SQLString(),
+		Metadata: colDesc.SQLStringNotHumanReadable(),
 		Default:  nil,
 		typ:      colDesc.Type,
 	}

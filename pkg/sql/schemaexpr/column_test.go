@@ -66,14 +66,13 @@ func TestDequalifyColumnRefs(t *testing.T) {
 				),
 			)
 
-			r, err := DequalifyColumnRefs(ctx, source, expr)
+			deqExpr, err := DequalifyColumnRefs(ctx, source, expr)
 			if err != nil {
 				t.Fatalf("%s: expected success, but found error: %s", d.expr, err)
 			}
 
-			s := tree.Serialize(r)
-			if s != d.expected {
-				t.Errorf("%s: expected %q, got %q", d.expr, d.expected, s)
+			if deqExpr != d.expected {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expected, deqExpr)
 			}
 		})
 	}

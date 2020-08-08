@@ -90,7 +90,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			r, err := validator.Validate(expr)
+			deqExpr, err := validator.Validate(expr)
 
 			if !d.expectedValid {
 				if err == nil {
@@ -105,9 +105,8 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
 			}
 
-			s := tree.Serialize(r)
-			if s != d.expectedExpr {
-				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
+			if deqExpr != d.expectedExpr {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, deqExpr)
 			}
 		})
 	}

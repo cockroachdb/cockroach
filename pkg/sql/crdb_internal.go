@@ -1666,11 +1666,11 @@ CREATE TABLE crdb_internal.table_columns (
 						col := &table.Columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
-							def, err := schemaexpr.DeserializeTableDescExpr(ctx, &p.semaCtx, table, *col.DefaultExpr)
+							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx)
 							if err != nil {
 								return err
 							}
-							defStr = tree.NewDString(tree.SerializeForDisplay(def))
+							defStr = tree.NewDString(defExpr)
 						}
 						row = row[:0]
 						row = append(row,
