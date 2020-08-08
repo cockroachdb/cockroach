@@ -617,6 +617,26 @@ SELECT * FROM k@a_b_gt_5 WHERE b > 5
 ----
 7  7
 
+# User defined types in partial index predicates should be human-readable.
+
+statement ok
+CREATE TABLE enum_table_show (
+    a INT,
+    b enum_type,
+    INDEX i (a) WHERE b IN ('foo', 'bar'),
+    FAMILY (a, b)
+)
+
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                 a INT8 NULL,
+                 b public.enum_type NULL,
+                 INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                 FAMILY fam_0_a_b_rowid (a, b, rowid)
+)
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 
