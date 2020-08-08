@@ -2990,32 +2990,6 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	return false
 }
 
-// DuplicateScanPrivate constructs a new ScanPrivate with new table and column
-// IDs. Only the Index, Flags and Locking fields are copied from the old
-// ScanPrivate, so the new ScanPrivate will not have constraints even if the old
-// one did.
-func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
-	md := c.e.mem.Metadata()
-	tabMeta := md.TableMeta(sp.Table)
-	newTableID := md.AddTable(tabMeta.Table, &tabMeta.Alias)
-
-	var newColIDs opt.ColSet
-	cols := sp.Cols
-	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		ord := tabMeta.MetaID.ColumnOrdinal(col)
-		newColID := newTableID.ColumnID(ord)
-		newColIDs.Add(newColID)
-	}
-
-	return &memo.ScanPrivate{
-		Table:   newTableID,
-		Index:   sp.Index,
-		Cols:    newColIDs,
-		Flags:   sp.Flags,
-		Locking: sp.Locking,
-	}
-}
-
 // MapScanFilterCols returns a new FiltersExpr with all the src column IDs in
 // the input expression replaced with column IDs in dst.
 //
@@ -3039,21 +3013,15 @@ func (c *CustomFuncs) MapScanFilterCols(
 
 	// Map each column in src to a column in dst based on the relative position
 	// of both the src and dst ColumnIDs in the ColSet.
-	var colMap util.FastIntMap
+	var colMap opt.ColMap
 	dstCol, _ := dst.Cols.Next(0)
 	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
 		colMap.Set(int(srcCol), int(dstCol))
 		dstCol, _ = dst.Cols.Next(dstCol + 1)
 	}
 
-	// Map the columns of each filter in the FiltersExpr.
-	newFilters := make([]memo.FiltersItem, len(filters))
-	for i := range filters {
-		expr := c.MapFiltersItemCols(&filters[i], colMap)
-		newFilters[i] = c.e.f.ConstructFiltersItem(expr)
-	}
-
-	return newFilters
+	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
+	return *newFilters
 }
 
 // MakeSetPrivateForSplitDisjunction constructs a new SetPrivate with column sets
