@@ -12,6 +12,7 @@ package schemaexpr
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -75,6 +76,71 @@ func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
 	}
 
 	return expr, nil
+}
+
+// FormatIndexForDisplay formats a column descriptor as a SQL string. It
+// converts user defined types in partial index predicate expressions to a
+// human-readable form.
+//
+// If tableName is anonymous then no table name is included in the formatted
+// string. For example:
+//
+//   INDEX i (a) WHERE b > 0
+//
+// If tableName is not anonymous, then "ON" and the name is included:
+//
+//   INDEX i ON t (a) WHERE b > 0
+//
+func FormatIndexForDisplay(
+	ctx context.Context,
+	table sqlbase.TableDescriptor,
+	tableName *tree.TableName,
+	index *descpb.IndexDescriptor,
+	semaCtx *tree.SemaContext,
+) (string, error) {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	if index.Unique {
+		f.WriteString("UNIQUE ")
+	}
+	if index.Type == descpb.IndexDescriptor_INVERTED {
+		f.WriteString("INVERTED ")
+	}
+	f.WriteString("INDEX ")
+	f.FormatNameP(&index.Name)
+	if *tableName != descpb.AnonymousTable {
+		f.WriteString(" ON ")
+		f.FormatNode(tableName)
+	}
+	f.WriteString(" (")
+	index.ColNamesFormat(f)
+	f.WriteByte(')')
+
+	if index.IsSharded() {
+		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT = %v",
+			index.Sharded.ShardBuckets)
+	}
+
+	if len(index.StoreColumnNames) > 0 {
+		f.WriteString(" STORING (")
+		for i := range index.StoreColumnNames {
+			if i > 0 {
+				f.WriteString(", ")
+			}
+			f.FormatNameP(&index.StoreColumnNames[i])
+		}
+		f.WriteByte(')')
+	}
+
+	if index.IsPartial() {
+		f.WriteString(" WHERE ")
+		pred, err := FormatExprForDisplay(ctx, table, index.Predicate, semaCtx)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(pred)
+	}
+
+	return f.CloseAndGetString(), nil
 }
 
 // MakePartialIndexExprs returns a map of predicate expressions for each

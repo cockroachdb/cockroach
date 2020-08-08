@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1475,28 +1474,6 @@ func TestDefaultExprNil(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestSQLString(t *testing.T) {
-	colNames := []string{"derp", "foo"}
-	indexName := "idx"
-	tableName := tree.MakeTableName("DB", "t1")
-	tableName.ExplicitCatalog = false
-	tableName.ExplicitSchema = false
-	index := descpb.IndexDescriptor{Name: indexName,
-		ID:               0x0,
-		Unique:           false,
-		ColumnNames:      colNames,
-		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-	}
-	expected := fmt.Sprintf("INDEX %s ON t1 (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
-	if got := index.SQLString(&tableName); got != expected {
-		t.Errorf("Expected '%s', but got '%s'", expected, got)
-	}
-	expected = fmt.Sprintf("INDEX %s (%s ASC, %s ASC)", indexName, colNames[0], colNames[1])
-	if got := index.SQLString(&descpb.AnonymousTable); got != expected {
-		t.Errorf("Expected '%s', but got '%s'", expected, got)
-	}
 }
 
 func TestLogicalColumnID(t *testing.T) {
