@@ -1107,3 +1107,14 @@ local
 
 statement ok
 ROLLBACK
+
+query TT
+SHOW ENUMS
+----
+as_bytes   bytes
+dbs        postgres|mysql|spanner|cockroach
+farewell   bye|seeya
+greeting   hello|howdy|hi
+greeting2  hello
+int        Z|S of int
+notbad     dup|DUP
