@@ -254,25 +254,9 @@ func (desc *MutableTypeDescriptor) IsNew() bool {
 }
 
 // AddEnumValue adds an enum member to the type.
+// AddEnumValue assumes that the type is an enum, and that the new value
+// doesn't exist already in the enum.
 func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) error {
-	if desc.Kind != descpb.TypeDescriptor_ENUM {
-		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
-	}
-	// See if the value already exists in the enum or not.
-	found := false
-	for _, member := range desc.EnumMembers {
-		if member.LogicalRepresentation == node.NewVal {
-			found = true
-			break
-		}
-	}
-	if found {
-		if node.IfNotExists {
-			return nil
-		}
-		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
-	}
-
 	getPhysicalRep := func(idx int) []byte {
 		if idx < 0 || idx >= len(desc.EnumMembers) {
 			return nil
