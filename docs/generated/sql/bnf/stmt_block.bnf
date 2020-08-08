@@ -187,6 +187,7 @@ show_stmt ::=
 	| show_create_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
+	| show_enums_stmt
 	| show_grants_stmt
 	| show_indexes_stmt
 	| show_partitions_stmt
@@ -536,6 +537,9 @@ show_csettings_stmt ::=
 show_databases_stmt ::=
 	'SHOW' 'DATABASES' with_comment
 
+show_enums_stmt ::=
+	'SHOW' 'ENUMS'
+
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
 
@@ -728,6 +732,7 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENCRYPTION_PASSPHRASE'
 	| 'ENUM'
+	| 'ENUMS'
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'

@@ -578,7 +578,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
@@ -822,6 +822,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
+%type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
@@ -3917,7 +3918,7 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS,
@@ -3929,6 +3930,7 @@ show_stmt:
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
+| show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
 | show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
@@ -4168,6 +4170,16 @@ show_databases_stmt:
     $$.val = &tree.ShowDatabases{WithComment: $3.bool()}
   }
 | SHOW DATABASES error // SHOW HELP: SHOW DATABASES
+
+// %Help: SHOW ENUMS - list defined enums
+// %Category: Misc
+// %Text: SHOW ENUMS
+show_enums_stmt:
+  SHOW ENUMS
+  {
+    $$.val = &tree.ShowEnums{}
+  }
+| SHOW ENUMS error // SHOW HELP: SHOW ENUMS
 
 // %Help: SHOW GRANTS - list grants
 // %Category: Priv
@@ -10890,6 +10902,7 @@ unreserved_keyword:
 | ENCODING
 | ENCRYPTION_PASSPHRASE
 | ENUM
+| ENUMS
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
