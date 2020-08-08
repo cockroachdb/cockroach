@@ -154,7 +154,7 @@ ALTER TYPE build ADD VALUE 'a' BEFORE 'b'
 statement error pq: \"b\" is not an existing enum label
 ALTER TYPE build ADD VALUE 'a' AFTER 'b'
 
-statement ok
+statement error pq: enum label \"c\" already exists, skipping
 ALTER TYPE build ADD VALUE IF NOT EXISTS 'c'
 
 statement ok
