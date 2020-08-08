@@ -217,9 +217,7 @@ func MakeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-
-		// Store the serialized predicate expression in the IndexDescriptor.
-		indexDesc.Predicate = tree.Serialize(expr)
+		indexDesc.Predicate = expr
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
