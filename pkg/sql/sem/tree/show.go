@@ -137,6 +137,15 @@ func (node *ShowDatabases) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowEnums represents a SHOW ENUMS statement.
+type ShowEnums struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowEnums) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW ENUMS")
+}
+
 // ShowTraceType is an enum of SHOW TRACE variants.
 type ShowTraceType string
 
