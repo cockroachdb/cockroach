@@ -148,6 +148,10 @@ func (r *Replica) shouldApplyCommand(
 	return cmd.forcedErr == nil
 }
 
+// noopOnEmptyRaftCommandErr is returned from checkForcedErr when an empty raft
+// command is received. See the comment near its use.
+var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
+
 // checkForcedErr determines whether or not a command should be applied to the
 // replicated state machine after it has been committed to the Raft log. This
 // decision is deterministic on all replicas, such that a command that is
@@ -185,7 +189,7 @@ func checkForcedErr(
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		return leaseIndex, proposalNoReevaluation, roachpb.NewErrorf("no-op on empty Raft entry")
+		return leaseIndex, proposalNoReevaluation, noopOnEmptyRaftCommandErr
 	}
 
 	// Verify the lease matches the proposer's expectation. We rely on
