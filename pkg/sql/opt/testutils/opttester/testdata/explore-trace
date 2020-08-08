@@ -140,6 +140,37 @@ Source expression:
   sort
    └── project
         └── inner-join (hash)
+             ├── inner-join (hash)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters
+             │         ├── grandchild.pid = child.pid
+             │         └── grandchild.cid = child.cid
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (hash)
+             │    ├── scan child
+             │    ├── scan grandchild
+             │    └── filters
+             │         ├── grandchild.pid = child.pid
+             │         └── grandchild.cid = child.cid
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
              ├── inner-join (merge)
              │    ├── scan grandchild
              │    ├── scan child
@@ -148,7 +179,7 @@ Source expression:
              └── filters
                   └── grandchild.pid = parent.pid
 
-New expression 1 of 2:
+New expression 1 of 5:
   sort
    └── project
         └── inner-join (hash)
@@ -162,7 +193,21 @@ New expression 1 of 2:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-New expression 2 of 2:
+New expression 2 of 5:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (hash)
+             │    ├── scan child
+             │    ├── scan parent
+             │    └── filters
+             │         └── child.pid = parent.pid
+             ├── scan grandchild
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+New expression 3 of 5:
   sort
    └── project
         └── inner-join (hash)
@@ -175,5 +220,31 @@ New expression 2 of 2:
              └── filters
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
+
+New expression 4 of 5:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (hash)
+             │    ├── scan grandchild
+             │    ├── scan parent
+             │    └── filters
+             │         └── grandchild.pid = parent.pid
+             ├── scan child
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+New expression 5 of 5:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan parent
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters (true)
+             └── filters
+                  └── grandchild.pid = parent.pid
 ----
 ----
