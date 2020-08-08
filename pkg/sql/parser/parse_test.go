@@ -499,6 +499,8 @@ func TestParse(t *testing.T) {
 
 		{`SHOW DATABASES`},
 		{`EXPLAIN SHOW DATABASES`},
+		{`SHOW ENUMS`},
+		{`EXPLAIN SHOW ENUMS`},
 		{`SHOW SCHEMAS`},
 		{`EXPLAIN SHOW SCHEMAS`},
 		{`SHOW SCHEMAS FROM a`},
