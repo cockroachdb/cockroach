@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -74,6 +75,23 @@ func (n *alterTypeNode) startExec(params runParams) error {
 func (p *planner) addEnumValue(
 	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeAddValue,
 ) error {
+	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	}
+	// See if the value already exists in the enum or not.
+	for _, member := range n.desc.EnumMembers {
+		if member.LogicalRepresentation == node.NewVal {
+			if node.IfNotExists {
+				p.SendClientNotice(
+					ctx,
+					pgnotice.Newf("enum label %q already exists, skipping", node.NewVal),
+				)
+				return nil
+			}
+			return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+		}
+	}
+
 	if err := n.desc.AddEnumValue(node); err != nil {
 		return err
 	}
