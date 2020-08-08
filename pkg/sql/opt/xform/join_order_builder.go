@@ -309,8 +309,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 	jb.joinCount = 0
 }
 
-// Reorder adds all valid (non-commutative) orderings of the given join to the
-// memo.
+// Reorder adds all valid orderings of the given join to the memo.
 func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 	switch t := join.(type) {
 	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
@@ -519,11 +518,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		}
 		if e.checkNonInnerJoin(s2, s1) {
 			// If joining s1, s2 is not valid, try s2, s1. We only do this if the
-			// s1, s2 join fails, because commutation (for full joins) is handled by
-			// the CommuteJoin rule.
-			//
-			// This is necessary because we only iterate s1 up to subset / 2 in
-			// DPSube(). Take this transformation as an example:
+			// s1, s2 join fails, because commutation is handled by the addJoin
+			// function. This is necessary because we only iterate s1 up to subset / 2
+			// in DPSube(). Take this transformation as an example:
 			//
 			//    SELECT *
 			//    FROM (SELECT * FROM xy LEFT JOIN ab ON x = a)
@@ -662,6 +659,7 @@ func (jb *JoinOrderBuilder) addJoin(
 		// Hook for testing purposes.
 		jb.callOnAddJoinFunc(s1, s2, joinFilters, op)
 	}
+
 	left := jb.plans[s1]
 	right := jb.plans[s2]
 	union := s1.union(s2)
@@ -669,6 +667,16 @@ func (jb *JoinOrderBuilder) addJoin(
 		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
 	} else {
 		jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+	}
+
+	if commute(op) {
+		// Also add the commuted version of the join to the memo.
+		jb.addToGroup(op, right, left, joinFilters, selectFilters, jb.plans[union])
+
+		if jb.onAddJoinFunc != nil {
+			// Hook for testing purposes.
+			jb.callOnAddJoinFunc(s2, s1, joinFilters, op)
+		}
 	}
 }
 
@@ -1260,6 +1268,11 @@ func (e *edge) checkRules(s1, s2 vertexSet) bool {
 		}
 	}
 	return true
+}
+
+// commute returns true if the given join operator type is commutable.
+func commute(op opt.Operator) bool {
+	return op == opt.InnerJoinOp || op == opt.FullJoinOp
 }
 
 // assoc returns true if two joins with the operator types and filters described
