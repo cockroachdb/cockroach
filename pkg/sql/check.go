@@ -43,21 +43,14 @@ func validateCheckExpr(
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	expr, err := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tableDesc, exprStr)
+	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx)
 	if err != nil {
 		return err
 	}
-	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
-	tblref := tree.TableRef{TableID: int64(tableDesc.GetID()), As: tree.AliasClause{Alias: "t"}}
-	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
-		From:  tree.From{Tables: []tree.TableExpr{&tblref}},
-		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
-	}
-	lim := &tree.Limit{Count: tree.NewDInt(1)}
-	stmt := &tree.Select{Select: sel, Limit: lim}
-	queryStr := tree.AsStringWithFlags(stmt, tree.FmtSerializable)
-	log.Infof(ctx, "Validating check constraint %q with query %q", tree.SerializeForDisplay(expr), queryStr)
+	colSelectors := sqlbase.ColumnsSelectors(tableDesc.Columns)
+	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
+	queryStr := fmt.Sprintf(`SELECT %s FROM [%d AS t] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), exprStr)
+	log.Infof(ctx, "Validating check constraint %q with query %q", expr, queryStr)
 
 	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
 	if err != nil {
@@ -66,7 +59,7 @@ func validateCheckExpr(
 	if rows.Len() > 0 {
 		return pgerror.Newf(pgcode.CheckViolation,
 			"validation of CHECK %q failed on row: %s",
-			tree.SerializeForDisplay(expr), labeledRowValues(tableDesc.Columns, rows))
+			expr, labeledRowValues(tableDesc.Columns, rows))
 	}
 	return nil
 }
@@ -363,14 +356,14 @@ func checkMutationInput(
 		} else if !res && checkVals[colIdx] != tree.DNull {
 			// Failed to satisfy CHECK constraint, so unwrap the serialized
 			// check expression to display to the user.
-			expr, exprErr := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, tabDesc, checks[i].Expr)
-			if exprErr != nil {
+			expr, err := schemaexpr.FormatExprForDisplay(ctx, tabDesc, checks[i].Expr, semaCtx)
+			if err != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.
-				return errors.Wrapf(exprErr, "failed to satisfy CHECK constraint (%s)", checks[i].Expr)
+				return errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].Expr)
 			}
 			return pgerror.Newf(
-				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", tree.SerializeForDisplay(expr),
+				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
 			)
 		}
 		colIdx++

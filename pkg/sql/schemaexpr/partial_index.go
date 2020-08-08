@@ -48,8 +48,8 @@ func MakeIndexPredicateValidator(
 }
 
 // Validate verifies that an expression is a valid partial index predicate. If
-// the expression is valid, it returns an expression with the columns
-// dequalified.
+// the expression is valid, it returns the serialized expression with the
+// columns dequalified.
 //
 // A predicate expression is valid if all of the following are true:
 //
@@ -59,11 +59,11 @@ func MakeIndexPredicateValidator(
 //   - It does not include non-immutable, aggregate, window, or set returning
 //     functions.
 //
-func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
+func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
 	expr, _, err := DequalifyAndValidateExpr(
 		v.ctx,
 		v.desc,
-		expr,
+		e,
 		types.Bool,
 		"index predicate",
 		v.semaCtx,
@@ -71,7 +71,7 @@ func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
 		&v.tableName,
 	)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	return expr, nil
@@ -132,16 +132,16 @@ func MakePartialIndexExprs(
 				return nil, refColIDs, err
 			}
 
-			texpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Bool)
+			typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Bool)
 			if err != nil {
 				return nil, refColIDs, err
 			}
 
-			if texpr, err = txCtx.NormalizeExpr(evalCtx, texpr); err != nil {
+			if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
 				return nil, refColIDs, err
 			}
 
-			exprs[idx.ID] = texpr
+			exprs[idx.ID] = typedExpr
 		}
 	}
 

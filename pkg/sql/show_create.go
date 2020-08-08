@@ -87,7 +87,7 @@ func ShowCreateTable(
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
-		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, &p.RunParams(ctx).p.semaCtx, desc, col)
+		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col, &p.RunParams(ctx).p.semaCtx)
 		if err != nil {
 			return "", err
 		}

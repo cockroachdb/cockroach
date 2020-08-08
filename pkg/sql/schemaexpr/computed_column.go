@@ -115,8 +115,9 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
-	// functions.
-	typedExpr, _, err := DequalifyAndValidateExpr(
+	// functions. In order to safely serialize user defined types and their
+	// members, we need to serialize the typed expression here.
+	expr, _, err := DequalifyAndValidateExpr(
 		v.ctx,
 		v.desc,
 		d.Computed.Expr,
@@ -130,15 +131,13 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		return err
 	}
 
-	// Get the column that this definition points to.
+	// Get the column that this definition points to and assign the serialized
+	// expression.
 	targetCol, _, err := v.desc.FindColumnByName(d.Name)
 	if err != nil {
 		return err
 	}
-	// In order to safely serialize user defined types and their members, we
-	// need to serialize the typed expression here.
-	s := tree.Serialize(typedExpr)
-	targetCol.ComputeExpr = &s
+	targetCol.ComputeExpr = &expr
 
 	return nil
 }

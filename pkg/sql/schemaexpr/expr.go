@@ -20,41 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// DeserializeTableDescExpr takes in a serialized expression and a table, and
-// returns an expression that has all user defined types resolved for
-// formatting. It is intended to be used when displaying a serialized
-// expression within a TableDescriptor. For example, a DEFAULT expression
-// of a table containing a user defined type t with id 50 would have all
-// references to t replaced with the id 50. In order to display this expression
-// back to an end user, the serialized id 50 needs to be replaced back with t.
-// DeserializeTableDescExpr performs this logic, but only returns a
-// tree.Expr to be clear that these returned expressions are not safe to Eval.
-func DeserializeTableDescExpr(
-	ctx context.Context, semaCtx *tree.SemaContext, desc sqlbase.TableDescriptor, exprStr string,
-) (tree.Expr, error) {
-	expr, err := parser.ParseExpr(exprStr)
-	if err != nil {
-		return nil, err
-	}
-	expr, _, err = replaceColumnVars(desc, expr)
-	if err != nil {
-		return nil, err
-	}
-	typed, err := expr.TypeCheck(ctx, semaCtx, types.Any)
-	if err != nil {
-		return nil, err
-	}
-	return typed, nil
-}
-
 // DequalifyAndValidateExpr validates that an expression has the given type
 // and contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression and the set of column IDs within
 // the expression are returned, if valid.
-// TODO(mgartner): Ideally this should return a serialized expression string on
-// success. Returning a tree.TypedExpr is dangerous because variables have been
-// replaced with dummyColumns which are not useful outside the context of
-// type-checking the expression.
+//
+// The serialized expression is returned because returning the created
+// tree.TypedExpr would be dangerous. It contains dummyColumns which do not
+// support evaluation and are not useful outside the context of type-checking
+// the expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
 	desc sqlbase.TableDescriptor,
@@ -64,7 +38,7 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (tree.TypedExpr, sqlbase.TableColSet, error) {
+) (string, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(
@@ -72,16 +46,16 @@ func DequalifyAndValidateExpr(
 			desc.AllNonDropColumns(),
 		),
 	)
-	expr, err := DequalifyColumnRefs(ctx, sourceInfo, expr)
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
-		return nil, colIDs, err
+		return "", colIDs, err
 	}
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
 	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
 	if err != nil {
-		return nil, colIDs, err
+		return "", colIDs, err
 	}
 
 	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
@@ -94,10 +68,10 @@ func DequalifyAndValidateExpr(
 	)
 
 	if err != nil {
-		return nil, colIDs, err
+		return "", colIDs, err
 	}
 
-	return typedExpr, colIDs, nil
+	return tree.Serialize(typedExpr), colIDs, nil
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
@@ -132,6 +106,55 @@ func ExtractColumnIDs(
 	})
 
 	return colIDs, err
+}
+
+// FormatExprForDisplay formats a schema expression string for display by adding
+// type annotations and resolving user defined types.
+func FormatExprForDisplay(
+	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+) (string, error) {
+	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
+	if err != nil {
+		return "", err
+	}
+	return tree.SerializeForDisplay(expr), nil
+}
+
+// FormatExprForDisplayWithoutTypeAnnotations formats a schema expression string
+// for display, similar to FormatExprForDisplay, but does not add type
+// annotations.
+func FormatExprForDisplayWithoutTypeAnnotations(
+	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+) (string, error) {
+	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
+	if err != nil {
+		return "", err
+	}
+	return tree.AsString(expr), nil
+}
+
+func deserializeExprForFormatting(
+	ctx context.Context, desc sqlbase.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+) (tree.Expr, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	expr, _, err = replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Type-check the expression to resolve user defined types.
+	typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+
+	return typedExpr, nil
 }
 
 // nameResolver is used to replace unresolved names in expressions with

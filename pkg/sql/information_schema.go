@@ -386,19 +386,19 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				}
 				colDefault := tree.DNull
 				if column.DefaultExpr != nil {
-					colExpr, err := schemaexpr.DeserializeTableDescExpr(ctx, &p.semaCtx, table, *column.DefaultExpr)
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx)
 					if err != nil {
 						return err
 					}
-					colDefault = tree.NewDString(tree.SerializeForDisplay(colExpr))
+					colDefault = tree.NewDString(colExpr)
 				}
 				colComputed := emptyString
 				if column.ComputeExpr != nil {
-					colExpr, err := schemaexpr.DeserializeTableDescExpr(ctx, &p.semaCtx, table, *column.ComputeExpr)
+					colExpr, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, *column.ComputeExpr, &p.semaCtx)
 					if err != nil {
 						return err
 					}
-					colComputed = tree.NewDString(tree.AsString(colExpr))
+					colComputed = tree.NewDString(colExpr)
 				}
 				return addRow(
 					dbNameStr,                    // table_catalog
