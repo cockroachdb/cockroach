@@ -4025,3 +4025,21 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 ) t(g)
 ----
 NULL
+
+subtest set_point_test
+
+query T
+SELECT
+  ST_AsText(ST_SetPoint(ls::geometry, i, p::geometry))
+FROM ( VALUES
+  ('LINESTRING(-1 2,-1 3)', 0, 'POINT(10 10)'),
+  ('LINESTRING(0 0, 1 1, 2 2)', 2, 'POINT(10 10)'),
+  ('LINESTRING(0 0, 1 1, 2 2, 3 3)', -1, 'POINT(10 10)'),
+  ('LINESTRING(0 0, 1 1, 2 2, 3 3)', -4, 'POINT(10 10)')
+  )
+ t(ls, i, p) ;
+----
+LINESTRING (10 10, -1 3)
+LINESTRING (0 0, 1 1, 10 10)
+LINESTRING (0 0, 1 1, 2 2, 10 10)
+LINESTRING (10 10, 1 1, 2 2, 3 3)

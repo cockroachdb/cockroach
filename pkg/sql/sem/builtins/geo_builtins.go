@@ -3136,6 +3136,33 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_setpoint": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"line_string", types.Geometry},
+				{"index", types.Int},
+				{"point", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				lineString := args[0].(*tree.DGeometry)
+				index := int(*args[1].(*tree.DInt))
+				point := args[2].(*tree.DGeometry)
+
+				ret, err := geomfn.SetPoint(lineString.Geometry, index, point.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Sets the Point at the given 0-based index and returns the modified LineString geometry`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_segmentize": makeBuiltin(
 		defProps(),
 		tree.Overload{
