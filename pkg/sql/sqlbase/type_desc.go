@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -268,7 +269,7 @@ func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) er
 	}
 	if found {
 		if node.IfNotExists {
-			return nil
+			return pgnotice.Newf("enum label %q already exists, skipping", node.NewVal)
 		}
 		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
 	}
