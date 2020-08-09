@@ -1276,6 +1276,11 @@ func TestRestoreFailCleanup(t *testing.T) {
 	dir = dir + "/foo"
 
 	sqlDB.Exec(t, `CREATE DATABASE restore`)
+
+	// Create a user defined type and check that it is cleaned up after the
+	// failed restore.
+	sqlDB.Exec(t, `SET experimental_enable_enums = true; CREATE TYPE data.myenum AS ENUM ('hello')`)
+
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 	// Bugger the backup by removing the SST files.
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -1298,6 +1303,10 @@ func TestRestoreFailCleanup(t *testing.T) {
 		`SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'`,
 		[][]string{{"bank"}},
 	)
+
+	// Verify that `myenum` was cleaned out from the failed restore. There should
+	// only be one namespace entry (data.myenum).
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'myenum'`, [][]string{{"1"}})
 }
 
 // TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
