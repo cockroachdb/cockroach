@@ -40,9 +40,8 @@ type ScheduledJobExecutor interface {
 	// Modifications to the ScheduledJob object will be persisted.
 	NotifyJobTermination(
 		ctx context.Context,
-		cfg *scheduledjobs.JobExecutionConfig,
-		env scheduledjobs.JobSchedulerEnv,
-		md *JobMetadata,
+		jobID int64,
+		jobStatus Status,
 		schedule *ScheduledJob,
 		txn *kv.Txn,
 	) error
@@ -94,36 +93,32 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
 // with the job status changes.
 func NotifyJobTermination(
 	ctx context.Context,
-	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
-	md *JobMetadata,
+	jobID int64,
+	jobStatus Status,
 	scheduleID int64,
+	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	if !md.Status.Terminal() {
-		return errors.Newf(
-			"job completion expects terminal state, found %s instead for job %d", md.Status, md.ID)
-	}
-
 	if env == nil {
 		env = scheduledjobs.ProdJobSchedulerEnv
 	}
 
 	// Get the executor for this schedule.
 	schedule, executor, err := lookupScheduleAndExecutor(
-		ctx, env, cfg.InternalExecutor, scheduleID, txn)
+		ctx, env, ex, scheduleID, txn)
 	if err != nil {
 		return err
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, cfg, env, md, schedule, txn)
+	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, schedule, txn)
 	if err != nil {
 		return err
 	}
 
 	// Update this schedule in case executor made changes to it.
-	return schedule.Update(ctx, cfg.InternalExecutor, txn)
+	return schedule.Update(ctx, ex, txn)
 }
 
 func lookupScheduleAndExecutor(
