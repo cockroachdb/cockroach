@@ -1688,6 +1688,87 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr></tbody>
 </table>
 
+### STRING[] functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="regexp_split_to_array"></a><code>regexp_split_to_array(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter.</p>
+</span></td></tr>
+<tr><td><a name="regexp_split_to_array"></a><code>regexp_split_to_array(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, flags: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter with flags.</p>
+<p>CockroachDB supports the following flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>c</strong></td>
+<td>Case-sensitive matching</td>
+</tr>
+<tr>
+<td><strong>g</strong></td>
+<td>Global matching (match each substring instead of only the first)</td>
+</tr>
+<tr>
+<td><strong>i</strong></td>
+<td>Case-insensitive matching</td>
+</tr>
+<tr>
+<td><strong>m</strong> or <strong>n</strong></td>
+<td>Newline-sensitive (see below)</td>
+</tr>
+<tr>
+<td><strong>p</strong></td>
+<td>Partial newline-sensitive matching (see below)</td>
+</tr>
+<tr>
+<td><strong>s</strong></td>
+<td>Newline-insensitive (default)</td>
+</tr>
+<tr>
+<td><strong>w</strong></td>
+<td>Inverse partial newline-sensitive matching (see below)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th><code>.</code> and <code>[^...]</code> match newlines</th>
+<th><code>^</code> and <code>$</code> match line boundaries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>s</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>w</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>p</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>m/n</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+</span></td></tr></tbody>
+</table>
+
 ### Sequence functions
 
 <table>
@@ -1755,6 +1836,80 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <tr><td><a name="jsonb_object_keys"></a><code>jsonb_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td></tr>
 <tr><td><a name="pg_get_keywords"></a><code>pg_get_keywords() &rarr; tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
+</span></td></tr>
+<tr><td><a name="regexp_split_to_table"></a><code>regexp_split_to_table(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter.</p>
+</span></td></tr>
+<tr><td><a name="regexp_split_to_table"></a><code>regexp_split_to_table(string: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, flags: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Split string using a POSIX regular expression as the delimiter with flags.</p>
+<p>CockroachDB supports the following flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>c</strong></td>
+<td>Case-sensitive matching</td>
+</tr>
+<tr>
+<td><strong>g</strong></td>
+<td>Global matching (match each substring instead of only the first)</td>
+</tr>
+<tr>
+<td><strong>i</strong></td>
+<td>Case-insensitive matching</td>
+</tr>
+<tr>
+<td><strong>m</strong> or <strong>n</strong></td>
+<td>Newline-sensitive (see below)</td>
+</tr>
+<tr>
+<td><strong>p</strong></td>
+<td>Partial newline-sensitive matching (see below)</td>
+</tr>
+<tr>
+<td><strong>s</strong></td>
+<td>Newline-insensitive (default)</td>
+</tr>
+<tr>
+<td><strong>w</strong></td>
+<td>Inverse partial newline-sensitive matching (see below)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th><code>.</code> and <code>[^...]</code> match newlines</th>
+<th><code>^</code> and <code>$</code> match line boundaries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>s</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>w</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>p</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>m/n</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
 </span></td></tr>
 <tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
 </span></td></tr>
