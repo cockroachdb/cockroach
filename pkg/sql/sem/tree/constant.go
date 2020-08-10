@@ -67,7 +67,7 @@ func typeCheckConstant(
 	ctx context.Context, semaCtx *SemaContext, c Constant, desired *types.T,
 ) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired.Family() != types.AnyFamily {
+	if !desired.IsAmbiguous() {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, semaCtx, desired)
