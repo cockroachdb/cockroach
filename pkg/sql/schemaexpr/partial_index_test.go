@@ -12,8 +12,10 @@ package schemaexpr
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -90,7 +92,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			r, err := validator.Validate(expr)
+			deqExpr, err := validator.Validate(expr)
 
 			if !d.expectedValid {
 				if err == nil {
@@ -105,9 +107,71 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
 			}
 
-			s := tree.Serialize(r)
-			if s != d.expectedExpr {
-				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
+			if deqExpr != d.expectedExpr {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, deqExpr)
+			}
+		})
+	}
+}
+
+func TestFormatIndexForDisplay(t *testing.T) {
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+
+	database := tree.Name("foo")
+	table := tree.Name("bar")
+	tableName := tree.MakeTableName(database, table)
+
+	colNames := []string{"a", "b"}
+	tableDesc := testTableDesc(
+		string(table),
+		[]testCol{{colNames[0], types.Int}, {colNames[1], types.Int}},
+		nil,
+	)
+
+	indexName := "baz"
+	baseIndex := descpb.IndexDescriptor{
+		Name:             indexName,
+		ID:               0x0,
+		ColumnNames:      colNames,
+		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
+	}
+
+	uniqueIndex := baseIndex
+	uniqueIndex.Unique = true
+
+	invertedIndex := baseIndex
+	invertedIndex.Type = descpb.IndexDescriptor_INVERTED
+	invertedIndex.ColumnNames = []string{"a"}
+
+	storingIndex := baseIndex
+	storingIndex.StoreColumnNames = []string{"c"}
+
+	partialIndex := baseIndex
+	partialIndex.Predicate = "a > 1:::INT8"
+
+	testData := []struct {
+		index     descpb.IndexDescriptor
+		tableName tree.TableName
+		expected  string
+	}{
+		{baseIndex, descpb.AnonymousTable, "INDEX baz (a ASC, b DESC)"},
+		{baseIndex, tableName, "INDEX baz ON foo.public.bar (a ASC, b DESC)"},
+		{uniqueIndex, descpb.AnonymousTable, "UNIQUE INDEX baz (a ASC, b DESC)"},
+		{invertedIndex, descpb.AnonymousTable, "INVERTED INDEX baz (a)"},
+		{storingIndex, descpb.AnonymousTable, "INDEX baz (a ASC, b DESC) STORING (c)"},
+		{partialIndex, descpb.AnonymousTable, "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
+	}
+
+	for testIdx, tc := range testData {
+		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			got, err := FormatIndexForDisplay(ctx, &tableDesc, &tc.tableName, &tc.index, &semaCtx)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if got != tc.expected {
+				t.Errorf("expected '%s', got '%s'", tc.expected, got)
 			}
 		})
 	}

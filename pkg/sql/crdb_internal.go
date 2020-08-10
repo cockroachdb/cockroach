@@ -1495,7 +1495,7 @@ CREATE TABLE crdb_internal.create_statements (
 				return err
 			}
 			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.Indexes, table, alterStmts,
-				validateStmts); err != nil {
+				validateStmts, &p.semaCtx); err != nil {
 				return err
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
@@ -1543,6 +1543,7 @@ func showAlterStatementWithInterleave(
 	table *sqlbase.ImmutableTableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
+	semaCtx *tree.SemaContext,
 ) error {
 	for i := range table.OutboundFKs {
 		fk := &table.OutboundFKs[i]
@@ -1607,7 +1608,9 @@ func showAlterStatementWithInterleave(
 				sharedPrefixLen += int(ancestor.SharedPrefixLen)
 			}
 			// Write the CREATE INDEX statements.
-			showCreateIndexWithInterleave(f, idx, tableName, parentName, sharedPrefixLen)
+			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
+				return err
+			}
 			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
 				return err
 			}
@@ -1617,14 +1620,21 @@ func showAlterStatementWithInterleave(
 }
 
 func showCreateIndexWithInterleave(
+	ctx context.Context,
 	f *tree.FmtCtx,
+	table *sqlbase.ImmutableTableDescriptor,
 	idx *descpb.IndexDescriptor,
 	tableName tree.TableName,
 	parentName tree.TableName,
 	sharedPrefixLen int,
-) {
+	semaCtx *tree.SemaContext,
+) error {
 	f.WriteString("CREATE ")
-	f.WriteString(idx.SQLString(&tableName))
+	idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, table, &tableName, idx, semaCtx)
+	if err != nil {
+		return err
+	}
+	f.WriteString(idxStr)
 	f.WriteString(" INTERLEAVE IN PARENT ")
 	parentName.Format(f)
 	f.WriteString(" (")
@@ -1636,6 +1646,7 @@ func showCreateIndexWithInterleave(
 		comma = ", "
 	}
 	f.WriteString(")")
+	return nil
 }
 
 // crdbInternalTableColumnsTable exposes the column descriptors.
@@ -1666,11 +1677,11 @@ CREATE TABLE crdb_internal.table_columns (
 						col := &table.Columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
-							def, err := schemaexpr.DeserializeTableDescExpr(ctx, &p.semaCtx, table, *col.DefaultExpr)
+							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx)
 							if err != nil {
 								return err
 							}
-							defStr = tree.NewDString(tree.SerializeForDisplay(def))
+							defStr = tree.NewDString(defExpr)
 						}
 						row = row[:0]
 						row = append(row,

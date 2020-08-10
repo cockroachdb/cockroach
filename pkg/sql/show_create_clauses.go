@@ -416,11 +416,11 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		typed, err := schemaexpr.DeserializeTableDescExpr(ctx, semaCtx, desc, e.Expr)
+		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx)
 		if err != nil {
 			return err
 		}
-		f.WriteString(tree.SerializeForDisplay(typed))
+		f.WriteString(expr)
 		f.WriteString(")")
 	}
 	f.WriteString("\n)")

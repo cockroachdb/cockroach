@@ -239,7 +239,7 @@ func alterColumnTypeGeneral(
 	var inverseExpr string
 	if using != nil {
 		// Validate the provided using expr and ensure it has the correct type.
-		typedExpr, _, err := schemaexpr.DequalifyAndValidateExpr(
+		expr, _, err := schemaexpr.DequalifyAndValidateExpr(
 			ctx,
 			tableDesc,
 			using,
@@ -253,8 +253,7 @@ func alterColumnTypeGeneral(
 		if err != nil {
 			return err
 		}
-		s := tree.Serialize(typedExpr)
-		newColComputeExpr = &s
+		newColComputeExpr = &expr
 
 		insertedValToString := tree.CastExpr{
 			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
