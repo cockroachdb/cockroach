@@ -1350,8 +1350,6 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 52514)
-
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
