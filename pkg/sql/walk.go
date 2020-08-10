@@ -804,7 +804,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *exportNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "destination", n.fileName)
+			v.observer.attr(name, "destination", n.destination)
 		}
 		n.source = v.visit(n.source)
 	}
