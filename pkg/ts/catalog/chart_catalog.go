@@ -1095,6 +1095,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"liveness.epochincrements"},
 			},
 			{
+				Title:   "Heartbeats In-Flight",
+				Metrics: []string{"liveness.heartbeatsinflight"},
+			},
+			{
 				Title:   "Heartbeat Latency",
 				Metrics: []string{"liveness.heartbeatlatency"},
 			},
