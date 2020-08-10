@@ -1,0 +1,15 @@
+# LogicTest: !3node-tenant
+
+query T noticetrace
+CREATE UNLOGGED TABLE unlogged_tbl (col int PRIMARY KEY)
+----
+NOTICE: unlogged tables behave as regular tables in CockroachDB
+
+query TT
+SHOW CREATE TABLE unlogged_tbl
+----
+unlogged_tbl  CREATE UNLOGGED TABLE public.unlogged_tbl (
+              col INT8 NOT NULL,
+              CONSTRAINT "primary" PRIMARY KEY (col ASC),
+              FAMILY "primary" (col)
+)

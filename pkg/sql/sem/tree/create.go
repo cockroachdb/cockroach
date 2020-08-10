@@ -1063,13 +1063,13 @@ const (
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists   bool
-	Table         TableName
-	Interleave    *InterleaveDef
-	PartitionBy   *PartitionBy
-	Temporary     bool
-	StorageParams StorageParams
-	OnCommit      CreateTableOnCommitSetting
+	IfNotExists      bool
+	Table            TableName
+	Interleave       *InterleaveDef
+	PartitionBy      *PartitionBy
+	Persistence Persistence
+	StorageParams    StorageParams
+	OnCommit         CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -1101,8 +1101,11 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 // Format implements the NodeFormatter interface.
 func (node *CreateTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
-	if node.Temporary {
+	switch node.Persistence {
+	case PersistenceTemporary:
 		ctx.WriteString("TEMPORARY ")
+	case PersistenceUnlogged:
+		ctx.WriteString("UNLOGGED ")
 	}
 	ctx.WriteString("TABLE ")
 	if node.IfNotExists {
@@ -1216,17 +1219,17 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
-	IfNotExists bool
-	Name        TableName
-	Temporary   bool
-	Options     SequenceOptions
+	IfNotExists      bool
+	Name             TableName
+	Persistence Persistence
+	Options          SequenceOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateSequence) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 
@@ -1522,12 +1525,12 @@ func (node *AlterRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        TableName
-	ColumnNames NameList
-	AsSource    *Select
-	IfNotExists bool
-	Temporary   bool
-	Replace     bool
+	Name             TableName
+	ColumnNames      NameList
+	AsSource         *Select
+	IfNotExists      bool
+	Persistence Persistence
+	Replace          bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1538,7 +1541,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteString("OR REPLACE ")
 	}
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 

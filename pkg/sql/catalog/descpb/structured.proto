@@ -1015,6 +1015,10 @@ message TableDescriptor {
   // before 20.1 refer to persistent tables, so lack of the flag being set implies
   // the table is persistent.
   optional bool temporary = 39 [(gogoproto.nullable) = false];
+  // Unlogged is an un-utilized value added to CRDB from 20.2. In PostgreSQL,
+  // this disables the write-ahead log (WAL), making imports faster at the
+  // cost of recoverability.
+  optional bool unlogged = 41 [(gogoproto.nullable)=false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -73,6 +73,9 @@ func ShowCreateTable(
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
+	if desc.Unlogged {
+		f.WriteString("UNLOGGED ")
+	}
 	if desc.Temporary {
 		f.WriteString("TEMP ")
 	}

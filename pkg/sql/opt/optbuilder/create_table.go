@@ -24,7 +24,7 @@ import (
 // statement.
 func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	isTemp := resolveTemporaryStatus(&ct.Table, ct.Temporary)
+	isTemp := resolveTemporaryStatus(&ct.Table, ct.Persistence)
 	if isTemp {
 		// Postgres allows using `pg_temp` as an alias for the session specific temp
 		// schema. In PG, the following are equivalent:
@@ -39,7 +39,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		// TODO(solon): Once it is possible to drop schemas, it will no longer be
 		// safe to set the schema name to `public`, as it may have been dropped.
 		ct.Table.ObjectNamePrefix.SchemaName = tree.PublicSchemaName
-		ct.Temporary = true
+		ct.Persistence = tree.PersistenceTemporary
 	}
 	sch, resName := b.resolveSchemaForCreate(&ct.Table)
 	ct.Table.ObjectNamePrefix = resName

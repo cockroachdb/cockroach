@@ -419,7 +419,7 @@ func mysqlTableToCockroach(
 				id,
 				time,
 				priv,
-				false, /* temporary */
+				tree.PersistencePermanent,
 				&params,
 			)
 		} else {
@@ -432,8 +432,8 @@ func mysqlTableToCockroach(
 				id,
 				time,
 				priv,
-				false, /* temporary */
-				nil,   /* params */
+				tree.PersistencePermanent,
+				nil, /* params */
 			)
 		}
 		if err != nil {

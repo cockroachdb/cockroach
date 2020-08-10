@@ -240,6 +240,17 @@ func (desc *TableDescriptor) IsVirtualTable() bool {
 	return IsVirtualTable(desc.ID)
 }
 
+// Persistence returns the Persistence from the TableDescriptor.
+func (desc *TableDescriptor) Persistence() tree.Persistence {
+	if desc.Temporary {
+		return tree.PersistenceTemporary
+	}
+	if desc.Unlogged {
+		return tree.PersistenceUnlogged
+	}
+	return tree.PersistencePermanent
+}
+
 // Dropped returns true if the type is dropped.
 func (desc *TypeDescriptor) Dropped() bool {
 	return desc.State == TypeDescriptor_DROP
