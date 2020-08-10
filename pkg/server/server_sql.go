@@ -187,6 +187,9 @@ type sqlServerArgs struct {
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.SQLConfig.TenantID)
+	if override := cfg.SQLConfig.TenantIDCodecOverride; override != (roachpb.TenantID{}) {
+		codec = keys.MakeSQLCodec(override)
+	}
 
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)

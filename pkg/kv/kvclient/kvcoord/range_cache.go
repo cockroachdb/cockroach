@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1260,4 +1261,11 @@ func (e *rangeCacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry 
 		desc:  e.desc,
 		lease: *l,
 	}
+}
+
+// isRangeLookupErrorRetryable returns whether the provided range lookup error
+// can be retried or whether it should be propagated immediately.
+func isRangeLookupErrorRetryable(err error) bool {
+	// For now, all errors are retryable except authentication errors.
+	return !grpcutil.IsAuthenticationError(err)
 }

@@ -1433,6 +1433,9 @@ func (ds *DistSender) sendPartialBatch(
 				// We set pErr if we encountered an error getting the descriptor in
 				// order to return the most recent error when we are out of retries.
 				pErr = roachpb.NewError(err)
+				if !isRangeLookupErrorRetryable(err) {
+					return response{pErr: roachpb.NewError(err)}
+				}
 				continue
 			}
 
@@ -1805,6 +1808,14 @@ func (ds *DistSender) sendToReplicas(
 		br, err = transport.SendNext(ctx, ba)
 
 		if err != nil {
+			if grpcutil.IsAuthenticationError(err) {
+				// Authentication error. Propagate.
+				if ambiguousError != nil {
+					return nil, roachpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+				}
+				return nil, err
+			}
+
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
 			// grpcutil.RequestDidNotStart function). We'll retry the request in order
