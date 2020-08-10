@@ -11,14 +11,25 @@ build/builder.sh make .buildinfo/tag
 build_name="${TAG_NAME:-$(cat .buildinfo/tag)}"
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+")"
 
-bucket="${BUCKET-cockroach-builds}"
+if [[ -z "${DRY_RUN}" ]] ; then
+  bucket="${BUCKET-cockroach-builds}"
+  google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
+  gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
+  git_tag="${build_name}"
+else
+  bucket="${BUCKET:-cockroach-release-test}"
+  google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
+  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
+  git_tag="dryrun-${build_name}"
+fi
 
-google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS
+# Used for docker login for gcloud
+gcr_hostname="us.gcr.io"
 tc_end_block "Variable Setup"
 
 
 tc_start_block "Tag the release"
-git tag "$build_name"
+git tag "${git_tag}"
 tc_end_block "Tag the release"
 
 
@@ -38,11 +49,7 @@ tc_end_block "Compile and publish S3 artifacts"
 
 tc_start_block "Make and push docker image"
 configure_docker_creds
-
-gcr_hostname="us.gcr.io"
 docker_login_with_google
-
-gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
 
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
 # NB: tar usually stops reading as soon as it sees an empty block but that makes
@@ -58,7 +65,7 @@ tc_end_block "Make and push docker image"
 tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 configure_git_ssh_key
-push_to_git ssh://git@github.com/cockroachlabs/release-staging.git "$build_name"
+push_to_git ssh://git@github.com/cockroachlabs/release-staging.git "${git_tag}"
 tc_end_block "Push release tag to github.com/cockroachdb/cockroach"
 
 
