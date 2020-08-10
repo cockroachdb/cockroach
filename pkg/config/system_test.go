@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 // TODO(benesch): Don't reinvent the key encoding here.
@@ -619,4 +620,31 @@ func TestGetZoneConfigForKey(t *testing.T) {
 			t.Errorf("#%d: GetZoneConfigForKey(%v) got %d; want %d", tcNum, tc.key, objectID, tc.expectedID)
 		}
 	}
+}
+
+func TestSystemConfigMask(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	entries := config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		plainKV("k1", "v1"),
+		plainKV("k2", "v2"),
+		plainKV("k3", "v3"),
+		plainKV("k4", "v4"),
+		plainKV("k5", "v5"),
+		plainKV("k6", "v6"),
+		plainKV("k7", "v7"),
+	}}
+	mask := config.MakeSystemConfigMask(
+		[]byte("k1"),
+		[]byte("k6"),
+		[]byte("k3"),
+	)
+
+	exp := config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		plainKV("k1", "v1"),
+		plainKV("k3", "v3"),
+		plainKV("k6", "v6"),
+	}}
+	res := mask.Apply(entries)
+	require.Equal(t, exp, res)
 }
