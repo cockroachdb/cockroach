@@ -67,7 +67,7 @@ TABLE uvwxy
  ├── x int
  ├── y int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── FAMILY family1 (u, v, w)
+ ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp)
  ├── FAMILY family2 (x)
  ├── FAMILY family3 (y)
  └── INDEX primary
@@ -156,3 +156,65 @@ TABLE part2
            ├── (1)
            ├── (3)
            └── (4)
+
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  a INT,
+  j JSONB,
+  g GEOMETRY,
+  INVERTED INDEX(j),
+  INVERTED INDEX(g)
+)
+----
+
+exec-ddl
+SHOW CREATE inv
+----
+TABLE inv
+ ├── k int not null
+ ├── a int
+ ├── j jsonb
+ ├── g geometry
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── j_inverted_key jsonb not null [hidden] [virtual]
+ ├── g_inverted_key geometry not null [hidden] [virtual]
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INVERTED INDEX secondary
+ │    ├── j_inverted_key jsonb not null [hidden] [virtual]
+ │    └── k int not null
+ └── INVERTED INDEX secondary
+      ├── g_inverted_key geometry not null [hidden] [virtual]
+      └── k int not null
+
+# Table with inverted indexes and implicit primary index.
+exec-ddl
+CREATE TABLE inv2 (
+  a INT,
+  j JSONB,
+  g GEOMETRY,
+  INVERTED INDEX(j),
+  INVERTED INDEX(g)
+)
+----
+
+exec-ddl
+SHOW CREATE inv2
+----
+TABLE inv2
+ ├── a int
+ ├── j jsonb
+ ├── g geometry
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── j_inverted_key jsonb not null [hidden] [virtual]
+ ├── g_inverted_key geometry not null [hidden] [virtual]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INVERTED INDEX secondary
+ │    ├── j_inverted_key jsonb not null [hidden] [virtual]
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INVERTED INDEX secondary
+      ├── g_inverted_key geometry not null [hidden] [virtual]
+      └── rowid int not null default (unique_rowid()) [hidden]

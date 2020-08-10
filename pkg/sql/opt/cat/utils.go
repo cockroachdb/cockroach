@@ -189,7 +189,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, tab.ColumnKind(i), &buf)
+		formatColumn(idxCol.Column, tab.ColumnKind(idxCol.Ordinal), &buf)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -307,6 +307,8 @@ func formatColumn(col Column, kind ColumnKind, buf *bytes.Buffer) {
 		fmt.Fprintf(buf, " [mutation]")
 	case System:
 		fmt.Fprintf(buf, " [system]")
+	case Virtual:
+		fmt.Fprintf(buf, " [virtual]")
 	}
 }
 

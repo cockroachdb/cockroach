@@ -103,7 +103,11 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := table.Column(c).(*descpb.ColumnDescriptor)
+		ord := c
+		if cat.IsVirtualColumn(table, c) {
+			ord = table.Column(ord).InvertedSourceColumnOrdinal()
+		}
+		desc := table.Column(ord).(*descpb.ColumnDescriptor)
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg
