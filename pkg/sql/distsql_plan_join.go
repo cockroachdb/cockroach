@@ -269,10 +269,7 @@ func (dsp *DistSQLPlanner) createPlanForInterleavedJoin(
 	if err != nil {
 		return nil, err
 	}
-	plan.GatewayNodeID, err = planCtx.ExtendedEvalCtx.ExecCfg.NodeID.OptionalNodeIDErr(50050)
-	if err != nil {
-		return nil, err
-	}
+	plan.GatewayNodeID = dsp.gatewayNodeID
 	plan.AddNoInputStage(
 		corePlacement, post, resultTypes, dsp.convertOrdering(n.reqOrdering, joinToStreamColMap),
 	)
