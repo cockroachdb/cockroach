@@ -116,6 +116,15 @@ func (a tenantAuth) authRequest(
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuth) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest) error {
+	// Consult reqMethodAllowlist to determine whether each request in the batch
+	// is permitted. If not, reject the entire batch.
+	for _, ru := range args.Requests {
+		if !reqAllowed(ru.GetInner()) {
+			return authErrorf("request [%s] not permitted", args.Summary())
+		}
+	}
+
+	// All keys in the request must reside within the tenant's keyspace.
 	rSpan, err := keys.Range(args.Requests)
 	if err != nil {
 		return authError(err.Error())
@@ -125,6 +134,31 @@ func (a tenantAuth) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest
 		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
 	}
 	return nil
+}
+
+var reqMethodAllowlist = [...]bool{
+	roachpb.Get:            true,
+	roachpb.Put:            true,
+	roachpb.ConditionalPut: true,
+	roachpb.Increment:      true,
+	roachpb.Delete:         true,
+	roachpb.DeleteRange:    true,
+	roachpb.ClearRange:     true,
+	roachpb.Scan:           true,
+	roachpb.ReverseScan:    true,
+	roachpb.EndTxn:         true,
+	roachpb.HeartbeatTxn:   true,
+	roachpb.QueryTxn:       true,
+	roachpb.QueryIntent:    true,
+	roachpb.InitPut:        true,
+	roachpb.AddSSTable:     true,
+	roachpb.Refresh:        true,
+	roachpb.RefreshRange:   true,
+}
+
+func reqAllowed(r roachpb.Request) bool {
+	m := int(r.Method())
+	return m < len(reqMethodAllowlist) && reqMethodAllowlist[m]
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
