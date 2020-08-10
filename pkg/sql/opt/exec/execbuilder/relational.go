@@ -1591,19 +1591,29 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
-		ivarMap: allCols,
-	}
-	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
-	if err != nil {
-		return execPlan{}, err
+		ivarMap: allCols.Copy(),
 	}
 	onExpr, err := b.buildScalar(&ctx, &join.On)
 	if err != nil {
 		return execPlan{}, err
 	}
-
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
+
+	// The inverted filter refers to the original column, but it is actually
+	// evaluated implicitly using the inverted column; the original column is not
+	// even accessible here.
+	//
+	// TODO(radu): this is sketchy. The inverted column should not even have the
+	// geospatial type (which would make the expression invalid in terms of
+	// typing). Perhaps we need to pass this information in a more specific way
+	// and not as a generic expression?
+	ord, _ := ctx.ivarMap.Get(int(join.InvertedCol))
+	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.Column(0).InvertedSourceColumnOrdinal())), ord)
+	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
 
 	res.root, err = b.factory.ConstructInvertedJoin(
 		joinOpToJoinType(join.JoinType),

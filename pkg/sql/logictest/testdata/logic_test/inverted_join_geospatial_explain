@@ -43,7 +43,7 @@ project                            ·                      ·
                 └── inverted join  ·                      ·
                      │             table                  rtable@geom_index
                      │             type                   inner
-                     │             ·                      st_intersects(geom1, geom)
+                     │             ·                      st_intersects(geom1, geom_inverted_key)
                      │             parallel               ·
                      └── scan      ·                      ·
 ·                                  table                  ltable@primary
@@ -68,7 +68,7 @@ project                            ·                      ·
                 └── inverted join  ·                      ·
                      │             table                  rtable@geom_index
                      │             type                   inner
-                     │             ·                      st_dwithin(geom1, geom, 5.0)
+                     │             ·                      st_dwithin(geom1, geom_inverted_key, 5.0)
                      │             parallel               ·
                      └── scan      ·                      ·
 ·                                  table                  ltable@primary
@@ -79,56 +79,56 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk1)
 ----
-·                                       distribution           local                                                       ·                            ·
-·                                       vectorized             true                                                        ·                            ·
-project                                 ·                      ·                                                           (lk, rk1)                    +lk,+rk1
- └── project                            ·                      ·                                                           (lk, geom1, rk1, geom)       +lk,+rk1
-      └── lookup join                   ·                      ·                                                           (lk, geom1, rk1, rk2, geom)  +lk,+rk1
-           │                            table                  rtable@primary                                              ·                            ·
-           │                            type                   inner                                                       ·                            ·
-           │                            equality               (rk1, rk2) = (rk1,rk2)                                      ·                            ·
-           │                            equality cols are key  ·                                                           ·                            ·
-           │                            parallel               ·                                                           ·                            ·
-           │                            pred                   st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)  ·                            ·
-           └── sort                     ·                      ·                                                           (lk, geom1, rk1, rk2)        +lk,+rk1
-                │                       order                  +lk,+rk1                                                    ·                            ·
-                └── project             ·                      ·                                                           (lk, geom1, rk1, rk2)        ·
-                     └── inverted join  ·                      ·                                                           (lk, geom1, rk1, geom, rk2)  ·
-                          │             table                  rtable@geom_index                                           ·                            ·
-                          │             type                   inner                                                       ·                            ·
-                          │             ·                      st_intersects(geom1, geom) OR st_dwithin(geom1, geom, 2.0)  ·                            ·
-                          │             parallel               ·                                                           ·                            ·
-                          └── scan      ·                      ·                                                           (lk, geom1)                  ·
-·                                       table                  ltable@primary                                              ·                            ·
-·                                       spans                  FULL SCAN                                                   ·                            ·
+·                                       distribution           local                                                                                 ·                                         ·
+·                                       vectorized             true                                                                                  ·                                         ·
+project                                 ·                      ·                                                                                     (lk, rk1)                                 +lk,+rk1
+ └── project                            ·                      ·                                                                                     (lk, geom1, rk1, geom)                    +lk,+rk1
+      └── lookup join                   ·                      ·                                                                                     (lk, geom1, rk1, rk2, geom)               +lk,+rk1
+           │                            table                  rtable@primary                                                                        ·                                         ·
+           │                            type                   inner                                                                                 ·                                         ·
+           │                            equality               (rk1, rk2) = (rk1,rk2)                                                                ·                                         ·
+           │                            equality cols are key  ·                                                                                     ·                                         ·
+           │                            parallel               ·                                                                                     ·                                         ·
+           │                            pred                   st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)                            ·                                         ·
+           └── sort                     ·                      ·                                                                                     (lk, geom1, rk1, rk2)                     +lk,+rk1
+                │                       order                  +lk,+rk1                                                                              ·                                         ·
+                └── project             ·                      ·                                                                                     (lk, geom1, rk1, rk2)                     ·
+                     └── inverted join  ·                      ·                                                                                     (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                          │             table                  rtable@geom_index                                                                     ·                                         ·
+                          │             type                   inner                                                                                 ·                                         ·
+                          │             ·                      st_intersects(geom1, geom_inverted_key) OR st_dwithin(geom1, geom_inverted_key, 2.0)  ·                                         ·
+                          │             parallel               ·                                                                                     ·                                         ·
+                          └── scan      ·                      ·                                                                                     (lk, geom1)                               ·
+·                                       table                  ltable@primary                                                                        ·                                         ·
+·                                       spans                  FULL SCAN                                                                             ·                                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk1)
 ----
-·                                       distribution           local                                                        ·                            ·
-·                                       vectorized             true                                                         ·                            ·
-sort                                    ·                      ·                                                            (lk, rk1)                    +lk,+rk1
- │                                      order                  +lk,+rk1                                                     ·                            ·
- └── project                            ·                      ·                                                            (lk, rk1)                    ·
-      └── project                       ·                      ·                                                            (lk, geom1, rk1, geom)       ·
-           └── lookup join              ·                      ·                                                            (lk, geom1, rk1, rk2, geom)  ·
-                │                       table                  rtable@primary                                               ·                            ·
-                │                       type                   inner                                                        ·                            ·
-                │                       equality               (rk1, rk2) = (rk1,rk2)                                       ·                            ·
-                │                       equality cols are key  ·                                                            ·                            ·
-                │                       parallel               ·                                                            ·                            ·
-                │                       pred                   st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)  ·                            ·
-                └── project             ·                      ·                                                            (lk, geom1, rk1, rk2)        ·
-                     └── inverted join  ·                      ·                                                            (lk, geom1, rk1, geom, rk2)  ·
-                          │             table                  rtable@geom_index                                            ·                            ·
-                          │             type                   inner                                                        ·                            ·
-                          │             ·                      st_intersects(geom1, geom) AND st_dwithin(geom1, geom, 2.0)  ·                            ·
-                          │             parallel               ·                                                            ·                            ·
-                          └── scan      ·                      ·                                                            (lk, geom1)                  ·
-·                                       table                  ltable@primary                                               ·                            ·
-·                                       spans                  FULL SCAN                                                    ·                            ·
+·                                       distribution           local                                                                                  ·                                         ·
+·                                       vectorized             true                                                                                   ·                                         ·
+sort                                    ·                      ·                                                                                      (lk, rk1)                                 +lk,+rk1
+ │                                      order                  +lk,+rk1                                                                               ·                                         ·
+ └── project                            ·                      ·                                                                                      (lk, rk1)                                 ·
+      └── project                       ·                      ·                                                                                      (lk, geom1, rk1, geom)                    ·
+           └── lookup join              ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom)               ·
+                │                       table                  rtable@primary                                                                         ·                                         ·
+                │                       type                   inner                                                                                  ·                                         ·
+                │                       equality               (rk1, rk2) = (rk1,rk2)                                                                 ·                                         ·
+                │                       equality cols are key  ·                                                                                      ·                                         ·
+                │                       parallel               ·                                                                                      ·                                         ·
+                │                       pred                   st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)                            ·                                         ·
+                └── project             ·                      ·                                                                                      (lk, geom1, rk1, rk2)                     ·
+                     └── inverted join  ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                          │             table                  rtable@geom_index                                                                      ·                                         ·
+                          │             type                   inner                                                                                  ·                                         ·
+                          │             ·                      st_intersects(geom1, geom_inverted_key) AND st_dwithin(geom1, geom_inverted_key, 2.0)  ·                                         ·
+                          │             parallel               ·                                                                                      ·                                         ·
+                          └── scan      ·                      ·                                                                                      (lk, geom1)                               ·
+·                                       table                  ltable@primary                                                                         ·                                         ·
+·                                       spans                  FULL SCAN                                                                              ·                                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -136,23 +136,23 @@ SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.geom)
 AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
 ----
-·                                  distribution           local                                                                                                                                                                   ·                                   ·
-·                                  vectorized             true                                                                                                                                                                    ·                                   ·
-project                            ·                      ·                                                                                                                                                                       (lk, rk1)                           ·
- └── project                       ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, geom)       ·
-      └── lookup join              ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, rk2, geom)  ·
-           │                       table                  rtable@primary                                                                                                                                                          ·                                   ·
-           │                       type                   inner                                                                                                                                                                   ·                                   ·
-           │                       equality               (rk1, rk2) = (rk1,rk2)                                                                                                                                                  ·                                   ·
-           │                       equality cols are key  ·                                                                                                                                                                       ·                                   ·
-           │                       parallel               ·                                                                                                                                                                       ·                                   ·
-           │                       pred                   (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))  ·                                   ·
-           └── project             ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, rk2)        ·
-                └── inverted join  ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, geom, rk2)  ·
-                     │             table                  rtable@geom_index                                                                                                                                                       ·                                   ·
-                     │             type                   inner                                                                                                                                                                   ·                                   ·
-                     │             ·                      (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom1, geom, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))  ·                                   ·
-                     │             parallel               ·                                                                                                                                                                       ·                                   ·
-                     └── scan      ·                      ·                                                                                                                                                                       (lk, geom1, geom2)                  ·
-·                                  table                  ltable@primary                                                                                                                                                          ·                                   ·
-·                                  spans                  FULL SCAN                                                                                                                                                               ·                                   ·
+·                                  distribution           local                                                                                                                                                                                                                       ·                                                ·
+·                                  vectorized             true                                                                                                                                                                                                                        ·                                                ·
+project                            ·                      ·                                                                                                                                                                                                                           (lk, rk1)                                        ·
+ └── project                       ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, geom)                    ·
+      └── lookup join              ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2, geom)               ·
+           │                       table                  rtable@primary                                                                                                                                                                                                              ·                                                ·
+           │                       type                   inner                                                                                                                                                                                                                       ·                                                ·
+           │                       equality               (rk1, rk2) = (rk1,rk2)                                                                                                                                                                                                      ·                                                ·
+           │                       equality cols are key  ·                                                                                                                                                                                                                           ·                                                ·
+           │                       parallel               ·                                                                                                                                                                                                                           ·                                                ·
+           │                       pred                   (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))                                                      ·                                                ·
+           └── project             ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2)                     ·
+                └── inverted join  ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2, geom_inverted_key)  ·
+                     │             table                  rtable@geom_index                                                                                                                                                                                                           ·                                                ·
+                     │             type                   inner                                                                                                                                                                                                                       ·                                                ·
+                     │             ·                      (st_intersects(geom1, geom_inverted_key) AND st_covers(geom2, geom_inverted_key)) AND (st_dfullywithin(geom1, geom_inverted_key, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom_inverted_key))  ·                                                ·
+                     │             parallel               ·                                                                                                                                                                                                                           ·                                                ·
+                     └── scan      ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2)                               ·
+·                                  table                  ltable@primary                                                                                                                                                                                                              ·                                                ·
+·                                  spans                  FULL SCAN                                                                                                                                                                                                                   ·                                                ·
