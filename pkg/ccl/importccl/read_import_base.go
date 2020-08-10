@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -67,7 +69,19 @@ func runImport(
 		flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 	}
 
-	conv, err := makeInputConverter(ctx, spec, flowCtx.NewEvalCtx(), kvCh)
+	evalCtx := flowCtx.NewEvalCtx()
+	evalCtx.DB = flowCtx.Cfg.DB
+	// Retrieve information of job here to be populated into converter, though sometimes
+	// it seems like jobregistry is nil.
+	var job *jobs.Job
+	if flowCtx.Cfg.JobRegistry != nil {
+		newJob, err := flowCtx.Cfg.JobRegistry.LoadJobWithTxn(ctx, spec.Progress.JobID, nil)
+		if err != nil {
+			return nil, err
+		}
+		job = newJob
+	}
+	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, job)
 	if err != nil {
 		return nil, err
 	}
@@ -393,13 +407,15 @@ func newImportRowError(err error, row string, num int64) error {
 
 // parallelImportContext describes state associated with the import.
 type parallelImportContext struct {
-	walltime   int64                             // Import time stamp.
-	numWorkers int                               // Parallelism
-	batchSize  int                               // Number of records to batch
-	evalCtx    *tree.EvalContext                 // Evaluation context.
-	tableDesc  *sqlbase.ImmutableTableDescriptor // Table descriptor we're importing into.
-	targetCols tree.NameList                     // List of columns to import.  nil if importing all columns.
-	kvCh       chan row.KVBatch                  // Channel for sending KV batches.
+	walltime             int64                                 // Import time stamp.
+	numWorkers           int                                   // Parallelism
+	batchSize            int                                   // Number of records to batch
+	evalCtx              *tree.EvalContext                     // Evaluation context.
+	tableDesc            *sqlbase.ImmutableTableDescriptor     // Table descriptor we're importing into.
+	targetCols           tree.NameList                         // List of columns to import.  nil if importing all columns.
+	kvCh                 chan row.KVBatch                      // Channel for sending KV batches.
+	job                  *jobs.Job                             // Job (of this import) to be populated into row converter.
+	defaultValueMetaData map[int32]*jobspb.DefaultExprMetaData // Metadata of default values to be communicated.
 }
 
 // importFileContext describes state specific to a file being imported.
@@ -426,7 +442,12 @@ func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh)
+		ctx,
+		importCtx.tableDesc,
+		importCtx.targetCols,
+		importCtx.evalCtx,
+		importCtx.defaultValueMetaData[fileCtx.source],
+		importCtx.kvCh)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
@@ -649,7 +670,7 @@ func (p *parallelImporter) importWorker(
 			}
 
 			rowIndex := int64(timestamp) + rowNum
-			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex); err != nil {
+			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex, importCtx.job); err != nil {
 				return newImportRowError(err, fmt.Sprintf("%v", record), rowNum)
 			}
 		}

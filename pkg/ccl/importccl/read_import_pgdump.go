@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -528,6 +529,7 @@ type pgDumpReader struct {
 	opts     roachpb.PgDumpOptions
 	walltime int64
 	colMap   map[*row.DatumRowConverter](map[string]int)
+	job      *jobs.Job
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -540,6 +542,7 @@ func newPgDumpReader(
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	job *jobs.Job,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
@@ -554,7 +557,8 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.Name] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh)
+			// TODO: populate defaultValueMetaData.
+			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, nil, kvCh)
 			if err != nil {
 				return nil, err
 			}
@@ -569,6 +573,7 @@ func newPgDumpReader(
 		opts:     opts,
 		walltime: walltime,
 		colMap:   colMap,
+		job:      job,
 	}, nil
 }
 
@@ -678,7 +683,7 @@ func (m *pgDumpReader) readFile(
 					}
 					conv.Datums[idx] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp), m.job); err != nil {
 					return err
 				}
 			}
@@ -747,7 +752,7 @@ func (m *pgDumpReader) readFile(
 							}
 						}
 					}
-					if err := conv.Row(ctx, inputIdx, count); err != nil {
+					if err := conv.Row(ctx, inputIdx, count, m.job); err != nil {
 						return err
 					}
 				default:

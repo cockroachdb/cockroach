@@ -247,13 +247,14 @@ func (th *testHelper) newRecordStream(
 		th.genRecordsData(t, format, numRecords, opts.RecordSeparator, records)
 	}
 
-	avro, err := newAvroInputReader(nil, th.schemaTable, opts, 0, 1, &th.evalCtx)
+	avro, err := newAvroInputReader(
+		nil, th.schemaTable, opts, 0, 1, &th.evalCtx, nil /* data */, nil /* job */)
 	require.NoError(t, err)
 	producer, consumer, err := newImportAvroPipeline(avro, &fileReader{Reader: records})
 	require.NoError(t, err)
 
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil)
+		context.Background(), th.schemaTable, nil, th.evalCtx.Copy(), nil, nil)
 	require.NoError(t, err)
 	return &testRecordStream{
 		producer: producer,
@@ -590,9 +591,11 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
+	// The data and job fields are only there to make sure that chunks can be updated
+	// atomically into the job's progress, in case we need to resume.
 	avro, err := newAvroInputReader(kvCh,
 		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
-		avroOpts, 0, 0, &evalCtx)
+		avroOpts, 0, 0, &evalCtx, nil /* data */, nil /* job */)
 	require.NoError(b, err)
 
 	limitStream := &limitAvroStream{

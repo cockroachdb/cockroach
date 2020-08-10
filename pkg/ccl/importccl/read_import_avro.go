@@ -16,6 +16,8 @@ import (
 	"io"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -452,15 +454,19 @@ func newAvroInputReader(
 	walltime int64,
 	parallelism int,
 	evalCtx *tree.EvalContext,
+	data map[int32]*jobspb.DefaultExprMetaData,
+	job *jobs.Job,
 ) (*avroInputReader, error) {
 
 	return &avroInputReader{
 		importContext: &parallelImportContext{
-			walltime:   walltime,
-			numWorkers: parallelism,
-			evalCtx:    evalCtx,
-			tableDesc:  tableDesc,
-			kvCh:       kvCh,
+			walltime:             walltime,
+			defaultValueMetaData: data,
+			numWorkers:           parallelism,
+			evalCtx:              evalCtx,
+			tableDesc:            tableDesc,
+			kvCh:                 kvCh,
+			job:                  job,
 		},
 		opts: avroOpts,
 	}, nil

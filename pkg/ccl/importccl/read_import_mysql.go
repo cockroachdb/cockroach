@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -51,6 +52,7 @@ type mysqldumpReader struct {
 	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
 	walltime int64
+	job      *jobs.Job
 }
 
 var _ inputConverter = &mysqldumpReader{}
@@ -61,8 +63,9 @@ func newMysqldumpReader(
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	job *jobs.Job,
 ) (*mysqldumpReader, error) {
-	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime}
+	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime, job: job}
 
 	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
@@ -70,8 +73,9 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
+		// TODO: populate the default value metadata.
 		conv, err := row.NewDatumRowConverter(ctx, sqlbase.NewImmutableTableDescriptor(*table.Desc),
-			nil /* targetColNames */, evalCtx, kvCh)
+			nil /* targetColNames */, evalCtx, nil, kvCh)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +163,7 @@ func (m *mysqldumpReader) readFile(
 					}
 					conv.Datums[i] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp), m.job); err != nil {
 					return err
 				}
 				if m.debugRow != nil {

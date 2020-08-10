@@ -219,7 +219,7 @@ func NewWorkloadKVConverter(
 //
 // This worker needs its own EvalContext and DatumAlloc.
 func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalContext) error {
-	conv, err := row.NewDatumRowConverter(ctx, w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
+	conv, err := row.NewDatumRowConverter(ctx, w.tableDesc, nil /* targetColNames */, evalCtx, nil, w.kvCh)
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,9 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 			// within the table and the index of the row within the batch should do
 			// what we want.
 			fileIdx, timestamp := int32(batchIdx), int64(rowIdx)
-			if err := conv.Row(ctx, fileIdx, timestamp); err != nil {
+			// TODO (Anzoteh96): the job field might need to be populated here if we're
+			// a nextval() default expression is involved here.
+			if err := conv.Row(ctx, fileIdx, timestamp, nil /* job */); err != nil {
 				return err
 			}
 		}

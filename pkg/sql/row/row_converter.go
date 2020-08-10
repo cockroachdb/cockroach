@@ -13,7 +13,10 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -185,6 +188,8 @@ type KVBatch struct {
 	Progress float32
 	// KVs is the actual converted KV data.
 	KVs []roachpb.KeyValue
+	// Chunks denote the new chunks being created.
+	DefaultMetaData *jobspb.DefaultExprMetaData
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -218,6 +223,8 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	// DefaultMetaData jobspb.DefaultExprMetaData
 }
 
 var kvDatumRowConverterBatchSize = 5000
@@ -237,6 +244,7 @@ func NewDatumRowConverter(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
+	defaultValueMetaData *jobspb.DefaultExprMetaData,
 	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
@@ -307,6 +315,12 @@ func NewDatumRowConverter(
 
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 	c.defaultCache = make([]tree.TypedExpr, len(cols))
+	seqIDs := make(map[descpb.ID]struct{})
+	for _, col := range cols {
+		for _, id := range col.UsesSequenceIds {
+			seqIDs[id] = struct{}{}
+		}
+	}
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
@@ -317,7 +331,33 @@ func NewDatumRowConverter(
 		return ok
 	}
 	annot := make(tree.Annotations, 1)
-	annot.Set(cellInfoAddr, &cellInfoAnnotation{uniqueRowIDInstance: 0})
+	rowSeqForAnnot := make(map[tree.DString]*rowSequence, len(seqIDs))
+	for id, _ := range seqIDs {
+		txn := c.EvalCtx.DB.NewTxn(ctx, "")
+		seqTable, err := catalogkv.MustGetTableDescByID(ctx, txn, c.EvalCtx.Codec, id)
+		if err != nil {
+			return nil, err
+		}
+		oldChunks := &jobspb.SequenceChunkArray{
+			Chunks: make([]*jobspb.ChunkInfo, 0),
+		}
+		if defaultValueMetaData != nil {
+			seqMapFromJob := defaultValueMetaData.SequenceMap.Chunks
+			chunks, _ := seqMapFromJob[int32(id)]
+			if chunks != nil {
+				oldChunks = chunks
+			}
+		}
+		rowSeqForAnnot[*tree.NewDString(seqTable.Name)] = &rowSequence{
+			id:        id,
+			table:     seqTable,
+			seqChunks: oldChunks,
+		}
+	}
+	annot.Set(cellInfoAddr, &cellInfoAnnotation{
+		uniqueRowIDInstance: 0,
+		sequenceMap:         rowSeqForAnnot,
+	})
 	c.EvalCtx.Annotations = &annot
 	for i := range cols {
 		col := &cols[i]
@@ -392,12 +432,14 @@ const rowIDBits = 64 - builtins.NodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
-func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
+func (c *DatumRowConverter) Row(
+	ctx context.Context, sourceID int32, rowIndex int64, job *jobs.Job,
+) error {
 	isTargetCol := func(i int) bool {
 		_, ok := c.IsTargetCol[i]
 		return ok
 	}
-	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
+	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex, job)
 	for i := range c.cols {
 		col := &c.cols[i]
 		if col.DefaultExpr != nil {

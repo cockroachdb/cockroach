@@ -126,10 +126,11 @@ func makeImportReaderSpecs(
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos: walltime,
-				Uri:           make(map[int32]string),
-				ResumePos:     make(map[int32]int64),
-				User:          user,
+				WalltimeNanos:       walltime,
+				Uri:                 make(map[int32]string),
+				ResumePos:           make(map[int32]int64),
+				User:                user,
+				DefaultExprMetaData: make(map[int32]*jobspb.DefaultExprMetaData),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -137,6 +138,9 @@ func makeImportReaderSpecs(
 		inputSpecs[n].Uri[int32(i)] = input
 		if importProgress.ResumePos != nil {
 			inputSpecs[n].ResumePos[int32(i)] = importProgress.ResumePos[int32(i)]
+		}
+		if importProgress.DefaultExprMetaData != nil {
+			inputSpecs[n].DefaultExprMetaData[int32(i)] = importProgress.DefaultExprMetaData[int32(i)]
 		}
 	}
 
@@ -229,6 +233,14 @@ func DistIngest(
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
 			prog.ResumePos = make([]int64, len(from))
+			prog.DefaultExprMetaData = make([]*jobspb.DefaultExprMetaData, len(from))
+			for i := range prog.DefaultExprMetaData {
+				prog.DefaultExprMetaData[i] = &jobspb.DefaultExprMetaData{
+					SequenceMap: &jobspb.SequenceChunkMap{
+						Chunks: map[int32]*jobspb.SequenceChunkArray{},
+					},
+				}
+			}
 			return 0.0
 		},
 	); err != nil {

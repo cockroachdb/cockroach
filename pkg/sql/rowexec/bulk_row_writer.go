@@ -101,8 +101,9 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
+	// TODO (anzoteh96): try populating defaultValueMetaData.
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh)
+		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, nil, kvCh)
 	if err != nil {
 		return err
 	}
@@ -215,7 +216,7 @@ func (sp *bulkRowWriter) convertLoop(
 			// are sorted by (fileIndex, rowIndex) and unique as long as the two
 			// inputs are a unique combo, so using the processor ID and a
 			// monotonically increasing batch index should do what we want.
-			if err := conv.Row(ctx, sp.processorID, sp.batchIdxAtomic); err != nil {
+			if err := conv.Row(ctx, sp.processorID, sp.batchIdxAtomic, nil); err != nil {
 				return err
 			}
 			atomic.AddInt64(&sp.batchIdxAtomic, 1)

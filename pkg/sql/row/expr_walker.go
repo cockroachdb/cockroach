@@ -14,6 +14,11 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -93,6 +98,16 @@ const (
 	overrideVolatile  overrideVolatility = true
 )
 
+type rowSequence struct {
+	id              descpb.ID
+	table           *sqlbase.ImmutableTableDescriptor
+	instancesPerRow int64
+	chunk           *jobspb.ChunkInfo          // The current chunk we're working on.
+	seqChunks       *jobspb.SequenceChunkArray // All the chunks corresponding to the sequence.
+	currVal         int64
+	instancePos     int64
+}
+
 // cellInfoAddr is the address used to store relevant information
 // in the Annotation field of evalCtx when evaluating expressions.
 const cellInfoAddr tree.AnnotationIdx = iota + 1
@@ -104,16 +119,22 @@ type cellInfoAnnotation struct {
 	uniqueRowIDTotal    int
 	randSource          *importRand
 	randInstancePerRow  int
+	sequenceMap         map[tree.DString]*rowSequence
+	job                 *jobs.Job
 }
 
 func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
 	return t.Get(cellInfoAddr).(*cellInfoAnnotation)
 }
 
-func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
+func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64, job *jobs.Job) {
 	c.sourceID = sourceID
 	c.rowID = rowID
 	c.uniqueRowIDInstance = 0
+	c.job = job
+	for _, rowSeq := range c.sequenceMap {
+		rowSeq.instancePos = 0
+	}
 }
 
 // We don't want to call unique_rowid() for columns with such default expressions
@@ -182,6 +203,87 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
 }
 
+func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	name := tree.MustBeDString(args[0])
+	seqMap := c.sequenceMap[name]
+	seqChunk := seqMap.chunk
+	chunkSize := int64(0)
+	if seqChunk != nil {
+		chunkSize = seqChunk.ChunkSize
+	}
+	if seqChunk == nil || c.rowID == seqChunk.NextChunkRow {
+		done := false
+		for _, chunk := range seqMap.seqChunks.Chunks {
+			if chunk.StartRow <= c.rowID && c.rowID < chunk.NextChunkRow && !done {
+				// An existing chunk exists, use that.
+				seqChunk = chunk
+				seqMap.currVal = chunk.ChunkStart + seqMap.instancesPerRow*(c.rowID-chunk.StartRow)
+				done = true
+			}
+		}
+		if !done {
+			// Request a new Chunk.
+			newChunkSize := 10 * chunkSize
+			if newChunkSize == 0 {
+				newChunkSize = 10
+			}
+			if newChunkSize < seqMap.instancesPerRow {
+				newChunkSize = seqMap.instancesPerRow
+			}
+			seqValueKey := evalCtx.Codec.SequenceKey(uint32(seqMap.id))
+			if c.job == nil {
+				return nil, errors.Newf(
+					"job needs to be injected into evalCtx for allocation of chunks")
+			}
+
+			askNewChunkFunc := func(_ *kv.Txn, _ jobs.JobMetadata, _ *jobs.JobUpdater) error {
+				newChunkVal, err := kv.IncrementValRetryable(
+					evalCtx.Ctx(), evalCtx.DB, seqValueKey, newChunkSize)
+				if err != nil {
+					return err
+				}
+				seqMap.chunk = &jobspb.ChunkInfo{
+					ChunkStart:   newChunkVal - newChunkSize,
+					ChunkSize:    newChunkSize,
+					StartRow:     c.rowID,
+					NextChunkRow: c.rowID + (newChunkSize / seqMap.instancesPerRow),
+				}
+				seqMap.seqChunks.Chunks = append(seqMap.seqChunks.Chunks, seqMap.chunk)
+				// Update the sequence chunks directly at the job progress.
+				progress := c.job.Progress()
+				importProgress := progress.GetImport()
+				progChunks := importProgress.DefaultExprMetaData[c.sourceID].SequenceMap.Chunks
+				if progChunks == nil {
+					progChunks = make(map[int32]*jobspb.SequenceChunkArray)
+				}
+				progChunks[int32(seqMap.id)] = seqMap.seqChunks
+				return nil
+			}
+			err := c.job.Update(evalCtx.Context, askNewChunkFunc)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error updating the sequence chunk")
+			}
+			seqMap.currVal = seqMap.chunk.ChunkStart
+		}
+	}
+	seqMap.currVal++
+	seqMap.instancePos++
+	return tree.NewDInt(tree.DInt(c.sequenceMap[name].currVal)), nil
+}
+
+func importCurrVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	name := tree.MustBeDString(args[0])
+	seqChunk := c.sequenceMap[name].chunk
+	// TODO: this definitely needs to be changed
+	currVal := int64(0)
+	if seqChunk == nil {
+		currVal = c.sequenceMap[name].currVal
+	}
+	return tree.NewDInt(tree.DInt(currVal)), nil
+}
+
 // Besides overriding, there are also counters that we want to keep track
 // of as we walk through the expressions in a row (at datumRowConverter creation
 // time). This will be handled by the visitorSideEffect field: it will be
@@ -189,8 +291,12 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 // unique_rowid, for example, we want to keep track of the total number of
 // unique_rowid occurrences in a row.
 type customFunc struct {
-	visitorSideEffect func(annotations *tree.Annotations)
-	override          *tree.FunctionDefinition
+	visitorSideEffect func(
+		annot *tree.Annotations,
+		exprs tree.Exprs,
+		evalCtx *tree.EvalContext,
+	) error
+	override *tree.FunctionDefinition
 }
 
 var useDefaultBuiltin *customFunc
@@ -211,8 +317,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	"timeofday":             useDefaultBuiltin,
 	"transaction_timestamp": useDefaultBuiltin,
 	"unique_rowid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			_ tree.Exprs,
+			_ *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).uniqueRowIDTotal++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["unique_rowid"],
@@ -226,8 +337,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"random": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["random"],
@@ -241,8 +357,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"gen_random_uuid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["gen_random_uuid"],
@@ -253,6 +374,49 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				Info: "Generates a random UUID based on row position and time, " +
 					"and returns it as a value of UUID type.",
 				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"currval": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["currval"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn:         importCurrVal,
+				Info:       "Returns the current value ",
+			},
+		),
+	},
+	"nextval": {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
+			args := make(tree.Datums, len(exprs))
+			for i, e := range exprs {
+				arg, err := e.(tree.TypedExpr).Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				args[i] = arg
+			}
+			name := tree.MustBeDString(args[0])
+			rowSeq, ok := getCellInfoAnnotation(annot).sequenceMap[name]
+			if !ok {
+				return errors.Newf("sequence of name %s not found", name.String())
+			}
+			rowSeq.instancesPerRow++
+			return nil
+		},
+		override: makeBuiltinOverride(
+			tree.FunDefs["nextval"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn:         importNextVal,
+				Info:       "Returns the next value ",
 			},
 		),
 	},
@@ -285,6 +449,7 @@ type importDefaultExprVisitor struct {
 	ctx         context.Context
 	annotations *tree.Annotations
 	semaCtx     *tree.SemaContext
+	evalCtx     *tree.EvalContext
 	// The volatility flag will be set if there's at least one volatile
 	// function appearing in the default expression.
 	volatility overrideVolatility
@@ -323,7 +488,11 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 	// unique_rowid function in an expression).
 	v.volatility = overrideVolatile
 	if custom.visitorSideEffect != nil {
-		custom.visitorSideEffect(v.annotations)
+		err := custom.visitorSideEffect(v.annotations, fn.Exprs, v.evalCtx)
+		if err != nil {
+			v.err = err
+			return expr
+		}
 	}
 	funcExpr := &tree.FuncExpr{
 		Func:  tree.ResolvableFunctionReference{FunctionReference: custom.override},
@@ -359,7 +528,7 @@ func sanitizeExprsForImport(
 		return nil, overrideErrorTerm,
 			unsafeExpressionError(err, "type checking error", expr.String())
 	}
-	v := &importDefaultExprVisitor{annotations: evalCtx.Annotations}
+	v := &importDefaultExprVisitor{annotations: evalCtx.Annotations, evalCtx: evalCtx}
 	newExpr, _ := tree.WalkExpr(v, typedExpr)
 	if v.err != nil {
 		return nil, overrideErrorTerm,
