@@ -9,12 +9,12 @@
 package importccl_test
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -186,6 +186,18 @@ func TestExportJoin(t *testing.T) {
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/join' FROM SELECT * FROM t, t as u`)
 }
 
+func readFileByGlob(t *testing.T, pattern string) []byte {
+	paths, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(paths))
+
+	result, err := ioutil.ReadFile(paths[0])
+	require.NoError(t, err)
+
+	return result
+}
+
 func TestExportOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -196,30 +208,58 @@ func TestExportOrder(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
-	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' from select * from foo order by y asc limit 2`)
-	content, err := ioutil.ReadFile(filepath.Join(dir, "order", "n1.0.csv"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
+	content := readFileByGlob(t, filepath.Join(dir, "order", "export*-n1.0.csv"))
+
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }
 
+func TestExportUniqueness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	const stmt = `EXPORT INTO CSV 'nodelocal://0/' WITH chunk_rows=$1 FROM SELECT * FROM foo`
+
+	sqlDB.Exec(t, stmt, 2)
+	dir1, err := ioutil.ReadDir(dir)
+	require.NoError(t, err)
+
+	sqlDB.Exec(t, stmt, 2)
+	dir2, err := ioutil.ReadDir(dir)
+	require.NoError(t, err)
+
+	require.Equal(t, 2*len(dir1), len(dir2), "second export did not double the number of files")
+}
+
 func TestExportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	baseDir, cleanup := testutils.TempDir(t)
+	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
+
 	tc := testcluster.StartTestCluster(
-		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
+
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
 	// Set up some initial state for the tests.
 	sqlDB.Exec(t, `
 SET experimental_enable_enums = true;
@@ -232,23 +272,27 @@ INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');
 		expected string
 	}{
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM (SELECT 'hello':::greeting, 'hi':::greeting)",
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM (SELECT 'hello':::greeting, 'hi':::greeting)",
 			expected: "hello,hi\n",
 		},
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM TABLE greeting_table",
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE greeting_table",
 			expected: "hello,hello\nhi,hi\n",
 		},
 		{
-			stmt:     "EXPORT INTO CSV 'nodelocal://0/test/' FROM (SELECT x, y, enum_first(x) FROM greeting_table)",
+			stmt:     "EXPORT INTO CSV 'nodelocal://0/%s/' FROM (SELECT x, y, enum_first(x) FROM greeting_table)",
 			expected: "hello,hello,hello\nhi,hi,hello\n",
 		},
 	}
-	for _, test := range tests {
-		sqlDB.Exec(t, test.stmt)
+	for i, test := range tests {
+		path := fmt.Sprintf("test%d", i)
+		stmt := fmt.Sprintf(test.stmt, path)
+
+		sqlDB.Exec(t, stmt)
+
 		// Read the dumped file.
-		contents, err := ioutil.ReadFile(filepath.Join(baseDir, "test", "n1.0.csv"))
-		require.NoError(t, err)
+		contents := readFileByGlob(t, filepath.Join(dir, path, "export*-n1.0.csv"))
+
 		require.Equal(t, test.expected, string(contents))
 	}
 }
@@ -269,28 +313,19 @@ func TestExportOrderCompressed(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
-	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' with compression = gzip from select * from foo order by y asc limit 2`)
-	fi, err := os.Open(filepath.Join(dir, "order", "n1.0.csv.gz"))
-	defer close(fi)
+	compressed := readFileByGlob(t, filepath.Join(dir, "order", "export*-n1.0.csv.gz"))
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	gzipReader, err := gzip.NewReader(fi)
+	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
 	defer close(gzipReader)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	content, err := ioutil.ReadAll(gzipReader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
@@ -300,18 +335,18 @@ func TestExportOrderCompressed(t *testing.T) {
 func TestExportShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
 	defer srv.Stopper().Stop(context.Background())
+
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
-	content, err := ioutil.ReadFile(filepath.Join(dir, "show", "n1.0.csv"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	content := readFileByGlob(t, filepath.Join(dir, "show", "export*-n1.0.csv"))
+
 	if expected, got := "defaultdb\npostgres\nsystem\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
