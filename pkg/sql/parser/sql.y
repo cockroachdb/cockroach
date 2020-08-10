@@ -481,6 +481,9 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
   return u.val.(*tree.BackupOptions)
 }
+func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
+  return u.val.(*tree.CopyOptions)
+}
 func (u *sqlSymUnion) transactionModes() tree.TransactionModes {
     return u.val.(tree.TransactionModes)
 }
@@ -561,7 +564,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
-%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BUNDLE BY
 
@@ -575,7 +578,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DETACHED
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -865,6 +868,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
+%type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with
@@ -2539,16 +2543,54 @@ opt_with_options:
     $$.val = nil
   }
 
+// The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:
+// 1) The "really old" syntax from v7.2 and prior
+// 2) Pre 9.0 using hard-wired, space-separated options
+// 3) The current and preferred options using comma-separated generic identifiers instead of keywords.
+// We currently support only the #2 format.
+// See the comment for CopyStmt in https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y.
 copy_from_stmt:
-  COPY table_name opt_column_list FROM STDIN opt_with_options
+  COPY table_name opt_column_list FROM STDIN opt_with_copy_options
   {
     name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
        Stdin: true,
-       Options: $6.kvOptions(),
+       Options: *$6.copyOptions(),
     }
+  }
+
+opt_with_copy_options:
+  opt_with copy_options_list
+  {
+    $$.val = $2.copyOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CopyOptions{}
+  }
+
+copy_options_list:
+  copy_options
+  {
+    $$.val = $1.copyOptions()
+  }
+| copy_options_list copy_options
+  {
+    if err := $1.copyOptions().CombineWith($2.copyOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+copy_options:
+  DESTINATION '=' string_or_placeholder
+  {
+    $$.val = &tree.CopyOptions{Destination: $3.expr()}
+  }
+| BINARY
+  {
+    $$.val = &tree.CopyOptions{CopyFormat: tree.CopyFormatBinary}
   }
 
 // %Help: CANCEL
@@ -10857,6 +10899,7 @@ unreserved_keyword:
 | BACKUP
 | BEFORE
 | BEGIN
+| BINARY
 | BUCKET_COUNT
 | BUNDLE
 | BY
@@ -10894,6 +10937,7 @@ unreserved_keyword:
 | DELETE
 | DEFAULTS
 | DEFERRED
+| DESTINATION
 | DETACHED
 | DISCARD
 | DOMAIN
