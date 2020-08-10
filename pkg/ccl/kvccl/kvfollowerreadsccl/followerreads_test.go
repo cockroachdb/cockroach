@@ -271,12 +271,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4Cache := tc.Server(3).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 	entry := n4Cache.GetCached(tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
-	require.False(t, entry.Lease.Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
+	require.False(t, entry.Lease().Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 2, StoreID: 2, ReplicaID: 2},
-	}, entry.Desc.Replicas().All())
+	}, entry.Desc().Replicas().All())
 
 	// Relocate the follower. n2 will no longer have a replica.
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,3], 1)`)
@@ -292,12 +292,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Check that the cache was properly updated.
 	entry = n4Cache.GetCached(tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
-	require.False(t, entry.Lease.Empty())
-	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
+	require.False(t, entry.Lease().Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3},
-	}, entry.Desc.Replicas().All())
+	}, entry.Desc().Replicas().All())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.

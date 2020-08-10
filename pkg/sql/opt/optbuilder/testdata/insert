@@ -1271,3 +1271,28 @@ insert partial_indexes
            ├── (column1:5 > column2:6) AND (column3:7 = 'bar') [as=column9:9]
            ├── column3:7 = 'delete-only' [as=column10:10]
            └── column3:7 = 'write-only' [as=column11:11]
+
+# Regression test for issue #52546. Building partial index predicate expressions
+# that are only a single column reference should not panic.
+
+exec-ddl
+CREATE TABLE t52546 (a INT, b BOOL, INDEX (a) WHERE b)
+----
+
+build
+INSERT INTO t52546 VALUES (1, true)
+----
+insert t52546
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => rowid:3
+ ├── partial index put columns: column2:6
+ └── project
+      ├── columns: column7:7 column1:5!null column2:6!null
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    └── (1, true)
+      └── projections
+           └── unique_rowid() [as=column7:7]

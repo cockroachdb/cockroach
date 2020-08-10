@@ -176,9 +176,6 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			r := roachpb.RangeInfo{
 				Desc: *tok.Desc(),
 			}
-			if l := tok.Lease(); l != nil {
-				r.Lease = *l
-			}
 			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
