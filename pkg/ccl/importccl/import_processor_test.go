@@ -115,7 +115,9 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh)
+				// The job field is used just for atomic progress saving when, say,
+				// allocating new chunk. Thus we can just use nil here.
+				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh, nil /* job */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}

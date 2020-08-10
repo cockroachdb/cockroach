@@ -71,7 +71,7 @@ func newMysqldumpReader(
 			continue
 		}
 		conv, err := row.NewDatumRowConverter(ctx, sqlbase.NewImmutableTableDescriptor(*table.Desc),
-			nil /* targetColNames */, evalCtx, kvCh)
+			nil /* targetColNames */, evalCtx, nil, kvCh)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,9 @@ func (m *mysqldumpReader) readFile(
 					}
 					conv.Datums[i] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
+				// The job field is nil here as there's no plan to populate it: even if it's
+				// nextval, the default values might have been automatically populated for dump files.
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp), nil); err != nil {
 					return err
 				}
 				if m.debugRow != nil {

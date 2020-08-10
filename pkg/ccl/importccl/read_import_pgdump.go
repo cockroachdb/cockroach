@@ -554,7 +554,7 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.Name] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh)
+			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, nil, kvCh)
 			if err != nil {
 				return nil, err
 			}
@@ -678,7 +678,9 @@ func (m *pgDumpReader) readFile(
 					}
 					conv.Datums[idx] = converted
 				}
-				if err := conv.Row(ctx, inputIdx, count+int64(timestamp)); err != nil {
+				// The job field is nil here as there's no plan to populate it: even if it's
+				// nextval, the default values might have been automatically populated for dump files.
+				if err := conv.Row(ctx, inputIdx, count+int64(timestamp), nil /* job */); err != nil {
 					return err
 				}
 			}
@@ -747,7 +749,7 @@ func (m *pgDumpReader) readFile(
 							}
 						}
 					}
-					if err := conv.Row(ctx, inputIdx, count); err != nil {
+					if err := conv.Row(ctx, inputIdx, count, nil); err != nil {
 						return err
 					}
 				default:

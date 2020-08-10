@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -3361,15 +3363,6 @@ func TestImportDefault(t *testing.T) {
 			format:          "CSV",
 			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
 		},
-		{
-			name:          "nextval",
-			sequence:      "testseq",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT nextval('testseq')",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
 		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
 		// IMPORT INTO are supported for these file formats.
 		{
@@ -3639,6 +3632,185 @@ func TestImportDefault(t *testing.T) {
 			})
 		}
 	})
+	t.Run("nextval", func(t *testing.T) {
+		testCases := []struct {
+			name         string
+			create       string
+			targetCols   []string
+			sequenceCols []string
+			sequences    []string
+		}{
+			{
+				name:         "nextval",
+				create:       "a INT, b INT DEFAULT nextval('myseq'), c STRING",
+				targetCols:   []string{"a", "c"},
+				sequences:    []string{"myseq"},
+				sequenceCols: []string{selectNotNull("b")},
+			},
+		}
+		for _, test := range testCases {
+			for _, seqName := range test.sequences {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, seqName))
+			}
+			t.Run(test.name, func(t *testing.T) {
+				defer sqlDB.Exec(t, `DROP TABLE t`)
+				for _, seqName := range test.sequences {
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, seqName))
+				}
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+				insertData := `(1, 'cat'), (2, 'him'), (3, 'meme')`
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+					strings.Join(test.targetCols, ", "),
+					insertData))
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+					strings.Join(test.targetCols, ", "),
+					strings.Join(testFiles.files, ", ")))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+					strings.Join(test.targetCols, ", "),
+					insertData))
+				var numDistinctRows int
+				sqlDB.QueryRow(t,
+					fmt.Sprintf(`SELECT DISTINCT COUNT (*) FROM (%s)`,
+						strings.Join(test.sequenceCols, " UNION ")),
+				).Scan(&numDistinctRows)
+				var numRows int
+				sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+				require.Equal(t, numDistinctRows, len(test.sequenceCols)*numRows)
+			})
+		}
+	})
+}
+
+// For now, the aim here is to simply test that the results we get
+// are sensible: even after a resume, we can ensure that the KVs
+// being written previously (before a checkpoint) are still the same.
+func TestImportDefaultWithResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer setImportReaderParallelism(1)()
+	const batchSize = 5
+	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+				},
+			},
+		})
+	registry := s.JobRegistry().(*jobs.Registry)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	testCases := []struct {
+		name       string
+		create     string
+		targetCols string
+		format     string
+		sequence   string
+	}{
+		{
+			name:       "nextval",
+			create:     "a INT, b STRING, c INT PRIMARY KEY DEFAULT nextval('mysequence')",
+			targetCols: "a, b",
+			sequence:   "mysequence",
+		},
+		// TODO (anzoteh96): once this is ready, add a testcase for random(), and
+		// gen_random_uuid().
+	}
+	for _, test := range testCases {
+		if test.sequence != "" {
+			defer sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.sequence))
+		}
+		t.Run(test.name, func(t *testing.T) {
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			if test.sequence != "" {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.sequence))
+			}
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+
+			jobCtx, cancelImport := context.WithCancel(ctx)
+			jobIDCh := make(chan int64)
+			var jobID int64 = -1
+
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				// Arrange for our special job resumer to be
+				// returned the very first time we start the import.
+				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+
+					resumer := raw.(*importResumer)
+					resumer.testingKnobs.ignoreProtectedTimestamps = true
+					resumer.testingKnobs.alwaysFlushJobProgress = true
+					resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+						return nil
+					}
+					if jobID == -1 {
+						return &cancellableImportResumer{
+							ctx:     jobCtx,
+							jobIDCh: jobIDCh,
+							wrapped: resumer,
+						}
+					}
+					return resumer
+				},
+			}
+
+			expectedNumRows := 10*batchSize + 1
+			testBarrier, csvBarrier := newSyncBarrier()
+			csv1 := newCsvGenerator(0, expectedNumRows, &intGenerator{}, &strGenerator{})
+			csv1.addBreakpoint(7*batchSize, func() (bool, error) {
+				defer csvBarrier.Enter()()
+				return false, nil
+			})
+
+			// Convince distsql to use our "external" storage implementation.
+			storage := newGeneratedStorage(csv1)
+			s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+
+			// Execute import; ignore any errors returned
+			// (since we're aborting the first import run.).
+			go func() {
+				_, _ = sqlDB.DB.ExecContext(ctx,
+					fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA ($1)`, test.targetCols), storage.getGeneratorURIs()[0])
+			}()
+			jobID = <-jobIDCh
+
+			// Wait until we are blocked handling breakpoint.
+			unblockImport := testBarrier.Enter()
+			// Wait until we have recorded some job progress.
+			js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
+
+			// Pause the job;
+			if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+				t.Fatal(err)
+			}
+			// Send cancellation and unblock breakpoint.
+			cancelImport()
+			unblockImport()
+
+			// Get updated resume position counter.
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
+			t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
+
+			// Unpause the job and wait for it to complete.
+			if err := registry.Unpause(ctx, nil, jobID); err != nil {
+				t.Fatal(err)
+			}
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+			// Verify that the number of rows matches the expected num of rows.
+			// That is, no duplicate data.
+			var numRows int
+			sqlDB.QueryRow(t,
+				fmt.Sprintf(`SELECT DISTINCT COUNT (*) FROM t`),
+			).Scan(&numRows)
+			require.Equal(t, expectedNumRows, numRows)
+		})
+	}
 }
 
 func TestImportComputed(t *testing.T) {
@@ -3873,7 +4045,8 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+		nil /* targetCols */, &evalCtx, nil /*data*/, nil /*job*/)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3976,7 +4149,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx, nil, nil)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

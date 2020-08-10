@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -118,6 +119,7 @@ func makeInputConverter(
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
+	job *jobs.Job,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 	var singleTable *sqlbase.ImmutableTableDescriptor
@@ -150,22 +152,23 @@ func makeInputConverter(
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx), nil
+			singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job)
 	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
+		return newPgDumpReader(
+			ctx, kvCh, spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), evalCtx)
+			int(spec.ReaderParallelism), evalCtx, spec.DefaultExprMetaData, job)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
