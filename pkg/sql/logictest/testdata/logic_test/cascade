@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(50048)
-
 # Tests for the experimental opt-driven cascades.
 subtest OptDriven
 

@@ -776,6 +776,11 @@ func (rf *Fetcher) ReadIndexKey(
 	// the table's specified spans.
 	initialKey := key
 
+	key, err = rf.codec.StripTenantPrefix(key)
+	if err != nil {
+		return nil, false, false, err
+	}
+
 	// key now contains the bytes in the key (if match) that are not part
 	// of the signature in order.
 	tableIdx, key, match, err := sqlbase.IndexKeyEquivSignature(key, rf.allEquivSignatures, rf.keySigBuf, rf.keyRestBuf)
