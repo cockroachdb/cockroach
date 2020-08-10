@@ -461,6 +461,12 @@ func NewAmbiguousResultError(msg string) *AmbiguousResultError {
 	return &AmbiguousResultError{Message: msg}
 }
 
+// NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
+// an explanatory format and set of arguments.
+func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
+	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
+}
+
 func (e *AmbiguousResultError) Error() string {
 	return e.message(nil)
 }
