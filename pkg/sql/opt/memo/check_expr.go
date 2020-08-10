@@ -181,11 +181,11 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		// mutation columns (which do not need to be part of INSERT).
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			kind := tab.ColumnKind(i)
-			if kind != cat.DeleteOnly && kind != cat.System && t.InsertCols[i] == 0 {
+			if (kind == cat.Ordinary || kind == cat.WriteOnly) && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
-			if kind == cat.System && t.InsertCols[i] != 0 {
-				panic(errors.AssertionFailedf("system column found in insertion columns"))
+			if (kind == cat.System || kind == cat.Virtual) && t.InsertCols[i] != 0 {
+				panic(errors.AssertionFailedf("system or virtual column found in insertion columns"))
 			}
 		}
 
