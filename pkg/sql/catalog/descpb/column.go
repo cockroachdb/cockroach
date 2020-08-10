@@ -128,8 +128,12 @@ func (desc ColumnDescriptor) GetPGAttributeNum() uint32 {
 	return uint32(desc.ID)
 }
 
-// SQLString returns the SQL statement describing the column.
-func (desc *ColumnDescriptor) SQLString() string {
+// SQLStringNotHumanReadable returns the SQL statement describing the column.
+//
+// Note that this function does not serialize user defined types into a human
+// readable format. schemaexpr.FormatColumnForDisplay should be used in cases
+// where human-readability is required.
+func (desc *ColumnDescriptor) SQLStringNotHumanReadable() string {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.FormatNameP(&desc.Name)
 	f.WriteByte(' ')

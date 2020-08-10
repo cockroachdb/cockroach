@@ -76,7 +76,7 @@ func TestValidateExpr(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			expr, _, err = DequalifyAndValidateExpr(
+			deqExpr, _, err := DequalifyAndValidateExpr(
 				ctx,
 				&desc,
 				expr,
@@ -100,9 +100,8 @@ func TestValidateExpr(t *testing.T) {
 				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
 			}
 
-			s := tree.Serialize(expr)
-			if s != d.expectedExpr {
-				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
+			if deqExpr != d.expectedExpr {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, deqExpr)
 			}
 		})
 	}

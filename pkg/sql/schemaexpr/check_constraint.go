@@ -89,7 +89,7 @@ func (b *CheckConstraintBuilder) Build(
 
 	// Verify that the expression results in a boolean and does not use
 	// invalid functions.
-	typedExpr, colIDs, err := DequalifyAndValidateExpr(
+	expr, colIDs, err := DequalifyAndValidateExpr(
 		b.ctx,
 		b.desc,
 		c.Expr,
@@ -104,7 +104,7 @@ func (b *CheckConstraintBuilder) Build(
 	}
 
 	return &descpb.TableDescriptor_CheckConstraint{
-		Expr:      tree.Serialize(typedExpr),
+		Expr:      expr,
 		Name:      name,
 		ColumnIDs: colIDs.Ordered(),
 		Hidden:    c.Hidden,

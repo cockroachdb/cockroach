@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -195,7 +196,7 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		)
 	}
 	for i := range expected.Columns {
-		e, g := expected.Columns[i].SQLString(), got.Columns[i].SQLString()
+		e, g := expected.Columns[i].SQLStringNotHumanReadable(), got.Columns[i].SQLStringNotHumanReadable()
 		if e != g {
 			t.Fatalf("column %d (%q): expected\n%s\ngot\n%s\n", i, expected.Columns[i].Name, e, g)
 		}
@@ -207,8 +208,19 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		)
 	}
 	for i := range expected.Indexes {
+		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext()
 		tableName := &descpb.AnonymousTable
-		e, g := expected.Indexes[i].SQLString(tableName), got.Indexes[i].SQLString(tableName)
+		expectedDesc := sqlbase.NewImmutableTableDescriptor(*expected)
+		gotDesc := sqlbase.NewImmutableTableDescriptor(*got)
+		e, err := schemaexpr.FormatIndexForDisplay(ctx, expectedDesc, tableName, &expected.Indexes[i], &semaCtx)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		g, err := schemaexpr.FormatIndexForDisplay(ctx, gotDesc, tableName, &got.Indexes[i], &semaCtx)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
 		if e != g {
 			t.Fatalf("index %d: expected\n%s\ngot\n%s\n", i, e, g)
 		}
