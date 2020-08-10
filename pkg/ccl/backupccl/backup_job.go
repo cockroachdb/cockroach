@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -570,7 +571,25 @@ func (b *backupResumer) Resume(
 		}
 	}
 
+	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg().InternalExecutor)
+
 	return nil
+}
+
+func (b *backupResumer) maybeNotifyScheduledJobCompletion(
+	ctx context.Context, jobStatus jobs.Status, ex sqlutil.InternalExecutor,
+) {
+	if b.job.CreatedBy() == nil || b.job.CreatedBy().Name != jobs.CreatedByScheduledJobs {
+		return
+	}
+	info := b.job.CreatedBy()
+
+	if err := jobs.NotifyJobTermination(
+		ctx, nil /* env */, *b.job.ID(), jobStatus, info.ID, ex, nil); err != nil {
+		log.Warningf(ctx,
+			"failed to notify schedule %d of completion of job %d; err=%s",
+			info.ID, *b.job.ID(), err)
+	}
 }
 
 func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
@@ -593,6 +612,12 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	defer b.maybeNotifyScheduledJobCompletion(
+		ctx,
+		jobs.StatusFailed,
+		phs.(sql.PlanHookState).ExecCfg().InternalExecutor,
+	)
+
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))

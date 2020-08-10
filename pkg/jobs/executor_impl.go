@@ -69,16 +69,11 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 
 // NotifyJobTermination implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) NotifyJobTermination(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
-	md *JobMetadata,
-	schedule *ScheduledJob,
-	_ *kv.Txn,
+	ctx context.Context, jobID int64, jobStatus Status, schedule *ScheduledJob, _ *kv.Txn,
 ) error {
 	// For now, only interested in failed status.
-	if md.Status == StatusFailed {
-		DefaultHandleFailedRun(schedule, md.ID, nil)
+	if jobStatus == StatusFailed {
+		DefaultHandleFailedRun(schedule, jobID, nil)
 	}
 	return nil
 }
