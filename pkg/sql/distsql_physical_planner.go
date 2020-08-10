@@ -3443,8 +3443,8 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	}
 
 	core := execinfrapb.ProcessorCoreUnion{CSVWriter: &execinfrapb.CSVWriterSpec{
-		Destination:      n.fileName,
-		NamePattern:      exportFilePatternDefault,
+		Destination:      n.destination,
+		NamePattern:      n.fileNamePattern,
 		Options:          n.csvOpts,
 		ChunkRows:        int64(n.chunkSize),
 		CompressionCodec: n.fileCompression,
