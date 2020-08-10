@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1069,8 +1070,16 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 	countReady := make([]chan struct{}, len(indexes))
 
 	for i, idx := range indexes {
+		// Shadow i and idx to prevent the values from changing within each
+		// gorountine.
 		i, idx := i, idx
 		countReady[i] = make(chan struct{})
+
+		// Skip partial indexes for now.
+		// TODO(mgartner): Validate partial inverted index entry counts.
+		if idx.IsPartial() {
+			continue
+		}
 
 		grp.GoCtx(func(ctx context.Context) error {
 			// Inverted indexes currently can't be interleaved, so a KV scan can be
@@ -1174,17 +1183,15 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	grp := ctxgroup.WithContext(ctx)
 
 	var tableRowCount int64
+	partialIndexExpectedCounts := make(map[descpb.IndexID]int64, len(indexes))
+
 	// Close when table count is ready.
-	tableCountReady := make(chan struct{})
+	tableCountsReady := make(chan struct{})
+
 	// Compute the size of each index.
 	for _, idx := range indexes {
+		// Shadow idx to prevent its value from changing within each gorountine.
 		idx := idx
-
-		// Skip partial indexes for now.
-		// TODO(mgartner): Validate partial index entry counts.
-		if idx.IsPartial() {
-			continue
-		}
 
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
@@ -1216,9 +1223,16 @@ func (sc *SchemaChanger) validateForwardIndexes(
 					ie.tcModifier = nil
 				}()
 
+				filter := ""
+				// If the index is a partial index the predicate must be added
+				// as a filter to the query to force scanning the index.
+				if idx.IsPartial() {
+					filter = fmt.Sprintf(`WHERE %s`, idx.Predicate)
+				}
+
 				row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
 					sqlbase.InternalExecutorSessionDataOverride{},
-					fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
+					fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]%s`, tableDesc.ID, idx.ID, filter))
 				if err != nil {
 					return err
 				}
@@ -1233,13 +1247,26 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 			// Now compare with the row count in the table.
 			select {
-			case <-tableCountReady:
-				if idxLen != tableRowCount {
+			case <-tableCountsReady:
+				expectedCount := tableRowCount
+				// If the index is a partial index, the expected number of rows
+				// is different than the total number of rows in the table.
+				if idx.IsPartial() {
+					expectedCount = partialIndexExpectedCounts[idx.ID]
+				}
+
+				if idxLen != expectedCount {
 					// TODO(vivek): find the offending row and include it in the error.
+					// TODO(mgartner): This should be an assertion error,
+					// similar to the error in validateInvertedIndexes. It is
+					// not possible to reach this code in the case of duplicates
+					// keys in a unique index. In that case, backfilling errors
+					// before this function is called when trying to add the
+					// error via kvserverbase.BulkAdder.
 					return pgerror.Newf(
 						pgcode.UniqueViolation,
 						"%d entries, expected %d violates unique constraint %q",
-						idxLen, tableRowCount, idx.Name,
+						idxLen, expectedCount, idx.Name,
 					)
 				}
 
@@ -1252,20 +1279,39 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	}
 
 	grp.GoCtx(func(ctx context.Context) error {
-		defer close(tableCountReady)
+		defer close(tableCountsReady)
 		var tableRowCountTime time.Duration
 		start := timeutil.Now()
 
 		// Count the number of rows in the table.
 		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
+			var s strings.Builder
+			for _, idx := range indexes {
+				// For partial indexes, count the number of rows in the table
+				// for which the predicate expression evaluates to true.
+				if idx.IsPartial() {
+					s.WriteString(fmt.Sprintf(`, count(1) FILTER (WHERE %s)`, idx.Predicate))
+				}
+			}
+			partialIndexCounts := s.String()
+
+			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]`, partialIndexCounts, tableDesc.ID)
+
 			ie := evalCtx.InternalExecutor.(*InternalExecutor)
-			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
-				sqlbase.InternalExecutorSessionDataOverride{},
-				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
+			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sqlbase.InternalExecutorSessionDataOverride{}, query)
 			if err != nil {
 				return err
 			}
+
 			tableRowCount = int64(tree.MustBeDInt(cnt[0]))
+			cntIdx := 1
+			for _, idx := range indexes {
+				if idx.IsPartial() {
+					partialIndexExpectedCounts[idx.ID] = int64(tree.MustBeDInt(cnt[cntIdx]))
+					cntIdx++
+				}
+			}
+
 			return nil
 		}); err != nil {
 			return err
