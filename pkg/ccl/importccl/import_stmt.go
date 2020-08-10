@@ -1238,6 +1238,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			return err
 		}
 		b := txn.NewBatch()
+		// newTables should be index aligned with details.Tables.
+		newTables := make([]*descpb.TableDescriptor, 0, len(details.Tables))
 		for _, tbl := range details.Tables {
 			newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.Desc)
 			prevTableDesc := newTableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor)
@@ -1286,13 +1288,19 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 				sqlbase.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
 				existingDesc)
+			newTables = append(newTables, newTableDesc.TableDesc())
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
 		}
 
-		// Update job record to mark tables published state as complete.
+		// Update job record to mark tables published state as complete and update
+		// the state of the table descriptor to PUBLIC.
 		details.TablesPublished = true
+		for i := range details.Tables {
+			details.Tables[i].Desc = newTables[i]
+		}
+
 		err := r.job.WithTxn(txn).SetDetails(ctx, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")

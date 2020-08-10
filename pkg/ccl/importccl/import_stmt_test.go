@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -3648,6 +3649,83 @@ func TestImportControlJob(t *testing.T) {
 			`SELECT * FROM pauseimport.t ORDER BY i`,
 			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
 		)
+	})
+}
+
+// TestImportCancelAfterCompletion ensures that a canceled IMPORT job cleans up
+// even after the tables have been published i.e the job has been "completed".
+func TestImportCancelAfterCompletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "node liveness error")
+	skip.UnderStress(t, "node liveness error")
+	skip.UnderStressRace(t, "node liveness error")
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	var serverArgs base.TestServerArgs
+
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+	}
+
+	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+		BulkAdderFlushesEveryBatch: true,
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, `CREATE DATABASE data`)
+
+	makeSrv := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
+			}
+		}))
+	}
+
+	t.Run("cleanup-after-import-completing", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
+		defer sqlDB.Exec(t, `DROP DATABASE cancelimport CASCADE`)
+
+		srv := makeSrv()
+		defer srv.Close()
+
+		var urls []string
+		for i := 0; i < 3; i++ {
+			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
+		}
+		csvURLs := strings.Join(urls, ", ")
+
+		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT8 PRIMARY KEY) CSV DATA (%s)`, csvURLs)
+
+		// The IMPORT job will complete once the RunJob returns, and attempt to mark
+		// the job as succeeded. Since we have already requested a cancel, this will
+		// fail and the job will move from Running -> Reverting -> Failed.
+		if _, err := jobutils.RunJob(
+			t, sqlDB, &allowResponse, []string{"cancel"}, query,
+		); !testutils.IsError(err, "Job with status cancel-requested cannot be marked as succeeded") {
+			t.Fatalf("expected 'job canceled' error, but got %+v", err)
+		}
+
+		// Wait for the job to reach a failed state. At this point the
+		// OnFailOrCancel should have completed.
+		jobID := jobutils.GetJobID(t, sqlDB, 0)
+		jobutils.WaitForJobFailed(t, sqlDB, jobID)
+
+		// Check that executing again succeeds. This won't work if the first import
+		// was not successfully cleaned up.
+		sqlDB.Exec(t, query)
 	})
 }
 
