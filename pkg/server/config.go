@@ -332,6 +332,12 @@ type SQLConfig struct {
 	//
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
+
+	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
+	// server's codec, but nothing else (e.g. its certs). Used for testing.
+	//
+	// Only applies when the SQL server is deployed individually.
+	TenantIDCodecOverride roachpb.TenantID
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.

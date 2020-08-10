@@ -710,14 +710,13 @@ func (ctx *Context) grpcDialOptions(
 	if ctx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
-		var err error
 		var tlsConfig *tls.Config
+		var err error
 		if ctx.tenID == roachpb.SystemTenantID {
 			tlsConfig, err = ctx.GetClientTLSConfig()
 		} else {
 			tlsConfig, err = ctx.GetTenantClientTLSConfig()
 		}
-
 		if err != nil {
 			return nil, err
 		}

@@ -77,3 +77,20 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
 	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
 }
+
+func TestTenantUnauthenticatedAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+		// Configure the SQL server to access the wrong tenant keyspace.
+		TenantIDCodecOverride: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[1]),
+	})
+	require.Error(t, err)
+	require.Regexp(t, `Unauthenticated desc = requested key /Tenant/11/System/"system-version/" not fully contained in tenant keyspace /Tenant/1{0-1}`, err)
+}

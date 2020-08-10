@@ -183,6 +183,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 		// for before reaching this point.
 		if err != nil {
 			log.VEventf(ctx, 1, "range descriptor lookup failed: %s", err)
+			if !isRangeLookupErrorRetryable(err) {
+				break
+			}
 			continue
 		}
 		if log.V(2) {
