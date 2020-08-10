@@ -300,12 +300,28 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 	return defaultURI, urisByLocalityKV, nil
 }
 
+func resolveOptionsForBackupJobDescription(opts tree.BackupOptions) (tree.BackupOptions, error) {
+	if opts.IsDefault() {
+		return opts, nil
+	}
+
+	newOpts := tree.BackupOptions{
+		CaptureRevisionHistory: opts.CaptureRevisionHistory,
+		Detached:               opts.Detached,
+	}
+
+	if opts.EncryptionPassphrase != nil {
+		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
+	}
+
+	return newOpts, nil
+}
+
 func backupJobDescription(
 	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
-		Options: backup.Options,
 		Targets: backup.Targets,
 	}
 
@@ -324,6 +340,12 @@ func backupJobDescription(
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
+
+	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options)
+	if err != nil {
+		return "", err
+	}
+	b.Options = resolvedOpts
 
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(b, ann), nil
