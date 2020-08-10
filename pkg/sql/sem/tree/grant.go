@@ -61,7 +61,7 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 			if i != 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.WriteString(typ.String())
+			ctx.FormatNode(typ)
 		}
 	} else {
 		ctx.WriteString("TABLE ")

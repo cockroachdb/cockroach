@@ -77,7 +77,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		grantOn = privilege.Database
 	} else if n.Targets.Types != nil {
 		grantOn = privilege.Type
-		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnType)
+		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnType)
 	} else {
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
 		grantOn = privilege.Table
@@ -163,7 +163,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 		// Validate privilege descriptors directly as the db/table level Validate
 		// may fix up the descriptor.
-		if err := privileges.Validate(descriptor.GetID()); err != nil {
+		if err := privileges.Validate(descriptor.GetID(), n.grantOn); err != nil {
 			return err
 		}
 

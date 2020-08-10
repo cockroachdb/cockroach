@@ -265,7 +265,23 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		return err
 	}
 
-	privs := createInheritedPrivilegesFromDBDesc(db, params.p.User())
+	// Database privileges and Type privileges do not overlap so there is nothing
+	// to inherit.
+	// However having USAGE on a parent schema of the type
+	// gives USAGE privilege to the type.
+	privs := descpb.NewDefaultPrivilegeDescriptor(params.p.User())
+	if schemaID != keys.PublicSchemaID && schemaID != keys.RootNamespaceID {
+		schemaDesc, err := catalogkv.MustGetSchemaDescByID(
+			p.ExtendedEvalContext().Context,
+			p.Txn(),
+			p.ExecCfg().Codec,
+			schemaID,
+		)
+		if err != nil {
+			return err
+		}
+		inheritUsagePrivilegeFromSchema(schemaDesc, privs)
+	}
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	// If the type is made in the public schema, it is available for "public" use.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2167,4 +2168,22 @@ func createInheritedPrivilegesFromDBDesc(
 	privs.SetOwner(user)
 
 	return privs
+}
+
+// TODO(richardjcai): Instead of inheriting the privilege when creating the
+// descriptor, we can check the parent of type for usage privilege as well,
+// this seems to be how Postgres does it.
+// Add a test for this when we support granting privileges to schemas #50879.
+func inheritUsagePrivilegeFromSchema(
+	schemaDesc *sqlbase.ImmutableSchemaDescriptor, privs *descpb.PrivilegeDescriptor,
+) {
+	schemaPrivs := schemaDesc.Privileges
+
+	// Look for all users that have USAGE on the schema and add it to the
+	// privilege descriptor.
+	for _, u := range schemaPrivs.Users {
+		if u.Privileges&privilege.USAGE.Mask() == 1 {
+			privs.Grant(u.User, privilege.List{privilege.USAGE})
+		}
+	}
 }

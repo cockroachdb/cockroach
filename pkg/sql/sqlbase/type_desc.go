@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -408,7 +409,7 @@ func (desc *ImmutableTypeDescriptor) Validate(
 		}
 
 		// Validate the Privileges of the descriptor.
-		if err := desc.Privileges.Validate(desc.ID); err != nil {
+		if err := desc.Privileges.Validate(desc.ID, privilege.Type); err != nil {
 			return err
 		}
 	case descpb.TypeDescriptor_ALIAS:
