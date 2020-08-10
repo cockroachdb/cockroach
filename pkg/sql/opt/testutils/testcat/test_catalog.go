@@ -552,23 +552,20 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
-	TabID         cat.StableID
-	TabVersion    int
-	TabName       tree.TableName
-	Columns       []*Column
-	SystemColumns []*Column
-	Indexes       []*Index
-	Stats         TableStats
-	Checks        []cat.CheckConstraint
-	Families      []*Family
-	IsVirtual     bool
-	Catalog       cat.Catalog
+	TabID      cat.StableID
+	TabVersion int
+	TabName    tree.TableName
+	Columns    []*Column
+	Indexes    []*Index
+	Stats      TableStats
+	Checks     []cat.CheckConstraint
+	Families   []*Family
+	IsVirtual  bool
+	Catalog    cat.Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
 
-	writeOnlyColCount  int
-	deleteOnlyColCount int
 	writeOnlyIdxCount  int
 	deleteOnlyIdxCount int
 
@@ -629,31 +626,17 @@ func (tt *Table) IsMaterializedView() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns) + len(tt.SystemColumns)
+	return len(tt.Columns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
-	if i >= len(tt.Columns) {
-		return tt.SystemColumns[i-len(tt.Columns)]
-	}
 	return tt.Columns[i]
 }
 
 // ColumnKind is part of the cat.Table interface.
 func (tt *Table) ColumnKind(i int) cat.ColumnKind {
-	writeOnlyEnd := len(tt.Columns) - tt.deleteOnlyColCount
-	standardEnd := writeOnlyEnd - tt.writeOnlyColCount
-	switch {
-	case i < standardEnd:
-		return cat.Ordinary
-	case i < writeOnlyEnd:
-		return cat.WriteOnly
-	case i < len(tt.Columns):
-		return cat.DeleteOnly
-	default:
-		return cat.System
-	}
+	return tt.Columns[i].Kind
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -938,19 +921,24 @@ func (ti *Index) GeoConfig() *geoindex.Config {
 
 // Column implements the cat.Column interface for testing purposes.
 type Column struct {
-	Ordinal      int
-	Hidden       bool
-	Nullable     bool
-	Name         string
-	Type         *types.T
-	DefaultExpr  *string
-	ComputedExpr *string
+	Ordinal                  int
+	Hidden                   bool
+	Nullable                 bool
+	Name                     string
+	Type                     *types.T
+	DefaultExpr              *string
+	ComputedExpr             *string
+	Kind                     cat.ColumnKind
+	InvertedSourceColOrdinal int
 }
 
 var _ cat.Column = &Column{}
 
 // ColID is part of the cat.Index interface.
 func (tc *Column) ColID() cat.StableID {
+	if tc.Kind == cat.Virtual {
+		return 0
+	}
 	return 1 + cat.StableID(tc.Ordinal)
 }
 
@@ -1019,6 +1007,14 @@ func (tc *Column) DefaultExprStr() string {
 // ComputedExprStr is part of the cat.Column interface.
 func (tc *Column) ComputedExprStr() string {
 	return *tc.ComputedExpr
+}
+
+// InvertedSourceColumnOrdinal is part of the cat.Column interface.
+func (tc *Column) InvertedSourceColumnOrdinal() int {
+	if tc.InvertedSourceColOrdinal < 0 {
+		panic(errors.AssertionFailedf("InvertedSourceColumnOrdinal called on non-virtual column"))
+	}
+	return tc.InvertedSourceColOrdinal
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
