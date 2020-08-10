@@ -25,7 +25,7 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func makeTenantCerts(t *testing.T, tenant string) (certsDir string, cleanup func()) {
+func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func()) {
 	certsDir, cleanup = tempDir(t)
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
@@ -81,18 +81,19 @@ func TestTenantCertificates(t *testing.T) {
 func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	defer leaktest.AfterTest(t)()
 
-	var tenant, certsDir string
+	var certsDir string
+	var tenant uint64
 	if !embedded {
 		// Don't mock assets in this test, we're creating our own one-off certs.
 		security.ResetAssetLoader()
 		defer ResetTest()
-		tenant = fmt.Sprint(rand.Int63())
+		tenant = uint64(rand.Int63())
 		var cleanup func()
 		certsDir, cleanup = makeTenantCerts(t, tenant)
 		defer cleanup()
 	} else {
 		certsDir = security.EmbeddedCertsDir
-		tenant = fmt.Sprint(security.EmbeddedTenantIDs()[0])
+		tenant = security.EmbeddedTenantIDs()[0]
 	}
 
 	// Now set up the config a server would use. The client will trust it based on
@@ -143,5 +144,5 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
-	require.Equal(t, "hello, tenant "+tenant, string(b))
+	require.Equal(t, fmt.Sprintf("hello, tenant %d", tenant), string(b))
 }
