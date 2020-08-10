@@ -202,7 +202,7 @@ func TestLockTableBasic(t *testing.T) {
 				req := Request{
 					Timestamp:  ts,
 					LatchSpans: spans,
-					LockSpans:  spans,
+					// LockSpans:  spans,
 				}
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
@@ -527,7 +527,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, item.request.Timestamp, item.request.Timestamp)
 			if err != nil {
 				return err
 			}
@@ -919,7 +919,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 			Txn:        txn,
 			Timestamp:  ts,
 			LatchSpans: spans,
-			LockSpans:  spans,
+			// LockSpans:  spans,
 		}
 		items = append(items, workloadItem{request: request})
 		if txn != nil {
@@ -998,7 +998,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		request := &Request{
 			Timestamp:  ts,
 			LatchSpans: spans,
-			LockSpans:  spans,
+			// LockSpans:  spans,
 		}
 		if txnMeta != nil {
 			request.Txn = &roachpb.Transaction{
@@ -1071,7 +1071,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, item.Timestamp, item.Timestamp); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1106,7 +1106,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, item.Timestamp, item.Timestamp); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1137,7 +1137,7 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 		Request: Request{
 			Timestamp:  ts,
 			LatchSpans: spans,
-			LockSpans:  spans,
+			// LockSpans:  spans,
 		},
 	}
 	for i := 0; i < numKeys; i++ {

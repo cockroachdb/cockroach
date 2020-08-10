@@ -204,18 +204,19 @@ func maybeBumpReadTimestampToWriteTimestamp(
 func tryBumpBatchTimestamp(
 	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
 ) bool {
-	if latchSpans.MaxProtectedTimestamp().Less(ts) {
-		// If the batch acquired any read latches with bounded (MVCC) timestamps
-		// below this new timestamp then we can not trivially bump the batch's
-		// timestamp without dropping and re-acquiring those latches. Doing so
-		// could allow the request to read at an unprotected timestamp.
-		//
-		// NOTE: we could consider adding a retry-loop above the latch
-		// acquisition to allow this to be retried, but given that we try not to
-		// mix read-only and read-write requests, doing so doesn't seem worth
-		// it.
-		return false
-	}
+	// TODO: fix.
+	// if latchSpans.MaxProtectedTimestamp().Less(ts) {
+	// 	// If the batch acquired any read latches with bounded (MVCC) timestamps
+	// 	// below this new timestamp then we can not trivially bump the batch's
+	// 	// timestamp without dropping and re-acquiring those latches. Doing so
+	// 	// could allow the request to read at an unprotected timestamp.
+	// 	//
+	// 	// NOTE: we could consider adding a retry-loop above the latch
+	// 	// acquisition to allow this to be retried, but given that we try not to
+	// 	// mix read-only and read-write requests, doing so doesn't seem worth
+	// 	// it.
+	// 	return false
+	// }
 	if ts.Less(ba.Timestamp) {
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}

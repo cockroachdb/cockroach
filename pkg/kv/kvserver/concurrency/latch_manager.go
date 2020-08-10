@@ -24,7 +24,7 @@ type latchManagerImpl struct {
 }
 
 func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard, *Error) {
-	lg, err := m.m.Acquire(ctx, req.LatchSpans)
+	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.readConflictTimestamp(), req.writeConflictTimestamp())
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

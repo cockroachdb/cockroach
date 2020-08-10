@@ -277,7 +277,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard
-	var latchSpans, lockSpans *spanset.SpanSet
+	var latchSpans *spanset.SpanSet
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -316,7 +316,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// have limited the transaction's maximum timestamp.
 		if latchSpans == nil {
 			var err error
-			latchSpans, lockSpans, err = r.collectSpans(ba)
+			latchSpans, err = r.collectSpans(ba)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
@@ -338,7 +338,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			WaitPolicy:      ba.WaitPolicy,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans,
-			LockSpans:       lockSpans,
 		})
 		if pErr != nil {
 			return nil, pErr
@@ -668,8 +667,8 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 
 func (r *Replica) collectSpans(
 	ba *roachpb.BatchRequest,
-) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
-	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
+) (latchSpans *spanset.SpanSet, _ error) {
+	latchSpans = new(spanset.SpanSet)
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -686,9 +685,9 @@ func (r *Replica) collectSpans(
 			// EndTxn declares a global write for each of its lock spans.
 			guess += len(et.(*roachpb.EndTxnRequest).LockSpans) - 1
 		}
-		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
+		latchSpans.Reserve(spanset.TransactionIsolation, spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	} else {
-		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		latchSpans.Reserve(spanset.TransactionIsolation, spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	}
 
 	// For non-local, MVCC spans we annotate them with the request timestamp
@@ -703,25 +702,23 @@ func (r *Replica) collectSpans(
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, lockSpans)
+			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, nil)
 		} else {
-			return nil, nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
 	// them to reduce the number of spans we pass to the spanlatch manager.
-	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
-		s.SortAndDedup()
+	latchSpans.SortAndDedup()
 
-		// If any command gave us spans that are invalid, bail out early
-		// (before passing them to the spanlatch manager, which may panic).
-		if err := s.Validate(); err != nil {
-			return nil, nil, err
-		}
+	// If any command gave us spans that are invalid, bail out early
+	// (before passing them to the spanlatch manager, which may panic).
+	if err := latchSpans.Validate(); err != nil {
+		return nil, err
 	}
 
-	return latchSpans, lockSpans, nil
+	return latchSpans, nil
 }
 
 // limitTxnMaxTimestamp limits the batch transaction's max timestamp
