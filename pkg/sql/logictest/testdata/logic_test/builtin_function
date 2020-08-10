@@ -2758,6 +2758,8 @@ SELECT set_bit(b'', 0, 1)
 query error set_bit\(\): new bit must be 0 or 1.
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
+subtest num_nulls_test
+
 statement ok
 CREATE TABLE nulls_test(a INT, b STRING)
 
@@ -2771,6 +2773,8 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 1  1
 2  0
+
+subtest pb_to_json
 
 query T
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
@@ -2786,9 +2790,33 @@ SELECT (SELECT * FROM [SHOW crdb_version]) = version()
 ----
 true
 
-
 query B
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
 ----
 true
 
+subtest regexp_split
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+')
+----
+3
+0AA
+1
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+', 'i')
+----
+3
+0
+1
+
+query T
+SELECT regexp_split_to_array('3aa0AAa1', 'a+')
+----
+{3,0AA,1}
+
+query T
+SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
+----
+{3,0,1}
