@@ -15,6 +15,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,6 +40,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	var descriptors []sqlbase.Descriptor
 	{
 		// Make shorthand type names for syntactic sugar.
+		type scDesc = descpb.SchemaDescriptor
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
@@ -51,7 +53,14 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			return sqlbase.NewInitialDatabaseDescriptor(id, name, security.AdminRole)
 		}
 		mkTyp := func(desc typDesc) *sqlbase.ImmutableTypeDescriptor {
+			// Set a default parent schema for the type descriptors.
+			if desc.ParentSchemaID == descpb.InvalidID {
+				desc.ParentSchemaID = keys.PublicSchemaID
+			}
 			return sqlbase.NewImmutableTypeDescriptor(desc)
+		}
+		mkSchema := func(desc scDesc) *sqlbase.ImmutableSchemaDescriptor {
+			return sqlbase.NewImmutableSchemaDescriptor(desc)
 		}
 		toOid := sqlbase.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"
@@ -144,6 +153,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 					},
 				},
 			}),
+			mkDB(22, "uds"),
+			mkSchema(scDesc{ParentID: 22, ID: 23, Name: "sc"}),
+			mkTable(tbDesc{ParentID: 22, UnexposedParentSchemaID: 23, ID: 24, Name: "tb1"}),
 		}
 	}
 
@@ -225,6 +237,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"", "TABLE udts_expr.comp", []string{"udts_expr", "enum1", "_enum1", "comp"}, nil, ``},
 		{"", "TABLE udts_expr.pi", []string{"udts_expr", "enum1", "_enum1", "pi"}, nil, ``},
 		{"", "TABLE udts_expr.checks", []string{"udts_expr", "enum1", "_enum1", "checks"}, nil, ``},
+		// Test that the user defined schema shows up in the descriptors.
+		{"", "DATABASE uds", []string{"uds", "sc", "tb1"}, []string{"uds"}, ``},
+		{"", "TABLE uds.sc.tb1", []string{"uds", "sc", "tb1"}, nil, ``},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {

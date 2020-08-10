@@ -463,6 +463,19 @@ func MustGetDatabaseDescByID(
 	return desc.(*sqlbase.ImmutableDatabaseDescriptor), nil
 }
 
+// MustGetSchemaDescByID looks up the schema descriptor given its ID,
+// returning an error if the descriptor is not found.
+func MustGetSchemaDescByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*sqlbase.ImmutableSchemaDescriptor, error) {
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
+		SchemaDescriptorKind, true /* required */)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	return desc.(*sqlbase.ImmutableSchemaDescriptor), nil
+}
+
 // GetDatabaseDescriptorsFromIDs returns the database descriptors from an input
 // set of database IDs. It will return an error if any one of the IDs is not a
 // database. It attempts to perform this operation in a single request,
