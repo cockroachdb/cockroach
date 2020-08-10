@@ -41,21 +41,26 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// ColumnCount returns the number of columns in the table. This includes
-	// public columns, write-only columns, etc.
+	// ColumnCount returns the number of unique columns in all indexes of the
+	// table.
 	ColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
-	// position within the table, where i < ColumnCount. Note that the Columns
-	// collection includes mutation columns, if present. Mutation columns are in
-	// the process of being added or dropped from the table, and may need to have
-	// default or computed values set when inserting or updating rows. See this
-	// RFC for more details:
+	// position within the table, where i < ColumnCount. The Columns collections
+	// is the union of all columns in all indexes. It may include mutation
+	// columns. Mutation columns are in the process of being added or dropped
+	// from the table, and may need to have default or computed values set when
+	// inserting or updating rows. See this RFC for more details:
 	//
 	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
 	//
-	// Writable columns are always situated after public columns, and are followed
-	// by deletable columns.
+	// Columns are returned in this order:
+	//   public
+	//   writable
+	//   deletable
+	//   system
+	//   virtual
+	//
 	Column(i int) Column
 
 	// ColumnKind returns the column kind.

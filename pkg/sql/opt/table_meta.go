@@ -195,6 +195,25 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
+// IndexKeyColumnsMapVirtual returns the metadata IDs for the set of strict key
+// columns in the given index. Inverted index columns are mapped to their source
+// column.
+func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
+
+	var indexCols ColSet
+	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
+		ord := 0
+		if i == 0 && index.IsInverted() {
+			ord = index.Column(i).InvertedSourceColumnOrdinal()
+		} else {
+			ord = index.Column(i).Ordinal
+		}
+		indexCols.Add(tm.MetaID.ColumnID(ord))
+	}
+	return indexCols
+}
+
 // SetConstraints sets the filters derived from check constraints; see
 // TableMeta.Constraint. The argument must be a *FiltersExpr.
 func (tm *TableMeta) SetConstraints(constraints ScalarExpr) {

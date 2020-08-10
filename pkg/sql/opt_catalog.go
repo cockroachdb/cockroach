@@ -546,6 +546,7 @@ type optTable struct {
 	// column and others. System columns have ordinals larger than the ordinals
 	// of physical columns and columns in mutations.
 	systemColumnDescs []cat.Column
+	virtualColumns    []optVirtualColumn
 
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
@@ -641,7 +642,29 @@ func newOptTable(
 				idxZone = &copyZone
 			}
 		}
-		ot.indexes[i].init(ot, i, idxDesc, idxZone)
+		virtualColOrd := -1
+		if idxDesc.Type == descpb.IndexDescriptor_INVERTED {
+			// The first column of an inverted index is special: in the descriptors,
+			// it looks as if the table column is part of the index; in fact the key
+			// contains values *derived* from that column. In the catalog, we refer to
+			// this key as a separate, virtual column.
+			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idxDesc.ColumnIDs[0])
+
+			// Add a virtual column that refers to the inverted index key.
+			virtualColOrd = ot.ColumnCount()
+			ot.virtualColumns = append(ot.virtualColumns, optVirtualColumn{
+				ordinal: virtualColOrd,
+				name:    string(ot.Column(invertedSourceColOrdinal).ColName()) + "_inverted_key",
+				// TODO(radu, mjibson): figure out what the type should be here. Geo is Int,
+				// but JSON isn't anything decodable (including Bytes). The disk fetecher will
+				// need to be taught about inverted indexes and dump the read data directly
+				// into a DBytes (i.e., don't call encoding.DecodeBytesAscending).
+				typ:                      ot.Column(invertedSourceColOrdinal).DatumType(),
+				nullable:                 false,
+				invertedSourceColOrdinal: invertedSourceColOrdinal,
+			})
+		}
+		ot.indexes[i].init(ot, i, idxDesc, idxZone, virtualColOrd)
 	}
 
 	for i := range ot.desc.OutboundFKs {
@@ -830,15 +853,26 @@ func (ot *optTable) IsVirtualTable() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.DeletableColumns()) + len(ot.systemColumnDescs)
+	return len(ot.desc.DeletableColumns()) + len(ot.systemColumnDescs) + len(ot.virtualColumns)
 }
 
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) cat.Column {
-	if i >= len(ot.desc.DeletableColumns()) {
-		return ot.systemColumnDescs[i-len(ot.desc.DeletableColumns())]
+	{
+		n := len(ot.desc.DeletableColumns())
+		if i < n {
+			return &ot.desc.DeletableColumns()[i]
+		}
+		i -= n
 	}
-	return &ot.desc.DeletableColumns()[i]
+	{
+		n := len(ot.systemColumnDescs)
+		if i < n {
+			return ot.systemColumnDescs[i]
+		}
+		i -= n
+	}
+	return &ot.virtualColumns[i]
 }
 
 // ColumnKind is part of the cat.Table interface.
@@ -850,9 +884,24 @@ func (ot *optTable) ColumnKind(i int) cat.ColumnKind {
 		return cat.WriteOnly
 	case i < len(ot.desc.DeletableColumns()):
 		return cat.DeleteOnly
-	default:
-		return cat.System
 	}
+	i -= len(ot.desc.DeletableColumns())
+	{
+		n := len(ot.systemColumnDescs)
+		if i < n {
+			return cat.System
+		}
+		i -= n
+	}
+	{
+		n := len(ot.virtualColumns)
+		if i < n {
+			return cat.Virtual
+		}
+		i -= n
+	}
+
+	panic(errors.AssertionFailedf("invalid column ordinal"))
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -953,10 +1002,11 @@ type optIndex struct {
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []descpb.ColumnID
 
-	indexOrdinal  int
-	numCols       int
-	numKeyCols    int
-	numLaxKeyCols int
+	indexOrdinal          int
+	invertedVirtualColOrd int
+	numCols               int
+	numKeyCols            int
+	numLaxKeyCols         int
 }
 
 var _ cat.Index = &optIndex{}
@@ -964,12 +1014,17 @@ var _ cat.Index = &optIndex{}
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
 func (oi *optIndex) init(
-	tab *optTable, indexOrdinal int, desc *descpb.IndexDescriptor, zone *zonepb.ZoneConfig,
+	tab *optTable,
+	indexOrdinal int,
+	desc *descpb.IndexDescriptor,
+	zone *zonepb.ZoneConfig,
+	invertedVirtualColOrd int,
 ) {
 	oi.tab = tab
 	oi.desc = desc
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
+	oi.invertedVirtualColOrd = invertedVirtualColOrd
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -1068,7 +1123,12 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		ord := 0
+		if i == 0 && oi.invertedVirtualColOrd != -1 {
+			ord = oi.invertedVirtualColOrd
+		} else {
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		}
 		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
 			Ordinal:    ord,
@@ -1168,6 +1228,81 @@ func (oi *optIndex) InterleavedBy(i int) (table, index cat.StableID) {
 // GeoConfig is part of the cat.Index interface.
 func (oi *optIndex) GeoConfig() *geoindex.Config {
 	return &oi.desc.GeoConfig
+}
+
+type optVirtualColumn struct {
+	ordinal                  int
+	name                     string
+	typ                      *types.T
+	nullable                 bool
+	invertedSourceColOrdinal int
+}
+
+var _ cat.Column = &optVirtualColumn{}
+
+// ColID is part of the cat.Index interface.
+func (vc *optVirtualColumn) ColID() cat.StableID {
+	panic(errors.AssertionFailedf("virtual columns have no StableID"))
+}
+
+// IsNullable is part of the cat.Column interface.
+func (vc *optVirtualColumn) IsNullable() bool {
+	return vc.nullable
+}
+
+// ColName is part of the cat.Column interface.
+func (vc *optVirtualColumn) ColName() tree.Name {
+	return tree.Name(vc.name)
+}
+
+// DatumType is part of the cat.Column interface.
+func (vc *optVirtualColumn) DatumType() *types.T {
+	return vc.typ
+}
+
+// ColTypePrecision is part of the cat.Column interface.
+func (vc *optVirtualColumn) ColTypePrecision() int {
+	return int(vc.typ.Precision())
+}
+
+// ColTypeWidth is part of the cat.Column interface.
+func (vc *optVirtualColumn) ColTypeWidth() int {
+	return int(vc.typ.Width())
+}
+
+// ColTypeStr is part of the cat.Column interface.
+func (vc *optVirtualColumn) ColTypeStr() string {
+	return vc.typ.SQLString()
+}
+
+// IsHidden is part of the cat.Column interface.
+func (vc *optVirtualColumn) IsHidden() bool {
+	return true
+}
+
+// HasDefault is part of the cat.Column interface.
+func (vc *optVirtualColumn) HasDefault() bool {
+	return false
+}
+
+// IsComputed is part of the cat.Column interface.
+func (vc *optVirtualColumn) IsComputed() bool {
+	return false
+}
+
+// DefaultExprStr is part of the cat.Column interface.
+func (vc *optVirtualColumn) DefaultExprStr() string {
+	return ""
+}
+
+// ComputedExprStr is part of the cat.Column interface.
+func (vc *optVirtualColumn) ComputedExprStr() string {
+	return ""
+}
+
+// InvertedSourceColumnOrdinal is part of the cat.Column interface.
+func (vc *optVirtualColumn) InvertedSourceColumnOrdinal() int {
+	return vc.invertedSourceColOrdinal
 }
 
 type optTableStat struct {
@@ -1686,6 +1821,11 @@ func (optDummyVirtualPKColumn) IsComputed() bool {
 // ComputedExprStr is part of the cat.Column interface.
 func (optDummyVirtualPKColumn) ComputedExprStr() string {
 	return ""
+}
+
+// InvertedSourceColumnOrdinal is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) InvertedSourceColumnOrdinal() int {
+	panic(errors.AssertionFailedf("not a virtual column"))
 }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
