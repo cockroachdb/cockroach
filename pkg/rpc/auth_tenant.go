@@ -116,6 +116,12 @@ func (a tenantAuth) authRequest(
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuth) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest) error {
+	// Admin batch requests are not permitted.
+	if args.IsAdmin() {
+		return authErrorf("admin request [%s] not permitted", args.Summary())
+	}
+
+	// All keys in the request must reside within the tenant's keyspace.
 	rSpan, err := keys.Range(args.Requests)
 	if err != nil {
 		return authError(err.Error())

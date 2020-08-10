@@ -153,6 +153,11 @@ func TestTenantAuthRequest(t *testing.T) {
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.ScanRequest{RequestHeader: h}
 	}
+	makeAdminReq := func(key string) roachpb.Request {
+		s := makeSpan(key)
+		h := roachpb.RequestHeaderFromSpan(s)
+		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key}
+	}
 	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
 		ru := make([]roachpb.RequestUnion, len(reqs))
 		for i, r := range reqs {
@@ -220,6 +225,38 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeReq(prefix(10, "a"), prefix(20, "b")),
 				)},
 				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminReq("a"),
+				)},
+				expErr: `admin request \[1 AdmSplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminReq(prefix(10, "a")),
+				)},
+				expErr: `admin request \[1 AdmSplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminReq(prefix(50, "a")),
+				)},
+				expErr: `admin request \[1 AdmSplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminReq(prefix(10, "a")),
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: `admin request \[1 Scan, 1 AdmSplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+					makeAdminReq(prefix(10, "a")),
+				)},
+				expErr: `admin request \[1 Scan, 1 AdmSplit\] not permitted`,
 			},
 		},
 		"/cockroach.roachpb.Internal/RangeLookup": {

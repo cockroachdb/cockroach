@@ -78,3 +78,29 @@ SHOW ZONE CONFIGURATION FOR TABLE kv
 
 statement error operation is unsupported
 ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
+
+# Cannot perform operations that issue Admin requests.
+#
+# TODO DURING REVIEW: we could wrap these up in nicer errors. It's unclear
+# whether doing so is worth the effort or where we would do so if we wanted to.
+
+statement error Unauthenticated desc = admin request \[1 AdmSplit\] not permitted
+ALTER TABLE kv SPLIT AT VALUES ('foo')
+
+statement error Unauthenticated desc = admin request \[1 AdmUnsplit\] not permitted
+ALTER TABLE kv UNSPLIT AT VALUES ('foo')
+
+statement error Unauthenticated desc = requested key /Meta2/"\\x00" not fully contained in tenant keyspace /Tenant/1\{0-1\}
+ALTER TABLE kv UNSPLIT ALL
+
+statement error Unauthenticated desc = admin request \[1 AdmScatter\] not permitted
+ALTER TABLE kv SCATTER
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'k')
+
+statement error Unauthenticated desc = requested key /Meta2/Tenant/10/Table/53/1/"k"/0 not fully contained in tenant keyspace /Tenant/1\{0-1\}
+ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
+
+statement error Unauthenticated desc = kvtenant.Proxy does not have access to FirstRange
+SELECT crdb_internal.check_consistency(true, '', '')

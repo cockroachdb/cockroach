@@ -1294,11 +1294,15 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-
-	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
-			return err
+	// Split off a new range for each new index span. But only do so for the
+	// system tenant. Secondary tenants do not have mandatory split points
+	// between tables or indexes.
+	if sc.execCfg.Codec.ForSystemTenant() {
+		expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		for _, span := range addingSpans {
+			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+				return err
+			}
 		}
 	}
 
