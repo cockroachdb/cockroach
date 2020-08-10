@@ -133,11 +133,6 @@ func (desc *ImmutableDatabaseDescriptor) Adding() bool {
 	return false
 }
 
-// Dropped implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) Dropped() bool {
-	return false
-}
-
 // Offline implements the Descriptor interface.
 func (desc *ImmutableDatabaseDescriptor) Offline() bool {
 	return false
