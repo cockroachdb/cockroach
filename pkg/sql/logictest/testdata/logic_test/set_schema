@@ -317,12 +317,23 @@ ALTER TYPE typ SET SCHEMA s1
 statement ok
 SELECT 'hello'::s1.typ
 
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::s1._typ
+
 # Ensure the type does not exist in the public schema.
 statement error pq: type "public.typ" does not exist
 SELECT 'hello'::public.typ
 
 statement error pq: type "typ" does not exist
 SELECT 'hello'::typ
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "public._typ" does not exist
+SELECT ARRAY['hello']::public._typ
+
+statement error pq: type "_typ" does not exist
+SELECT ARRAY['hello']::_typ
 
 # Testing setting a type to the public schema.
 
@@ -333,9 +344,17 @@ ALTER TYPE s1.typ SET SCHEMA public
 statement ok
 SELECT 'hello'::public.typ
 
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::public._typ
+
 # Ensure the type does not exist in the s1 schema.
 statement error pq: type "s1.typ" does not exist
 SELECT 'hello'::s1.typ
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "s1._typ" does not exist
+SELECT ARRAY['hello']::s1._typ
 
 # Test moving from one user defined schema to another.
 statement ok
@@ -347,9 +366,17 @@ ALTER TYPE s1.typ2 SET SCHEMA s2
 statement ok
 SELECT 'hello'::s2.typ2
 
+# Ensure the array type is set to the new schema as well.
+statement ok
+SELECT ARRAY['hello']::s2._typ2
+
 # Ensure the type does not exist in the s1 schema.
 statement error pq: type "s1.typ2" does not exist
 SELECT 'hello'::s1.typ2
+
+# Ensure the array type is removed from the old schema.
+statement error pq: type "s1._typ2" does not exist
+SELECT ARRAY['hello']::s1._typ2
 
 statement ok
 CREATE TYPE s1.typ3 AS ENUM ('hello')
@@ -427,4 +454,3 @@ user testuser
 
 statement error pq: user testuser does not have CREATE privilege on schema s1
 ALTER TYPE typ5 SET SCHEMA s1
-
