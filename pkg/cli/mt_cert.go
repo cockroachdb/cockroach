@@ -11,6 +11,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -60,12 +62,16 @@ Creation fails if the CA expiration time is before the desired certificate expir
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(
 		func(cmd *cobra.Command, args []string) error {
+			tenantID, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return errors.Wrapf(err, "%s is invalid uint64", args[0])
+			}
 			cp, err := security.CreateTenantClientPair(
 				baseCfg.SSLCertsDir,
 				baseCfg.SSLCAKey,
 				keySize,
 				certificateLifetime,
-				args[0],
+				tenantID,
 			)
 			if err != nil {
 				return errors.Wrap(
