@@ -1235,26 +1235,24 @@ func EncodeSecondaryIndexes(
 	return secondaryIndexEntries, nil
 }
 
-// IndexKeyEquivSignature parses an index key if and only if the index
-// key belongs to a table where its equivalence signature and all its
-// interleave ancestors' signatures can be found in
-// validEquivSignatures.
+// IndexKeyEquivSignature parses an index key if and only if the index key
+// belongs to a table where its equivalence signature and all its interleave
+// ancestors' signatures can be found in validEquivSignatures. Any tenant ID
+// prefix should be removed before calling this function.
 //
-// Its validEquivSignatures argument is a map containing equivalence
-// signatures of valid ancestors of the desired table and of the
-// desired table itself.
+// Its validEquivSignatures argument is a map containing equivalence signatures
+// of valid ancestors of the desired table and of the desired table itself.
 //
-// IndexKeyEquivSignature returns whether or not the index key
-// satisfies the above condition, the value mapped to by the desired
-// table (could be a table index), and the rest of the key that's not
-// part of the signature.
+// IndexKeyEquivSignature returns whether or not the index key satisfies the
+// above condition, the value mapped to by the desired table (could be a table
+// index), and the rest of the key that's not part of the signature.
 //
-// It also requires two []byte buffers: one for the signature
-// (signatureBuf) and one for the rest of the key (keyRestBuf).
+// It also requires two []byte buffers: one for the signature (signatureBuf) and
+// one for the rest of the key (keyRestBuf).
 //
-// The equivalence signature defines the equivalence classes for the
-// signature of potentially interleaved tables. For example, the
-// equivalence signatures for the following interleaved indexes:
+// The equivalence signature defines the equivalence classes for the signature
+// of potentially interleaved tables. For example, the equivalence signatures
+// for the following interleaved indexes:
 //
 //    <parent@primary>
 //    <child@secondary>
@@ -1267,12 +1265,12 @@ func EncodeSecondaryIndexes(
 //    <parent@primary>:     /<parent table id>/<parent index id>
 //    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
 //
-// Equivalence signatures allow us to associate an index key with its
-// table without having to invoke DecodeIndexKey multiple times.
+// Equivalence signatures allow us to associate an index key with its table
+// without having to invoke DecodeIndexKey multiple times.
 //
-// IndexKeyEquivSignature will return false if the a table's
-// ancestor's signature or the table's signature (table which the
-// index key belongs to) is not mapped in validEquivSignatures.
+// IndexKeyEquivSignature will return false if the a table's ancestor'ssignature
+// or the table's signature (table which the index key belongs to) is not mapped
+// in validEquivSignatures.
 //
 // For example, suppose the given key is
 //
