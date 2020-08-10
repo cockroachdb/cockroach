@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
@@ -99,10 +100,10 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 		return "", err
 	}
 	ctx := tree.NewFmtCtx(tree.FmtSerializable)
-	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.IDTypeReference) {
+	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 		newRef := ref
-		if rw, ok := rewrites[descpb.ID(ref.ID)]; ok {
-			newRef = &tree.IDTypeReference{ID: uint32(rw.ID)}
+		if rw, ok := rewrites[sqlbase.UserDefinedTypeOIDToID(ref.OID)]; ok {
+			newRef = &tree.OIDTypeReference{OID: sqlbase.TypeIDToOID(rw.ID)}
 		}
 		ctx.WriteString(newRef.SQLString())
 	})
@@ -205,11 +206,11 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				if _, ok := typesByID[descpb.ID(col.Type.StableTypeID())]; !ok {
+				if _, ok := typesByID[sqlbase.GetTypeDescID(col.Type)]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",
 						table.Name,
-						col.Type.StableTypeID(),
+						sqlbase.GetTypeDescID(col.Type),
 					)
 				}
 			}
@@ -633,21 +634,20 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 	if !typ.UserDefined() {
 		return
 	}
-	// TODO (rohany): Probably should expose some functions on the types.T to
-	//  set this information, rather than reaching into the internal type.
-	if rw, ok := descriptorRewrites[descpb.ID(typ.StableTypeID())]; ok {
-		typ.InternalType.UDTMetadata.StableTypeID = uint32(rw.ID)
-		typ.InternalType.Oid = types.StableTypeIDToOID(uint32(rw.ID))
+	// Collect potential new OID values.
+	var newOID, newArrayOID oid.Oid
+	if rw, ok := descriptorRewrites[sqlbase.GetTypeDescID(typ)]; ok {
+		newOID = sqlbase.TypeIDToOID(rw.ID)
 	}
-
+	if typ.Family() != types.ArrayFamily {
+		if rw, ok := descriptorRewrites[sqlbase.GetArrayTypeDescID(typ)]; ok {
+			newArrayOID = sqlbase.TypeIDToOID(rw.ID)
+		}
+	}
+	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)
+	// If the type is an array, then we need to rewrite the element type as well.
 	if typ.Family() == types.ArrayFamily {
 		rewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites)
-	} else {
-		// If the type is not an array, then we just need to updated the array
-		// type ID in the type metadata.
-		if rw, ok := descriptorRewrites[descpb.ID(typ.StableArrayTypeID())]; ok {
-			typ.InternalType.UDTMetadata.StableArrayTypeID = uint32(rw.ID)
-		}
 	}
 }
 

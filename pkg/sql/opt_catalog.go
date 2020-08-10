@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // optCatalog implements the cat.Catalog interface over the SchemaResolver
@@ -234,9 +235,9 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return ds, false, err
 }
 
-// ResolveTypeByID is part of the cat.Catalog interface.
-func (oc *optCatalog) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	return oc.planner.ResolveTypeByID(ctx, id)
+// ResolveTypeByOID is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	return oc.planner.ResolveTypeByOID(ctx, oid)
 }
 
 func getDescFromCatalogObjectForPermissions(o cat.Object) (sqlbase.Descriptor, error) {

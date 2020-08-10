@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 func (s *Smither) typeFromName(name string) (*types.T, error) {
@@ -98,7 +99,7 @@ func (s *Smither) ResolveType(
 	return res, nil
 }
 
-// ResolveTypeByID implements the tree.TypeReferenceResolver interface.
-func (s *Smither) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
-	return nil, errors.AssertionFailedf("smither cannot resolve types by ID")
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+func (s *Smither) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
+	return nil, errors.AssertionFailedf("smither cannot resolve types by OID")
 }

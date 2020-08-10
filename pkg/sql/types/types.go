@@ -992,14 +992,13 @@ func MakeTimestampTZ(precision int32) *T {
 
 // MakeEnum constructs a new instance of an EnumFamily type with the given
 // stable type ID. Note that it does not hydrate cached fields on the type.
-func MakeEnum(typeID, arrayTypeID uint32) *T {
+func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 	return &T{InternalType: InternalType{
 		Family: EnumFamily,
-		Oid:    StableTypeIDToOID(typeID),
+		Oid:    typeOID,
 		Locale: &emptyLocale,
 		UDTMetadata: &PersistentUserDefinedTypeMetadata{
-			StableTypeID:      typeID,
-			StableArrayTypeID: arrayTypeID,
+			ArrayTypeOID: arrayTypeOID,
 		},
 	}}
 }
@@ -1013,13 +1012,6 @@ func MakeArray(typ *T) *T {
 		ArrayContents: typ,
 		Locale:        &emptyLocale,
 	}}
-	if typ.UserDefined() {
-		// If the element type is user defined, then the array type is user
-		// defined as well, with a stable ID equal to the element's array type ID.
-		arr.InternalType.UDTMetadata = &PersistentUserDefinedTypeMetadata{
-			StableTypeID: typ.StableArrayTypeID(),
-		}
-	}
 	return arr
 }
 
@@ -1190,22 +1182,35 @@ func (t *T) TupleLabels() []string {
 	return t.InternalType.TupleLabels
 }
 
-// StableTypeID returns the stable ID of the TypeDescriptor that backs this
-// type. This function only returns non-zero data for user defined types.
-func (t *T) StableTypeID() uint32 {
-	return t.InternalType.UDTMetadata.StableTypeID
+// UserDefinedArrayOID returns the OID of the array type that corresponds to
+// this user defined type. This function only can only be called on user
+// defined types and returns non-zero data only for user defined types that
+// aren't arrays.
+func (t *T) UserDefinedArrayOID() oid.Oid {
+	if t.InternalType.UDTMetadata == nil {
+		return 0
+	}
+	return t.InternalType.UDTMetadata.ArrayTypeOID
 }
 
-// StableArrayTypeID returns the stable ID of the TypeDescriptor that backs
-// the implicit array type for the type. This function only returns non-zero
-// data for user defined types that aren't array types.
-func (t *T) StableArrayTypeID() uint32 {
-	return t.InternalType.UDTMetadata.StableArrayTypeID
+// RemapUserDefinedTypeOIDs is used to remap OIDs stored within a types.T
+// that is a user defined type. The newArrayOID argument is ignored if the
+// input type is an Array type. It mutates the input types.T and should only
+// be used when type is known to not be shared. If the input oid values are
+// 0 then the RemapUserDefinedTypeOIDs has no effect.
+func RemapUserDefinedTypeOIDs(t *T, newOID, newArrayOID oid.Oid) {
+	if newOID != 0 {
+		t.InternalType.Oid = newOID
+	}
+	if t.Family() != ArrayFamily && newArrayOID != 0 {
+		t.InternalType.UDTMetadata.ArrayTypeOID = newArrayOID
+	}
 }
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
-	return t.InternalType.UDTMetadata != nil
+	// Types with OIDs larger than the predefined max are user defined.
+	return t.Oid() > oidext.CockroachPredefinedOIDMax
 }
 
 var familyNames = map[Family]string{
@@ -1725,7 +1730,7 @@ func (t *T) Equivalent(other *T) bool {
 		if t.Oid() == oid.T_anyenum || other.Oid() == oid.T_anyenum {
 			return true
 		}
-		if t.StableTypeID() != other.StableTypeID() {
+		if t.Oid() != other.Oid() {
 			return false
 		}
 	}
@@ -1874,10 +1879,7 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		}
 	}
 	if t.UDTMetadata != nil && other.UDTMetadata != nil {
-		if t.UDTMetadata.StableTypeID != other.UDTMetadata.StableTypeID {
-			return false
-		}
-		if t.UDTMetadata.StableArrayTypeID != other.UDTMetadata.StableArrayTypeID {
+		if t.UDTMetadata.ArrayTypeOID != other.UDTMetadata.ArrayTypeOID {
 			return false
 		}
 	} else if t.UDTMetadata != nil {
@@ -2456,20 +2458,6 @@ func (t *T) stringTypeSQL() string {
 
 	return typName
 }
-
-// StableTypeIDToOID converts a stable descriptor ID into a type OID.
-func StableTypeIDToOID(id uint32) oid.Oid {
-	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
-}
-
-// UserDefinedTypeOIDToID converts a user defined type OID into a stable
-// descriptor ID.
-func UserDefinedTypeOIDToID(oid oid.Oid) uint32 {
-	return uint32(oid) - oidext.CockroachPredefinedOIDMax
-}
-
-// Silence unused warnings.
-var _ = UserDefinedTypeOIDToID
 
 var typNameLiterals map[string]*T
 

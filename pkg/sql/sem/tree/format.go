@@ -233,7 +233,7 @@ type FmtCtx struct {
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
 	// indexedTypeFormatter is an optional interceptor for formatting
 	// IDTypeReferences differently than normal.
-	indexedTypeFormatter func(*FmtCtx, *IDTypeReference)
+	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
 }
 
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
@@ -337,7 +337,7 @@ func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeh
 
 // SetIndexedTypeFormat modifies FmtCtx to customize the printing of
 // IDTypeReferences using the provided function.
-func (ctx *FmtCtx) SetIndexedTypeFormat(fn func(*FmtCtx, *IDTypeReference)) {
+func (ctx *FmtCtx) SetIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) {
 	ctx.indexedTypeFormatter = fn
 }
 

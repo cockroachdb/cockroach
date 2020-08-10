@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // SchemaID uniquely identifies the usage of a schema within the scope of a
@@ -94,7 +95,7 @@ type Metadata struct {
 	//  because the installation of type metadata in tables doesn't go through
 	//  the type resolver that the optimizer hijacks. However, we could update
 	//  this map when adding a table via metadata.AddTable.
-	userDefinedTypes      map[uint32]struct{}
+	userDefinedTypes      map[oid.Oid]struct{}
 	userDefinedTypesSlice []*types.T
 
 	// deps stores information about all data source objects depended on by the
@@ -202,11 +203,11 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.tables = append(md.tables, from.tables...)
 
 	if (md.userDefinedTypes) == nil {
-		md.userDefinedTypes = make(map[uint32]struct{})
+		md.userDefinedTypes = make(map[oid.Oid]struct{})
 	}
 	for i := range from.userDefinedTypesSlice {
 		typ := from.userDefinedTypesSlice[i]
-		md.userDefinedTypes[typ.StableTypeID()] = struct{}{}
+		md.userDefinedTypes[typ.Oid()] = struct{}{}
 		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 	}
 
@@ -308,7 +309,7 @@ func (md *Metadata) CheckDependencies(
 	}
 	// Check that all of the user defined types present have not changed.
 	for _, typ := range md.AllUserDefinedTypes() {
-		toCheck, err := catalog.ResolveTypeByID(ctx, typ.StableTypeID())
+		toCheck, err := catalog.ResolveTypeByOID(ctx, typ.Oid())
 		if err != nil {
 			// Handle when the type no longer exists.
 			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
@@ -341,10 +342,10 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 		return
 	}
 	if md.userDefinedTypes == nil {
-		md.userDefinedTypes = make(map[uint32]struct{})
+		md.userDefinedTypes = make(map[oid.Oid]struct{})
 	}
-	if _, ok := md.userDefinedTypes[typ.StableTypeID()]; !ok {
-		md.userDefinedTypes[typ.StableTypeID()] = struct{}{}
+	if _, ok := md.userDefinedTypes[typ.Oid()]; !ok {
+		md.userDefinedTypes[typ.Oid()] = struct{}{}
 		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 	}
 }

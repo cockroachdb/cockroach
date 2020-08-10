@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
@@ -154,6 +156,28 @@ func getTypeDescFromID(
 	}
 	// TODO(ajwerner): Fill in ModificationTime.
 	return NewImmutableTypeDescriptor(*typ), nil
+}
+
+// TypeIDToOID converts a type descriptor ID into a type OID.
+func TypeIDToOID(id descpb.ID) oid.Oid {
+	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
+}
+
+// UserDefinedTypeOIDToID converts a user defined type OID into a
+// descriptor ID.
+func UserDefinedTypeOIDToID(oid oid.Oid) descpb.ID {
+	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax
+}
+
+// GetTypeDescID gets the type descriptor ID from a user defined type.
+func GetTypeDescID(t *types.T) descpb.ID {
+	return UserDefinedTypeOIDToID(t.Oid())
+}
+
+// GetArrayTypeDescID gets the ID of the array type descriptor from a user
+// defined type.
+func GetArrayTypeDescID(t *types.T) descpb.ID {
+	return UserDefinedTypeOIDToID(t.UserDefinedArrayOID())
 }
 
 // TypeDesc implements the Descriptor interface.
@@ -505,7 +529,7 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
 	case descpb.TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(desc.GetID()), uint32(desc.ArrayTypeID))
+		typ := types.MakeEnum(TypeIDToOID(desc.GetID()), TypeIDToOID(desc.ArrayTypeID))
 		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
 			return nil, err
 		}
@@ -530,7 +554,7 @@ func HydrateTypesInTableDescriptor(
 	hydrateCol := func(col *descpb.ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
-			name, typDesc, err := res.GetTypeDescriptor(ctx, descpb.ID(col.Type.StableTypeID()))
+			name, typDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(col.Type))
 			if err != nil {
 				return err
 			}
@@ -589,7 +613,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, descpb.ID(elemType.StableTypeID()))
+				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(elemType))
 				if err != nil {
 					return err
 				}
@@ -691,7 +715,7 @@ func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
 	}
 	// Collect the type's descriptor ID.
 	ret := map[descpb.ID]struct{}{
-		descpb.ID(typ.StableTypeID()): {},
+		GetTypeDescID(typ): {},
 	}
 	if typ.Family() == types.ArrayFamily {
 		// If we have an array type, then collect all types in the contents.
@@ -701,7 +725,7 @@ func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
 		}
 	} else {
 		// Otherwise, take the array type ID.
-		ret[descpb.ID(typ.StableArrayTypeID())] = struct{}{}
+		ret[GetArrayTypeDescID(typ)] = struct{}{}
 	}
 	return ret
 }
