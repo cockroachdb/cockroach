@@ -777,6 +777,9 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 
 func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 	var output []string
+	leaseByStoreID := make(map[roachpb.StoreID][]string)
+	var allStores []int
+
 	for key, info := range gossipInfo.Infos {
 		bytes, err := info.Value.GetBytes()
 		if err != nil {
@@ -845,7 +848,44 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			output = append(output, fmt.Sprintf("%q: %v", key, gossipedTime))
 		} else if strings.HasPrefix(key, gossip.KeyGossipClientsPrefix) {
 			output = append(output, fmt.Sprintf("%q: %v", key, string(bytes)))
+		} else if strings.HasPrefix(key, gossip.KeyRangeLeases) {
+			// For range lease details, we don't really like to print one line of output per entry
+			// in gossip, because we have one per range and there's potentially a lot of range.
+			// Instead, we print one line of output per store, and for each store
+			// we list the ranges for which gossip announces a lease on that store.
+			//
+			// Example output:
+			// "leases": s1=[r1/1:12 r2/1:2 r21/1:6 r23/1:2 r24/1:6 r26/1:2 r27/1:2 r6/1:2 r7/1:2 r8/1:2]
+			// "leases": s2=[r10/2:5 r11/2:9 r22/2:5 r3/2:4 r31/2:5 r33/2:5 r4/2:10 r9/2:7]
+			//
+			// (The number after the colon is the lease sequence
+			// number. Enables detection of leases that don't transfer
+			// properly.)
+			//
+			rangeID, err := gossip.RangeIDFromKey(key, gossip.KeyRangeLeases)
+			if err != nil {
+				return "", err
+			}
+			var lease roachpb.Lease
+			if err := protoutil.Unmarshal(bytes, &lease); err != nil {
+				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			if _, ok := leaseByStoreID[lease.Replica.StoreID]; !ok {
+				allStores = append(allStores, int(lease.Replica.StoreID))
+			}
+			leaseByStoreID[lease.Replica.StoreID] = append(leaseByStoreID[lease.Replica.StoreID],
+				fmt.Sprintf("r%d/%d:%d", rangeID, lease.Replica.ReplicaID, lease.Sequence))
+		} else {
+			output = append(output, fmt.Sprintf("unknown key %q: %v", key, bytes))
 		}
+	}
+
+	sort.Ints(allStores)
+	for _, sid := range allStores {
+		storeID := roachpb.StoreID(sid)
+		ranges := leaseByStoreID[storeID]
+		sort.Strings(ranges)
+		output = append(output, fmt.Sprintf("%q: s%d=[%s]", gossip.KeyRangeLeases, storeID, strings.Join(ranges, " ")))
 	}
 
 	sort.Strings(output)

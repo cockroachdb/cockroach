@@ -374,6 +374,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientCtx:         cfg.AmbientCtx,
 		Settings:           st,
 		Clock:              clock,
+		Gossip:             g,
 		NodeDescs:          g,
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retryOpts,
