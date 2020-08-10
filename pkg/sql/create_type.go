@@ -178,7 +178,7 @@ func (p *planner) createArrayType(
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
 	case descpb.TypeDescriptor_ENUM:
-		elemTyp = types.MakeEnum(uint32(typDesc.GetID()), uint32(id))
+		elemTyp = types.MakeEnum(sqlbase.TypeIDToOID(typDesc.GetID()), sqlbase.TypeIDToOID(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}

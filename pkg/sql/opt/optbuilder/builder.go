@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -415,11 +416,11 @@ func (o *optTrackingTypeResolver) ResolveType(
 	return typ, nil
 }
 
-// ResolveTypeByID implements the tree.TypeResolver interface.
-func (o *optTrackingTypeResolver) ResolveTypeByID(
-	ctx context.Context, id uint32,
+// ResolveTypeByOID implements the tree.TypeResolver interface.
+func (o *optTrackingTypeResolver) ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	typ, err := o.res.ResolveTypeByID(ctx, id)
+	typ, err := o.res.ResolveTypeByOID(ctx, oid)
 	if err != nil {
 		return nil, err
 	}
