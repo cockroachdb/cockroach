@@ -67,7 +67,9 @@ func runImport(
 		flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 	}
 
-	conv, err := makeInputConverter(ctx, spec, flowCtx.NewEvalCtx(), kvCh)
+	evalCtx := flowCtx.NewEvalCtx()
+	evalCtx.DB = flowCtx.Cfg.DB
+	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

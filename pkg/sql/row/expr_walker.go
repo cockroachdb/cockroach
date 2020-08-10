@@ -14,6 +14,9 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -93,6 +96,20 @@ const (
 	overrideVolatile  overrideVolatility = true
 )
 
+type sequenceChunk struct {
+	startVal int64
+	size     int64
+	startRow int64
+	currVal  int64
+}
+
+type rowSequence struct {
+	id              descpb.ID
+	table           *sqlbase.ImmutableTableDescriptor
+	instancesPerRow int
+	chunk           *sequenceChunk
+}
+
 // cellInfoAddr is the address used to store relevant information
 // in the Annotation field of evalCtx when evaluating expressions.
 const cellInfoAddr tree.AnnotationIdx = iota + 1
@@ -104,6 +121,7 @@ type cellInfoAnnotation struct {
 	uniqueRowIDTotal    int
 	randSource          *importRand
 	randInstancePerRow  int
+	sequenceMap         map[tree.DString]*rowSequence
 }
 
 func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
@@ -182,6 +200,50 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
 }
 
+func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	name := tree.MustBeDString(args[0])
+	seqMap := c.sequenceMap[name]
+	seqChunk := seqMap.chunk
+	chunkSize := int64(0)
+	if seqChunk != nil {
+		chunkSize = seqChunk.size
+	}
+	if seqChunk == nil || seqChunk.currVal == seqChunk.startVal+seqChunk.size {
+		// Request a new Chunk.
+		newChunkSize := 10 * chunkSize
+		if newChunkSize == 0 {
+			newChunkSize = 10
+		}
+		seqValueKey := evalCtx.Codec.SequenceKey(uint32(seqMap.id))
+		val, err := kv.IncrementValRetryable(
+			evalCtx.Ctx(), evalCtx.DB, seqValueKey, newChunkSize)
+		if err != nil {
+			return nil, err
+		}
+		seqMap.chunk = &sequenceChunk{
+			startVal: val - newChunkSize,
+			size:     newChunkSize,
+			startRow: c.rowID,
+			currVal:  val - newChunkSize,
+		}
+	}
+	seqMap.chunk.currVal++
+	return tree.NewDInt(tree.DInt(c.sequenceMap[name].chunk.currVal)), nil
+}
+
+func importCurrVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	name := tree.MustBeDString(args[0])
+	seqChunk := c.sequenceMap[name].chunk
+	// TODO: this definitely needs to be changed
+	currVal := int64(0)
+	if seqChunk == nil {
+		currVal = seqChunk.currVal
+	}
+	return tree.NewDInt(tree.DInt(currVal)), nil
+}
+
 // Besides overriding, there are also counters that we want to keep track
 // of as we walk through the expressions in a row (at datumRowConverter creation
 // time). This will be handled by the visitorSideEffect field: it will be
@@ -189,8 +251,12 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 // unique_rowid, for example, we want to keep track of the total number of
 // unique_rowid occurrences in a row.
 type customFunc struct {
-	visitorSideEffect func(annotations *tree.Annotations)
-	override          *tree.FunctionDefinition
+	visitorSideEffect func(
+		annot *tree.Annotations,
+		exprs tree.Exprs,
+		evalCtx *tree.EvalContext,
+	) error
+	override *tree.FunctionDefinition
 }
 
 var useDefaultBuiltin *customFunc
@@ -211,8 +277,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	"timeofday":             useDefaultBuiltin,
 	"transaction_timestamp": useDefaultBuiltin,
 	"unique_rowid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			_ tree.Exprs,
+			_ *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).uniqueRowIDTotal++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["unique_rowid"],
@@ -256,6 +327,45 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			},
 		),
 	},
+	"currval": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["currval"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn:         importCurrVal,
+				Info:       "Returns the current value ",
+			},
+		),
+	},
+	"nextval": {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
+			args := make(tree.Datums, len(exprs))
+			for i, e := range exprs {
+				arg, err := e.(tree.TypedExpr).Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				args[i] = arg
+			}
+			name := tree.MustBeDString(args[0])
+			getCellInfoAnnotation(annot).sequenceMap[name].instancesPerRow++
+			return nil
+		},
+		override: makeBuiltinOverride(
+			tree.FunDefs["nextval"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn:         importNextVal,
+				Info:       "Returns the next value ",
+			},
+		),
+	},
 }
 
 func unsafeExpressionError(err error, msg string, expr string) error {
@@ -285,6 +395,7 @@ type importDefaultExprVisitor struct {
 	ctx         context.Context
 	annotations *tree.Annotations
 	semaCtx     *tree.SemaContext
+	evalCtx     *tree.EvalContext
 	// The volatility flag will be set if there's at least one volatile
 	// function appearing in the default expression.
 	volatility overrideVolatility
@@ -323,7 +434,11 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 	// unique_rowid function in an expression).
 	v.volatility = overrideVolatile
 	if custom.visitorSideEffect != nil {
-		custom.visitorSideEffect(v.annotations)
+		err := custom.visitorSideEffect(v.annotations, fn.Exprs, v.evalCtx)
+		if err != nil {
+			v.err = err
+			return expr
+		}
 	}
 	funcExpr := &tree.FuncExpr{
 		Func:  tree.ResolvableFunctionReference{FunctionReference: custom.override},
@@ -359,7 +474,7 @@ func sanitizeExprsForImport(
 		return nil, overrideErrorTerm,
 			unsafeExpressionError(err, "type checking error", expr.String())
 	}
-	v := &importDefaultExprVisitor{annotations: evalCtx.Annotations}
+	v := &importDefaultExprVisitor{annotations: evalCtx.Annotations, evalCtx: evalCtx}
 	newExpr, _ := tree.WalkExpr(v, typedExpr)
 	if v.err != nil {
 		return nil, overrideErrorTerm,
