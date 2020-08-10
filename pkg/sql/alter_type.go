@@ -128,6 +128,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 		ctx,
 		n.desc,
 		newName,
+		n.desc.ParentSchemaID,
 		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
@@ -153,6 +154,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 		ctx,
 		arrayDesc,
 		newArrayName,
+		arrayDesc.ParentSchemaID,
 		tree.AsStringWithFQNames(n.n, p.Ann()),
 	); err != nil {
 		return err
@@ -160,8 +162,14 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 	return nil
 }
 
+// performRenameTypeDesc renames and/or sets the schema of a type descriptor.
+// newName and newSchemaID may be the same as the current name and schemaid.
 func (p *planner) performRenameTypeDesc(
-	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, newName string, jobDesc string,
+	ctx context.Context,
+	desc *sqlbase.MutableTypeDescriptor,
+	newName string,
+	newSchemaID descpb.ID,
+	jobDesc string,
 ) error {
 	// Record the rename details in the descriptor for draining.
 	name := descpb.NameInfo{
@@ -173,6 +181,8 @@ func (p *planner) performRenameTypeDesc(
 
 	// Set the descriptor up with the new name.
 	desc.Name = newName
+	// Set the descriptor to the new schema ID.
+	desc.SetParentSchemaID(newSchemaID)
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
@@ -223,7 +233,6 @@ func (p *planner) renameTypeValue(
 func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema string) error {
 	typeDesc := n.desc
 	schemaID := typeDesc.GetParentSchemaID()
-	databaseID := typeDesc.GetParentID()
 
 	desiredSchemaID, err := p.prepareSetSchema(ctx, typeDesc, schema)
 	if err != nil {
@@ -236,26 +245,22 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return nil
 	}
 
-	name := descpb.NameInfo{
-		ParentID:       databaseID,
-		ParentSchemaID: schemaID,
-		Name:           typeDesc.Name,
-	}
-	typeDesc.AddDrainingName(name)
+	err = p.performRenameTypeDesc(
+		ctx, typeDesc, typeDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
 
-	// Set the tableDesc's new schema id to the desired schema's id.
-	typeDesc.SetParentSchemaID(desiredSchemaID)
-
-	if err := p.writeTypeSchemaChange(
-		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
-	); err != nil {
+	if err != nil {
 		return err
 	}
 
-	newKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, typeDesc.Name)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
+	if err != nil {
+		return err
+	}
 
-	return p.writeNameKey(ctx, newKey, typeDesc.ID)
+	return p.performRenameTypeDesc(
+		ctx, arrayDesc, arrayDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
