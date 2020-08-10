@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -31,18 +30,18 @@ func declareKeysResolveIntentCombined(
 ) {
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
-	var minTxnTS hlc.Timestamp
+	// var minTxnTS hlc.Timestamp
 	switch t := req.(type) {
 	case *roachpb.ResolveIntentRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
-		minTxnTS = t.IntentTxn.MinTimestamp
+		// minTxnTS = t.IntentTxn.MinTimestamp
 	case *roachpb.ResolveIntentRangeRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
-		minTxnTS = t.IntentTxn.MinTimestamp
+		// minTxnTS = t.IntentTxn.MinTimestamp
 	}
-	latchSpans.AddMVCC(spanset.SpanReadWrite, req.Header().Span(), minTxnTS)
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, req.Header().Span()) //, minTxnTS)
 	if status == roachpb.ABORTED {
 		// We don't always write to the abort span when resolving an ABORTED
 		// intent, but we can't tell whether we will or not ahead of time.

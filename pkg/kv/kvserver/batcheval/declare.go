@@ -30,7 +30,7 @@ func DefaultDeclareKeys(
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 	}
-	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	latchSpans.AddNonMVCC(access, req.Header().Span()) //, header.Timestamp)
 }
 
 // DefaultDeclareIsolatedKeys is similar to DefaultDeclareKeys, but it declares
@@ -87,7 +87,7 @@ func DefaultDeclareIsolatedKeys(
 		}
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)
-	lockSpans.AddNonMVCC(access, req.Header().Span())
+	// lockSpans.AddNonMVCC(access, req.Header().Span())
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header

@@ -156,7 +156,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 		}
 
 		// Some requests don't want the wait on locks.
-		if req.LockSpans.Empty() {
+		if req.LatchSpans.EmptyTransactional() {
 			return nil, nil
 		}
 
