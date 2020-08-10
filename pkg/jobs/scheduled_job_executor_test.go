@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,14 +38,9 @@ func (s *statusTrackingExecutor) ExecuteJob(
 }
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
-	md *JobMetadata,
-	_ *ScheduledJob,
-	_ *kv.Txn,
+	ctx context.Context, jobID int64, jobStatus Status, schedule *ScheduledJob, txn *kv.Txn,
 ) error {
-	s.counts[md.Status]++
+	s.counts[jobStatus]++
 	return nil
 }
 
@@ -54,23 +48,6 @@ var _ ScheduledJobExecutor = &statusTrackingExecutor{}
 
 func newStatusTrackingExecutor() *statusTrackingExecutor {
 	return &statusTrackingExecutor{counts: make(map[Status]int)}
-}
-
-func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, s := range []Status{
-		StatusPending, StatusRunning, StatusPaused, StatusReverting,
-		StatusCancelRequested, StatusPauseRequested,
-	} {
-		md := &JobMetadata{
-			ID:     123,
-			Status: s,
-		}
-		require.Error(t, NotifyJobTermination(
-			context.Background(), nil, nil, md, 321, nil))
-	}
 }
 
 func TestScheduledJobExecutorRegistration(t *testing.T) {
@@ -103,12 +80,8 @@ func TestJobTerminationNotification(t *testing.T) {
 
 	// Pretend it completes multiple runs with terminal statuses.
 	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
-		md := &JobMetadata{
-			ID:      123,
-			Status:  s,
-			Payload: &jobspb.Payload{},
-		}
-		require.NoError(t, NotifyJobTermination(ctx, h.cfg, h.env, md, schedule.ScheduleID(), nil))
+		require.NoError(t, NotifyJobTermination(
+			ctx, h.env, 123, s, schedule.ScheduleID(), h.cfg.InternalExecutor, nil))
 	}
 
 	// Verify counts.
