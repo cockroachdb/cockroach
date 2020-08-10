@@ -307,7 +307,7 @@ A file preventing this node from restarting was placed at:
 // forward sequence number jump (i.e. a skipped lease). This behavior can
 // be disabled by passing permitJump as true.
 func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, permitJump bool) {
-	r.mu.Lock()
+	r.mu.RLock()
 	replicaID := r.mu.replicaID
 	// Pull out the last lease known to this Replica. It's possible that this is
 	// not actually the last lease in the Range's lease sequence because the
@@ -316,7 +316,32 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// lease update. All other forms of lease updates should be continuous
 	// without jumps (see permitJump).
 	prevLease := *r.mu.state.Lease
-	r.mu.Unlock()
+	r.mu.RUnlock()
+
+	// Sanity check to make sure that the lease sequence is moving in the right
+	// direction.
+	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
+		// We're at a version that supports lease sequence numbers.
+		switch {
+		case s2 < s1:
+			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
+				log.Safe(prevLease), log.Safe(newLease))
+		case s2 == s1:
+			// If the sequence numbers are the same, make sure they're actually
+			// the same lease. This can happen when callers are using
+			// leasePostApply for some of its side effects, like with
+			// splitPostApply. It can also happen during lease extensions.
+			if !prevLease.Equivalent(newLease) {
+				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
+					log.Safe(prevLease), log.Safe(newLease))
+			}
+		case s2 == s1+1:
+			// Lease sequence incremented by 1. Expected case.
+		case s2 > s1+1 && !permitJump:
+			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
+				log.Safe(prevLease), log.Safe(newLease))
+		}
+	}
 
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
 	// NB: in the case in which a node restarts, minLeaseProposedTS forces it to
@@ -373,31 +398,6 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 
 	// Inform the concurrency manager that the lease holder has been updated.
 	r.concMgr.OnRangeLeaseUpdated(newLease.Sequence, iAmTheLeaseHolder)
-
-	// Sanity check to make sure that the lease sequence is moving in the right
-	// direction.
-	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
-		// We're at a version that supports lease sequence numbers.
-		switch {
-		case s2 < s1:
-			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
-		case s2 == s1:
-			// If the sequence numbers are the same, make sure they're actually
-			// the same lease. This can happen when callers are using
-			// leasePostApply for some of its side effects, like with
-			// splitPostApply. It can also happen during lease extensions.
-			if !prevLease.Equivalent(newLease) {
-				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
-					log.Safe(prevLease), log.Safe(newLease))
-			}
-		case s2 == s1+1:
-			// Lease sequence incremented by 1. Expected case.
-		case s2 > s1+1 && !permitJump:
-			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
-				log.Safe(prevLease), log.Safe(newLease))
-		}
-	}
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
