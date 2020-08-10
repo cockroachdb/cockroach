@@ -63,19 +63,22 @@ type descriptorResolver struct {
 	descByID map[descpb.ID]sqlbase.Descriptor
 	// Map: db name -> dbID
 	dbsByName map[string]descpb.ID
-	// Map: dbID -> obj name -> obj ID
-	objsByName map[descpb.ID]map[string]descpb.ID
+	// Map: dbID -> schema name -> obj name -> obj ID
+	objsByName map[descpb.ID]map[string]map[string]descpb.ID
 }
 
 // LookupSchema implements the tree.ObjectNameTargetResolver interface.
-// TODO(ajwerner): Update this for user-defined schemas.
 func (r *descriptorResolver) LookupSchema(
 	_ context.Context, dbName, scName string,
 ) (bool, tree.SchemaMeta, error) {
-	if scName != tree.PublicSchema {
+	dbID, ok := r.dbsByName[dbName]
+	if !ok {
 		return false, nil, nil
 	}
-	if dbID, ok := r.dbsByName[dbName]; ok {
+	schemas := r.objsByName[dbID]
+	if _, ok := schemas[scName]; ok {
+		// TODO (rohany): Not sure if we want to change this to also
+		//  use the resolved schema struct.
 		if dbDesc, ok := r.descByID[dbID].(sqlbase.DatabaseDescriptor); ok {
 			return true, dbDesc, nil
 		}
@@ -90,16 +93,15 @@ func (r *descriptorResolver) LookupObject(
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
-	if scName != tree.PublicSchema {
-		return false, nil, nil
-	}
 	dbID, ok := r.dbsByName[dbName]
 	if !ok {
 		return false, nil, nil
 	}
-	if objMap, ok := r.objsByName[dbID]; ok {
-		if objID, ok := objMap[obName]; ok {
-			return true, r.descByID[objID], nil
+	if scMap, ok := r.objsByName[dbID]; ok {
+		if objMap, ok := scMap[scName]; ok {
+			if objID, ok := objMap[obName]; ok {
+				return true, r.descByID[objID], nil
+			}
 		}
 	}
 	return false, nil, nil
@@ -111,7 +113,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 	r := &descriptorResolver{
 		descByID:   make(map[descpb.ID]sqlbase.Descriptor),
 		dbsByName:  make(map[string]descpb.ID),
-		objsByName: make(map[descpb.ID]map[string]descpb.ID),
+		objsByName: make(map[descpb.ID]map[string]map[string]descpb.ID),
 	}
 
 	// Iterate to find the databases first. We need that because we also
@@ -124,6 +126,9 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 					desc.GetName(), r.dbsByName[desc.GetName()], desc.GetID())
 			}
 			r.dbsByName[desc.GetName()] = desc.GetID()
+			r.objsByName[desc.GetID()] = make(map[string]map[string]descpb.ID)
+			// Always add an entry for the public schema.
+			r.objsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -132,6 +137,18 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 				desc.GetID(), prevDesc.GetName(), desc.GetName())
 		}
 		r.descByID[desc.GetID()] = desc
+	}
+
+	// Add all schemas to the resolver.
+	for _, desc := range descs {
+		if sc, ok := desc.(sqlbase.SchemaDescriptor); ok {
+			schemaMap := r.objsByName[sc.GetParentID()]
+			if schemaMap == nil {
+				schemaMap = make(map[string]map[string]descpb.ID)
+			}
+			schemaMap[sc.GetName()] = make(map[string]descpb.ID)
+			r.objsByName[sc.GetParentID()] = schemaMap
+		}
 	}
 
 	// registerDesc is a closure that registers a Descriptor into the resolver's
@@ -145,20 +162,40 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 			return errors.Errorf("%s %q's ParentID %d (%q) is not a database",
 				kind, desc.GetName(), parentID, parentDesc.GetName())
 		}
-		objMap := r.objsByName[parentDesc.GetID()]
+
+		// Look up what schema this descriptor belongs under.
+		schemaMap := r.objsByName[parentDesc.GetID()]
+		scID := desc.GetParentSchemaID()
+		var scName string
+		if scID == keys.PublicSchemaID {
+			scName = tree.PublicSchema
+		} else {
+			scDescI, ok := r.descByID[scID]
+			if !ok {
+				return errors.Errorf("schema %d not found for desc %d", scID, desc.GetID())
+			}
+			scDesc, ok := scDescI.(sqlbase.SchemaDescriptor)
+			if !ok {
+				return errors.Errorf("descriptor %d is not a schema", scDescI.GetID())
+			}
+			scName = scDesc.GetName()
+		}
+
+		// Create an entry for the descriptor.
+		objMap := schemaMap[scName]
 		if objMap == nil {
 			objMap = make(map[string]descpb.ID)
 		}
 		if _, ok := objMap[desc.GetName()]; ok {
-			return errors.Errorf("duplicate %s name: %q.%q used for ID %d and %d",
-				kind, parentDesc.GetName(), desc.GetName(), desc.GetID(), objMap[desc.GetName()])
+			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
+				kind, parentDesc.GetName(), scName, desc.GetName(), desc.GetID(), objMap[desc.GetName()])
 		}
 		objMap[desc.GetName()] = desc.GetID()
-		r.objsByName[parentDesc.GetID()] = objMap
+		r.objsByName[parentDesc.GetID()][scName] = objMap
 		return nil
 	}
 
-	// Now on to the tables and types.
+	// Now on to the remaining descriptors.
 	for _, desc := range descs {
 		if desc.Dropped() {
 			continue
@@ -221,6 +258,14 @@ func descriptorsMatchingTargets(
 			ret.expandedDB = append(ret.expandedDB, dbID)
 			alreadyRequestedDBs[dbID] = struct{}{}
 			alreadyExpandedDBs[dbID] = struct{}{}
+		}
+	}
+
+	alreadyRequestedSchemas := make(map[descpb.ID]struct{})
+	maybeAddSchemaDesc := func(id descpb.ID) {
+		if _, ok := alreadyRequestedSchemas[id]; !ok {
+			alreadyRequestedSchemas[id] = struct{}{}
+			ret.descs = append(ret.descs, resolver.descByID[id])
 		}
 	}
 
@@ -294,6 +339,11 @@ func descriptorsMatchingTargets(
 				alreadyRequestedTables[tableDesc.GetID()] = struct{}{}
 				ret.descs = append(ret.descs, tableDesc)
 			}
+			// If this table is a member of a user defined schema, then request the
+			// user defined schema.
+			if tableDesc.GetParentSchemaID() != keys.PublicSchemaID {
+				maybeAddSchemaDesc(tableDesc.GetParentSchemaID())
+			}
 			// Get all the types used by this table.
 			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(getTypeByID)
 			if err != nil {
@@ -333,29 +383,36 @@ func descriptorsMatchingTargets(
 
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for _, id := range resolver.objsByName[dbID] {
-			desc := resolver.descByID[id]
-			switch desc := desc.(type) {
-			case sqlbase.TableDescriptor:
-				if err := catalog.FilterDescriptorState(desc); err != nil {
-					// Don't include this table in the expansion since it's not in a valid
-					// state. Silently fail since this table was not directly requested,
-					// but was just part of an expansion.
-					continue
+		for _, schemas := range resolver.objsByName[dbID] {
+			for _, id := range schemas {
+				desc := resolver.descByID[id]
+				switch desc := desc.(type) {
+				case sqlbase.TableDescriptor:
+					if err := catalog.FilterDescriptorState(desc); err != nil {
+						// Don't include this table in the expansion since it's not in a valid
+						// state. Silently fail since this table was not directly requested,
+						// but was just part of an expansion.
+						continue
+					}
+					if _, ok := alreadyRequestedTables[id]; !ok {
+						ret.descs = append(ret.descs, desc)
+					}
+					// If this table is a member of a user defined schema, then request the
+					// user defined schema.
+					if desc.GetParentSchemaID() != keys.PublicSchemaID {
+						maybeAddSchemaDesc(desc.GetParentSchemaID())
+					}
+					// Get all the types used by this table.
+					typeIDs, err := desc.GetAllReferencedTypeIDs(getTypeByID)
+					if err != nil {
+						return ret, err
+					}
+					for _, id := range typeIDs {
+						maybeAddTypeDesc(id)
+					}
+				case sqlbase.TypeDescriptor:
+					maybeAddTypeDesc(desc.GetID())
 				}
-				if _, ok := alreadyRequestedTables[id]; !ok {
-					ret.descs = append(ret.descs, desc)
-				}
-				// Get all the types used by this table.
-				typeIDs, err := desc.GetAllReferencedTypeIDs(getTypeByID)
-				if err != nil {
-					return ret, err
-				}
-				for _, id := range typeIDs {
-					maybeAddTypeDesc(id)
-				}
-			case sqlbase.TypeDescriptor:
-				maybeAddTypeDesc(desc.GetID())
 			}
 		}
 	}
@@ -646,6 +703,8 @@ func fullClusterTargets(
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			}
+		case sqlbase.SchemaDescriptor:
+			fullClusterDescs = append(fullClusterDescs, desc)
 		case sqlbase.TypeDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
 		}

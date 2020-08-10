@@ -275,6 +275,7 @@ func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
 	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	schemas []sqlbase.SchemaDescriptor,
 	tables []sqlbase.TableDescriptor,
 	types []sqlbase.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
@@ -303,6 +304,25 @@ func WriteDescriptors(
 			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
 			b.CPut(dKey.Key(keys.SystemSQLCodec), desc.GetID(), nil)
 		}
+
+		// Write namespace and descriptor entries for each schema.
+		for i := range schemas {
+			sc := schemas[i]
+			if err := catalogkv.WriteNewDescToBatch(
+				ctx,
+				false, /* kvTrace */
+				settings,
+				b,
+				keys.SystemSQLCodec,
+				sc.GetID(),
+				schemas[i],
+			); err != nil {
+				return err
+			}
+			skey := sqlbase.NewSchemaKey(sc.GetParentID(), sc.GetName())
+			b.CPut(skey.Key(keys.SystemSQLCodec), sc.GetID(), nil)
+		}
+
 		for i := range tables {
 			table := tables[i]
 			// For full cluster restore, keep privileges as they were.
@@ -369,7 +389,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			tkey := catalogkv.MakePublicTableNameKey(ctx, settings, typ.ParentID, typ.Name)
+			tkey := catalogkv.MakeObjectNameKey(ctx, settings, typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
 			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.ID, nil)
 		}
 
@@ -775,6 +795,7 @@ func createImportingDescriptors(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
+	var schemas []*sqlbase.MutableSchemaDescriptor
 	var types []*sqlbase.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
@@ -795,6 +816,8 @@ func createImportingDescriptors(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
+		case sqlbase.SchemaDescriptor:
+			schemas = append(schemas, sqlbase.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case sqlbase.TypeDescriptor:
 			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
@@ -847,6 +870,22 @@ func createImportingDescriptors(
 		return nil, nil, nil, nil, nil, err
 	}
 
+	// Collect all schemas that are going to be restored.
+	var schemasToWrite []*sqlbase.MutableSchemaDescriptor
+	var writtenSchemas []sqlbase.SchemaDescriptor
+	for i := range schemas {
+		sc := schemas[i]
+		rw := details.DescriptorRewrites[sc.ID]
+		if !rw.ToExisting {
+			schemasToWrite = append(schemasToWrite, sc)
+			writtenSchemas = append(writtenSchemas, sc)
+		}
+	}
+
+	if err := rewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
 	for _, desc := range tableDescs {
 		desc.Version++
 		desc.State = descpb.TableDescriptor_OFFLINE
@@ -862,7 +901,7 @@ func createImportingDescriptors(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteDescriptors(ctx, txn, databases, tables, writtenTypes, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
+			if err := WriteDescriptors(ctx, txn, databases, writtenSchemas, tables, writtenTypes, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
@@ -922,6 +961,10 @@ func createImportingDescriptors(
 			details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
 			for i := range typesToWrite {
 				details.TypeDescs[i] = typesToWrite[i].TypeDesc()
+			}
+			details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
+			for i := range schemasToWrite {
+				details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
 			}
 
 			// Update the job once all descs have been prepared for ingestion.
@@ -1270,6 +1313,23 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
+	}
+
+	// Drop any schema descriptors that this restore created.
+	for i := range details.SchemaDescs {
+		sc := details.SchemaDescs[i]
+		if err := catalogkv.RemoveObjectNamespaceEntry(
+			ctx,
+			txn,
+			keys.SystemSQLCodec,
+			sc.ParentID,
+			keys.RootNamespaceID,
+			sc.Name,
+			false, /* kvTrace */
+		); err != nil {
+			return err
+		}
+		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
 	}
 
 	// Queue a GC job.
