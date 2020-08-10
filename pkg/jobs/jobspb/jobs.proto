@@ -126,6 +126,10 @@ message RestoreDetails {
   // Note that it does not include type descriptors existing in the cluster
   // that backed up types are remapped to.
   repeated sqlbase.TypeDescriptor type_descs = 14;
+  // SchemaDescs contains schema descriptors written as part of this restore.
+  // Like TypeDescs, it does not include existing schema descriptors in the
+  // cluster that backed up schemas are remapped to.
+  repeated sqlbase.SchemaDescriptor schema_descs = 15;
   message Tenant {
     uint64 id = 1 [(gogoproto.customname) = "ID"];
     bytes info = 2;
