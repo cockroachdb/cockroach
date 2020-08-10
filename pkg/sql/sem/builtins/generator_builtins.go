@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -1127,6 +1128,10 @@ var _ tree.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
+	if !ctx.Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy()
+	}
+
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 

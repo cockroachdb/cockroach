@@ -33,37 +33,37 @@ CREATE TEMP TABLE users (id UUID, city STRING, CONSTRAINT "primary" PRIMARY KEY 
 
 # Missing status server
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SHOW SESSIONS
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SHOW QUERIES
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 CANCEL QUERY ''
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 CANCEL SESSION ''
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.node_transactions
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.node_sessions
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.node_queries
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.cluster_sessions
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.cluster_queries
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_store_status
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_node_status
 
 # Cannot manipulate zone configurations
@@ -73,8 +73,31 @@ query IITTTTTTTTTTT
 SELECT * FROM crdb_internal.zones
 ----
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 SHOW ZONE CONFIGURATION FOR TABLE kv
 
-statement error operation is unsupported
+statement error operation is unsupported in multi-tenancy mode
 ALTER TABLE kv CONFIGURE ZONE USING num_replicas = 123
+
+# Cannot perform operations that issue Admin requests.
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv SPLIT AT VALUES ('foo')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv UNSPLIT AT VALUES ('foo')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv UNSPLIT ALL
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv SCATTER
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'k')
+
+statement error operation is unsupported in multi-tenancy mode
+ALTER TABLE kv EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'k')
+
+statement error operation is unsupported in multi-tenancy mode
+SELECT crdb_internal.check_consistency(true, '', '')
