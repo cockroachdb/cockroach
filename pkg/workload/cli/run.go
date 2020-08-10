@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -35,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
@@ -42,6 +45,7 @@ import (
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
+var tolerateAmbiguousErrors = runFlags.Bool("tolerate-ambiguous-errors", false, "Keep running on ambiguous commit errors")
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
@@ -464,7 +468,14 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		select {
 		case err := <-errCh:
 			formatter.outputError(err)
-			if *tolerateErrors {
+			ignoreErr := *tolerateErrors
+			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) && string(pqErr.Code) == pgcode.StatementCompletionUnknown.String() {
+				ignoreErr = ignoreErr || *tolerateAmbiguousErrors
+			}
+			if pgxErr := (*pgx.PgError)(nil); errors.As(err, &pgxErr) && pgxErr.Code == pgcode.StatementCompletionUnknown.String() {
+				ignoreErr = ignoreErr || *tolerateAmbiguousErrors
+			}
+			if ignoreErr {
 				if everySecond.ShouldLog() {
 					log.Errorf(ctx, "%v", err)
 				}
