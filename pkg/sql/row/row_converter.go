@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -294,6 +295,12 @@ func NewDatumRowConverter(
 
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 	c.defaultCache = make([]tree.TypedExpr, len(cols))
+	seqIDs := make(map[descpb.ID]struct{})
+	for _, col := range cols {
+		for _, id := range col.UsesSequenceIds {
+			seqIDs[id] = struct{}{}
+		}
+	}
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
@@ -304,7 +311,22 @@ func NewDatumRowConverter(
 		return ok
 	}
 	annot := make(tree.Annotations, 1)
-	annot.Set(cellInfoAddr, &cellInfoAnnotation{uniqueRowIDInstance: 0})
+	rowSeqForAnnot := make(map[tree.DString]*rowSequence, len(seqIDs))
+	for id, _ := range seqIDs {
+		txn := c.EvalCtx.DB.NewTxn(ctx, "")
+		seqTable, err := catalogkv.MustGetTableDescByID(ctx, txn, c.EvalCtx.Codec, id)
+		if err != nil {
+			return nil, err
+		}
+		rowSeqForAnnot[*tree.NewDString(seqTable.Name)] = &rowSequence{
+			id:    id,
+			table: seqTable,
+		}
+	}
+	annot.Set(cellInfoAddr, &cellInfoAnnotation{
+		uniqueRowIDInstance: 0,
+		sequenceMap:         rowSeqForAnnot,
+	})
 	c.EvalCtx.Annotations = &annot
 	for i := range cols {
 		col := &cols[i]

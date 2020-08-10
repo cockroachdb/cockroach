@@ -3115,10 +3115,6 @@ func TestImportDefault(t *testing.T) {
 			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
 		},
 		{
-			name:          "nextval",
-			sequence:      "testseq",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT nextval('testseq')",
 			targetCols:    "a",
 			format:        "CSV",
 			expectedError: "unsafe for import",
@@ -3372,6 +3368,51 @@ func TestImportDefault(t *testing.T) {
 				var numRows int
 				sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
 				require.Equal(t, numDistinctRows, len(test.randomCols)*numRows)
+				t.Run("nextval", func(t *testing.T) {
+					testCases := []struct {
+						name         string
+						create       string
+						targetCols   []string
+						sequenceCols []string
+						sequences    []string
+					}{
+						{
+							name:         "nextval",
+							create:       "a INT, b INT DEFAULT nextval('myseq'), c STRING",
+							targetCols:   []string{"a", "c"},
+							sequences:    []string{"myseq"},
+							sequenceCols: []string{selectNotNull("b")},
+						},
+					}
+					for _, test := range testCases {
+						for _, seqName := range test.sequences {
+							defer sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, seqName))
+						}
+						t.Run(test.name, func(t *testing.T) {
+							defer sqlDB.Exec(t, `DROP TABLE t`)
+							for _, seqName := range test.sequences {
+								sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, seqName))
+							}
+							sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+							insertData := `(1, 'cat'), (2, 'him'), (3, 'meme')`
+							sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+								strings.Join(test.targetCols, ", "),
+								insertData))
+							sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+								strings.Join(test.targetCols, ", "),
+								strings.Join(testFiles.files, ", ")))
+							sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+								strings.Join(test.targetCols, ", "),
+								insertData))
+							// sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{})
+							var numDistinctRows int
+							sqlDB.QueryRow(t,
+								fmt.Sprintf(`SELECT DISTINCT COUNT (*) FROM (%s)`,
+									strings.Join(test.sequenceCols, " UNION ")),
+							).Scan(&numDistinctRows)
+							var numRows int
+							sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+							require.Equal(t, numDistinctRows, len(test.sequenceCols)*numRows)
 			})
 		}
 	})
