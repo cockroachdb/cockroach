@@ -623,6 +623,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
+			// TODO (rohany): Once we can lookup schemas by ID in the collection,
+			//  resolve the correct schema name here.
 			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
 			return name, desc, nil
 		}
@@ -651,6 +653,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
+			// TODO (rohany): Once we can lookup schemas by ID in the collection,
+			//  resolve the correct schema name here.
 			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
 			return name, desc, nil
 		}

@@ -156,6 +156,31 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
+	"regexp_split_to_table": makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(false /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter.",
+			tree.VolatilityImmutable,
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+				{"flags", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(true /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter with flags."+regexpFlagInfo,
+			tree.VolatilityImmutable,
+		),
+	),
+
 	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
@@ -312,6 +337,50 @@ func makeGeneratorOverloadWithReturnType(
 	}
 }
 
+// regexpSplitToTableGenerator supports regexp_split_to_table.
+type regexpSplitToTableGenerator struct {
+	words []string
+	curr  int
+}
+
+func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) tree.GeneratorFactory {
+	return func(
+		ctx *tree.EvalContext, args tree.Datums,
+	) (tree.ValueGenerator, error) {
+		words, err := regexpSplit(ctx, args, hasFlags)
+		if err != nil {
+			return nil, err
+		}
+		return &regexpSplitToTableGenerator{
+			words: words,
+			curr:  -1,
+		}, nil
+	}
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.String }
+
+// Close implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) Close() {}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	g.curr = -1
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
+	g.curr++
+	return g.curr < len(g.words), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
+}
+
 // keywordsValueGenerator supports the execution of pg_get_keywords().
 type keywordsValueGenerator struct {
 	curKeyword int
@@ -337,6 +406,8 @@ func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	k.curKeyword = -1
 	return nil
 }
+
+// Next implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Next(_ context.Context) (bool, error) {
 	k.curKeyword++
 	return k.curKeyword < len(lex.KeywordNames), nil
