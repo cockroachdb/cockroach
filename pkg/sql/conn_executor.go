@@ -20,7 +20,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -256,10 +254,6 @@ type Server struct {
 
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
-
-	// dbCache is a cache for database descriptors, maintained through Gossip
-	// updates.
-	dbCache *databaseCacheHolder
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -282,17 +276,14 @@ type Metrics struct {
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	systemCfg := config.NewSystemConfig(cfg.DefaultZoneConfig)
 	return &Server{
 		cfg:             cfg,
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
-		// dbCache will be updated on Start().
-		dbCache:       newDatabaseCacheHolder(database.NewCache(cfg.Codec, systemCfg)),
-		pool:          pool,
-		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reCache:       tree.NewRegexpCache(512),
+		pool:            pool,
+		sqlStats:        sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reportedStats:   sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		reCache:         tree.NewRegexpCache(512),
 	}
 }
 
@@ -326,21 +317,6 @@ func makeMetrics(internal bool) Metrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	if s.cfg.Codec.ForSystemTenant() {
-		gossipUpdateC := s.cfg.SystemConfig.RegisterSystemConfigChannel()
-		stopper.RunWorker(ctx, func(ctx context.Context) {
-			for {
-				select {
-				case <-gossipUpdateC:
-					sysCfg := s.cfg.SystemConfig.GetSystemConfig()
-					s.dbCache.updateSystemConfig(sysCfg)
-				case <-stopper.ShouldStop():
-					return
-				}
-			}
-		})
-	}
-
 	// Start a loop to clear SQL stats at the max reset interval. This is
 	// to ensure that we always have some worker clearing SQL stats to avoid
 	// continually allocating space for the SQL stats. Additionally, spawn
@@ -641,8 +617,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
-		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache)
+	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager, s.cfg.Settings)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -831,7 +806,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache, txnEv); err != nil {
+	if err := ex.resetExtraTxnState(ctx, txnEv); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -1194,9 +1169,7 @@ func (ns *prepStmtNamespace) resetTo(
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // commits, rolls back or restarts.
-func (ex *connExecutor) resetExtraTxnState(
-	ctx context.Context, dbCacheHolder *databaseCacheHolder, ev txnEvent,
-) error {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {
@@ -1204,8 +1177,6 @@ func (ex *connExecutor) resetExtraTxnState(
 	}
 
 	ex.extraTxnState.descCollection.ReleaseAll(ctx)
-
-	ex.extraTxnState.descCollection.ResetDatabaseCache(dbCacheHolder.getDatabaseCache())
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -1795,7 +1766,7 @@ func (ex *connExecutor) execCopyIn(
 	} else {
 		txnOpt = copyTxnOpt{
 			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, ex.server.dbCache, noEvent)
+				return ex.resetExtraTxnState(ctx, noEvent)
 			},
 		}
 	}
@@ -2230,12 +2201,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			handleErr(err)
 		}
 
-		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.descCollection.WaitForCacheToDropDatabases(ex.Ctx())
-
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache, advInfo.txnEvent); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
 			return advanceInfo{}, err
 		}
 	default:

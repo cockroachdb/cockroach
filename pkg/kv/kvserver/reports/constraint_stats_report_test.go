@@ -760,7 +760,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			sqlbase.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name, security.AdminRole))
+			&sqlbase.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name, security.AdminRole).ImmutableDatabaseDescriptor)
 
 		for _, table := range db.tables {
 			tableID := objectCounter

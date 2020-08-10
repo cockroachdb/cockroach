@@ -568,7 +568,10 @@ type CommonLookupFlags struct {
 }
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
-type DatabaseLookupFlags = CommonLookupFlags
+type DatabaseLookupFlags struct {
+	CommonLookupFlags
+	RequireMutable bool
+}
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNames().
 type DatabaseListFlags struct {

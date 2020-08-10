@@ -274,7 +274,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
-	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	databases []sqlbase.DatabaseDescriptor,
 	tables []sqlbase.TableDescriptor,
 	types []sqlbase.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
@@ -285,13 +285,19 @@ func WriteDescriptors(
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
-		wroteDBs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
-		for _, desc := range databases {
+		wroteDBs := make(map[descpb.ID]sqlbase.DatabaseDescriptor)
+		for i := range databases {
+			desc := databases[i]
 			// If the restore is not a full cluster restore we cannot know that
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				desc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
+				if mut, ok := desc.(*sqlbase.MutableDatabaseDescriptor); ok {
+					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
+				} else {
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+						desc.GetID(), desc)
+				}
 			}
 			wroteDBs[desc.GetID()] = desc
 			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
@@ -653,7 +659,7 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job       *jobs.Job
 	settings  *cluster.Settings
-	databases []*sqlbase.ImmutableDatabaseDescriptor
+	databases []sqlbase.DatabaseDescriptor
 	tables    []sqlbase.TableDescriptor
 	// writtenTypes is the set of types that are restored from the backup into
 	// the database. Note that this is not always the set of types within the
@@ -736,7 +742,7 @@ func remapRelevantStatistics(
 func isDatabaseEmpty(
 	ctx context.Context,
 	db *kv.DB,
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
+	dbDesc sqlbase.DatabaseDescriptor,
 	ignoredTables map[descpb.ID]struct{},
 ) (bool, error) {
 	var allDescs []sqlbase.Descriptor
@@ -766,7 +772,7 @@ func isDatabaseEmpty(
 func createImportingDescriptors(
 	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, r *restoreResumer,
 ) (
-	databases []*sqlbase.ImmutableDatabaseDescriptor,
+	databases []sqlbase.DatabaseDescriptor,
 	tables []sqlbase.TableDescriptor,
 	oldTableIDs []descpb.ID,
 	writtenTypes []sqlbase.TypeDescriptor,

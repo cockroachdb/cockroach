@@ -13,15 +13,12 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -35,7 +32,7 @@ import (
 
 type dropDatabaseNode struct {
 	n                       *tree.DropDatabase
-	dbDesc                  *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc                  *sqlbase.MutableDatabaseDescriptor
 	td                      []toDelete
 	schemasToDelete         []string
 	allTableObjectsToDelete []*sqlbase.MutableTableDescriptor
@@ -60,7 +57,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), !n.IfExists)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), !n.IfExists)
 	if err != nil {
 		return nil, err
 	}
@@ -256,14 +253,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
-
-	b := &kv.Batch{}
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Del %s", descKey)
-	}
-	b.Del(descKey)
-
 	for _, schemaToDelete := range n.schemasToDelete {
 		if err := catalogkv.RemoveSchemaNamespaceEntry(
 			ctx,
@@ -276,32 +265,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	err := catalogkv.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-	)
-	if err != nil {
-		return err
-	}
-
-	// No job was created because no tables were dropped, so zone config can be
-	// immediately removed, if applicable.
-	if len(n.allTableObjectsToDelete) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
-		zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.GetID()))
-		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-		}
-		// Delete the zone config entry for this database.
-		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-	}
-
-	p.Descriptors().AddUncommittedDatabase(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
-
-	if err := p.txn.Run(ctx, b); err != nil {
-		return err
-	}
-
 	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
 		return err
+	}
+
+	// Update the database descriptor itself to reflect its dropped state.
+	dropDetails := descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           n.dbDesc.GetName(),
+	}
+	n.dbDesc.DrainingNames = append(n.dbDesc.DrainingNames, dropDetails)
+	n.dbDesc.State = descpb.DatabaseDescriptor_DROP
+	if err := p.writeDatabaseChange(ctx, n.dbDesc); err != nil {
+		return nil
 	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded

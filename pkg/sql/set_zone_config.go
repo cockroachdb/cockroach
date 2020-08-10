@@ -190,7 +190,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		if zs.Database == "system" {
 			return p.RequireAdminRole(ctx, "alter the system database")
 		}
-		dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(zs.Database), true)
+		dbDesc, err := p.ResolveImmutableDatabaseDescriptor(ctx, string(zs.Database), true)
 		if err != nil {
 			return err
 		}

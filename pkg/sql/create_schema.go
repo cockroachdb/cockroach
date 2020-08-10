@@ -61,19 +61,18 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			"cannot create schema without being connected to a database")
 	}
 
-	// TODO (lucy): We need a MutableDatabaseDescriptor resolution function.
-	db, err := p.ResolveUncachedDatabaseByName(params.ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(params.ctx, p.CurrentDatabase(), true /* required */)
 	if err != nil {
 		return err
 	}
 
 	// Users cannot create schemas within the system database.
-	if db.ID == keys.SystemDatabaseID {
+	if db.GetID() == keys.SystemDatabaseID {
 		return pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in the system database")
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, err := p.schemaExists(params.ctx, db.ID, n.Schema)
+	exists, err := p.schemaExists(params.ctx, db.GetID(), n.Schema)
 	if err != nil {
 		return err
 	}
@@ -117,29 +116,28 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 
 	// Create the SchemaDescriptor.
 	desc := sqlbase.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
-		ParentID:   db.ID,
+		ParentID:   db.GetID(),
 		Name:       n.Schema,
 		ID:         id,
 		Privileges: privs,
 	})
 
 	// Update the parent database with this schema information.
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
-	if mutDB.Schemas == nil {
-		mutDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	if db.Schemas == nil {
+		db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
-	mutDB.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
+	db.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
 		ID:      desc.ID,
 		Dropped: false,
 	}
-	if err := p.writeDatabaseChange(params.ctx, mutDB); err != nil {
+	if err := p.writeDatabaseChange(params.ctx, db); err != nil {
 		return err
 	}
 
 	// Finally create the schema on disk.
 	return p.createDescriptorWithID(
 		params.ctx,
-		sqlbase.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
+		sqlbase.NewSchemaKey(db.GetID(), n.Schema).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,
