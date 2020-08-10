@@ -36,10 +36,10 @@ DROP TABLE t
 statement error schema change cannot be initiated in this version until the version upgrade is finalized
 TRUNCATE TABLE t
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  t  table
+public  t  table  0
 
 subtest columns
 
@@ -143,10 +143,10 @@ CREATE TABLE db.t (a INT)
 statement error schema change cannot be initiated in this version until the version upgrade is finalized
 DROP DATABASE db
 
-query TTT
+query TTTI
 SHOW TABLES FROM db
 ----
-public  t  table
+public  t  table  NULL
 
 subtest non_backfill_schema_changes
 
