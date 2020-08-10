@@ -74,6 +74,7 @@ table_name NOT IN (
 	'index_columns',
 	'table_columns',
 	'table_indexes',
+	'table_row_statistics',
 	'ranges',
 	'ranges_no_leases',
 	'predefined_comments',

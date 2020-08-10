@@ -6,11 +6,11 @@ CREATE TABLE a (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
-query TTT
+query TTTI
 SHOW TABLES FROM test
 ----
-public  a  table
-public  b  table
+public  a  table  0
+public  b  table  0
 
 statement ok
 INSERT INTO a VALUES (3),(7),(2)
@@ -35,10 +35,10 @@ SELECT job_type, status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' OR 
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
 
-query TTT
+query TTTI
 SHOW TABLES FROM test
 ----
-public  b  table
+public  b  table  0
 
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a

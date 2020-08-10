@@ -73,6 +73,7 @@ test           crdb_internal       session_trace                      public   S
 test           crdb_internal       session_variables                  public   SELECT
 test           crdb_internal       table_columns                      public   SELECT
 test           crdb_internal       table_indexes                      public   SELECT
+test           crdb_internal       table_row_statistics               public   SELECT
 test           crdb_internal       tables                             public   SELECT
 test           crdb_internal       zones                              public   SELECT
 test           information_schema  NULL                               admin    ALL

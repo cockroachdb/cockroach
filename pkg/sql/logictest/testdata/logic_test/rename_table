@@ -20,10 +20,10 @@ SELECT * FROM kv
 1 2
 3 4
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  kv  table
+public  kv  table  0
 
 statement ok
 ALTER TABLE kv RENAME TO new_kv
@@ -37,10 +37,10 @@ SELECT * FROM new_kv
 1 2
 3 4
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  new_kv  table
+public  new_kv  table  0
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -96,11 +96,11 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER TABLE test.t RENAME TO t2
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  new_kv  table
-public  t2      table
+public  new_kv  table  0
+public  t2      table  0
 
 user testuser
 
@@ -123,15 +123,15 @@ ALTER TABLE test.new_kv RENAME TO test2.t
 statement ok
 ALTER TABLE test.t2 RENAME TO test2.t2
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
 
-query TTT
+query TTTI
 SHOW TABLES FROM test2
 ----
-public  t   table
-public  t2  table
+public  t   table  NULL
+public  t2  table  NULL
 
 user root
 
@@ -264,10 +264,10 @@ INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
 statement ok
 USE d
 
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  kv  table
+public  kv  table  0
 
 query TTT
 EXPLAIN ALTER TABLE kv RENAME TO kv2
@@ -277,7 +277,7 @@ EXPLAIN ALTER TABLE kv RENAME TO kv2
 rename table  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
-query TTT
+query TTTI
 SHOW TABLES
 ----
-public  kv  table
+public  kv  table  0
