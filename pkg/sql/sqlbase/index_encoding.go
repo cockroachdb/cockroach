@@ -1238,7 +1238,8 @@ func EncodeSecondaryIndexes(
 // IndexKeyEquivSignature parses an index key if and only if the index
 // key belongs to a table where its equivalence signature and all its
 // interleave ancestors' signatures can be found in
-// validEquivSignatures.
+// validEquivSignatures. Any tenant ID prefix should be removed before calling
+// this function.
 //
 // Its validEquivSignatures argument is a map containing equivalence
 // signatures of valid ancestors of the desired table and of the
