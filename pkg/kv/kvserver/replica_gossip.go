@@ -52,6 +52,38 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 }
 
+// gossipLeaseAcquired informs other nodes of the new leaseholder, to
+// invalidate any entries already present in the leaseholder cache of
+// other nodes.
+func (r *Replica) gossipLeaseAcquired(ctx context.Context, newLease *roachpb.Lease) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	// Gossip is not provided for the bootstrap store and for some tests.
+	if r.store.Gossip() == nil {
+		return
+	}
+	// If gossip is not yet ready, don't even try.
+	select {
+	case <-r.store.Gossip().Connected:
+	default:
+		if log.V(1) {
+			log.Infof(ctx, "not gossiping lease acquisition: cluster not yet initialized")
+		}
+		return
+	}
+	if log.V(1) {
+		log.Infof(ctx, "gossiping lease acquisition")
+	}
+
+	if err := r.store.Gossip().AddInfoProto(
+		gossip.MakeKey(gossip.KeyRangeLeases, r.RangeID.String()), /* the range we're gossiping for */
+		newLease, /* tell the world about our fresh new lease */
+		0,        /* gossip forever */
+	); err != nil {
+		log.Warningf(ctx, "failed to gossip lease acquisition: %v", err)
+	}
+}
+
 // shouldGossip returns true if this replica should be gossiping. Gossip is
 // inherently inconsistent and asynchronous, we're using the lease as a way to
 // ensure that only one node gossips at a time.

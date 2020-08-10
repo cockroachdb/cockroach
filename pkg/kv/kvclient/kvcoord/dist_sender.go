@@ -273,6 +273,10 @@ type DistSenderConfig struct {
 	RPCContext      *rpc.Context
 	NodeDialer      *nodedialer.Dialer
 
+	// Gossip, if provided, is used to update range cache entries when a
+	// lease is acquired on a different node.
+	Gossip *gossip.Gossip
+
 	// One of the following two must be provided, but not both.
 	//
 	// If only FirstRangeProvider is supplied, DistSender will use itself as a
@@ -330,7 +334,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	getRangeDescCacheSize := func() int64 {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
-	ds.rangeCache = NewRangeDescriptorCache(ds.st, rdb, getRangeDescCacheSize, cfg.RPCContext.Stopper)
+	ds.rangeCache = NewRangeDescriptorCache(ds.st, rdb, getRangeDescCacheSize, cfg.Gossip, cfg.RPCContext.Stopper)
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {

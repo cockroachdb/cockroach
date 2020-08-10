@@ -405,7 +405,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg: &execinfra.ServerConfig{
 					Settings:   s.ClusterSettings(),
-					RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+					RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper()),
 				},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
@@ -597,7 +597,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
 			Settings:   s.ClusterSettings(),
-			RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+			RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper()),
 		},
 		// Run in a LeafTxn so that txn metadata is produced.
 		Txn:    leafTxn,

@@ -163,7 +163,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// splits to exercise that codepath, but we also want to make sure we
 			// still handle an unexpected split, so we make our own range cache and
 			// only populate it with one of our two splits.
-			mockCache := kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper())
+			mockCache := kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper())
 			addr, err := keys.Addr(key(0))
 			if err != nil {
 				t.Fatal(err)

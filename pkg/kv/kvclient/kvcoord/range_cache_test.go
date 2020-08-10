@@ -256,7 +256,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 			db.splitRange(t, keys.RangeMetaKey(roachpb.RKey(string(char))))
 		}
 	}
-	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), stop.NewStopper())
+	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), nil, stop.NewStopper())
 	return db
 }
 
@@ -967,7 +967,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stop.NewStopper())
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &kvbase.RangeCacheEntry{Desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1141,7 +1141,7 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			cache := NewRangeDescriptorCache(st, nil /* db */, staticSize(2<<10), stop.NewStopper())
+			cache := NewRangeDescriptorCache(st, nil /* db */, staticSize(2<<10), nil, stop.NewStopper())
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
@@ -1191,7 +1191,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stop.NewStopper())
 	cache.Insert(ctx,
 		roachpb.RangeInfo{Desc: firstDesc},
 		roachpb.RangeInfo{Desc: restDesc})
@@ -1224,7 +1224,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stop.NewStopper())
 	for _, rd := range testData {
 		cache.rangeCache.cache.Add(
 			rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), &kvbase.RangeCacheEntry{Desc: rd})
@@ -1355,7 +1355,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stop.NewStopper())
 			cache.Insert(ctx,
 				roachpb.RangeInfo{Desc: *descAM1},
 				roachpb.RangeInfo{Desc: *descMZ3},
@@ -1426,7 +1426,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stop.NewStopper())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stop.NewStopper())
 
 	cache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  desc1,

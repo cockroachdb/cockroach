@@ -271,7 +271,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
-	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stop.NewStopper())
+	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, nil, stop.NewStopper())
 	r := MakeDistSQLReceiver(
 		context.Background(), nil /* resultWriter */, tree.Rows,
 		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
