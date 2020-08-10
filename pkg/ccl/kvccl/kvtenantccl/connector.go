@@ -37,18 +37,19 @@ import (
 )
 
 func init() {
-	kvtenant.Factory = proxyFactory{}
+	kvtenant.Factory = connectorFactory{}
 }
 
-// Proxy mediates the communication of cluster-wide state to sandboxed SQL-only
-// tenant processes through a restricted interface. A Proxy is seeded with a set
-// of one or more network addresses that reference existing KV nodes in the
-// cluster (or a load-balancer which fans out to some/all KV nodes). On startup,
-// it establishes contact with one of these nodes to learn about the topology of
-// the cluster and bootstrap the rest of SQL <-> KV network communication.
+// Connector mediates the communication of cluster-wide state to sandboxed
+// SQL-only tenant processes through a restricted interface. A Connector is
+// seeded with a set of one or more network addresses that reference existing KV
+// nodes in the cluster (or a load-balancer which fans out to some/all KV
+// nodes). On startup, it establishes contact with one of these nodes to learn
+// about the topology of the cluster and bootstrap the rest of SQL <-> KV
+// network communication.
 //
-// See below for the Proxy's roles.
-type Proxy struct {
+// See below for the Connector's roles.
+type Connector struct {
 	log.AmbientContext
 
 	rpcContext      *rpc.Context
@@ -68,28 +69,29 @@ type Proxy struct {
 	}
 }
 
-// Proxy is capable of providing information on each of the KV nodes in the
+// Connector is capable of providing information on each of the KV nodes in the
 // cluster in the form of NodeDescriptors. This obviates the need for SQL-only
 // tenant processes to join the cluster-wide gossip network.
-var _ kvcoord.NodeDescStore = (*Proxy)(nil)
+var _ kvcoord.NodeDescStore = (*Connector)(nil)
 
-// Proxy is capable of providing Range addressing information in the form of
+// Connector is capable of providing Range addressing information in the form of
 // RangeDescriptors through delegated RangeLookup requests. This is necessary
 // because SQL-only tenants are restricted from reading Range Metadata keys
 // directly. Instead, the RangeLookup requests are proxied through existing KV
 // nodes while being subject to additional validation (e.g. is the Range being
 // requested owned by the requesting tenant?).
-var _ kvcoord.RangeDescriptorDB = (*Proxy)(nil)
+var _ kvcoord.RangeDescriptorDB = (*Connector)(nil)
 
-// Proxy is capable of providing a filtered view of the SystemConfig containing
-// only information applicable to secondary tenants. This obviates the need for
-// SQL-only tenant processes to join the cluster-wide gossip network.
-var _ config.SystemConfigProvider = (*Proxy)(nil)
+// Connector is capable of providing a filtered view of the SystemConfig
+// containing only information applicable to secondary tenants. This obviates
+// the need for SQL-only tenant processes to join the cluster-wide gossip
+// network.
+var _ config.SystemConfigProvider = (*Connector)(nil)
 
-// NewProxy creates a new Proxy.
-func NewProxy(cfg kvtenant.ProxyConfig, addrs []string) *Proxy {
-	cfg.AmbientCtx.AddLogTag("tenant-proxy", nil)
-	return &Proxy{
+// NewConnector creates a new Connector.
+func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
+	cfg.AmbientCtx.AddLogTag("tenant-connector", nil)
+	return &Connector{
 		AmbientContext:  cfg.AmbientCtx,
 		rpcContext:      cfg.RPCContext,
 		rpcRetryOptions: cfg.RPCRetryOptions,
@@ -99,22 +101,24 @@ func NewProxy(cfg kvtenant.ProxyConfig, addrs []string) *Proxy {
 	}
 }
 
-// proxyFactory implements kvtenant.ProxyFactory.
-type proxyFactory struct{}
+// connectorFactory implements kvtenant.ConnectorFactory.
+type connectorFactory struct{}
 
-func (proxyFactory) NewProxy(cfg kvtenant.ProxyConfig, addrs []string) (kvtenant.Proxy, error) {
-	return NewProxy(cfg, addrs), nil
+func (connectorFactory) NewConnector(
+	cfg kvtenant.ConnectorConfig, addrs []string,
+) (kvtenant.Connector, error) {
+	return NewConnector(cfg, addrs), nil
 }
 
-// Start launches the proxy's worker thread and waits for it to receive an
+// Start launches the connector's worker thread and waits for it to receive an
 // initial GossipSubscription event.
-func (p *Proxy) Start(ctx context.Context) error {
-	startupC := p.startupC
-	p.rpcContext.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		ctx = p.AnnotateCtx(ctx)
-		ctx, cancel := p.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
+func (c *Connector) Start(ctx context.Context) error {
+	startupC := c.startupC
+	c.rpcContext.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		ctx = c.AnnotateCtx(ctx)
+		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		p.runGossipSubscription(ctx)
+		c.runGossipSubscription(ctx)
 	})
 	// Synchronously block until the first GossipSubscription event.
 	select {
@@ -125,9 +129,9 @@ func (p *Proxy) Start(ctx context.Context) error {
 	}
 }
 
-func (p *Proxy) runGossipSubscription(ctx context.Context) {
+func (c *Connector) runGossipSubscription(ctx context.Context) {
 	for ctx.Err() == nil {
-		client, err := p.getClient(ctx)
+		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
@@ -136,7 +140,7 @@ func (p *Proxy) runGossipSubscription(ctx context.Context) {
 		})
 		if err != nil {
 			log.Warningf(ctx, "error issuing GossipSubscription RPC: %v", err)
-			p.tryForgetClient(ctx, client)
+			c.tryForgetClient(ctx, client)
 			continue
 		}
 		for {
@@ -147,7 +151,7 @@ func (p *Proxy) runGossipSubscription(ctx context.Context) {
 				}
 				// Soft RPC error. Drop client and retry.
 				log.Warningf(ctx, "error consuming GossipSubscription RPC: %v", err)
-				p.tryForgetClient(ctx, client)
+				c.tryForgetClient(ctx, client)
 				break
 			}
 			if e.Error != nil {
@@ -160,20 +164,20 @@ func (p *Proxy) runGossipSubscription(ctx context.Context) {
 				log.Errorf(ctx, "unknown GossipSubscription pattern: %q", e.PatternMatched)
 				continue
 			}
-			handler(p, ctx, e.Key, e.Content)
-			if p.startupC != nil {
-				close(p.startupC)
-				p.startupC = nil
+			handler(c, ctx, e.Key, e.Content)
+			if c.startupC != nil {
+				close(c.startupC)
+				c.startupC = nil
 			}
 		}
 	}
 }
 
-var gossipSubsHandlers = map[string]func(*Proxy, context.Context, string, roachpb.Value){
+var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, roachpb.Value){
 	// Subscribe to all *NodeDescriptor updates.
-	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Proxy).updateNodeAddress,
+	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Connector).updateNodeAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
-	gossip.KeySystemConfig: (*Proxy).updateSystemConfig,
+	gossip.KeySystemConfig: (*Connector).updateSystemConfig,
 }
 
 var gossipSubsPatterns = func() []string {
@@ -186,8 +190,8 @@ var gossipSubsPatterns = func() []string {
 }()
 
 // updateNodeAddress handles updates to "node" gossip keys, performing the
-// corresponding update to the Proxy's cached NodeDescriptor set.
-func (p *Proxy) updateNodeAddress(ctx context.Context, key string, content roachpb.Value) {
+// corresponding update to the Connector's cached NodeDescriptor set.
+func (c *Connector) updateNodeAddress(ctx context.Context, key string, content roachpb.Value) {
 	desc := new(roachpb.NodeDescriptor)
 	if err := content.GetProto(desc); err != nil {
 		log.Errorf(ctx, "could not unmarshal node descriptor: %v", err)
@@ -200,19 +204,19 @@ func (p *Proxy) updateNodeAddress(ctx context.Context, key string, content roach
 	// replaced network addresses, but that logic has been dead since 5bce267.
 	// Other than that, gossip callbacks are not invoked on info expiration, so
 	// nothing ever removes them from Gossip.nodeDescs. Fix this.
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.nodeDescs == nil {
-		p.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.nodeDescs == nil {
+		c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
 	}
-	p.mu.nodeDescs[desc.NodeID] = desc
+	c.mu.nodeDescs[desc.NodeID] = desc
 }
 
 // GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
-func (p *Proxy) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	desc, ok := p.mu.nodeDescs[nodeID]
+func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
 		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
 	}
@@ -220,19 +224,19 @@ func (p *Proxy) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescripto
 }
 
 // updateSystemConfig handles updates to a filtered view of the "system-db"
-// gossip key, performing the corresponding update to the Proxy's cached
+// gossip key, performing the corresponding update to the Connector's cached
 // SystemConfig.
-func (p *Proxy) updateSystemConfig(ctx context.Context, key string, content roachpb.Value) {
-	cfg := config.NewSystemConfig(p.defaultZoneCfg)
+func (c *Connector) updateSystemConfig(ctx context.Context, key string, content roachpb.Value) {
+	cfg := config.NewSystemConfig(c.defaultZoneCfg)
 	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
 		log.Errorf(ctx, "could not unmarshal system config: %v", err)
 		return
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.mu.systemConfig = cfg
-	for _, c := range p.mu.systemConfigChannels {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.systemConfig = cfg
+	for _, c := range c.mu.systemConfigChannels {
 		select {
 		case c <- struct{}{}:
 		default:
@@ -241,41 +245,41 @@ func (p *Proxy) updateSystemConfig(ctx context.Context, key string, content roac
 }
 
 // GetSystemConfig implements the config.SystemConfigProvider interface.
-func (p *Proxy) GetSystemConfig() *config.SystemConfig {
-	// TODO(nvanbenschoten): we need to wait in `(*Proxy).Start()` until the
+func (c *Connector) GetSystemConfig() *config.SystemConfig {
+	// TODO(nvanbenschoten): we need to wait in `(*Connector).Start()` until the
 	// system config is populated. As is, there's a small chance that we return
 	// nil, which SQL does not handle.
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.mu.systemConfig
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.mu.systemConfig
 }
 
 // RegisterSystemConfigChannel implements the config.SystemConfigProvider
 // interface.
-func (p *Proxy) RegisterSystemConfigChannel() <-chan struct{} {
-	// Create channel that receives new system config notifications.
-	// The channel has a size of 1 to prevent proxy from having to block on it.
-	c := make(chan struct{}, 1)
+func (c *Connector) RegisterSystemConfigChannel() <-chan struct{} {
+	// Create channel that receives new system config notifications. The channel
+	// has a size of 1 to prevent connector from having to block on it.
+	ch := make(chan struct{}, 1)
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.mu.systemConfigChannels = append(p.mu.systemConfigChannels, c)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.systemConfigChannels = append(c.mu.systemConfigChannels, ch)
 
 	// Notify the channel right away if we have a config.
-	if p.mu.systemConfig != nil {
-		c <- struct{}{}
+	if c.mu.systemConfig != nil {
+		ch <- struct{}{}
 	}
-	return c
+	return ch
 }
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.
-func (p *Proxy) RangeLookup(
+func (c *Connector) RangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Proxy range lookup requests through the Internal service.
-	ctx = p.AnnotateCtx(ctx)
+	ctx = c.AnnotateCtx(ctx)
 	for ctx.Err() == nil {
-		client, err := p.getClient(ctx)
+		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
@@ -303,7 +307,7 @@ func (p *Proxy) RangeLookup(
 				return nil, nil, err
 			}
 			// Soft RPC error. Drop client and retry.
-			p.tryForgetClient(ctx, client)
+			c.tryForgetClient(ctx, client)
 			continue
 		}
 		if resp.Error != nil {
@@ -316,7 +320,7 @@ func (p *Proxy) RangeLookup(
 }
 
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
-func (p *Proxy) FirstRange() (*roachpb.RangeDescriptor, error) {
+func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
 }
 
@@ -324,24 +328,24 @@ func (p *Proxy) FirstRange() (*roachpb.RangeDescriptor, error) {
 // not, the method attempts to dial one of the configured addresses. The method
 // blocks until either a connection is successfully established or the provided
 // context is canceled.
-func (p *Proxy) getClient(ctx context.Context) (roachpb.InternalClient, error) {
-	p.mu.RLock()
-	if c := p.mu.client; c != nil {
-		p.mu.RUnlock()
-		return c, nil
+func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, error) {
+	c.mu.RLock()
+	if client := c.mu.client; client != nil {
+		c.mu.RUnlock()
+		return client, nil
 	}
-	ch, _ := p.rpcDial.DoChan("dial", func() (interface{}, error) {
-		dialCtx := p.AnnotateCtx(context.Background())
-		dialCtx, cancel := p.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
+	ch, _ := c.rpcDial.DoChan("dial", func() (interface{}, error) {
+		dialCtx := c.AnnotateCtx(context.Background())
+		dialCtx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
 		defer cancel()
-		err := p.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Proxy: dial", p.dialAddrs)
+		err := c.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Connector: dial", c.dialAddrs)
 		if err != nil {
 			return nil, err
 		}
 		// NB: read lock not needed.
-		return p.mu.client, nil
+		return c.mu.client, nil
 	})
-	p.mu.RUnlock()
+	c.mu.RUnlock()
 
 	select {
 	case res := <-ch:
@@ -356,47 +360,47 @@ func (p *Proxy) getClient(ctx context.Context) (roachpb.InternalClient, error) {
 
 // dialAddrs attempts to dial each of the configured addresses in a retry loop.
 // The method will only return a non-nil error on context cancellation.
-func (p *Proxy) dialAddrs(ctx context.Context) error {
-	for r := retry.StartWithCtx(ctx, p.rpcRetryOptions); r.Next(); {
+func (c *Connector) dialAddrs(ctx context.Context) error {
+	for r := retry.StartWithCtx(ctx, c.rpcRetryOptions); r.Next(); {
 		// Try each address on each retry iteration.
-		randStart := rand.Intn(len(p.addrs))
-		for i := range p.addrs {
-			addr := p.addrs[(i+randStart)%len(p.addrs)]
-			conn, err := p.dialAddr(ctx, addr)
+		randStart := rand.Intn(len(c.addrs))
+		for i := range c.addrs {
+			addr := c.addrs[(i+randStart)%len(c.addrs)]
+			conn, err := c.dialAddr(ctx, addr)
 			if err != nil {
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 				continue
 			}
 			client := roachpb.NewInternalClient(conn)
-			p.mu.Lock()
-			p.mu.client = client
-			p.mu.Unlock()
+			c.mu.Lock()
+			c.mu.client = client
+			c.mu.Unlock()
 			return nil
 		}
 	}
 	return ctx.Err()
 }
 
-func (p *Proxy) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
-	if p.rpcDialTimeout == 0 {
-		return p.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+func (c *Connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
+	if c.rpcDialTimeout == 0 {
+		return c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
 	}
-	err = contextutil.RunWithTimeout(ctx, "dial addr", p.rpcDialTimeout, func(ctx context.Context) error {
-		conn, err = p.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+	err = contextutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
+		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
 		return err
 	})
 	return conn, err
 }
 
-func (p *Proxy) tryForgetClient(ctx context.Context, c roachpb.InternalClient) {
+func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.InternalClient) {
 	if ctx.Err() != nil {
 		// Error (may be) due to context. Don't forget client.
 		return
 	}
 	// Compare-and-swap to avoid thrashing.
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.client == c {
-		p.mu.client = nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.client == client {
+		c.mu.client = nil
 	}
 }

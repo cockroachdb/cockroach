@@ -88,17 +88,17 @@ func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.Gossip
 	}
 }
 
-func waitForNodeDesc(t *testing.T, p *Proxy, nodeID roachpb.NodeID) {
+func waitForNodeDesc(t *testing.T, c *Connector, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
-		_, err := p.GetNodeDescriptor(nodeID)
+		_, err := c.GetNodeDescriptor(nodeID)
 		return err
 	})
 }
 
-// TestProxyGossipSubscription tests Proxy's roles as a kvcoord.NodeDescStore
-// and as a config.SystemConfigProvider.
-func TestProxyGossipSubscription(t *testing.T) {
+// TestConnectorGossipSubscription tests Connector's roles as a
+// kvcoord.NodeDescStore and as a config.SystemConfigProvider.
+func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -125,18 +125,18 @@ func TestProxyGossipSubscription(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	cfg := kvtenant.ProxyConfig{
+	cfg := kvtenant.ConnectorConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{ln.Addr().String()}
-	p := NewProxy(cfg, addrs)
+	c := NewConnector(cfg, addrs)
 
 	// Start should block until the first GossipSubscription response.
 	startedC := make(chan error)
 	go func() {
-		startedC <- p.Start(ctx)
+		startedC <- c.Start(ctx)
 	}()
 	select {
 	case err := <-startedC:
@@ -152,14 +152,14 @@ func TestProxyGossipSubscription(t *testing.T) {
 	require.NoError(t, <-startedC)
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
-	waitForNodeDesc(t, p, 2)
-	desc, err := p.GetNodeDescriptor(1)
+	waitForNodeDesc(t, c, 2)
+	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(2)
+	desc, err = c.GetNodeDescriptor(2)
 	require.Equal(t, node2, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(3)
+	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
 	require.Regexp(t, "unable to look up descriptor for n3", err)
 
@@ -170,21 +170,21 @@ func TestProxyGossipSubscription(t *testing.T) {
 	gossipSubC <- gossipEventForNodeDesc(node3)
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
-	waitForNodeDesc(t, p, 3)
-	desc, err = p.GetNodeDescriptor(1)
+	waitForNodeDesc(t, c, 3)
+	desc, err = c.GetNodeDescriptor(1)
 	require.Equal(t, node1Up, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(2)
+	desc, err = c.GetNodeDescriptor(2)
 	require.Equal(t, node2, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(3)
+	desc, err = c.GetNodeDescriptor(3)
 	require.Equal(t, node3, desc)
 	require.NoError(t, err)
 
 	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
-	sysCfg := p.GetSystemConfig()
+	sysCfg := c.GetSystemConfig()
 	require.Nil(t, sysCfg)
-	sysCfgC := p.RegisterSystemConfigChannel()
+	sysCfgC := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC, 0)
 
 	// Return first SystemConfig response.
@@ -196,7 +196,7 @@ func TestProxyGossipSubscription(t *testing.T) {
 
 	// Test config.SystemConfigProvider impl. Wait for update first.
 	<-sysCfgC
-	sysCfg = p.GetSystemConfig()
+	sysCfg = c.GetSystemConfig()
 	require.NotNil(t, sysCfg)
 	require.Equal(t, sysCfgEntries.Values, sysCfg.Values)
 
@@ -209,17 +209,18 @@ func TestProxyGossipSubscription(t *testing.T) {
 
 	// Test config.SystemConfigProvider impl. Wait for update first.
 	<-sysCfgC
-	sysCfg = p.GetSystemConfig()
+	sysCfg = c.GetSystemConfig()
 	require.NotNil(t, sysCfg)
 	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
 
 	// A newly registered SystemConfig channel will be immediately notified.
-	sysCfgC2 := p.RegisterSystemConfigChannel()
+	sysCfgC2 := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC2, 1)
 }
 
-// TestProxyGossipSubscription tests Proxy's role as a kvcoord.RangeDescriptorDB.
-func TestProxyRangeLookup(t *testing.T) {
+// TestConnectorGossipSubscription tests Connector's role as a
+// kvcoord.RangeDescriptorDB.
+func TestConnectorRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -245,14 +246,14 @@ func TestProxyRangeLookup(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	cfg := kvtenant.ProxyConfig{
+	cfg := kvtenant.ConnectorConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{ln.Addr().String()}
-	p := NewProxy(cfg, addrs)
-	// NOTE: we don't actually start the proxy worker. That's ok, as
+	c := NewConnector(cfg, addrs)
+	// NOTE: we don't actually start the connector worker. That's ok, as
 	// RangeDescriptorDB methods don't require it to be running.
 
 	// Success case.
@@ -261,7 +262,7 @@ func TestProxyRangeLookup(t *testing.T) {
 	rangeLookupRespC <- &roachpb.RangeLookupResponse{
 		Descriptors: descs, PrefetchedDescriptors: preDescs,
 	}
-	resDescs, resPreDescs, err := p.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
+	resDescs, resPreDescs, err := c.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
 	require.Equal(t, descs, resDescs)
 	require.Equal(t, preDescs, resPreDescs)
 	require.NoError(t, err)
@@ -270,7 +271,7 @@ func TestProxyRangeLookup(t *testing.T) {
 	rangeLookupRespC <- &roachpb.RangeLookupResponse{
 		Error: roachpb.NewErrorf("hit error"),
 	}
-	resDescs, resPreDescs, err = p.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
+	resDescs, resPreDescs, err = c.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
 	require.Nil(t, resDescs)
 	require.Nil(t, resPreDescs)
 	require.Regexp(t, "hit error", err)
@@ -287,22 +288,22 @@ func TestProxyRangeLookup(t *testing.T) {
 		blockingC <- struct{}{}
 		cancel()
 	}()
-	resDescs, resPreDescs, err = p.RangeLookup(canceledCtx, roachpb.RKey("a"), false /* useReverseScan */)
+	resDescs, resPreDescs, err = c.RangeLookup(canceledCtx, roachpb.RKey("a"), false /* useReverseScan */)
 	require.Nil(t, resDescs)
 	require.Nil(t, resPreDescs)
 	require.Regexp(t, context.Canceled.Error(), err)
 
 	// FirstRange always returns error.
-	desc, err := p.FirstRange()
+	desc, err := c.FirstRange()
 	require.Nil(t, desc)
 	require.Regexp(t, "does not have access to FirstRange", err)
 	require.True(t, grpcutil.IsAuthenticationError(err))
 }
 
-// TestProxyRetriesUnreachable tests that Proxy iterates over each of its
-// provided addresses and retries until it is able to establish a connection on
-// one of them.
-func TestProxyRetriesUnreachable(t *testing.T) {
+// TestConnectorRetriesUnreachable tests that Connector iterates over each of
+// its provided addresses and retries until it is able to establish a connection
+// on one of them.
+func TestConnectorRetriesUnreachable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -343,19 +344,19 @@ func TestProxyRetriesUnreachable(t *testing.T) {
 	})
 
 	// Add listen address into list of other bogus addresses.
-	cfg := kvtenant.ProxyConfig{
+	cfg := kvtenant.ConnectorConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{"1.1.1.1:9999", ln.Addr().String(), "2.2.2.2:9999"}
-	p := NewProxy(cfg, addrs)
-	p.rpcDialTimeout = 5 * time.Millisecond // speed up test
+	c := NewConnector(cfg, addrs)
+	c.rpcDialTimeout = 5 * time.Millisecond // speed up test
 
 	// Start should block until the first GossipSubscription response.
 	startedC := make(chan error)
 	go func() {
-		startedC <- p.Start(ctx)
+		startedC <- c.Start(ctx)
 	}()
 	select {
 	case err := <-startedC:
@@ -363,7 +364,7 @@ func TestProxyRetriesUnreachable(t *testing.T) {
 	case <-time.After(25 * time.Millisecond):
 	}
 
-	// Begin serving on gRPC server. Proxy should quickly connect
+	// Begin serving on gRPC server. Connector should quickly connect
 	// and complete startup.
 	stopper.RunWorker(ctx, func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
@@ -371,14 +372,14 @@ func TestProxyRetriesUnreachable(t *testing.T) {
 	require.NoError(t, <-startedC)
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
-	waitForNodeDesc(t, p, 2)
-	desc, err := p.GetNodeDescriptor(1)
+	waitForNodeDesc(t, c, 2)
+	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(2)
+	desc, err = c.GetNodeDescriptor(2)
 	require.Equal(t, node2, desc)
 	require.NoError(t, err)
-	desc, err = p.GetNodeDescriptor(3)
+	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
 	require.Regexp(t, "unable to look up descriptor for n3", err)
 }
