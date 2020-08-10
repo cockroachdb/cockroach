@@ -110,6 +110,27 @@ func categorizeType(t *types.T) string {
 
 var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
+const regexpFlagInfo = `
+
+CockroachDB supports the following flags:
+
+| Flag           | Description                                                       |
+|----------------|-------------------------------------------------------------------|
+| **c**          | Case-sensitive matching                                           |
+| **g**          | Global matching (match each substring instead of only the first)  |
+| **i**          | Case-insensitive matching                                         |
+| **m** or **n** | Newline-sensitive (see below)                                     |
+| **p**          | Partial newline-sensitive matching (see below)                    |
+| **s**          | Newline-insensitive (default)                                     |
+| **w**          | Inverse partial newline-sensitive matching (see below)            |
+
+| Mode | ` + "`.` and `[^...]` match newlines | `^` and `$` match line boundaries" + `|
+|------|----------------------------------|--------------------------------------|
+| s    | yes                              | no                                   |
+| w    | yes                              | yes                                  |
+| p    | no                               | no                                   |
+| m/n  | no                               | yes                                  |`
+
 // builtinDefinition represents a built-in function before it becomes
 // a tree.FunctionDefinition.
 type builtinDefinition struct {
@@ -1437,26 +1458,36 @@ var builtins = map[string]builtinDefinition{
 				return result, nil
 			},
 			Info: "Replaces matches for the regular expression `regex` in `input` with the regular " +
-				"expression `replace` using `flags`." + `
+				"expression `replace` using `flags`." + regexpFlagInfo,
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
-CockroachDB supports the following flags:
-
-| Flag           | Description                                                       |
-|----------------|-------------------------------------------------------------------|
-| **c**          | Case-sensitive matching                                           |
-| **g**          | Global matching (match each substring instead of only the first)  |
-| **i**          | Case-insensitive matching                                         |
-| **m** or **n** | Newline-sensitive (see below)                                     |
-| **p**          | Partial newline-sensitive matching (see below)                    |
-| **s**          | Newline-insensitive (default)                                     |
-| **w**          | Inverse partial newline-sensitive matching (see below)            |
-
-| Mode | ` + "`.` and `[^...]` match newlines | `^` and `$` match line boundaries" + `|
-|------|----------------------------------|--------------------------------------|
-| s    | yes                              | no                                   |
-| w    | yes                              | yes                                  |
-| p    | no                               | no                                   |
-| m/n  | no                               | yes                                  |`,
+	"regexp_split_to_array": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.String)),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return regexpSplitToArray(ctx, args, false /* hasFlags */)
+			},
+			Info:       "Split string using a POSIX regular expression as the delimiter.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+				{"flags", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.String)),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return regexpSplitToArray(ctx, args, true /* hasFlags */)
+			},
+			Info:       "Split string using a POSIX regular expression as the delimiter with flags." + regexpFlagInfo,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -5251,6 +5282,36 @@ type regexpFlagKey struct {
 // Pattern implements the RegexpCacheKey interface.
 func (k regexpFlagKey) Pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
+}
+
+func regexpSplit(ctx *tree.EvalContext, args tree.Datums, hasFlags bool) ([]string, error) {
+	s := string(tree.MustBeDString(args[0]))
+	pattern := string(tree.MustBeDString(args[1]))
+	sqlFlags := ""
+	if hasFlags {
+		sqlFlags = string(tree.MustBeDString(args[2]))
+	}
+	patternRe, err := ctx.ReCache.GetRegexp(regexpFlagKey{pattern, sqlFlags})
+	if err != nil {
+		return nil, err
+	}
+	return patternRe.Split(s, -1), nil
+}
+
+func regexpSplitToArray(
+	ctx *tree.EvalContext, args tree.Datums, hasFlags bool,
+) (tree.Datum, error) {
+	words, err := regexpSplit(ctx, args, hasFlags /* hasFlags */)
+	if err != nil {
+		return nil, err
+	}
+	result := tree.NewDArray(types.String)
+	for _, word := range words {
+		if err := result.Append(tree.NewDString(word)); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func regexpReplace(ctx *tree.EvalContext, s, pattern, to, sqlFlags string) (tree.Datum, error) {
