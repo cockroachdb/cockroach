@@ -83,7 +83,7 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 	ctx.lazy.certificateManager.Do(func() {
 		var opts []security.Option
 		if ctx.tenID != roachpb.SystemTenantID {
-			opts = append(opts, security.ForTenant(ctx.tenID.String()))
+			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
 			security.NewCertificateManager(ctx.config.SSLCertsDir, opts...)
