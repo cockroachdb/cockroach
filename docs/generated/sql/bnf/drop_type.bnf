@@ -1,0 +1,3 @@
+drop_type_stmt ::=
+	'DROP' 'TYPE' type_name_list opt_drop_behavior
+	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior

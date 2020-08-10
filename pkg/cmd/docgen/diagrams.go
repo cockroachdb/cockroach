@@ -609,6 +609,10 @@ var specs = []stmtSpec{
 		inline: []string{"opt_table_elem_list", "table_elem_list", "table_elem"},
 	},
 	{
+		name: "create_type",
+		stmt: "create_type_stmt",
+	},
+	{
 		name:   "create_view_stmt",
 		inline: []string{"opt_column_list"},
 	},
@@ -709,6 +713,10 @@ var specs = []stmtSpec{
 		stmt:   "drop_table_stmt",
 		inline: []string{"opt_drop_behavior", "table_name_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
+	},
+	{
+		name: "drop_type",
+		stmt: "drop_type_stmt",
 	},
 	{
 		name:   "drop_view",
@@ -1179,6 +1187,10 @@ var specs = []stmtSpec{
 	{
 		name:   "show_databases_stmt",
 		inline: []string{"with_comment"},
+	},
+	{
+		name: "show_enums",
+		stmt: "show_enums_stmt",
 	},
 	{
 		name:    "show_backup",
