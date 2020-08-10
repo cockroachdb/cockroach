@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1775,63 +1776,141 @@ func (r schemaChangeResumer) Resume(
 		return scErr
 	}
 
-	// For an empty database, the zone config for it was already GC'ed and there's
-	// nothing left to do.
-	if details.DroppedDatabaseID != descpb.InvalidID &&
-		len(details.DroppedTables) == 0 &&
-		len(details.DroppedTypes) == 0 {
-		return nil
-	}
+	// If we're dropping a database, the database may have children to also drop.
+	// We also leave open the possibility of jobs involving dropping multiple
+	// tables with no database, for 19.2 compatibility.
+	databaseHasChildrenToDrop := len(details.DroppedTables) > 0 || len(details.DroppedTypes) > 0
 
-	// If a database is being dropped, handle this separately by draining names
-	// for all the tables and types.
-	//
-	// This also covers other cases where we have a leftover 19.2 job that drops
-	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
-	// it's possible for DroppedDatabaseID to be unset.
-	if details.DroppedDatabaseID != descpb.InvalidID || len(details.DroppedTables) > 1 {
-		// Drop all of the types in the database.
-		for i := range details.DroppedTypes {
-			ts := &typeSchemaChanger{
-				typeID:  details.DroppedTypes[i],
-				execCfg: p.ExecCfg(),
-			}
-			if err := ts.execWithRetry(ctx); err != nil {
-				return err
-			}
-		}
-
-		// Drop the tables now.
-		for i := range details.DroppedTables {
-			droppedTable := &details.DroppedTables[i]
-			if err := execSchemaChange(droppedTable.ID, descpb.InvalidMutationID, details.DroppedDatabaseID); err != nil {
-				return err
-			}
-		}
-		dropTime := timeutil.Now().UnixNano()
-		tablesToGC := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
-		for i, table := range details.DroppedTables {
-			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
-		}
-		multiTableGCDetails := jobspb.SchemaChangeGCDetails{
-			Tables:   tablesToGC,
-			ParentID: details.DroppedDatabaseID,
-		}
-
-		return startGCJob(
-			ctx,
-			p.ExecCfg().DB,
-			p.ExecCfg().JobRegistry,
-			r.job.Payload().Username,
-			r.job.Payload().Description,
-			multiTableGCDetails,
-		)
-	}
-	if details.TableID == descpb.InvalidID {
+	if details.DroppedDatabaseID == descpb.InvalidID &&
+		details.TableID == descpb.InvalidID &&
+		!databaseHasChildrenToDrop {
 		return errors.AssertionFailedf("schema change has no specified database or table(s)")
 	}
 
-	return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
+	// Single-table schema change.
+	if details.TableID != descpb.InvalidID {
+		return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
+	}
+
+	// TODO (lucy): !!! add retries
+	if details.DroppedDatabaseID != descpb.InvalidID {
+		if err := execDatabaseChanges(ctx, details, p); err != nil {
+			return err
+		}
+	}
+
+	if !databaseHasChildrenToDrop {
+		return nil
+	}
+
+	// Drop all of the types in the database.
+	for i := range details.DroppedTypes {
+		ts := &typeSchemaChanger{
+			typeID:  details.DroppedTypes[i],
+			execCfg: p.ExecCfg(),
+		}
+		if err := ts.execWithRetry(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Drop the tables now.
+	for i := range details.DroppedTables {
+		droppedTable := &details.DroppedTables[i]
+		if err := execSchemaChange(droppedTable.ID, descpb.InvalidMutationID, details.DroppedDatabaseID); err != nil {
+			return err
+		}
+	}
+	dropTime := timeutil.Now().UnixNano()
+	tablesToGC := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
+	for i, table := range details.DroppedTables {
+		tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
+	}
+	multiTableGCDetails := jobspb.SchemaChangeGCDetails{
+		Tables:   tablesToGC,
+		ParentID: details.DroppedDatabaseID,
+	}
+
+	return startGCJob(
+		ctx,
+		p.ExecCfg().DB,
+		p.ExecCfg().JobRegistry,
+		r.job.Payload().Username,
+		r.job.Payload().Description,
+		multiTableGCDetails,
+	)
+}
+
+func execDatabaseChanges(
+	ctx context.Context, details jobspb.SchemaChangeDetails, p PlanHookState,
+) error {
+	// If there's a database specified that's undergoing a schema change, check
+	// for draining names. This can be the case if the database is either being
+	// renamed, or being dropped. In the latter case, we also delete the database
+	// descriptor. If there are no child tables or types to be dropped, we also
+	// remove the zone config for the database.
+	if details.DroppedDatabaseID != descpb.InvalidID {
+		var dbDesc *sqlbase.ImmutableDatabaseDescriptor
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			dbDesc, err = catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, details.DroppedDatabaseID)
+			return err
+		}); err != nil {
+			return err
+		}
+
+		if len(dbDesc.GetDrainingNames()) > 0 {
+			log.Infof(ctx, "draining names on database %d", dbDesc.GetID())
+			if err := drainNamesForDescriptor(
+				ctx,
+				dbDesc.GetID(),
+				p.LeaseMgr(),
+				p.ExecCfg().Codec,
+				nil, /* beforeDrainNames */
+			); err != nil {
+				return err
+			}
+		}
+
+		if dbDesc.Dropped() {
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				if err := txn.SetSystemConfigTrigger(p.ExecCfg().Codec.ForSystemTenant()); err != nil {
+					return err
+				}
+				b := &kv.Batch{}
+
+				descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, dbDesc.GetID())
+				b.Del(descKey)
+
+				// Remove the zone config if applicable.
+				databaseHasChildrenToDrop := len(details.DroppedTables) > 0 || len(details.DroppedTypes) > 0
+				if !databaseHasChildrenToDrop && p.ExecCfg().Codec.ForSystemTenant() {
+					zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(dbDesc.GetID()))
+					if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+						log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+					}
+					// Delete the zone config entry for this database.
+					b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+				}
+
+				return txn.Run(ctx, b)
+			}); err != nil {
+				return err
+			}
+		}
+
+		if err := WaitToUpdateLeases(ctx, p.LeaseMgr(), dbDesc.GetID()); err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				// This happens when we dropped the database.
+				return nil
+			}
+			log.Warningf(ctx, "waiting to update leases: %+v", err)
+			// As we are dismissing the error, go through the recording motions.
+			// This ensures that any important error gets reported to Sentry, etc.
+			sqltelemetry.RecordError(ctx, err, &p.ExecCfg().Settings.SV)
+		}
+	}
+
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

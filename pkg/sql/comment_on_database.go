@@ -31,7 +31,7 @@ type commentOnDatabaseNode struct {
 func (p *planner) CommentOnDatabase(
 	ctx context.Context, n *tree.CommentOnDatabase,
 ) (planNode, error) {
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true)
+	dbDesc, err := p.ResolveImmutableDatabaseDescriptor(ctx, string(n.Name), true)
 	if err != nil {
 		return nil, err
 	}

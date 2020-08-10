@@ -211,3 +211,23 @@ DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('
 
 statement ok
 USE defaultdb; DROP DATABASE db1 CASCADE
+
+# Test that names cannot be reused within the same transaction.
+
+statement ok
+CREATE DATABASE oldname
+
+statement ok
+BEGIN
+
+statement ok
+ALTER DATABASE oldname RENAME TO newname
+
+statement error pgcode 42P04 database "oldname" already exists
+CREATE DATABASE oldname
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP DATABASE oldname

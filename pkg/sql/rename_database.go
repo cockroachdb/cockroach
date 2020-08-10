@@ -28,7 +28,7 @@ import (
 )
 
 type renameDatabaseNode struct {
-	dbDesc  *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc  *sqlbase.MutableDatabaseDescriptor
 	newName string
 }
 
@@ -47,7 +47,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true /*required*/)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /*required*/)
 	if err != nil {
 		return nil, err
 	}

@@ -13,9 +13,10 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -30,17 +31,11 @@ import (
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
 
-// renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, oldDesc *sqlbase.ImmutableDatabaseDescriptor, newName string,
+	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor, newName string,
 ) error {
-	oldName := oldDesc.GetName()
-	newDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*oldDesc.DatabaseDesc())
-	newDesc.Version++
-	newDesc.SetName(newName)
-	if err := newDesc.Validate(); err != nil {
-		return err
-	}
+	oldName := desc.GetName()
+	desc.SetName(newName)
 
 	if exists, _, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
@@ -49,40 +44,47 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
+	// Add the new namespace entry.
 	newKey := catalogkv.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key(p.ExecCfg().Codec)
-
-	descID := newDesc.GetID()
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, descID)
-	descDesc := newDesc.DescriptorProto()
-
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
+		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, desc.ID)
 	}
-	b.CPut(newKey, descID, nil)
-	b.Put(descKey, descDesc)
-	err := catalogkv.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, p.ExecCfg().Codec, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-	)
-	if err != nil {
+	b.CPut(newKey, desc.ID, nil)
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
-	p.Descriptors().AddUncommittedDatabase(oldName, descID, descs.DBDropped)
-	p.Descriptors().AddUncommittedDatabase(newName, descID, descs.DBCreated)
+	// Add the old name to the draining names on the database descriptor.
+	renameDetails := descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           oldName,
+	}
+	desc.DrainingNames = append(desc.DrainingNames, renameDetails)
 
-	return p.txn.Run(ctx, b)
+	if err := p.createDropDatabaseJob(
+		// TODO (lucy): !!! update the job description from the AST node
+		ctx, desc.GetID(), nil /* DroppedTableDetails */, nil /* typesToDrop */, "rename database",
+	); err != nil {
+		return err
+	}
+	return p.writeDatabaseChange(ctx, desc)
 }
 
+// writeDatabaseChange writes a MutableDatabaseDescriptor's changes to the
+// store. Unlike with tables, callers are responsible for queuing the
+// accompanying job.
 func (p *planner) writeDatabaseChange(
 	ctx context.Context, desc *sqlbase.MutableDatabaseDescriptor,
 ) error {
 	desc.MaybeIncrementVersion()
-	// TODO (rohany, lucy): This usage of descs.DBCreated is awkward, but since
-	//  we are getting rid of this anyway, I'll just leave it for now to be
-	//  cleaned up as part of the database cache removal process.
-	p.Descriptors().AddUncommittedDatabase(desc.Name, desc.ID, descs.DBCreated)
+	if err := desc.Validate(); err != nil {
+		return err
+	}
+	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
+		return err
+	}
 	b := p.txn.NewBatch()
 	if err := catalogkv.WriteDescToBatch(
 		ctx,

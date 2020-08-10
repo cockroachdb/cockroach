@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -145,19 +144,15 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.ImmutableDatabaseDescriptor:
-			if err := d.Validate(); err != nil {
+		case *sqlbase.MutableDatabaseDescriptor:
+			// TODO (lucy): Ideally this would happen in the same batch as for the
+			// table descriptors.
+			if err := p.createDropDatabaseJob(ctx, d.GetID(), nil, nil,
+				fmt.Sprintf("updating privileges for database %d", d.GetID()),
+			); err != nil {
 				return err
 			}
-			if err := catalogkv.WriteDescToBatch(
-				ctx,
-				p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-				p.ExecCfg().Settings,
-				b,
-				p.ExecCfg().Codec,
-				descriptor.GetID(),
-				descriptor,
-			); err != nil {
+			if err := p.writeDatabaseChange(ctx, d); err != nil {
 				return err
 			}
 

@@ -323,7 +323,7 @@ func importPlanHook(
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
-			dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, p.SessionData().Database, true /*required*/)
+			dbDesc, err := p.ResolveImmutableDatabaseDescriptor(ctx, p.SessionData().Database, true /*required*/)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedObject,
 					"could not resolve current database")
