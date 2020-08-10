@@ -106,6 +106,11 @@ func (desc *ColumnDescriptor) ComputedExprStr() string {
 	return *desc.ComputeExpr
 }
 
+// InvertedColumnOrdinal is part of the cat.Column interface.
+func (desc *ColumnDescriptor) InvertedColumnOrdinal() int {
+	panic(errors.AssertionFailedf("not a virtual column"))
+}
+
 // CheckCanBeFKRef returns whether the given column is computed.
 func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	if desc.IsComputed() {

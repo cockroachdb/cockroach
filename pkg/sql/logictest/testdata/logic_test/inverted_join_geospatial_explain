@@ -42,7 +42,7 @@ render                        ·                      ·
            └── inverted join  ·                      ·
                 │             table                  rtable@geom_index
                 │             type                   inner
-                │             ·                      st_intersects(@2, @4)
+                │             ·                      st_intersects(@2, @5)
                 │             parallel               ·
                 └── scan      ·                      ·
 ·                             table                  ltable@primary
@@ -66,7 +66,7 @@ render                        ·                      ·
            └── inverted join  ·                      ·
                 │             table                  rtable@geom_index
                 │             type                   inner
-                │             ·                      st_dwithin(@2, @4, 5.0)
+                │             ·                      st_dwithin(@2, @5, 5.0)
                 │             parallel               ·
                 └── scan      ·                      ·
 ·                             table                  ltable@primary
@@ -96,10 +96,10 @@ render                             ·                      ·                   
                 │                  render 1               geom1                                                       ·                            ·
                 │                  render 2               rk1                                                         ·                            ·
                 │                  render 3               rk2                                                         ·                            ·
-                └── inverted join  ·                      ·                                                           (lk, geom1, rk1, geom, rk2)  ·
+                └── inverted join  ·                      ·                                                           (lk, geom1, rk1, rk2, geom)  ·
                      │             table                  rtable@geom_index                                           ·                            ·
                      │             type                   inner                                                       ·                            ·
-                     │             ·                      st_intersects(@2, @4) OR st_dwithin(@2, @4, 2.0)            ·                            ·
+                     │             ·                      st_intersects(@2, @5) OR st_dwithin(@2, @5, 2.0)            ·                            ·
                      │             parallel               ·                                                           ·                            ·
                      └── scan      ·                      ·                                                           (lk, geom1)                  ·
 ·                                  table                  ltable@primary                                              ·                            ·
@@ -129,10 +129,10 @@ sort                               ·                      ·                   
                 │                  render 1               geom1                                                        ·                            ·
                 │                  render 2               rk1                                                          ·                            ·
                 │                  render 3               rk2                                                          ·                            ·
-                └── inverted join  ·                      ·                                                            (lk, geom1, rk1, geom, rk2)  ·
+                └── inverted join  ·                      ·                                                            (lk, geom1, rk1, rk2, geom)  ·
                      │             table                  rtable@geom_index                                            ·                            ·
                      │             type                   inner                                                        ·                            ·
-                     │             ·                      st_intersects(@2, @4) AND st_dwithin(@2, @4, 2.0)            ·                            ·
+                     │             ·                      st_intersects(@2, @5) AND st_dwithin(@2, @5, 2.0)            ·                            ·
                      │             parallel               ·                                                            ·                            ·
                      └── scan      ·                      ·                                                            (lk, geom1)                  ·
 ·                                  table                  ltable@primary                                               ·                            ·
@@ -162,10 +162,10 @@ render                        ·                      ·                        
            │                  render 2               geom2                                                                                                                                                                   ·                                   ·
            │                  render 3               rk1                                                                                                                                                                     ·                                   ·
            │                  render 4               rk2                                                                                                                                                                     ·                                   ·
-           └── inverted join  ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, geom, rk2)  ·
+           └── inverted join  ·                      ·                                                                                                                                                                       (lk, geom1, geom2, rk1, rk2, geom)  ·
                 │             table                  rtable@geom_index                                                                                                                                                       ·                                   ·
                 │             type                   inner                                                                                                                                                                   ·                                   ·
-                │             ·                      (st_intersects(@2, @5) AND st_covers(@3, @5)) AND (st_dfullywithin(@2, @5, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', @5))                   ·                                   ·
+                │             ·                      (st_intersects(@2, @6) AND st_covers(@3, @6)) AND (st_dfullywithin(@2, @6, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', @6))                   ·                                   ·
                 │             parallel               ·                                                                                                                                                                       ·                                   ·
                 └── scan      ·                      ·                                                                                                                                                                       (lk, geom1, geom2)                  ·
 ·                             table                  ltable@primary                                                                                                                                                          ·                                   ·
