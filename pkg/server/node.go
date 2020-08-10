@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -1001,6 +1002,35 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
+	stripContent := func(_ string, content roachpb.Value) (roachpb.Value, error) {
+		// Don't strip anything.
+		return content, nil
+	}
+	if _, ok := roachpb.TenantFromContext(ctx); ok {
+		// If this is a tenant connection, strip portions of the gossip infos.
+		stripContent = func(key string, content roachpb.Value) (roachpb.Value, error) {
+			switch key {
+			case gossip.KeySystemConfig:
+				// Strip the system config down to just those keys in the
+				// GossipSubscriptionSystemConfigMask, preventing cluster-wide
+				// or system tenant-specific information to leak.
+				var ents config.SystemConfigEntries
+				if err := content.GetProto(&ents); err != nil {
+					return roachpb.Value{}, errors.Errorf("could not unmarshal system config: %v", err)
+				}
+
+				var newContent roachpb.Value
+				newEnts := kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
+				if err := newContent.SetProto(&newEnts); err != nil {
+					return roachpb.Value{}, errors.Errorf("could not marshal system config: %v", err)
+				}
+				return newContent, nil
+			default:
+				return content, nil
+			}
+		}
+	}
+
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead
 	// handle all communication asynchronously. We could pick a channel size and
@@ -1014,41 +1044,26 @@ func (n *Node) GossipSubscription(
 	const maxBlockDur = 1 * time.Millisecond
 	for _, pattern := range args.Patterns {
 		pattern := pattern
-		// TODO(nvanbenschoten): add some form of access control here. Tenants
-		// should only be able to subscribe to certain patterns, such as:
-		// - "node:.*"
-		// - "system-db:zones/1/tenants"
-		//
-		// Note that the SystemConfig pattern here doesn't refer to a real key.
-		// Instead, it's keying into the single SystemConfig gossip key. That's
-		// necessary to avoid leaking privileged information to callers, but it
-		// means that we have a little more work to do in order to destructure
-		// and filter system config updates. Luckily, SystemConfigDeltaFilter
-		// supports a "keyPrefix" that should help here. We'll also want to use
-		// RegisterSystemConfigChannel for any SystemConfig patterns.
-		//
-		// UPDATE: the SystemConfig pattern story is even more complicated
-		// because of ZoneConfig inheritance/recursion. We'll also need to
-		// return the default zone config. In that case, it probably makes sense
-		// to perform the filtering here (based on whether a tenant marker is
-		// present in the ctx) without baking it into the protocol itself. So
-		// the request will simply specify "system-db" but we'll only return the
-		// subset of key/values that the tenant is allowed to / needs to see.
-
 		callback := func(key string, content roachpb.Value) {
 			callbackMu.Lock()
 			defer callbackMu.Unlock()
 			if entCClosed {
 				return
 			}
-			event := &roachpb.GossipSubscriptionEvent{
-				Key: key, Content: content, PatternMatched: pattern,
+			content, err := stripContent(key, content)
+			var event roachpb.GossipSubscriptionEvent
+			if err != nil {
+				event.Error = roachpb.NewError(err)
+			} else {
+				event.Key = key
+				event.Content = content
+				event.PatternMatched = pattern
 			}
 			select {
-			case entC <- event:
+			case entC <- &event:
 			default:
 				select {
-				case entC <- event:
+				case entC <- &event:
 				case <-time.After(maxBlockDur):
 					// entC blocking for too long. The consumer must not be
 					// keeping up. Terminate the subscription.
