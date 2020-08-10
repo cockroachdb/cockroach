@@ -2094,13 +2094,7 @@ CockroachDB supports the following flags:
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ts, err := recentTimestamp(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDTimestampTZ(ts, time.Microsecond)
-			},
+			Fn:         followerReadTimestamp,
 			Info: `Returns a timestamp which is very likely to be safe to perform
 against a follower replica.
 
@@ -2111,6 +2105,17 @@ leaseholder for a given range.
 
 Note that this function requires an enterprise license on a CCL distribution to
 return without an error.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	tree.FollowerReadTimestampExperimentalFunctionName: makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn:         followerReadTimestamp,
+			Info:       fmt.Sprintf("Same as %s. This name is deprecated.", tree.FollowerReadTimestampFunctionName),
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -6131,4 +6136,12 @@ func requireNonNull(d tree.Datum) error {
 		return errInvalidNull
 	}
 	return nil
+}
+
+func followerReadTimestamp(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+	ts, err := recentTimestamp(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return tree.MakeDTimestampTZ(ts, time.Microsecond)
 }

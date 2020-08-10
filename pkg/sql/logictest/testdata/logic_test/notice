@@ -33,3 +33,18 @@ ALTER TABLE d.t RENAME TO d.t2
 ----
 NOTICE: renaming tables with a qualification is deprecated
 HINT: use ALTER TABLE d.t RENAME TO t2 instead
+
+statement ok
+SET experimental_enable_enums=true;
+
+# Start off with an empty enum, and add values to it.
+statement ok
+CREATE TYPE color AS ENUM ()
+
+statement ok
+ALTER TYPE color ADD VALUE 'black'
+
+query T noticetrace
+ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
+----
+NOTICE: enum label "black" already exists, skipping

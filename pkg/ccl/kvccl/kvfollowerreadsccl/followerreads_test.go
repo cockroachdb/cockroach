@@ -201,10 +201,10 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	skip.UnderShort(t)
 
 	ctx := context.Background()
-	// The test uses experimental_follower_read_timestamp().
+	// The test uses follower_read_timestamp().
 	defer utilccl.TestingEnableEnterprise()()
 
-	historicalQuery := `SELECT * FROM test AS OF SYSTEM TIME experimental_follower_read_timestamp() WHERE k=2`
+	historicalQuery := `SELECT * FROM test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 	recCh := make(chan tracing.Recording, 1)
 
 	var n2Addr, n3Addr syncutil.AtomicString
@@ -247,7 +247,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1)`)
 	// Speed up closing of timestamps, as we'll in order to be able to use
-	// experimental_follower_read_timestamp().
+	// follower_read_timestamp().
 	// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt follower reads
 	// for anything below 0.4s * (1 + 0.5 * 20) = 4.4s.
 	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s'`)
