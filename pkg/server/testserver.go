@@ -486,28 +486,28 @@ func makeSQLServerArgs(
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
 
-	tpCfg := kvtenant.ProxyConfig{
+	tcCfg := kvtenant.ConnectorConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		RPCContext:        rpcContext,
 		RPCRetryOptions:   rpcRetryOptions,
 		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
 	}
-	tenantProxy, err := kvtenant.Factory.NewProxy(tpCfg, sqlCfg.TenantKVAddrs)
+	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	resolver := kvtenant.AddressResolver(tenantProxy)
+	resolver := kvtenant.AddressResolver(tenantConnect)
 	nodeDialer := nodedialer.New(rpcContext, resolver)
 
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		Settings:          st,
 		Clock:             clock,
-		NodeDescs:         tenantProxy,
+		NodeDescs:         tenantConnect,
 		RPCRetryOptions:   &rpcRetryOptions,
 		RPCContext:        rpcContext,
 		NodeDialer:        nodeDialer,
-		RangeDescriptorDB: tenantProxy,
+		RangeDescriptorDB: tenantConnect,
 		TestingKnobs:      dsKnobs,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
@@ -581,7 +581,7 @@ func makeSQLServerArgs(
 			},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
-			tenantProxy: tenantProxy,
+			tenantConnect: tenantConnect,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
@@ -589,8 +589,8 @@ func makeSQLServerArgs(
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		rpcContext:               rpcContext,
-		nodeDescs:                tenantProxy,
-		systemConfigProvider:     tenantProxy,
+		nodeDescs:                tenantConnect,
+		systemConfigProvider:     tenantConnect,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,
