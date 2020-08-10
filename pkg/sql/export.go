@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -30,7 +31,11 @@ type exportNode struct {
 
 	source planNode
 
-	fileName        string
+	// fileName represents the destination URI for the export, typically a directory
+	// TODO(sherman): consider better naming for fileName vs namePattern; maybe fileName becomes 'destination'
+	fileName string
+	// namePattern represents the file naming pattern for the export, typically to be appended to the fileName URI
+	namePattern     string
 	csvOpts         roachpb.CSVOptions
 	chunkSize       int
 	fileCompression execinfrapb.FileCompression
@@ -135,9 +140,13 @@ func (ef *execFactory) ConstructExport(
 		}
 	}
 
+	exportID := ef.planner.stmt.queryID.String()
+	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePatternDefault)
+
 	return &exportNode{
 		source:          input.(planNode),
 		fileName:        string(*fileNameStr),
+		namePattern:     namePattern,
 		csvOpts:         csvOpts,
 		chunkSize:       chunkSize,
 		fileCompression: codec,
