@@ -126,6 +126,15 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		}
 	}
 
+	// If the database name is empty, avoid falling through to the physical
+	// accessors, since there can't be a non-virtual table or type with this name.
+	if db == "" {
+		if flags.Required {
+			obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
+			return nil, sqlbase.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
+		}
+		return nil, nil
+	}
 	// Fallthrough.
 	return l.Accessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 }
