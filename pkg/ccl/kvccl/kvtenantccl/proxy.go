@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -315,7 +317,7 @@ func (p *Proxy) RangeLookup(
 
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (p *Proxy) FirstRange() (*roachpb.RangeDescriptor, error) {
-	return nil, errors.New("kvtenant.Proxy does not have access to FirstRange")
+	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If

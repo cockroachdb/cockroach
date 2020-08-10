@@ -155,8 +155,12 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 statement ok
 INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 
-statement ok
-ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
+# TODO(nvanbenschoten): until we have conditional logic in these files, disable
+# this statement so that we can continue to test this file with the 3node-tenant
+# config.
+#
+# statement ok
+# ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
 query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
 SELECT (1, 2) IN (SELECT * FROM abc)
