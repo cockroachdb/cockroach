@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -30,9 +31,14 @@ type exportNode struct {
 
 	source planNode
 
-	fileName        string
+	// destination represents the destination URI for the export,
+	// typically a directory
+	destination string
+	// fileNamePattern represents the file naming pattern for the
+	// export, typically to be appended to the destination URI
+	fileNamePattern string
 	csvOpts         roachpb.CSVOptions
-	chunkSize       int
+	chunkRows       int
 	fileCompression execinfrapb.FileCompression
 }
 
@@ -55,20 +61,20 @@ func (e *exportNode) Close(ctx context.Context) {
 const (
 	exportOptionDelimiter   = "delimiter"
 	exportOptionNullAs      = "nullas"
-	exportOptionChunkSize   = "chunk_rows"
+	exportOptionChunkRows   = "chunk_rows"
 	exportOptionFileName    = "filename"
 	exportOptionCompression = "compression"
 )
 
 var exportOptionExpectValues = map[string]KVStringOptValidate{
-	exportOptionChunkSize:   KVStringOptRequireValue,
+	exportOptionChunkRows:   KVStringOptRequireValue,
 	exportOptionDelimiter:   KVStringOptRequireValue,
 	exportOptionFileName:    KVStringOptRequireValue,
 	exportOptionNullAs:      KVStringOptRequireValue,
 	exportOptionCompression: KVStringOptRequireValue,
 }
 
-const exportChunkSizeDefault = 100000
+const exportChunkRowsDefault = 100000
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
 const exportCompressionCodec = "gzip"
@@ -85,11 +91,12 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("unsupported export format: %q", fileFormat)
 	}
 
-	fileNameDatum, err := fileName.Eval(ef.planner.EvalContext())
+	destinationDatum, err := fileName.Eval(ef.planner.EvalContext())
 	if err != nil {
 		return nil, err
 	}
-	fileNameStr, ok := fileNameDatum.(*tree.DString)
+
+	destination, ok := destinationDatum.(*tree.DString)
 	if !ok {
 		return nil, errors.Errorf("expected string value for the file location")
 	}
@@ -112,13 +119,13 @@ func (ef *execFactory) ConstructExport(
 		csvOpts.NullEncoding = &override
 	}
 
-	chunkSize := exportChunkSizeDefault
-	if override, ok := optVals[exportOptionChunkSize]; ok {
-		chunkSize, err = strconv.Atoi(override)
+	chunkRows := exportChunkRowsDefault
+	if override, ok := optVals[exportOptionChunkRows]; ok {
+		chunkRows, err = strconv.Atoi(override)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		}
-		if chunkSize < 1 {
+		if chunkRows < 1 {
 			return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid csv chunk size")
 		}
 	}
@@ -135,11 +142,15 @@ func (ef *execFactory) ConstructExport(
 		}
 	}
 
+	exportID := ef.planner.stmt.queryID.String()
+	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePatternDefault)
+
 	return &exportNode{
 		source:          input.(planNode),
-		fileName:        string(*fileNameStr),
+		destination:     string(*destination),
+		fileNamePattern: namePattern,
 		csvOpts:         csvOpts,
-		chunkSize:       chunkSize,
+		chunkRows:       chunkRows,
 		fileCompression: codec,
 	}, nil
 }
