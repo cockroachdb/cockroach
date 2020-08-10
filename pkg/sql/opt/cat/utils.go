@@ -227,6 +227,10 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			c.Childf("table=%d index=%d", table, index)
 		}
 	}
+	if pred, isPartial := idx.Predicate(); isPartial {
+		c := child.Child("WHERE")
+		c.Childf(pred)
+	}
 }
 
 // formatColPrefix returns a string representation of a list of columns. The

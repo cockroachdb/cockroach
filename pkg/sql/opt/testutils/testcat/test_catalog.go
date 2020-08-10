@@ -266,6 +266,17 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 		"\"%q\" is not a table", tree.ErrString(name)))
 }
 
+// Tables returns a list of all tables added to the test catalog.
+func (tc *Catalog) Tables() []*Table {
+	tables := make([]*Table, 0, len(tc.testSchema.dataSources))
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok {
+			tables = append(tables, tab)
+		}
+	}
+	return tables
+}
+
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
 	fq := tab.TabName.FQString()
@@ -340,6 +351,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		tc.CreateTable(stmt)
 		return "", nil
 
+	case *tree.CreateIndex:
+		tc.CreateIndex(stmt)
+		return "", nil
+
 	case *tree.CreateView:
 		tc.CreateView(stmt)
 		return "", nil
@@ -350,6 +365,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 
 	case *tree.DropTable:
 		tc.DropTable(stmt)
+		return "", nil
+
+	case *tree.DropIndex:
+		tc.DropIndex(stmt)
 		return "", nil
 
 	case *tree.CreateSequence:
