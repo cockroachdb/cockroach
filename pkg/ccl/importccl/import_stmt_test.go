@@ -757,6 +757,24 @@ COPY t (a, b, c) FROM stdin;
 			err: "expected 2 columns, got 3",
 		},
 		{
+			name: "out-of-order and omitted COPY columns",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE "public"."tbl" ("a" int primary key, "B" string, "c" int, d int DEFAULT 6);
+COPY "public"."tbl" (c, "a", "B") FROM STDIN;
+5	1	carrot
+9	3	mango
+\.
+END;
+			`,
+			query: map[string][][]string{
+				`SELECT a, "B", c, d FROM tbl`: {
+					{"1", "carrot", "5", "6"},
+					{"3", "mango", "9", "6"},
+				},
+			},
+		},
+		{
 			name: "fk",
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
