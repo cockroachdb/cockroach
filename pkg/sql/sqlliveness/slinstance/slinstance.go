@@ -120,15 +120,15 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     1.5,
-		Closer:         l.stopper.ShouldStop(),
 	}
+	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 	everySecond := log.Every(time.Second)
 	var err error
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.exp); err != nil {
 			if ctx.Err() != nil {
-				err = ctx.Err()
 				break
 			}
 			if everySecond.ShouldLog() {
@@ -152,8 +152,9 @@ func (l *Instance) extendSession(ctx context.Context, s sqlliveness.Session) (bo
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     1.5,
-		Closer:         l.stopper.ShouldStop(),
 	}
+	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 	var err error
 	var found bool
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
@@ -189,7 +190,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-l.stopper.ShouldStop():
+		case <-l.stopper.ShouldQuiesce():
 			return
 		case <-t.C:
 			t.Read = true
@@ -270,8 +271,8 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 		}
 
 		select {
-		case <-l.stopper.ShouldStop():
-			return nil, errors.New("the Instance has been stopped")
+		case <-l.stopper.ShouldQuiesce():
+			return nil, stop.ErrUnavailable
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ch:
