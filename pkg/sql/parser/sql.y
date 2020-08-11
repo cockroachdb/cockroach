@@ -485,6 +485,9 @@ func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
 func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
   return u.val.(*tree.CopyOptions)
 }
+func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
+  return u.val.(*tree.RestoreOptions)
+}
 func (u *sqlSymUnion) transactionModes() tree.TransactionModes {
     return u.val.(tree.TransactionModes)
 }
@@ -602,7 +605,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INTEGER
-%token <str> INTERSECT INTERVAL INTO INVERTED IS ISERROR ISNULL ISOLATION
+%token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
@@ -635,7 +638,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
+%token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
@@ -869,6 +873,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
+%type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
@@ -2331,25 +2336,32 @@ opt_with_schedule_options:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
-      DescriptorCoverage: tree.AllDescriptors, From: $3.listOfStringOrPlaceholderOptList(),
-      AsOf: $4.asOfClause(), Options: $5.kvOptions(),
+    DescriptorCoverage: tree.AllDescriptors,
+    From: $3.listOfStringOrPlaceholderOptList(),
+    AsOf: $4.asOfClause(),
+    Options: *($5.restoreOptions()),
     }
   }
-| RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+| RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
-      Targets: $2.targetList(), From: $4.listOfStringOrPlaceholderOptList(),
-      AsOf: $5.asOfClause(), Options: $6.kvOptions(),
-      }
+    Targets: $2.targetList(),
+    From: $4.listOfStringOrPlaceholderOptList(),
+    AsOf: $5.asOfClause(),
+    Options: *($6.restoreOptions()),
+    }
   }
-| RESTORE targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_options
+| RESTORE targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
-      Targets: $2.targetList(), Subdir: $4.expr(), From: $6.listOfStringOrPlaceholderOptList(),
-      AsOf: $7.asOfClause(), Options: $8.kvOptions(),
+      Targets: $2.targetList(),
+      Subdir: $4.expr(),
+      From: $6.listOfStringOrPlaceholderOptList(),
+      AsOf: $7.asOfClause(),
+      Options: *($8.restoreOptions()),
     }
   }
 | RESTORE error // SHOW HELP: RESTORE
@@ -2372,6 +2384,61 @@ list_of_string_or_placeholder_opt_list:
 | list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
   {
     $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
+  }
+
+// Optional restore options.
+opt_with_restore_options:
+  WITH restore_options_list
+  {
+    $$.val = $2.restoreOptions()
+  }
+| WITH OPTIONS '(' restore_options_list ')'
+  {
+    $$.val = $4.restoreOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.RestoreOptions{}
+  }
+
+restore_options_list:
+  // Require at least one option
+  restore_options
+  {
+    $$.val = $1.restoreOptions()
+  }
+| restore_options_list ',' restore_options
+  {
+    if err := $1.restoreOptions().CombineWith($3.restoreOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid restore options.
+restore_options:
+  ENCRYPTION_PASSPHRASE '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{EncryptionPassphrase: $3.expr()}
+  }
+| INTO_DB '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{IntoDB: $3.expr()}
+  }
+| SKIP_MISSING_FOREIGN_KEYS
+  {
+    $$.val = &tree.RestoreOptions{SkipMissingFKs: true}
+  }
+| SKIP_MISSING_SEQUENCES
+  {
+    $$.val = &tree.RestoreOptions{SkipMissingSequences: true}
+  }
+| SKIP_MISSING_SEQUENCE_OWNERS
+  {
+    $$.val = &tree.RestoreOptions{SkipMissingSequenceOwners: true}
+  }
+| SKIP_MISSING_VIEWS
+  {
+    $$.val = &tree.RestoreOptions{SkipMissingViews: true}
   }
 
 import_format:
@@ -10993,6 +11060,7 @@ unreserved_keyword:
 | INJECT
 | INSERT
 | INTERLEAVE
+| INTO_DB
 | INVERTED
 | ISOLATION
 | JOB
@@ -11117,6 +11185,10 @@ unreserved_keyword:
 | SHOW
 | SIMPLE
 | SKIP
+| SKIP_MISSING_FOREIGN_KEYS
+| SKIP_MISSING_SEQUENCES
+| SKIP_MISSING_SEQUENCE_OWNERS
+| SKIP_MISSING_VIEWS
 | SNAPSHOT
 | SPLIT
 | SQL
