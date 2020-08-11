@@ -23,11 +23,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1863,6 +1865,93 @@ IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
 		require.Equal(t, rowsPerFile, result)
 	})
+}
+
+// TestURIRequiresAdminRole tests the IMPORT logic which guards certain
+// privileged ExternalStorage IO paths with an admin only check.
+func TestURIRequiresAdminRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const nodes = 3
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		SQLMemoryPoolSize: 256 << 20,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	rootDB := sqlutils.MakeSQLRunner(conn)
+
+	rootDB.Exec(t, `CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer testuser.Close()
+
+	for _, tc := range []struct {
+		name          string
+		uri           string
+		requiresAdmin bool
+	}{
+		{
+			name:          "s3-implicit",
+			uri:           "s3://foo/bar?AUTH=implicit",
+			requiresAdmin: true,
+		},
+		{
+			name:          "s3-specified",
+			uri:           "s3://foo/bar?AUTH=specified",
+			requiresAdmin: false,
+		},
+		{
+			name:          "s3-custom",
+			uri:           "s3://foo/bar?AUTH=specified&AWS_ENDPOINT=baz",
+			requiresAdmin: true,
+		},
+		{
+			name:          "gs-implicit",
+			uri:           "gs://foo/bar?AUTH=implicit",
+			requiresAdmin: true,
+		},
+		{
+			name:          "gs-specified",
+			uri:           "gs://foo/bar?AUTH=specified",
+			requiresAdmin: false,
+		},
+		{
+			name:          "userfile",
+			uri:           "userfile:///foo",
+			requiresAdmin: false,
+		},
+		{
+			name:          "nodelocal",
+			uri:           "nodelocal://self/foo",
+			requiresAdmin: true,
+		},
+		{
+			name:          "http",
+			uri:           "http://foo/bar",
+			requiresAdmin: true,
+		},
+		{
+			name:          "https",
+			uri:           "https://foo/bar",
+			requiresAdmin: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE foo (id INT) CSV DATA ('%s')`, tc.uri))
+			if tc.requiresAdmin {
+				require.True(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
+			} else {
+				require.False(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
+			}
+		})
+	}
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
