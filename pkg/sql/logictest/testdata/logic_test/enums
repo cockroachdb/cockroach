@@ -1108,13 +1108,30 @@ local
 statement ok
 ROLLBACK
 
-query TT
+query TTT
 SHOW ENUMS
 ----
-as_bytes   bytes
-dbs        postgres|mysql|spanner|cockroach
-farewell   bye|seeya
-greeting   hello|howdy|hi
-greeting2  hello
-int        Z|S of int
-notbad     dup|DUP
+public as_bytes   bytes
+public dbs        postgres|mysql|spanner|cockroach
+public farewell   bye|seeya
+public greeting   hello|howdy|hi
+public greeting2  hello
+public int        Z|S of int
+public notbad     dup|DUP
+
+statement ok
+SET experimental_enable_user_defined_schemas = true;
+CREATE SCHEMA uds;
+CREATE TYPE uds.typ AS ENUM ('schema')
+
+query TTT
+SHOW ENUMS
+----
+public as_bytes   bytes
+public dbs        postgres|mysql|spanner|cockroach
+public farewell   bye|seeya
+public greeting   hello|howdy|hi
+public greeting2  hello
+public int        Z|S of int
+public notbad     dup|DUP
+uds    typ        schema

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // UncachedPhysicalAccessor implements direct access to sql object descriptors
@@ -97,23 +96,14 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 
 	// Get the descriptor from disk.
-	desc, err := GetAnyDescriptorByID(ctx, txn, codec, schemaID, Immutable)
+	sc, err := MustGetSchemaDescByID(ctx, txn, codec, schemaID)
 	if err != nil {
 		return false, sqlbase.ResolvedSchema{}, err
-	}
-
-	if desc == nil {
-		return false, sqlbase.ResolvedSchema{}, nil
-	}
-
-	sc, ok := desc.(sqlbase.SchemaDescriptor)
-	if !ok {
-		return false, sqlbase.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
 	}
 	return true, sqlbase.ResolvedSchema{
 		ID:   sc.GetID(),
 		Kind: sqlbase.SchemaUserDefined,
-		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc.SchemaDesc()),
+		Desc: sc,
 	}, nil
 }
 
