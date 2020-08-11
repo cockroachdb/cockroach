@@ -59,8 +59,10 @@ var (
 	cloud                         = gce
 	encrypt          encryptValue = "false"
 	instanceType     string
+	localSSD         bool
 	workload         string
 	roachprod        string
+	createArgs       []string
 	buildTag         string
 	clusterName      string
 	clusterWipe      bool
@@ -708,6 +710,10 @@ func isSSD(machineType string) bool {
 	if cloud != aws {
 		panic("can only differentiate SSDs based on machine type on AWS")
 	}
+	if !localSSD {
+		// Overridden by the user using a cmd arg.
+		return false
+	}
 
 	typeAndSize := strings.Split(machineType, ".")
 	if len(typeAndSize) == 2 {
@@ -926,6 +932,9 @@ func (s *clusterSpec) args() []string {
 	}
 	if s.Lifetime != 0 {
 		args = append(args, "--lifetime="+s.Lifetime.String())
+	}
+	if len(createArgs) > 0 {
+		args = append(args, createArgs...)
 	}
 	return args
 }
@@ -1228,7 +1237,7 @@ func (f *clusterFactory) newCluster(
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
-	if !cfg.useIOBarrier {
+	if !cfg.useIOBarrier && localSSD {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 
