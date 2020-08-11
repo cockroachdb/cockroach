@@ -4116,7 +4116,7 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				sid := sqlliveness.SessionID(*(args[0].(*tree.DBytes)))
-				live, err := evalCtx.SQLLivenessStorage.IsAlive(evalCtx.Context, evalCtx.Txn, sid)
+				live, err := evalCtx.SQLLivenessReader.IsAlive(evalCtx.Context, sid)
 				if err != nil {
 					return tree.MakeDBool(true), err
 				}

@@ -114,19 +114,19 @@ func (s *Storage) Start(ctx context.Context) {
 	s.mu.started = true
 }
 
-func (s *Storage) IsAlive(
-	ctx context.Context, _ *kv.Txn, sid sqlliveness.SessionID,
-) (alive bool, err error) {
+// IsAlive determines whether a given session is alive. If this method returns
+// true, the session may no longer be alive, but if it returns false, the
+// session definitely is not alive.
+func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
 	// TODO(ajwerner): consider creating a zero-allocation cache key by converting
 	// the bytes to a string using unsafe.
-	sidKey := string(sid)
 	s.mu.RLock()
-	if _, ok := s.mu.deadSessions.Get(sidKey); ok {
+	if _, ok := s.mu.deadSessions.Get(sid); ok {
 		s.mu.RUnlock()
 		s.metrics.IsAliveCacheHits.Inc(1)
 		return false, nil
 	}
-	if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
+	if expiration, ok := s.mu.liveSessions.Get(sid); ok {
 		expiration := expiration.(hlc.Timestamp)
 		// The record exists but is expired. If we returned that the session was
 		// alive regardless of the expiration then we'd never update the cache.
@@ -147,7 +147,7 @@ func (s *Storage) IsAlive(
 	// Launch singleflight to go read from the database. If it is found, we
 	// can add it and its expiration to the liveSessions cache. If it isn't
 	// found, we know it's dead and we can add that to the deadSessions cache.
-	resChan, _ := s.g.DoChan(sidKey, func() (interface{}, error) {
+	resChan, _ := s.g.DoChan(string(sid), func() (interface{}, error) {
 		// store the result underneath the singleflight to avoid the need
 		// for additional synchronization.
 		live, expiration, err := s.fetchSession(ctx, sid)
@@ -157,11 +157,10 @@ func (s *Storage) IsAlive(
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if live {
-			s.mu.liveSessions.Add(sidKey, expiration)
+			s.mu.liveSessions.Add(sid, expiration)
 		} else {
-			s.mu.deadSessions.Add(sidKey, nil)
+			s.mu.deadSessions.Add(sid, nil)
 		}
-		log.Infof(ctx, "feteched %s %v", sidKey, live)
 		return live, nil
 	})
 	s.mu.RUnlock()
@@ -183,7 +182,7 @@ func (s *Storage) fetchSession(
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		row, err = s.ex.QueryRow(
 			ctx, "expire-single-session", txn, `
-SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid,
+SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid.UnsafeBytes(),
 		)
 		return errors.Wrapf(err, "Could not query session id: %s", sid)
 	}); err != nil {
@@ -206,8 +205,6 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	t.Reset(0)
 	for {
 		if t.Read {
-			intv := s.gcInterval()
-			log.Infof(ctx, "reset iwht %v", intv)
 			t.Reset(s.gcInterval())
 		}
 		select {
@@ -259,19 +256,21 @@ SELECT count(*)
 // A client must never call this method with a session which was previously
 // used! The contract of IsAlive is that once a session becomes not alive, it
 // must never become alive again.
-func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) (err error) {
+func (s *Storage) Insert(
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+) (err error) {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := s.ex.QueryRow(
 			ctx, "insert-session", txn,
 			`INSERT INTO system.sqlliveness VALUES ($1, $2)`,
-			session.ID(), tree.TimestampToDecimalDatum(session.Expiration()),
+			sid.UnsafeBytes(), tree.TimestampToDecimalDatum(expiration),
 		)
 		return err
 	}); err != nil {
 		s.metrics.WriteFailures.Inc(1)
-		return errors.Wrapf(err, "Could not insert session %s", session.ID())
+		return errors.Wrapf(err, "Could not insert session %s", sid)
 	}
-	log.Infof(ctx, "inserted sqlliveness session %s", session.ID())
+	log.Infof(ctx, "inserted sqlliveness session %s", sid)
 	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }
@@ -279,13 +278,13 @@ func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) (err 
 // Update updates the row in table `system.sqlliveness` with the given input if
 // if the row exists and in that case returns true. Otherwise it returns false.
 func (s *Storage) Update(
-	ctx context.Context, session sqlliveness.Session,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, err error) {
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		data, err := s.ex.QueryRow(
 			ctx, "update-session", txn, `
 UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
-			tree.TimestampToDecimalDatum(session.Expiration()), session.ID(),
+			tree.TimestampToDecimalDatum(expiration), sid.UnsafeBytes(),
 		)
 		if err != nil {
 			return err
@@ -297,7 +296,7 @@ UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING se
 		s.metrics.WriteFailures.Inc(1)
 	}
 	if err != nil {
-		return false, errors.Wrapf(err, "Could not update session %s", session.ID())
+		return false, errors.Wrapf(err, "Could not update session %s", sid)
 	}
 	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil
