@@ -416,10 +416,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
-	sqllivenessStorage := slstorage.NewStorage(
-		cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
-	)
-
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -438,7 +434,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		DistSQLSrv:              distSQLServer,
 		StatusServer:            cfg.statusServer,
 		SessionRegistry:         cfg.sessionRegistry,
-		SQLLivenessStorage:      sqllivenessStorage,
+		SQLLivenessStorage:      cfg.sqlLivenessStorage,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
