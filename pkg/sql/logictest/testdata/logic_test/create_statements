@@ -96,5 +96,12 @@ CREATE TABLE a (b INT) WITH (fillfactor=true);
 statement error unimplemented: storage parameter "toast_tuple_target"
 CREATE TABLE a (b INT) WITH (toast_tuple_target=100);
 
-statement ok
-CREATE TABLE a (b INT) WITH (fillfactor=100);
+query T noticetrace
+CREATE TABLE a (b INT) WITH (fillfactor=100)
+----
+NOTICE: storage parameter "fillfactor" is ignored
+
+query T noticetrace
+CREATE INDEX a_idx ON a(b) WITH (fillfactor=50)
+----
+NOTICE: storage parameter "fillfactor" is ignored

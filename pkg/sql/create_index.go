@@ -34,6 +34,16 @@ type createIndexNode struct {
 	tableDesc *sqlbase.MutableTableDescriptor
 }
 
+var indexStorageParams = map[string]storageParamType{
+	`fillfactor`:                        storageParamInt,
+	`vacuum_cleanup_index_scale_factor`: storageParamUnimplemented,
+	`buffering`:                         storageParamUnimplemented,
+	`fastupdate`:                        storageParamUnimplemented,
+	`gin_pending_list_limit`:            storageParamUnimplemented,
+	`pages_per_range`:                   storageParamUnimplemented,
+	`autosummarize`:                     storageParamUnimplemented,
+}
+
 // CreateIndex creates an index.
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
@@ -134,6 +144,16 @@ func MakeIndexDescriptor(
 		Unique:            n.Unique,
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
+	}
+
+	if err := checkStorageParameters(
+		params.ctx,
+		params.p.SemaCtx(),
+		params.EvalContext(),
+		n.StorageParams,
+		indexStorageParams,
+	); err != nil {
+		return nil, err
 	}
 
 	if n.Inverted {
