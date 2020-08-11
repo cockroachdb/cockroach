@@ -1109,12 +1109,12 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // the Range.
 //
 // The method accepts a concurrency Guard and a LeaseStatus parameter. These are
-// used to indicate whether the caller has acquired latches and checked the
-// Range lease. The method will only check for a pending merge if both of these
-// conditions are true. If either !g.HoldingLatches() or st.State !=
-// LeaseState_VALID then the method will not check for a pending merge. Callers
-// might be ok with this if they know that they will end up checking for a
-// pending merge at some later time.
+// used to indicate whether the caller has acquired latches and, either the
+// request is allowed to skip the check for a valid lease on the evaluating
+// Replica or the caller has checked the Range lease. The method will only check
+// for a pending merge if both of these conditions are true. Callers might be ok
+// with this if they know that they will end up checking for a pending merge at
+// some later time.
 func (r *Replica) checkExecutionCanProceed(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
 ) error {
@@ -1124,6 +1124,19 @@ func (r *Replica) checkExecutionCanProceed(
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	// Only check for a pending merge if latches are held and the Range lease is
+	// held by this Replica (or the request is such that we skip the check for a
+	// valid lease on the evaluating replica - like TransferLeaseRequests).
+	// Without these conditions, checkForPendingMergeRLocked could return false
+	// negatives (i.e. the request might needlessly end up waiting for an ongoing
+	// merge).
+	//
+	// In practice, this means that follower reads or any request where
+	// concurrency.shouldAcquireLatches() == false (e.g. RequestLeaseRequests)
+	// will not check for a pending merge before executing and, as such, can
+	// execute while a range is in a merge's critical phase.
+	shouldCheckForOngoingMerge := g.HoldingLatches() &&
+		(st.State == kvserverpb.LeaseState_VALID || ba.IsSingleSkipLeaseCheckRequest())
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
@@ -1132,15 +1145,7 @@ func (r *Replica) checkExecutionCanProceed(
 		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
 	); err != nil {
 		return err
-	} else if g.HoldingLatches() && st.State == kvserverpb.LeaseState_VALID {
-		// Only check for a pending merge if latches are held and the Range
-		// lease is held by this Replica. Without both of these conditions,
-		// checkForPendingMergeRLocked could return false negatives.
-		//
-		// In practice, this means that follower reads or any request where
-		// concurrency.shouldAcquireLatches() == false (e.g. lease requests)
-		// will not check for a pending merge before executing and, as such,
-		// can execute while a range is in a merge's critical phase.
+	} else if shouldCheckForOngoingMerge {
 		return r.checkForPendingMergeRLocked(ba)
 	}
 	return nil
