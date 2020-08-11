@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package execinfrapb
 
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +49,7 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
 func processExpression(
-	exprSpec execinfrapb.Expression,
+	exprSpec Expression,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	h *tree.IndexedVarHelper,
@@ -148,7 +147,7 @@ func DeserializeExpr(
 		return nil, nil
 	}
 
-	deserializedExpr, err := processExpression(execinfrapb.Expression{Expr: expr}, evalCtx, semaCtx, vars)
+	deserializedExpr, err := processExpression(Expression{Expr: expr}, evalCtx, semaCtx, vars)
 	if err != nil {
 		return deserializedExpr, err
 	}
@@ -161,10 +160,7 @@ func DeserializeExpr(
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr execinfrapb.Expression,
-	types []*types.T,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	expr Expression, types []*types.T, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil
