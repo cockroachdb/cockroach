@@ -325,22 +325,28 @@ func GetProjectionOperator(
 			// {{end}}
 		}
 	case tree.ComparisonOperator:
-		switch op {
-		// {{range .CmpOps}}
-		case tree._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			// {{range .LeftFamilies}}
-			case _LEFT_CANONICAL_TYPE_FAMILY:
-				switch leftType.Width() {
-				// {{range .LeftWidths}}
-				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					// {{range .RightFamilies}}
-					case _RIGHT_CANONICAL_TYPE_FAMILY:
-						switch rightType.Width() {
-						// {{range .RightWidths}}
-						case _RIGHT_TYPE_WIDTH:
-							return &_OP_NAME{projOpBase: projOpBase}, nil
+		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+			// Tuple comparison has special null-handling semantics, so we will
+			// fallback to the default comparison operator if either of the
+			// input vectors is of a tuple type.
+			switch op {
+			// {{range .CmpOps}}
+			case tree._NAME:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				// {{range .LeftFamilies}}
+				case _LEFT_CANONICAL_TYPE_FAMILY:
+					switch leftType.Width() {
+					// {{range .LeftWidths}}
+					case _LEFT_TYPE_WIDTH:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						// {{range .RightFamilies}}
+						case _RIGHT_CANONICAL_TYPE_FAMILY:
+							switch rightType.Width() {
+							// {{range .RightWidths}}
+							case _RIGHT_TYPE_WIDTH:
+								return &_OP_NAME{projOpBase: projOpBase}, nil
+								// {{end}}
+							}
 							// {{end}}
 						}
 						// {{end}}
@@ -349,15 +355,13 @@ func GetProjectionOperator(
 				}
 				// {{end}}
 			}
-		// {{end}}
-		default:
-			return &defaultCmpProjOp{
-				projOpBase:          projOpBase,
-				adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
-				toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
-				datumToVecConverter: GetDatumToPhysicalFn(outputType),
-			}, nil
 		}
+		return &defaultCmpProjOp{
+			projOpBase:          projOpBase,
+			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
 }

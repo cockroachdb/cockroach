@@ -1450,13 +1450,17 @@ func planSelectionOperators(
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory,
 		)
-		op = colexec.NewIsNullSelOp(op, resultIdx, false)
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
 		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.IsNotNullExpr:
 		op, resultIdx, typs, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory,
 		)
-		op = colexec.NewIsNullSelOp(op, resultIdx, true)
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
 		return op, resultIdx, typs, internalMemUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
@@ -1491,10 +1495,12 @@ func planSelectionOperators(
 					// default comparison operator.
 					break
 				}
-				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
-				// negate when IS DISTINCT FROM is used.
+				// IS NOT DISTINCT FROM NULL is synonymous with IS NULL and IS
+				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
+				// tuples). Therefore, negate when the operator is IS DISTINCT
+				// FROM NULL.
 				negate := cmpOp == tree.IsDistinctFrom
-				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate)
+				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate, false /* isTupleNull */)
 			}
 			if op == nil {
 				// op hasn't been created yet, so let's try the constructor for
@@ -1808,6 +1814,7 @@ func planProjectionExpr(
 	if err := checkSupportedProjectionExpr(left, right); err != nil {
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
+	allocator := colmem.NewAllocator(ctx, acc, factory)
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
@@ -1827,8 +1834,8 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		op, err = colexec.GetProjectionLConstOperator(
-			colmem.NewAllocator(ctx, acc, factory), typs, left.ResolvedType(), outputType,
-			projOp, input, rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+			allocator, typs, left.ResolvedType(), outputType, projOp, input,
+			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 		)
 	} else {
 		var (
@@ -1861,7 +1868,7 @@ func planProjectionExpr(
 			case tree.Like, tree.NotLike:
 				negate := projOp == tree.NotLike
 				op, err = colexec.GetLikeProjectionOperator(
-					colmem.NewAllocator(ctx, acc, factory), evalCtx, input, leftIdx, resultIdx,
+					allocator, evalCtx, input, leftIdx, resultIdx,
 					string(tree.MustBeDString(rConstArg)), negate,
 				)
 			case tree.In, tree.NotIn:
@@ -1889,8 +1896,7 @@ func planProjectionExpr(
 					}
 				}
 				op, err = colexec.GetInProjectionOperator(
-					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], input, leftIdx,
-					resultIdx, datumTuple, negate,
+					allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
 				)
 			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
 				if right != tree.DNull {
@@ -1902,14 +1908,16 @@ func planProjectionExpr(
 				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
 				// negate when IS DISTINCT FROM is used.
 				negate := projOp == tree.IsDistinctFrom
-				op = colexec.NewIsNullProjOp(colmem.NewAllocator(ctx, acc, factory), input, leftIdx, resultIdx, negate)
+				op = colexec.NewIsNullProjOp(
+					allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */
+				)
 			}
 			if op == nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other projection operators.
 				op, err = colexec.GetProjectionRConstOperator(
-					colmem.NewAllocator(ctx, acc, factory), typs, right.ResolvedType(), outputType,
-					projOp, input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+					allocator, typs, right.ResolvedType(), outputType, projOp,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 				)
 			}
 		} else {
@@ -1927,8 +1935,8 @@ func planProjectionExpr(
 			internalMemUsed += internalMemUsedRight
 			resultIdx = len(typs)
 			op, err = colexec.GetProjectionOperator(
-				colmem.NewAllocator(ctx, acc, factory), typs, outputType, projOp,
-				input, leftIdx, rightIdx, resultIdx, evalCtx, binFn, cmpExpr,
+				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
+				resultIdx, evalCtx, binFn, cmpExpr,
 			)
 		}
 	}
@@ -2026,7 +2034,10 @@ func planIsNullProjectionOp(
 		ctx, evalCtx, expr, columnTypes, input, acc, factory,
 	)
 	outputIdx := len(typs)
-	op = colexec.NewIsNullProjOp(colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx, negate)
+	isTupleNull := typs[resultIdx].Family() == types.TupleFamily
+	op = colexec.NewIsNullProjOp(
+		colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx, negate, isTupleNull,
+	)
 	typs = appendOneType(typs, outputType)
 	return op, outputIdx, typs, internalMemUsed, err
 }
