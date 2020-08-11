@@ -32,7 +32,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 			ctx, "claim-jobs", txn, `
 UPDATE system.jobs SET claim_session_id = $1, claim_instance_id = $2
 WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
-			s.ID(), r.ID(), maxAdoptionsPerLoop,
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
@@ -49,7 +49,7 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
 SELECT id FROM system.jobs
 WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
-		StatusRunning, StatusReverting, s.ID(), r.ID(),
+		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could query for claimed jobs")
@@ -68,7 +68,7 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	defer r.mu.Unlock()
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
-		if !aj.sid.Equals(s.ID()) {
+		if aj.sid != s.ID() {
 			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
@@ -96,7 +96,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Ses
 		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
 SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
 FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
-		jobID, s.ID(),
+		jobID, s.ID().UnsafeBytes(),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -229,7 +229,7 @@ WHERE (status IN ($1, $3)) AND (claim_session_id = $5 AND claim_instance_id = $6
 RETURNING id, status`,
 			StatusPauseRequested, StatusPaused,
 			StatusCancelRequested, StatusReverting,
-			s.ID(), r.ID(),
+			s.ID().UnsafeBytes(), r.ID(),
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")

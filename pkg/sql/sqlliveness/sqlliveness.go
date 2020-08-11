@@ -16,32 +16,44 @@
 package sqlliveness
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // SessionID represents an opaque identifier for a session. This ID should be
-// globally unique.
-type SessionID []byte
+// globally unique. It is a string so that it can be used as a map key but it
+// may not be a well-formed UTF8 string.
+type SessionID string
 
-// Equals returns true if ids are equal.
-func (s SessionID) Equals(other SessionID) bool {
-	return bytes.Equal(s, other)
+// Provider is a wrapper around the sqllivness subsystem for external
+// consumption.
+type Provider interface {
+	Start(ctx context.Context)
+	Metrics() metric.Struct
+	Reader
+	Instance
 }
 
+// String returns a hex-encoded version of the SessionID.
 func (s SessionID) String() string {
-	return hex.EncodeToString(s)
+	return hex.EncodeToString(encoding.UnsafeConvertStringToBytes(string(s)))
 }
 
-// SQLInstance represents a SQL tenant server instance and is responsible for
+// UnsafeBytes returns a byte slice representation of the ID. It is unsafe to
+// modify this byte slice. This method is exposed to ease storing the session
+// ID as bytes in SQL.
+func (s SessionID) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(s))
+}
+
+// Instance represents a SQL tenant server instance and is responsible for
 // maintaining at most once session for this instance and heart beating the
 // current live one if it exists and otherwise creating a new  live one.
-type SQLInstance interface {
-	Start(ctx context.Context)
+type Instance interface {
 	Session(context.Context) (Session, error)
 }
 
@@ -60,18 +72,9 @@ type Session interface {
 	Expiration() hlc.Timestamp
 }
 
-// Storage abstracts over the set of sessions in the cluster.
-type Storage interface {
-	// Start runs the storage service.
-	Start(ctx context.Context)
-
-	// Insert stores the input Session.
-	Insert(context.Context, Session) error
-	// Update looks for a Session with the same SessionID as the input Session in
-	// the storage and if found replaces it with the input returning true.
-	// Otherwise it returns false to indicate that the session does not exist.
-	Update(context.Context, Session) (bool, error)
+// Reader abstracts over the state of session records.
+type Reader interface {
 	// IsAlive is used to query the liveness of a Session typically by another
-	// SQLInstance that is attempting to claim expired resources.
-	IsAlive(context.Context, *kv.Txn, SessionID) (alive bool, err error)
+	// Instance that is attempting to claim expired resources.
+	IsAlive(context.Context, SessionID) (alive bool, err error)
 }

@@ -50,8 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -90,6 +89,7 @@ type sqlServer struct {
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
+	sqlLivenessProvider     sqlliveness.Provider
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -179,10 +179,7 @@ type sqlServerArgs struct {
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 
 	// Stores and deletes expired liveness sessions.
-	sqlLivenessStorage sqlliveness.Storage
-
-	// Manages liveness sessions.
-	sqlInstance sqlliveness.SQLInstance
+	sqlLivenessProvider sqlliveness.Provider
 
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
@@ -216,13 +213,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			regLiveness = sqlbase.MakeOptionalNodeLiveness(testingLiveness.(*jobs.FakeNodeLiveness))
 		}
 
-		cfg.sqlLivenessStorage = slstorage.NewStorage(
+		cfg.sqlLivenessProvider = slprovider.New(
 			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
 		)
-
-		cfg.sqlInstance = slinstance.NewSQLInstance(
-			cfg.stopper, cfg.clock, cfg.sqlLivenessStorage, cfg.Settings,
-		)
+		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
@@ -232,7 +226,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.db,
 			cfg.circularInternalExecutor,
 			cfg.nodeIDContainer,
-			cfg.sqlInstance,
+			cfg.sqlLivenessProvider,
 			cfg.Settings,
 			cfg.HistogramWindowInterval(),
 			func(opName, user string) (interface{}, func()) {
@@ -361,11 +355,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		Metrics: &distSQLMetrics,
 
-		SQLLivenessStorage: cfg.sqlLivenessStorage,
-		JobRegistry:        jobRegistry,
-		Gossip:             cfg.gossip,
-		NodeDialer:         cfg.nodeDialer,
-		LeaseManager:       leaseMgr,
+		SQLLivenessReader: cfg.sqlLivenessProvider,
+		JobRegistry:       jobRegistry,
+		Gossip:            cfg.gossip,
+		NodeDialer:        cfg.nodeDialer,
+		LeaseManager:      leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
@@ -434,7 +428,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		DistSQLSrv:              distSQLServer,
 		StatusServer:            cfg.statusServer,
 		SessionRegistry:         cfg.sessionRegistry,
-		SQLLivenessStorage:      cfg.sqlLivenessStorage,
+		SQLLivenessReader:       cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
@@ -622,6 +616,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		adminMemMetrics:         adminMemMetrics,
 		sqlMemMetrics:           sqlMemMetrics,
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
+		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 	}, nil
 }
 
@@ -641,7 +636,7 @@ func (s *sqlServer) start(
 			return err
 		}
 	}
-
+	s.sqlLivenessProvider.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)

@@ -325,7 +325,7 @@ func (ds *ServerImpl) setupFlow(
 			Tenant:             &sqlbase.DummyTenantOperator{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
-			SQLLivenessStorage: ds.ServerConfig.SQLLivenessStorage,
+			SQLLivenessReader:  ds.ServerConfig.SQLLivenessReader,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))

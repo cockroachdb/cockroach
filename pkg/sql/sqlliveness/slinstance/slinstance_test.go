@@ -49,7 +49,7 @@ func TestSQLInstance(t *testing.T) {
 
 	s1, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)
-	a, err := fakeStorage.IsAlive(ctx, nil, s1.ID())
+	a, err := fakeStorage.IsAlive(ctx, s1.ID())
 	require.NoError(t, err)
 	require.True(t, a)
 
@@ -57,9 +57,9 @@ func TestSQLInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, s1.ID(), s2.ID())
 
-	_ = fakeStorage.Delete(ctx, s2)
+	_ = fakeStorage.Delete(ctx, s2.ID())
 	t.Logf("Deleted session %s", s2.ID())
-	a, err = fakeStorage.IsAlive(ctx, nil, s2.ID())
+	a, err = fakeStorage.IsAlive(ctx, s2.ID())
 	require.NoError(t, err)
 	require.False(t, a)
 
@@ -76,14 +76,14 @@ func TestSQLInstance(t *testing.T) {
 		time.Second, 10*time.Millisecond,
 	)
 
-	a, err = fakeStorage.IsAlive(ctx, nil, s3.ID())
+	a, err = fakeStorage.IsAlive(ctx, s3.ID())
 	require.NoError(t, err)
 	require.True(t, a)
 	require.NotEqual(t, s2.ID(), s3.ID())
 
 	// Force next call to Session to fail.
 	stopper.Stop(ctx)
-	sqlInstance.(*slinstance.SQLInstance).ClearSession()
+	sqlInstance.ClearSession()
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
 }

@@ -78,7 +78,7 @@ func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 // A SQLInstanceID is an ephemeral ID assigned to a running instance of the SQL
 // server. This is distinct from a NodeID, which is a long-lived identifier
 // assigned to a node in the KV layer which is unique across all KV nodes in the
-// cluster and persists across restarts. Instead, a SQLInstance is similar to a
+// cluster and persists across restarts. Instead, a Instance is similar to a
 // process ID from the unix world: an integer assigned to the SQL server
 // on process start which is unique across all SQL server processes running
 // on behalf of the tenant, while the SQL server is running.
