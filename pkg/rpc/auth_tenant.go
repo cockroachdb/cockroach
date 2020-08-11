@@ -78,6 +78,11 @@ func (a tenantAuth) tenantFromCert(ctx context.Context) (roachpb.TenantID, error
 		return roachpb.TenantID{}, errTLSInfoMissing
 	}
 
+	// TODO(tbg): clean up.
+	if ou := tlsInfo.State.PeerCertificates[0].Subject.OrganizationalUnit; len(ou) != 1 || ou[0] != "Tenants" {
+		return roachpb.TenantID{}, errTLSInfoMissing
+	}
+
 	commonName := tlsInfo.State.PeerCertificates[0].Subject.CommonName
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
 	if err != nil {

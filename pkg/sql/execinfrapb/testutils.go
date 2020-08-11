@@ -59,7 +59,7 @@ func StartMockDistSQLServer(
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(stopper)
 	rpcContext.NodeID.Set(context.TODO(), nodeID)
-	server := rpc.NewServer(rpcContext)
+	server := rpc.NewServer(rpcContext, rpc.ServerOptions{})
 	mock := newMockDistSQLServer()
 	RegisterDistSQLServer(server, mock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)

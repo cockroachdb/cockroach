@@ -113,41 +113,39 @@ func spanInclusionFuncForClient(
 }
 
 type serverOpts struct {
-	interceptor func(fullMethod string) error
-	tenant      bool
+	ServerOptions
 }
 
-// ServerOption is a configuration option passed to NewServer.
-type ServerOption func(*serverOpts)
+// ServeMode determines which clients a Server serves.
+type ServeMode byte
 
-// ForTenant is an option to NewServer that results in the server being set
-// up to validate incoming tenants. With this option the server still uses
-// KV-internal node certificates but listens on a dedicated port.
-func ForTenant(opts *serverOpts) {
-	opts.tenant = true
-}
+const (
+	// ServeNode indicates that the created server will serve internal cluster
+	// traffic, i.e. whether it will allow incoming connections to authenticate
+	// via node certs.
+	ServeNode ServeMode = iota
+	// ServeTenant indicates that the created server will serve tenants, i.e.
+	// whether it will allow authenticate and authorize incoming requests using
+	// tenant client certs.
+	ServeTenant
+	// ServeNodeAndTenant indicates that the server will accept connections both
+	// from nodes and tenants.
+	ServeNodeAndTenant
+)
 
-// WithInterceptor adds an additional interceptor. The interceptor is called before
-// streaming and unary RPCs and may inject an error.
-//
-// This option can only be used once (i.e. interceptors can not be chained).
-func WithInterceptor(f func(fullMethod string) error) ServerOption {
-	return func(opts *serverOpts) {
-		if opts.interceptor != nil {
-			panic("interceptor can only be set once")
-		}
-		opts.interceptor = f
-	}
+type ServerOptions struct {
+	ServeMode   ServeMode
+	ServeTenant bool
+	// Interceptor is an additional request interceptor that gets to inspect the
+	// method being invoked on both streaming and unary RPCs, and may inject an
+	// error.
+	Interceptor func(fullMethod string) error
 }
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
-func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
-	var o serverOpts
-	for _, f := range opts {
-		f(&o)
-	}
+func NewServer(ctx *Context, opts ServerOptions) *grpc.Server {
 	grpcOpts := []grpc.ServerOption{
 		// The limiting factor for lowering the max message size is the fact
 		// that a single large kv can be sent over the network in one message.
@@ -172,13 +170,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.StatsHandler(&ctx.stats),
 	}
 	if !ctx.Config.Insecure {
-		var tlsConfig *tls.Config
-		var err error
-		if !o.tenant {
-			tlsConfig, err = ctx.GetServerTLSConfig()
-		} else {
-			tlsConfig, err = ctx.GetTenantServerTLSConfig()
-		}
+		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -192,20 +184,26 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 
 	if !ctx.Config.Insecure {
 		var a auth
-		if !o.tenant {
+		switch opts.ServeMode {
+		case ServeNode:
 			a = kvAuth{}
-		} else {
+		case ServeTenant:
 			a = tenantAuth{}
+		case ServeNodeAndTenant:
+			a = kvAuth{tenant: true}
+		default:
+			panic(errors.Errorf("unknown ServeMode %v", opts.ServeMode))
 		}
+
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
 	}
 
-	if o.interceptor != nil {
+	if opts.Interceptor != nil {
 		unaryInterceptor = append(unaryInterceptor, func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
-			if err := o.interceptor(info.FullMethod); err != nil {
+			if err := opts.Interceptor(info.FullMethod); err != nil {
 				return nil, err
 			}
 			return handler(ctx, req)
@@ -214,7 +212,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		streamInterceptor = append(streamInterceptor, func(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
-			if err := o.interceptor(info.FullMethod); err != nil {
+			if err := opts.Interceptor(info.FullMethod); err != nil {
 				return err
 			}
 			return handler(srv, stream)
