@@ -1,0 +1,54 @@
+exec-ddl
+CREATE TABLE kv (
+    k INT PRIMARY KEY,
+    v INT
+)
+----
+
+exec-ddl
+CREATE INDEX idx ON kv (v)
+----
+
+exec-ddl
+SHOW CREATE kv
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX idx
+      ├── v int
+      └── k int not null
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE TABLE ab (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX idx (b)
+)
+----
+
+exec-ddl
+CREATE INDEX idx ON kv (v) STORING (k) WHERE v > 1
+----
+
+exec-ddl
+SHOW CREATE kv
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX idx
+      ├── v int
+      ├── k int not null
+      └── WHERE
+           └── v > 1
