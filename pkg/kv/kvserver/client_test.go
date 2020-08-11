@@ -1559,6 +1559,15 @@ func pushTxnArgs(
 	}
 }
 
+func adminTransferLeaseArgs(key roachpb.Key, target roachpb.StoreID) roachpb.Request {
+	return &roachpb.AdminTransferLeaseRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Target: target,
+	}
+}
+
 func TestSortRangeDescByAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
