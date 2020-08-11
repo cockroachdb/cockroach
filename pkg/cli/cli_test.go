@@ -101,9 +101,6 @@ func createTestCerts(certsDir string) (cleanup func() error) {
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
 
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantServerCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantServerCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantServerKey),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantClientCACert),
 	}
 
