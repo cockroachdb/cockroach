@@ -1108,13 +1108,13 @@ local
 statement ok
 ROLLBACK
 
-query TT
+query TTT
 SHOW ENUMS
 ----
-as_bytes   bytes
-dbs        postgres|mysql|spanner|cockroach
-farewell   bye|seeya
-greeting   hello|howdy|hi
-greeting2  hello
-int        Z|S of int
-notbad     dup|DUP
+pg_catalog  as_bytes   {bytes}
+pg_catalog  dbs        {postgres,mysql,spanner,cockroach}
+pg_catalog  farewell   {bye,seeya}
+pg_catalog  greeting   {hello,howdy,hi}
+pg_catalog  greeting2  {hello}
+pg_catalog  int        {Z,"S of int"}
+pg_catalog  notbad     {dup,DUP}
