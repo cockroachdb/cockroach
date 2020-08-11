@@ -106,6 +106,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INVERTED INDEX a ON b (c) WHERE d > 3`},
 		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
 		{`CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3`},
+		{`CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TEMPORARY TABLE a (b INT8)`},
